@@ -205,6 +205,8 @@ function ensureCode(get: Get, set: Set_, code: string): string {
   const existing = Object.keys(cb).find((c) => norm(c) === norm(code));
   if (existing) return existing;
   set({ codebook: { ...cb, [code]: { color: COLORS[Object.keys(cb).length % COLORS.length], def: "", status: "candidate" } } });
+  // a newly created code should appear in the hotbar immediately (no manual refresh)
+  set({ hotbarCache: hotbarCodes(get()) });
   return code;
 }
 

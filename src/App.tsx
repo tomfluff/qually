@@ -5,6 +5,7 @@ import { Tabs } from "./components/Tabs";
 import { CodeSidebar } from "./components/CodeSidebar";
 import { TranscriptView } from "./components/TranscriptView";
 import { VideoDock } from "./components/VideoDock";
+import { HotbarDock } from "./components/HotbarDock";
 
 export function App() {
   const active = useStore((s) => s.active);
@@ -43,6 +44,7 @@ export function App() {
             : <TranscriptView />}
         </div>
       </div>
+      {active !== "browse" && <HotbarDock />}
       <VideoDock />
     </div>
   );

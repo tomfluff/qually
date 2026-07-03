@@ -84,6 +84,35 @@ button { font-family:inherit; }
 
 .empty { padding:16px; color:var(--muted); }
 
+/* hotbar bottom dock */
+.hotbar { position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+  z-index:45; display:flex; flex-direction:column; align-items:center;
+  padding:7px 9px; background:var(--panel); border:1px solid var(--line);
+  border-bottom:none; border-radius:12px 12px 0 0; box-shadow:0 6px 24px rgba(0,0,0,.28); }
+.hotbar.collapsed { padding:0; background:transparent; border:none; box-shadow:none; }
+.hotbar.collapsed .tiles { display:none; }
+.hotbar .tiles { display:flex; gap:5px; }
+.tile { position:relative; width:36px; height:36px; padding:0; flex:0 0 auto;
+  box-sizing:border-box; border:1px solid rgba(0,0,0,.18); border-radius:7px;
+  cursor:pointer; color:#fff; font-weight:700; font-size:13px; display:flex;
+  align-items:center; justify-content:center; text-shadow:0 1px 2px rgba(0,0,0,.55); }
+.tile:hover { filter:brightness(1.08); }
+.tile.refresh { background:#fff; color:#333; text-shadow:none;
+  border-color:rgba(0,0,0,.32); }
+.tile .tname { position:absolute; bottom:calc(100% + 8px); left:50%;
+  transform:translateX(-50%); background:var(--fg); color:var(--bg);
+  padding:3px 9px; border-radius:6px; white-space:nowrap; display:none;
+  pointer-events:none; box-shadow:0 4px 14px rgba(0,0,0,.3); z-index:80; }
+.tile:hover .tname { display:block; }
+/* extruding tab on the top-center edge of the dock (always visible) */
+.hbhandle { position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
+  padding:2px 16px 3px; border:1px solid var(--line); border-bottom:none;
+  background:var(--panel); color:var(--muted); cursor:pointer;
+  border-radius:10px 10px 0 0; display:flex; align-items:center; justify-content:center;
+  box-shadow:0 -3px 10px rgba(0,0,0,.12); transition:color .12s, background .12s; }
+.hbhandle:hover { color:var(--fg); background:var(--line); }
+.hbhandle .harrow { display:block; }
+
 /* video dock */
 .vdock { position:fixed; z-index:50; background:var(--panel); border:1px solid var(--line);
   border-radius:12px; box-shadow:0 10px 34px rgba(0,0,0,.3); overflow:hidden;
