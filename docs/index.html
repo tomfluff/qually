@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Coding App</title>
+<style>
+:root {
+  --bg:#ffffff; --fg:#1a1a1a; --muted:#8a8a8a; --line:#e4e4e4;
+  --panel:#f6f6f6; --accent:#3b6ea5; --sel:#dbeafe;
+}
+[data-theme=dark] {
+  --bg:#161a1e; --fg:#e6e6e6; --muted:#7f8a94; --line:#2c333a;
+  --panel:#1e242a; --accent:#7aa7d6; --sel:#243b55;
+}
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+  font-family:system-ui,Segoe UI,Roboto,sans-serif; }
+#app { display:flex; flex-direction:column; height:100%; }
+
+/* ── tabs ─────────────────────────────────────────────── */
+#tabs { display:flex; align-items:center; gap:2px; padding:6px 8px 0;
+  border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+.tab { padding:6px 14px; border:1px solid var(--line); border-bottom:none;
+  border-radius:8px 8px 0 0; cursor:pointer; font-size:13px; background:var(--bg);
+  color:var(--muted); user-select:none; }
+.tab.active { color:var(--fg); font-weight:600; border-color:var(--accent); }
+.tab .x { margin-left:8px; opacity:.5; }
+.tab .x:hover { opacity:1; }
+#tabs .spacer { flex:1; }
+#tabs button, #toolbar button, .vbtn {
+  background:var(--bg); color:var(--fg); border:1px solid var(--line);
+  border-radius:6px; padding:5px 10px; font-size:12px; cursor:pointer; }
+#tabs button:hover, #toolbar button:hover, .vbtn:hover { border-color:var(--accent); }
+
+/* ── toolbar ──────────────────────────────────────────── */
+#toolbar { display:flex; align-items:center; gap:8px; padding:6px 10px;
+  border-bottom:1px solid var(--line); font-size:12px; background:var(--panel); }
+#toolbar label { color:var(--muted); }
+#toolbar input[type=range] { width:110px; }
+body.zen #toolbar, body.zen #palette, body.zen #tabs { display:none; }
+#zenExit { display:none; position:fixed; top:8px; right:8px; z-index:60;
+  opacity:.4; } 
+body.zen #zenExit { display:block; }
+#zenExit:hover { opacity:1; }
+
+/* ── main layout ──────────────────────────────────────── */
+#main { display:flex; flex:1; min-height:0; }
+#palette { width:250px; border-right:1px solid var(--line); overflow-y:auto;
+  padding:10px; background:var(--panel); flex-shrink:0; }
+#palette h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); margin:14px 0 6px; }
+.codeItem { display:flex; align-items:center; gap:7px; padding:4px 6px;
+  border-radius:6px; cursor:pointer; font-size:13px; }
+.codeItem:hover { background:var(--sel); }
+.codeItem .swatch { width:13px; height:13px; border-radius:4px; flex-shrink:0; }
+.codeItem .cnt { margin-left:auto; color:var(--muted); font-size:11px; }
+.codeItem .key { font-size:10px; border:1px solid var(--line); border-radius:3px;
+  padding:0 4px; color:var(--muted); }
+#newCode { width:100%; margin-top:6px; padding:5px 7px; font-size:13px;
+  border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); }
+
+/* ── transcript lines ─────────────────────────────────── */
+#content { flex:1; overflow-y:auto; position:relative; }
+#lines { padding:10px 16px 40vh; }
+.lineRow { display:flex; align-items:flex-start; gap:8px; padding:2px 0;
+  border-radius:4px; position:relative; }
+.lineRow.selected { background:var(--sel); }
+.lineRow .lid { width:44px; text-align:right; color:var(--muted);
+  font-size:.72em; padding-top:.35em; flex-shrink:0; user-select:none; cursor:pointer; }
+.lineRow .ts { width:64px; color:var(--muted); font-size:.72em; padding-top:.35em;
+  flex-shrink:0; cursor:pointer; user-select:none; }
+.lineRow .ts:hover { color:var(--accent); }
+.lineRow .spk { width:22px; text-align:center; font-size:.72em; font-weight:700;
+  padding-top:.35em; flex-shrink:0; }
+.lineRow.rspk { opacity:.55; }
+.lineRow .txt { flex:1; line-height:1.45; cursor:pointer; }
+.lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;
+  padding:0 2px; }
+.laneBar { width:9px; position:relative; border-radius:2px; cursor:pointer; }
+.laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
+.laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
+.laneBar .grip { position:absolute; left:-3px; right:-3px; height:7px; cursor:ns-resize; }
+.laneBar .gripTop { top:-2px; } .laneBar .gripBot { bottom:-2px; }
+.laneEmpty { width:9px; }
+
+/* ── segment popover ──────────────────────────────────── */
+#pop { position:fixed; z-index:70; background:var(--bg); border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,.25); padding:12px;
+  font-size:13px; width:280px; display:none; }
+#pop textarea { width:100%; height:52px; font-size:12px; background:var(--panel);
+  color:var(--fg); border:1px solid var(--line); border-radius:6px; }
+#pop .row { display:flex; gap:6px; margin-top:8px; }
+
+/* ── browse view ──────────────────────────────────────── */
+#browse { padding:16px 22px; max-width:900px; }
+#browse input[type=search] { width:100%; padding:7px 10px; font-size:14px;
+  border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); }
+.bCode { padding:8px 10px; border-radius:8px; cursor:pointer; display:flex;
+  gap:8px; align-items:center; }
+.bCode:hover { background:var(--sel); }
+.bExcerpt { border-left:4px solid var(--line); margin:10px 0; padding:6px 12px;
+  line-height:1.45; }
+.bExcerpt .ref { font-size:11px; color:var(--muted); cursor:pointer; }
+.bExcerpt .ref:hover { color:var(--accent); }
+
+/* ── video dock ───────────────────────────────────────── */
+#vdock { position:fixed; z-index:50; right:24px; bottom:24px; width:380px;
+  background:var(--panel); border:1px solid var(--line); border-radius:12px;
+  box-shadow:0 10px 34px rgba(0,0,0,.3); overflow:hidden; resize:both;
+  min-width:220px; min-height:44px; }
+#vdock.collapsed { resize:none; width:auto !important; height:auto !important; }
+#vdock.collapsed #vbody { display:none; }
+#vhead { display:flex; align-items:center; gap:6px; padding:6px 10px;
+  cursor:move; font-size:12px; color:var(--muted); user-select:none; }
+#vbody video { width:100%; display:block; background:#000; }
+#vbody.audioOnly video { height:0; }
+#vctrl { display:flex; gap:6px; padding:6px 10px; align-items:center; font-size:12px; }
+#vctrl input[type=number] { width:58px; background:var(--bg); color:var(--fg);
+  border:1px solid var(--line); border-radius:4px; }
+#vempty { padding:16px; text-align:center; font-size:13px; color:var(--muted); }
+.hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="tabs"></div>
+  <div id="toolbar">
+    <button id="btnImport">Import files…</button>
+    <button id="btnExport">Export coded-segments.csv</button>
+    <label>Text <input type="range" id="fontSize" min="12" max="30" value="16"></label>
+    <button id="btnZen" title="Distraction-free">Zen</button>
+    <button id="btnTheme">☾</button>
+    <span id="status" style="color:var(--muted);margin-left:auto"></span>
+  </div>
+  <div id="main">
+    <div id="palette"></div>
+    <div id="content"></div>
+  </div>
+</div>
+<button id="zenExit">exit zen</button>
+<div id="pop"></div>
+<div id="vdock" class="collapsed">
+  <div id="vhead"><span id="vtitle">video</span>
+    <span style="flex:1"></span>
+    <button class="vbtn" id="vAudio" title="audio only">♪</button>
+    <button class="vbtn" id="vCollapse">▾</button>
+  </div>
+  <div id="vbody"></div>
+</div>
+<input type="file" id="filePick" multiple accept=".csv" class="hidden">
+<input type="file" id="videoPick" accept="video/*,audio/*" class="hidden">
+<script>
+"use strict";
+/* ================= state ================= */
+const COLORS = ["#e0554f","#3b82c4","#3fa860","#c98a2a","#8e6bc9","#2fa3a3",
+                "#c95c9c","#7d8f2e","#b0653a","#5470d6","#4f9e86","#a35ac0"];
+let S = {
+  transcripts: {},     // pid -> {lines:[{id,ts,speaker,text}]}
+  segments: [],        // {sid,pid,start,end,code,notes,proposedBy,status}
+  codebook: {},        // code -> {color,def,status}
+  extSegRows: [],      // imported segment rows for pids we don't have loaded (pass-through)
+  tabs: [], active: "",// pids + "browse"
+  hotbar: { mode:"auto", pinned:[] },
+  video: {},           // pid -> {name, offset}
+  ui: { fontSize:16, dark:false }
+};
+let sel = { pid:null, anchor:null, lines:new Set() };
+let undoStack = [];
+let nextSid = 1;
+
+const $ = id => document.getElementById(id);
+const el = (tag, cls, txt) => { const e = document.createElement(tag);
+  if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+const esc = s => s;
+const norm = c => c.trim().replace(/\s+/g," ").toLowerCase();
+
+function pushUndo() {
+  undoStack.push(JSON.stringify({segments:S.segments, codebook:S.codebook}));
+  if (undoStack.length > 80) undoStack.shift();
+}
+function undo() {
+  const prev = undoStack.pop();
+  if (!prev) return;
+  const o = JSON.parse(prev);
+  S.segments = o.segments; S.codebook = o.codebook;
+  renderAll(); save();
+}
+
+/* ================= CSV utils ================= */
+function parseCSV(text) {
+  const rows = []; let row = [], field = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else q = false; }
+      else field += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i+1] === "\n") i++;
+      row.push(field); field = "";
+      if (row.length > 1 || row[0] !== "") rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const head = rows[0].map(h => h.trim());
+  return rows.slice(1).map(r => Object.fromEntries(head.map((h,i) => [h, r[i] ?? ""])));
+}
+function toCSV(rows, fields) {
+  const q = v => { v = String(v ?? "");
+    return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+  return [fields.join(",")]
+    .concat(rows.map(r => fields.map(f => q(r[f])).join(","))).join("\r\n") + "\r\n";
+}
+
+/* ================= import ================= */
+$("btnImport").onclick = () => $("filePick").click();
+$("filePick").onchange = async e => {
+  for (const f of e.target.files) {
+    const rows = parseCSV(await f.text());
+    if (!rows.length) continue;
+    const cols = Object.keys(rows[0]);
+    if (cols.includes("segment_ref")) importSegments(rows);
+    else if (cols.includes("short_def") || (cols.includes("code") && cols.includes("status")))
+      importCodebook(rows);
+    else if (cols.includes("line_id") && cols.includes("text"))
+      importTranscript(f.name.replace(/\.csv$/i,""), rows);
+    else setStatus("unrecognized CSV: " + f.name);
+  }
+  e.target.value = "";
+  renderAll(); save();
+};
+function ensureCode(code) {
+  const key = Object.keys(S.codebook).find(c => norm(c) === norm(code));
+  if (key) return key;
+  S.codebook[code] = { color: COLORS[Object.keys(S.codebook).length % COLORS.length],
+                       def:"", status:"candidate" };
+  return code;
+}
+function importTranscript(pid, rows) {
+  const lines = rows.map(r => ({ id:+r.line_id, ts:r.timestamp || "",
+    speaker:(r.speaker || "P").trim(), text:r.text || "" }))
+    .filter(l => Number.isFinite(l.id));
+  S.transcripts[pid] = { lines };
+  if (!S.tabs.includes(pid)) S.tabs.push(pid);
+  if (!S.active) S.active = pid;
+  // inline codes column -> segments (same run-collapsing as sync_coding.py)
+  const perCode = {};
+  rows.forEach(r => (r.codes || "").split(";").map(c => c.trim()).filter(Boolean)
+    .forEach(c => (perCode[norm(c)] = perCode[norm(c)] || {name:c, ids:[]}).ids.push(+r.line_id)));
+  Object.values(perCode).forEach(({name, ids}) => {
+    ids.sort((a,b) => a-b);
+    let start = ids[0], prev = ids[0];
+    const flush = end => addSegment(pid, start, end, ensureCode(name), "tom", "accepted", "", true);
+    for (let i = 1; i <= ids.length; i++) {
+      if (i === ids.length || ids[i] !== prev + 1) { flush(prev); start = ids[i]; }
+      prev = ids[i];
+    }
+  });
+  setStatus("loaded " + pid + " (" + lines.length + " lines)");
+}
+function importCodebook(rows) {
+  rows.forEach(r => { if (!r.code) return;
+    const key = ensureCode(r.code);
+    S.codebook[key].def = r.short_def || S.codebook[key].def;
+    S.codebook[key].status = r.status || S.codebook[key].status; });
+}
+function importSegments(rows) {
+  rows.forEach(r => {
+    const m = /^(.+?):(\d+)(?:-(\d+))?$/.exec(r.segment_ref || "");
+    if (!m) return;
+    const pid = m[1], start = +m[2], end = +(m[3] || m[2]);
+    if (!S.transcripts[pid]) { S.extSegRows.push(r); return; }
+    addSegment(pid, start, end, ensureCode(r.code), r.proposed_by || "tom",
+               r.status || "accepted", r.notes || "", true);
+  });
+}
+function addSegment(pid, start, end, code, proposedBy, status, notes, silent) {
+  const dup = S.segments.find(s => s.pid === pid && s.start === start &&
+    s.end === end && norm(s.code) === norm(code));
+  if (dup) return dup;
+  const seg = { sid:nextSid++, pid, start, end, code, notes:notes||"",
+                proposedBy:proposedBy||"tom", status:status||"accepted" };
+  S.segments.push(seg);
+  if (!silent) save();
+  return seg;
+}
+
+/* ================= export ================= */
+$("btnExport").onclick = () => {
+  const fields = ["segment_ref","pid","excerpt","code","proposed_by","status","notes"];
+  const rows = S.segments.map(s => ({
+    segment_ref: s.pid + ":" + (s.start === s.end ? s.start : s.start + "-" + s.end),
+    pid: s.pid, excerpt: excerptOf(s), code: s.code,
+    proposed_by: s.proposedBy, status: s.status, notes: s.notes }))
+    .concat(S.extSegRows);   // pass through rows of unloaded transcripts untouched
+  const blob = new Blob([toCSV(rows, fields)], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "coded-segments.csv";
+  a.click();
+  setStatus("exported " + rows.length + " rows (complete file, replace data/coding/coded-segments.csv)");
+};
+function excerptOf(s) {
+  const t = S.transcripts[s.pid]; if (!t) return "";
+  return t.lines.filter(l => l.id >= s.start && l.id <= s.end &&
+    !l.speaker.toUpperCase().startsWith("R")).map(l => l.text.trim()).join(" ");
+}
+
+/* ================= persistence ================= */
+function save() {
+  try { localStorage.setItem("coding-app-state",
+    JSON.stringify({...S, extSegRows:S.extSegRows})); } catch(e) {}
+}
+function load() {
+  try { const raw = localStorage.getItem("coding-app-state");
+    if (!raw) return;
+    S = Object.assign(S, JSON.parse(raw));
+    nextSid = Math.max(0, ...S.segments.map(s => s.sid)) + 1;
+  } catch(e) {}
+}
+function setStatus(t) { $("status").textContent = t; }
+
+/* ================= rendering ================= */
+function renderAll() { renderTabs(); renderPalette(); renderContent(); renderVideoDock(); }
+
+function renderTabs() {
+  const bar = $("tabs"); bar.innerHTML = "";
+  S.tabs.forEach(pid => {
+    const t = el("div", "tab" + (S.active === pid ? " active" : ""), pid);
+    const x = el("span", "x", "×");
+    x.onclick = ev => { ev.stopPropagation();
+      S.tabs = S.tabs.filter(p => p !== pid);
+      if (S.active === pid) S.active = S.tabs[0] || "browse";
+      renderAll(); save(); };
+    t.appendChild(x);
+    t.onclick = () => { S.active = pid; sel = {pid:null,anchor:null,lines:new Set()};
+      renderAll(); };
+    bar.appendChild(t);
+  });
+  const b = el("div", "tab" + (S.active === "browse" ? " active" : ""), "Browse");
+  b.onclick = () => { S.active = "browse"; renderAll(); };
+  bar.appendChild(b);
+  bar.appendChild(el("div","spacer"));
+}
+
+function codeCounts() {
+  const m = {};
+  S.segments.filter(s => s.status === "accepted").forEach(s => {
+    (m[s.code] = m[s.code] || {segs:0, pids:new Set()});
+    m[s.code].segs++; m[s.code].pids.add(s.pid); });
+  return m;
+}
+function hotbarCodes() {
+  if (S.hotbar.mode === "pinned") return S.hotbar.pinned.slice(0,9);
+  const counts = codeCounts();
+  return Object.keys(S.codebook)
+    .sort((a,b) => (counts[b]?.segs||0) - (counts[a]?.segs||0)).slice(0,9);
+}
+let hotbarCache = [];
+function renderPalette() {
+  const p = $("palette"); p.innerHTML = "";
+  const counts = codeCounts();
+  p.appendChild(el("h3", null, "hotbar (" + S.hotbar.mode + ")"));
+  const modeRow = el("div");
+  ["auto","pinned"].forEach(m => {
+    const b = el("button", null, m);
+    b.style.cssText = "font-size:11px;margin-right:4px;padding:2px 8px;border-radius:5px;border:1px solid var(--line);background:" +
+      (S.hotbar.mode === m ? "var(--sel)" : "var(--bg)") + ";color:var(--fg);cursor:pointer";
+    b.onclick = () => { S.hotbar.mode = m; renderPalette(); save(); };
+    modeRow.appendChild(b);
+  });
+  const rf = el("button", null, "⟳ refresh");
+  rf.title = "recompute auto hotbar by usage";
+  rf.style.cssText = "font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer";
+  rf.onclick = () => { hotbarCache = hotbarCodes(); renderPalette(); };
+  modeRow.appendChild(rf);
+  p.appendChild(modeRow);
+  if (!hotbarCache.length) hotbarCache = hotbarCodes();
+  hotbarCache.forEach((c, i) => { if (S.codebook[c]) p.appendChild(codeRow(c, counts, i+1)); });
+
+  p.appendChild(el("h3", null, "all codes"));
+  Object.keys(S.codebook).sort().forEach(c => p.appendChild(codeRow(c, counts)));
+  const inp = el("input"); inp.id = "newCode"; inp.placeholder = "+ new code (Enter)";
+  inp.onkeydown = e => { if (e.key === "Enter" && inp.value.trim()) {
+    pushUndo(); const c = ensureCode(inp.value.trim()); inp.value = "";
+    if (sel.lines.size) applyCode(c);
+    renderAll(); save(); } };
+  p.appendChild(inp);
+}
+function codeRow(code, counts, key) {
+  const row = el("div", "codeItem");
+  const sw = el("span", "swatch"); sw.style.background = S.codebook[code].color;
+  sw.onclick = ev => { ev.stopPropagation();
+    const inp = document.createElement("input"); inp.type = "color";
+    inp.value = S.codebook[code].color;
+    inp.oninput = () => { S.codebook[code].color = inp.value; renderAll(); save(); };
+    inp.click(); };
+  row.appendChild(sw);
+  row.appendChild(el("span", null, code));
+  if (key) row.appendChild(el("span", "key", String(key)));
+  const c = counts[code];
+  row.appendChild(el("span", "cnt", c ? c.segs + "·" + c.pids.size : "0"));
+  row.title = (S.codebook[code].def || "") +
+    (S.hotbar.mode === "pinned" ? "  (right-click: pin/unpin)" : "");
+  row.onclick = () => { if (sel.lines.size) { pushUndo(); applyCode(code); } };
+  row.oncontextmenu = ev => { ev.preventDefault();
+    const i = S.hotbar.pinned.indexOf(code);
+    if (i >= 0) S.hotbar.pinned.splice(i,1); else S.hotbar.pinned.push(code);
+    if (S.hotbar.mode === "pinned") hotbarCache = hotbarCodes();
+    renderPalette(); save(); };
+  return row;
+}
+function applyCode(code) {
+  if (!sel.pid || !sel.lines.size) return;
+  const ids = [...sel.lines].sort((a,b) => a-b);
+  // contiguous runs of the selection -> segments
+  let start = ids[0], prev = ids[0];
+  for (let i = 1; i <= ids.length; i++) {
+    if (i === ids.length || ids[i] !== prev + 1) {
+      addSegment(sel.pid, start, prev, code, "tom", "accepted", "", true);
+      start = ids[i];
+    }
+    prev = ids[i];
+  }
+  sel.lines.clear(); sel.anchor = null;
+  renderAll(); save();
+}
+
+/* ---- transcript view with lanes ---- */
+function renderContent() {
+  const c = $("content"); c.innerHTML = "";
+  c.style.fontSize = S.ui.fontSize + "px";
+  if (S.active === "browse") { c.appendChild(renderBrowse()); return; }
+  const t = S.transcripts[S.active];
+  if (!t) { c.appendChild(el("div", "bExcerpt",
+    "Import transcript CSVs to begin (Import files…).")); return; }
+  const wrap = el("div"); wrap.id = "lines";
+  const segs = S.segments.filter(s => s.pid === S.active && s.status !== "rejected")
+    .sort((a,b) => a.start - b.start || b.end - a.end);
+  // lane assignment (interval graph greedy)
+  const laneEnd = [];
+  segs.forEach(s => {
+    let lane = laneEnd.findIndex(e => e < s.start);
+    if (lane === -1) { lane = laneEnd.length; laneEnd.push(0); }
+    laneEnd[lane] = s.end; s.lane = lane;
+  });
+  const nLanes = laneEnd.length;
+  t.lines.forEach(l => {
+    const row = el("div", "lineRow" + (l.speaker.toUpperCase().startsWith("R") ? " rspk" : "")
+      + (sel.pid === S.active && sel.lines.has(l.id) ? " selected" : ""));
+    row.dataset.lid = l.id;
+    const lanes = el("div", "lanes");
+    for (let i = 0; i < nLanes; i++) {
+      const seg = segs.find(s => s.lane === i && s.start <= l.id && l.id <= s.end);
+      if (!seg) { lanes.appendChild(el("span","laneEmpty")); continue; }
+      const bar = el("span", "laneBar" + (seg.start === l.id ? " segStart":"")
+        + (seg.end === l.id ? " segEnd":""));
+      bar.style.background = S.codebook[seg.code]?.color || "#999";
+      bar.title = seg.code + " (" + seg.start + "-" + seg.end + ")";
+      bar.onclick = ev => { ev.stopPropagation(); openPop(seg, ev.clientX, ev.clientY); };
+      if (seg.start === l.id) { const g = el("span","grip gripTop");
+        g.onmousedown = ev => dragEdge(ev, seg, "start"); bar.appendChild(g); }
+      if (seg.end === l.id) { const g = el("span","grip gripBot");
+        g.onmousedown = ev => dragEdge(ev, seg, "end"); bar.appendChild(g); }
+      lanes.appendChild(bar);
+    }
+    const lid = el("span","lid", String(l.id));
+    const ts = el("span","ts", l.ts.split(".")[0]);
+    ts.title = "seek video"; ts.onclick = () => seekVideo(l.ts);
+    const spk = el("span","spk", l.speaker);
+    const txt = el("span","txt", l.text);
+    const clickSel = ev => selectLine(l.id, ev.shiftKey);
+    lid.onclick = clickSel; txt.onclick = clickSel;
+    row.append(lanes, lid, ts, spk, txt);
+    wrap.appendChild(row);
+  });
+  c.appendChild(wrap);
+}
+function selectLine(id, extend) {
+  if (sel.pid !== S.active) sel = { pid:S.active, anchor:null, lines:new Set() };
+  if (extend && sel.anchor !== null) {
+    sel.lines.clear();
+    const [a,b] = [Math.min(sel.anchor,id), Math.max(sel.anchor,id)];
+    for (let i = a; i <= b; i++) sel.lines.add(i);
+  } else if (sel.lines.has(id) && sel.lines.size === 1) {
+    sel.lines.clear(); sel.anchor = null;
+  } else { sel.lines = new Set([id]); sel.anchor = id; }
+  renderContent();
+}
+function dragEdge(ev, seg, which) {
+  ev.preventDefault(); ev.stopPropagation();
+  pushUndo();
+  const move = e => {
+    const rowEl = document.elementFromPoint(e.clientX, e.clientY)?.closest(".lineRow");
+    if (!rowEl) return;
+    const lid = +rowEl.dataset.lid;
+    if (which === "start" && lid <= seg.end) seg.start = lid;
+    if (which === "end" && lid >= seg.start) seg.end = lid;
+    renderContent();
+  };
+  const up = () => { document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", up); renderAll(); save(); };
+  document.addEventListener("mousemove", move);
+  document.addEventListener("mouseup", up);
+}
+/* ---- segment popover ---- */
+function openPop(seg, x, y) {
+  const pop = $("pop"); pop.innerHTML = ""; pop.style.display = "block";
+  pop.style.left = Math.min(x, innerWidth - 300) + "px";
+  pop.style.top = Math.min(y, innerHeight - 220) + "px";
+  pop.appendChild(el("div", null, seg.code + "  ·  " + seg.pid + ":" +
+    seg.start + (seg.end !== seg.start ? "-" + seg.end : "") +
+    "  ·  " + seg.proposedBy + "/" + seg.status));
+  const ta = el("textarea"); ta.value = seg.notes; ta.placeholder = "notes";
+  ta.oninput = () => { seg.notes = ta.value; save(); };
+  pop.appendChild(ta);
+  const row = el("div","row");
+  const del = el("button", null, "delete"); del.className = "vbtn";
+  del.onclick = () => { pushUndo();
+    S.segments = S.segments.filter(s => s.sid !== seg.sid);
+    pop.style.display = "none"; renderAll(); save(); };
+  const rej = el("button", null, seg.status === "rejected" ? "accept" : "reject");
+  rej.className = "vbtn";
+  rej.onclick = () => { pushUndo();
+    seg.status = seg.status === "rejected" ? "accepted" : "rejected";
+    pop.style.display = "none"; renderAll(); save(); };
+  const close = el("button", null, "close"); close.className = "vbtn";
+  close.onclick = () => pop.style.display = "none";
+  row.append(del, rej, close); pop.appendChild(row);
+}
+
+/* ---- browse view ---- */
+let browseCode = null, browseFilter = "";
+function renderBrowse() {
+  const wrap = el("div"); wrap.id = "browse";
+  const search = el("input"); search.type = "search";
+  search.placeholder = "filter codes…"; search.value = browseFilter;
+  search.oninput = () => { browseFilter = search.value; renderContent(); };
+  wrap.appendChild(search);
+  const counts = codeCounts();
+  if (!browseCode) {
+    Object.keys(S.codebook).sort()
+      .filter(c => c.toLowerCase().includes(browseFilter.toLowerCase()))
+      .forEach(c => {
+        const row = el("div","bCode");
+        const sw = el("span","swatch"); sw.style.background = S.codebook[c].color;
+        row.append(sw, el("span", null, c),
+          el("span","cnt", (counts[c]?.segs||0) + " segs · " + (counts[c]?.pids.size||0) + " pids"));
+        row.onclick = () => { browseCode = c; renderContent(); };
+        wrap.appendChild(row);
+      });
+  } else {
+    const back = el("button", null, "← all codes"); back.className = "vbtn";
+    back.onclick = () => { browseCode = null; renderContent(); };
+    wrap.appendChild(back);
+    wrap.appendChild(el("h2", null, browseCode));
+    S.segments.filter(s => norm(s.code) === norm(browseCode) && s.status === "accepted")
+      .forEach(s => {
+        const ex = el("div","bExcerpt");
+        ex.style.borderLeftColor = S.codebook[s.code]?.color || "var(--line)";
+        const ref = el("div","ref", s.pid + ":" + s.start +
+          (s.end !== s.start ? "-" + s.end : "") +
+          (S.transcripts[s.pid] ? "  (open)" : "  (transcript not loaded)"));
+        if (S.transcripts[s.pid]) ref.onclick = () => jumpTo(s);
+        ex.appendChild(el("div", null, excerptOf(s) || "(excerpt in coded-segments.csv)"));
+        ex.appendChild(ref);
+        wrap.appendChild(ex);
+      });
+  }
+  return wrap;
+}
+function jumpTo(seg) {
+  S.active = seg.pid; renderAll();
+  requestAnimationFrame(() => {
+    const row = document.querySelector('.lineRow[data-lid="' + seg.start + '"]');
+    if (row) { row.scrollIntoView({block:"center"}); row.style.outline = "2px solid var(--accent)";
+      setTimeout(() => row.style.outline = "", 1600); }
+  });
+}
+
+/* ================= video dock ================= */
+let videoEl = null, videoURL = null;
+function renderVideoDock() {
+  const body = $("vbody"); body.innerHTML = "";
+  const pid = S.active;
+  $("vtitle").textContent = "video · " + (pid === "browse" ? "—" : pid);
+  if (pid === "browse" || !S.transcripts[pid]) { videoEl = null; return; }
+  if (!videoURL || videoURL.pid !== pid) {
+    // no media chosen for this tab yet -> dock doubles as the selector
+    const empty = el("div"); empty.id = "vempty";
+    empty.appendChild(el("div", null, "No media loaded for " + pid + "."));
+    const pick = el("button", null, "Choose video/audio file…"); pick.className = "vbtn";
+    pick.style.marginTop = "8px";
+    pick.onclick = () => { $("videoPick").onchange = e => {
+        const f = e.target.files[0]; if (!f) return;
+        if (videoURL) URL.revokeObjectURL(videoURL.url);
+        videoURL = { pid, url: URL.createObjectURL(f), name: f.name };
+        S.video[pid] = S.video[pid] || { offset: 0 };
+        renderVideoDock(); e.target.value = "";
+      }; $("videoPick").click(); };
+    empty.appendChild(pick);
+    body.appendChild(empty);
+    videoEl = null;
+    return;
+  }
+  videoEl = document.createElement("video");
+  videoEl.src = videoURL.url; videoEl.controls = true;
+  body.appendChild(videoEl);
+  const ctrl = el("div"); ctrl.id = "vctrl";
+  ctrl.appendChild(el("span", null, videoURL.name));
+  const offLabel = el("label", null, "offset(s) ");
+  const off = document.createElement("input"); off.type = "number"; off.step = "1";
+  off.value = S.video[pid]?.offset || 0;
+  off.oninput = () => { (S.video[pid] = S.video[pid] || {}).offset = +off.value; save(); };
+  offLabel.appendChild(off); ctrl.appendChild(offLabel);
+  const change = el("button", null, "change"); change.className = "vbtn";
+  change.onclick = () => { videoURL = null; renderVideoDock(); };
+  ctrl.appendChild(change);
+  body.appendChild(ctrl);
+}
+function tsToSec(ts) {
+  const p = (ts || "").split(".")[0].split(":").map(Number);
+  if (p.some(isNaN) || !p.length) return null;
+  return p.reduce((a,b) => a*60 + b, 0);
+}
+function seekVideo(ts) {
+  if (!videoEl) return setStatus("no media loaded for this tab");
+  const sec = tsToSec(ts);
+  if (sec === null) return;
+  videoEl.currentTime = Math.max(0, sec + (S.video[S.active]?.offset || 0));
+  videoEl.play();
+}
+/* dock: drag + collapse + audio-only */
+(function() {
+  const dock = $("vdock"), head = $("vhead");
+  head.onmousedown = ev => {
+    if (ev.target.tagName === "BUTTON") return;
+    const r = dock.getBoundingClientRect();
+    const dx = ev.clientX - r.left, dy = ev.clientY - r.top;
+    dock.style.right = "auto"; dock.style.bottom = "auto";
+    const move = e => { dock.style.left = (e.clientX - dx) + "px";
+      dock.style.top = (e.clientY - dy) + "px"; };
+    const up = () => { document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up); };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  };
+  $("vCollapse").onclick = () => { dock.classList.toggle("collapsed");
+    $("vCollapse").textContent = dock.classList.contains("collapsed") ? "▸" : "▾"; };
+  $("vAudio").onclick = () => $("vbody").classList.toggle("audioOnly");
+})();
+
+/* ================= toolbar / global ================= */
+$("fontSize").oninput = e => { S.ui.fontSize = +e.target.value;
+  $("content").style.fontSize = S.ui.fontSize + "px"; save(); };
+$("btnTheme").onclick = () => { S.ui.dark = !S.ui.dark;
+  document.documentElement.dataset.theme = S.ui.dark ? "dark" : ""; save(); };
+$("btnZen").onclick = () => document.body.classList.add("zen");
+$("zenExit").onclick = () => document.body.classList.remove("zen");
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); undo(); return; }
+  if (e.key === "Escape") { sel.lines.clear(); sel.anchor = null;
+    $("pop").style.display = "none"; document.body.classList.remove("zen");
+    renderContent(); return; }
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 9 && sel.lines.size) {
+    const code = hotbarCache[n-1];
+    if (code) { pushUndo(); applyCode(code); }
+  }
+});
+
+/* ================= init ================= */
+load();
+document.documentElement.dataset.theme = S.ui.dark ? "dark" : "";
+$("fontSize").value = S.ui.fontSize;
+if (!S.tabs.length) S.active = "browse";
+renderAll();
+</script>
+</body>
+</html>
