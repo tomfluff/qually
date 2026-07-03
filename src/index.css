@@ -84,14 +84,49 @@ button { font-family:inherit; }
 
 .empty { padding:16px; color:var(--muted); }
 
+/* settings popover */
+.settings-wrap { position:relative; display:inline-flex; }
+.settings-pop { position:absolute; top:calc(100% + 6px); left:0; z-index:70;
+  width:264px; background:var(--bg); border:1px solid var(--line); border-radius:12px;
+  box-shadow:0 10px 34px rgba(0,0,0,.28); padding:14px; display:flex;
+  flex-direction:column; gap:10px; font-size:12px; }
+.settings-title { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); font-weight:700; }
+.settings-pop .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
+.settings-pop .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
+.settings-pop .srow input[type=range] { width:104px; margin:0; align-self:center;
+  accent-color:var(--accent); }
+.settings-pop .sval { min-width:26px; padding:2px 0; text-align:center;
+  color:var(--fg); font-variant-numeric:tabular-nums; background:var(--panel);
+  border:1px solid var(--line); border-radius:5px; }
+.settings-pop .seg { display:flex; width:130px; border:1px solid var(--line);
+  border-radius:7px; overflow:hidden; }
+.settings-pop .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
+  padding:5px 0; font-size:12px; font-weight:500; text-align:center; cursor:pointer;
+  transition:background .12s, color .12s; }
+.settings-pop .seg button:hover { background:var(--panel); }
+.settings-pop .seg button.on { background:var(--accent); color:#fff; }
+.settings-div { height:1px; background:var(--line); margin:2px 0; }
+.settings-pop .zenbtn { width:100%; justify-content:center; text-align:center; }
+.settings-note { font-size:11px; color:var(--muted); text-align:center; }
+
+.codeItem .pindot { color:var(--accent); font-size:.7em; }
+
+/* zen mode: hide chrome, keep transcript + video */
+#app.zen #toolbar, #app.zen #tabs, #app.zen #sidebar, #app.zen .hotbar { display:none; }
+.zenexit { position:fixed; top:8px; right:8px; z-index:60; opacity:.4; }
+.zenexit:hover { opacity:1; }
+
 /* hotbar bottom dock */
 .hotbar { position:fixed; bottom:0; left:50%; transform:translateX(-50%);
   z-index:45; display:flex; flex-direction:column; align-items:center;
-  padding:7px 9px; background:var(--panel); border:1px solid var(--line);
+  padding:7px 9px; min-width:84px; background:var(--panel); border:1px solid var(--line);
   border-bottom:none; border-radius:12px 12px 0 0; box-shadow:0 6px 24px rgba(0,0,0,.28); }
 .hotbar.collapsed { padding:0; background:transparent; border:none; box-shadow:none; }
 .hotbar.collapsed .tiles { display:none; }
-.hotbar .tiles { display:flex; gap:5px; }
+.hotbar .tiles { display:flex; gap:5px; align-items:center; min-height:36px; }
+.hbhint { display:flex; align-items:center; height:36px; padding:0 10px;
+  color:var(--muted); font-size:12px; white-space:nowrap; }
 .tile { position:relative; width:36px; height:36px; padding:0; flex:0 0 auto;
   box-sizing:border-box; border:1px solid rgba(0,0,0,.18); border-radius:7px;
   cursor:pointer; color:#fff; font-weight:700; font-size:13px; display:flex;

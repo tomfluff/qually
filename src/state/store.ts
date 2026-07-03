@@ -24,7 +24,7 @@ interface State {
   hotbar: { mode: "auto" | "pinned"; pinned: string[] };
   hotbarCache: string[];
   video: Record<string, { name?: string; offset: number }>;
-  ui: { fontSize: number; sidebarFontSize: number; dark: boolean };
+  ui: { fontSize: number; sidebarFontSize: number; dark: boolean; zen: boolean };
   // transient (not persisted)
   selection: Selection;
   undoStack: string[];
@@ -51,6 +51,8 @@ interface State {
   setFontSize: (n: number) => void;
   setSidebarFontSize: (n: number) => void;
   toggleTheme: () => void;
+  setHotbarMode: (mode: "auto" | "pinned") => void;
+  setZen: (v: boolean) => void;
   exportCSV: () => string;
 }
 
@@ -69,7 +71,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false },
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false },
       selection: emptySel(), undoStack: [], nextSid: 1,
 
       importFiles: async (files) => {
@@ -165,6 +167,8 @@ export const useStore = create<State>()(
       setFontSize: (n) => set({ ui: { ...get().ui, fontSize: n } }),
       setSidebarFontSize: (n) => set({ ui: { ...get().ui, sidebarFontSize: n } }),
       toggleTheme: () => set({ ui: { ...get().ui, dark: !get().ui.dark } }),
+      setHotbarMode: (mode) => { set({ hotbar: { ...get().hotbar, mode } }); set({ hotbarCache: hotbarCodes(get()) }); },
+      setZen: (v) => set({ ui: { ...get().ui, zen: v } }),
 
       exportCSV: () => {
         const s = get();

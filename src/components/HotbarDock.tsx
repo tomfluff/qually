@@ -8,6 +8,7 @@ import { Icon } from "./Icon";
 // pinning stays right-click-from-sidebar.
 export function HotbarDock() {
   const codes = useStore((s) => s.hotbarCache);
+  const mode = useStore((s) => s.hotbar.mode);
   const codebook = useStore((s) => s.codebook);
   const fontSize = useStore((s) => s.ui.fontSize);
   const hasSel = useStore((s) => s.selection.lines.size > 0);
@@ -38,9 +39,15 @@ export function HotbarDock() {
             <span className="tname" style={{ fontSize }}>{code}</span>
           </button>
         ))}
-        <button className="tile refresh" onClick={refreshHotbar} title="recompute by usage">
-          <Icon name="refresh" size={20} />
-        </button>
+        {mode === "auto"
+          ? (
+            <button className="tile refresh" onClick={refreshHotbar} title="recompute by usage">
+              <Icon name="refresh" size={20} />
+            </button>
+          )
+          : tiles.length === 0 && (
+            <span className="hbhint">Right-click a code to pin</span>
+          )}
       </div>
     </div>
   );

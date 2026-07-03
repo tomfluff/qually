@@ -11,6 +11,8 @@ export function CodeSidebar() {
   const applyCode = useStore((s) => s.applyCode);
   const setColor = useStore((s) => s.setColor);
   const pushUndo = useStore((s) => s.pushUndo);
+  const togglePin = useStore((s) => s.togglePin);
+  const pinned = useStore((s) => s.hotbar.pinned);
   const [draft, setDraft] = useState("");
 
   const counts: Record<string, { segs: number; pids: Set<string> }> = {};
@@ -40,7 +42,8 @@ export function CodeSidebar() {
         return (
           <div key={code} className="codeItem"
             onClick={() => { if (hasSel) { pushUndo(); applyCode(code); } }}
-            title={code}>
+            onContextMenu={(e) => { e.preventDefault(); togglePin(code); }}
+            title={`${code}  (right-click: pin/unpin for hotbar)`}>
             <span className="swatch" style={{ background: codebook[code].color }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -50,6 +53,7 @@ export function CodeSidebar() {
                 inp.click();
               }} />
             <span>{code}</span>
+            {pinned.includes(code) && <span className="pindot" title="pinned">●</span>}
             {slot >= 0 && slot < 9 && <span className="key">{slot + 1}</span>}
             <span className="cnt">{c ? `${c.segs}·${c.pids.size}` : "0"}</span>
           </div>

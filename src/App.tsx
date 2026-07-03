@@ -10,6 +10,7 @@ import { HotbarDock } from "./components/HotbarDock";
 export function App() {
   const active = useStore((s) => s.active);
   const dark = useStore((s) => s.ui.dark);
+  const zen = useStore((s) => s.ui.zen);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "";
@@ -21,7 +22,7 @@ export function App() {
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
       const s = useStore.getState();
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); s.undo(); return; }
-      if (e.key === "Escape") { s.clearSelection(); return; }
+      if (e.key === "Escape") { if (s.ui.zen) s.setZen(false); s.clearSelection(); return; }
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= 9 && s.selection.lines.size) {
         const code = s.hotbarCache[n - 1];
@@ -33,7 +34,7 @@ export function App() {
   }, []);
 
   return (
-    <div id="app">
+    <div id="app" className={zen ? "zen" : ""}>
       <Toolbar />
       <Tabs />
       <div id="main">
@@ -46,6 +47,7 @@ export function App() {
       </div>
       {active !== "browse" && <HotbarDock />}
       <VideoDock />
+      {zen && <button className="zenexit" onClick={() => useStore.getState().setZen(false)}>exit zen (Esc)</button>}
     </div>
   );
 }
