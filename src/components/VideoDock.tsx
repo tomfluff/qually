@@ -73,7 +73,7 @@ export function VideoDock() {
 
   return (
     <div className={"vdock" + (geom.collapsed ? " collapsed" : "")}
-      style={{ width: geom.w, ...pos }}>
+      style={{ width: cur ? geom.w : 260, ...pos }}>
       {cur ? (
         <div className="vbody">
           {!geom.collapsed && (

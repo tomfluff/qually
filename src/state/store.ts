@@ -29,6 +29,7 @@ interface State {
   selection: Selection;
   undoStack: string[];
   nextSid: number;
+  jump: { pid: string; line: number } | null;
 
   importFiles: (files: FileList | File[]) => Promise<void>;
   ensureCode: (code: string) => string;
@@ -39,6 +40,8 @@ interface State {
   clearSelection: () => void;
   setActive: (pid: string) => void;
   closeTab: (pid: string) => void;
+  jumpTo: (pid: string, line: number) => void;
+  clearJump: () => void;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
   toggleReject: (sid: number) => void;
@@ -72,7 +75,7 @@ export const useStore = create<State>()(
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false },
-      selection: emptySel(), undoStack: [], nextSid: 1,
+      selection: emptySel(), undoStack: [], nextSid: 1, jump: null,
 
       importFiles: async (files) => {
         for (const f of Array.from(files)) {
@@ -127,6 +130,8 @@ export const useStore = create<State>()(
 
       clearSelection: () => set({ selection: emptySel() }),
       setActive: (pid) => set({ active: pid, selection: emptySel() }),
+      jumpTo: (pid, line) => set({ active: pid, selection: emptySel(), jump: { pid, line } }),
+      clearJump: () => set({ jump: null }),
       closeTab: (pid) => {
         const s = get();
         const tabs = s.tabs.filter((p) => p !== pid);

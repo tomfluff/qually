@@ -31,13 +31,13 @@ export function SettingsButton() {
         <div className="settings-pop">
           <div className="settings-title">Settings</div>
           <label className="srow">
-            <span>Transcript size</span>
+            <span>Transcript</span>
             <input type="range" min={12} max={30} value={fontSize} onChange={(e) => setFontSize(+e.target.value)} />
             <span className="sval">{fontSize}</span>
           </label>
           <label className="srow">
-            <span>Sidebar size</span>
-            <input type="range" min={10} max={20} value={sidebarFontSize} onChange={(e) => setSidebarFontSize(+e.target.value)} />
+            <span>Sidebar</span>
+            <input type="range" min={10} max={30} value={sidebarFontSize} onChange={(e) => setSidebarFontSize(+e.target.value)} />
             <span className="sval">{sidebarFontSize}</span>
           </label>
           <div className="srow">

@@ -1,5 +1,5 @@
-import { useMemo, useState, type MouseEvent } from "react";
-import { VList } from "virtua";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign, type Line } from "../state/store";
 import { SegmentPopover } from "./SegmentPopover";
 import { seekVideo } from "../video/seek";
@@ -17,7 +17,18 @@ export function TranscriptView() {
   const selectLine = useStore((s) => s.selectLine);
   const pushUndo = useStore((s) => s.pushUndo);
   const setSegmentRange = useStore((s) => s.setSegmentRange);
+  const jump = useStore((s) => s.jump);
+  const clearJump = useStore((s) => s.clearJump);
+  const vref = useRef<VListHandle>(null);
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
+
+  // Browse -> jump: scroll the virtualized list to the requested line, then clear
+  useEffect(() => {
+    if (!jump || jump.pid !== active || !transcript) return;
+    const idx = transcript.lines.findIndex((l) => l.id === jump.line);
+    if (idx >= 0) vref.current?.scrollToIndex(idx, { align: "center" });
+    clearJump();
+  }, [jump, active, transcript, clearJump]);
 
   // lane assignment for the active transcript (greedy interval graph)
   // rejected segments stay in the lanes (styled distinctly) so they can be re-accepted
@@ -50,7 +61,7 @@ export function TranscriptView() {
 
   return (
     <>
-      <VList style={{ height: "100%", fontSize }}>
+      <VList ref={vref} style={{ height: "100%", fontSize }}>
         {transcript.lines.map((l) => (
           <Row
             key={l.id}

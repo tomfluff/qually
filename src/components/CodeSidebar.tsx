@@ -35,6 +35,7 @@ export function CodeSidebar() {
       <input id="newCode" value={draft} placeholder="+ new code (Enter)"
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && addNew()} />
+      <div className="codeList nicescroll">
       <h3>all codes</h3>
       {Object.keys(codebook).sort().map((code) => {
         const slot = hotbarCache.indexOf(code);
@@ -59,6 +60,7 @@ export function CodeSidebar() {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

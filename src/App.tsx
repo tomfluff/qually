@@ -4,6 +4,7 @@ import { Toolbar } from "./components/Toolbar";
 import { Tabs } from "./components/Tabs";
 import { CodeSidebar } from "./components/CodeSidebar";
 import { TranscriptView } from "./components/TranscriptView";
+import { BrowseView } from "./components/BrowseView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 
@@ -40,9 +41,7 @@ export function App() {
       <div id="main">
         <CodeSidebar />
         <div id="content">
-          {active === "browse"
-            ? <div className="empty">Browse view — coming in a later pass. Open a transcript tab to code.</div>
-            : <TranscriptView />}
+          {active === "browse" ? <BrowseView /> : <TranscriptView />}
         </div>
       </div>
       {active !== "browse" && <HotbarDock />}
