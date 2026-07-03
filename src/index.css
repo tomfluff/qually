@@ -70,8 +70,8 @@ button { font-family:inherit; }
   flex-shrink:0; border:none; border-radius:999px; padding:0 9px; cursor:pointer;
   line-height:1.4; }
 .lineRow .ts:hover { background:var(--accent); }
-.lineRow .spk { width:2.5ch; text-align:center; font-weight:700; flex-shrink:0;
-  color:var(--muted); }
+.lineRow .spk { width:var(--spk-w, 2.5ch); text-align:center; font-weight:700;
+  flex-shrink:0; color:var(--muted); white-space:nowrap; }
 .lineRow.rspk { opacity:.6; }
 .lineRow .txt { flex:1; line-height:1.45; }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign, type Line } from "../state/store";
 import { SegmentPopover } from "./SegmentPopover";
@@ -59,9 +59,13 @@ export function TranscriptView() {
     return <div className="empty">Import transcript CSVs to begin (Import files…).</div>;
   }
 
+  // uniform speaker-column width sized to the longest label in this transcript
+  const spkChars = transcript.lines.reduce((m, l) => Math.max(m, l.speaker.trim().length), 0);
+  const spkWidth = `${Math.max(2.5, spkChars)}ch`;
+
   return (
     <>
-      <VList ref={vref} style={{ height: "100%", fontSize }}>
+      <VList ref={vref} style={{ height: "100%", fontSize, "--spk-w": spkWidth } as CSSProperties}>
         {transcript.lines.map((l) => (
           <Row
             key={l.id}
