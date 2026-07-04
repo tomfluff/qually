@@ -33,18 +33,18 @@ export function Toolbar() {
 
   return (
     <div id="toolbar">
+      <button className="btn" onClick={() => fileRef.current?.click()}>Import files…</button>
+      <button className="btn" onClick={doExport}>Export coded-segments.csv</button>
+      <span className="tbdiv" />
       <button className="btn iconbtn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
         <Icon name="undo" size={16} />
       </button>
       <button className="btn iconbtn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
         <Icon name="redo" size={16} />
       </button>
-      <span className="tbdiv" />
-      <button className="btn" onClick={() => fileRef.current?.click()}>Import files…</button>
-      <button className="btn" onClick={doExport}>Export coded-segments.csv</button>
+      <span className="status">{status}</span>
       <SettingsButton />
       <AboutButton />
-      <span className="status">{status}</span>
       <input ref={fileRef} type="file" multiple accept=".csv" style={{ display: "none" }}
         onChange={(e) => { doImport(e.target.files); e.target.value = ""; }} />
     </div>
