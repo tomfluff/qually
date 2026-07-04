@@ -124,8 +124,11 @@ button { font-family:inherit; }
 
 /* transcript rows — order: line# · timecode · speaker · text · lanes (right).
    Uniform typography: everything at the transcript font-size; muting via color only. */
-.lineRow { display:flex; align-items:center; gap:8px; padding:6px 16px;
+.lineRow { display:flex; align-items:center; gap:8px; padding:0 16px;
   cursor:pointer; user-select:none; }
+/* vertical spacing lives on the text so the lane strip spans the full row
+   height and multiline segment bars connect (no inter-row gap) */
+.lineRow .txt { padding-block:6px; }
 .lineRow.selected { background:var(--sel); }
 .lineRow .lid { width:4ch; text-align:right; color:var(--muted); flex-shrink:0;
   user-select:none; }
