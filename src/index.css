@@ -206,8 +206,9 @@ button { font-family:inherit; }
 .lineRow:hover { background:var(--row-hover); }
 .lineRow.selected { background:var(--row-sel); }
 .lineRow.selected:hover { background:var(--row-sel-hover); }
-.lineRow .lid { width:4ch; text-align:right; color:var(--muted); flex-shrink:0;
-  user-select:none; }
+.lineRow .lid { width:var(--lid-w, 4ch); text-align:right; color:var(--muted); flex-shrink:0;
+  user-select:none; white-space:nowrap; }
+.lineRow.merged .lid { font-variant-numeric:tabular-nums; }
 .lineRow .ts { font-size:0.8em; color:var(--bg); background:var(--muted);
   flex-shrink:0; border:none; border-radius:999px; padding:0 9px; cursor:pointer;
   line-height:1.4; }

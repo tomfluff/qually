@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
-import { useStore, laneAssign, type Line } from "../state/store";
+import { useStore, laneAssign } from "../state/store";
+import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { seekVideo } from "../video/seek";
 import { findMatches } from "../search";
@@ -24,9 +25,12 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
   return nodes;
 }
 
+const lidLabel = (g: Group) => g.startId === g.endId ? `${g.startId}` : `${g.startId}–${g.endId}`;
+
 export function TranscriptView() {
   const active = useStore((s) => s.active);
   const transcript = useStore((s) => s.transcripts[s.active]);
+  const mergeLines = useStore((s) => s.ui.mergeLines);
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
@@ -49,13 +53,16 @@ export function TranscriptView() {
     else setHoverSid(sid);
   };
 
-  // Browse -> jump: scroll the virtualized list to the requested line, then clear
+  // merged display units (singletons when the toggle is off)
+  const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
+
+  // Browse -> jump: scroll the virtualized list to the unit containing the line
   useEffect(() => {
     if (!jump || jump.pid !== active || !transcript) return;
-    const idx = transcript.lines.findIndex((l) => l.id === jump.line);
+    const idx = groups.findIndex((g) => jump.line >= g.startId && jump.line <= g.endId);
     if (idx >= 0) vref.current?.scrollToIndex(idx + 1, { align: "center" }); // +1 for the top vpad
     clearJump();
-  }, [jump, active, transcript, clearJump]);
+  }, [jump, active, transcript, groups, clearJump]);
 
   // PageUp/PageDown/Home/End scroll the transcript list
   useEffect(() => {
@@ -82,16 +89,16 @@ export function TranscriptView() {
   // reserve 5 lanes; grow past that so text contracts instead of the strip scrolling
   const cols = Math.max(5, laned.reduce((m, s) => Math.max(m, s.lane + 1), 0));
 
-  // drag a segment edge to another line (elementFromPoint -> nearest row's line id)
+  // drag a segment edge to another unit (elementFromPoint -> that unit's boundary line id)
   const dragEdge = (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => {
     e.preventDefault(); e.stopPropagation();
     pushUndo();
     const move = (ev: globalThis.MouseEvent) => {
       const row = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest(".lineRow") as HTMLElement | null;
       if (!row?.dataset.lid) return;
-      const lid = +row.dataset.lid;
-      if (which === "start" && lid <= seg.end) setSegmentRange(seg.sid, lid, seg.end);
-      if (which === "end" && lid >= seg.start) setSegmentRange(seg.sid, seg.start, lid);
+      const gs = +row.dataset.lid, ge = +(row.dataset.end ?? row.dataset.lid);
+      if (which === "start" && gs <= seg.end) setSegmentRange(seg.sid, gs, seg.end);
+      if (which === "end" && ge >= seg.start) setSegmentRange(seg.sid, seg.start, ge);
     };
     const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
     document.addEventListener("mousemove", move);
@@ -124,9 +131,11 @@ export function TranscriptView() {
     return <div className="empty">Import transcript CSVs to begin (Import files…).</div>;
   }
 
-  // uniform speaker-column width sized to the longest label in this transcript
+  // uniform column widths sized to the longest label in this transcript
   const spkChars = transcript.lines.reduce((m, l) => Math.max(m, l.speaker.trim().length), 0);
   const spkWidth = `${Math.max(2.5, spkChars)}ch`;
+  const lidChars = groups.reduce((m, g) => Math.max(m, lidLabel(g).length), 1);
+  const lidWidth = `${Math.max(2, lidChars)}ch`;
 
   // bracket the hovered (or popover-open) segment's first/last lines
   const activeSid = hoverSid ?? pop?.sid ?? null;
@@ -135,24 +144,24 @@ export function TranscriptView() {
 
   return (
     <>
-      <VList ref={vref} style={{ height: "100%", fontSize, "--spk-w": spkWidth } as CSSProperties}>
+      <VList ref={vref} style={{ height: "100%", fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth } as CSSProperties}>
         {[
           <div className="vpad" key="vpad-top" />, // headroom before the first line
-          ...transcript.lines.map((l) => (
+          ...groups.map((g) => (
             <Row
-              key={l.id}
-              line={l}
-              selected={!!selLines?.has(l.id)}
+              key={g.startId}
+              group={g}
+              selected={g.ids.some((id) => selLines?.has(id))}
               cols={cols}
               laned={laned}
               codebook={codebook}
-              onRowDown={(e) => onRowDown(e, l.id)}
+              onRowDown={(e) => onRowDown(e, g.startId)}
               onLaneClick={(seg, e) => setPop({ sid: seg.sid, x: e.clientX, y: e.clientY })}
               onGripDown={dragEdge}
               onLaneHover={onLaneHover}
               hl={hl}
               searchQuery={search.query}
-              curOcc={search.current && search.current.line === l.id ? search.current.occ : -1}
+              current={search.current}
             />
           )),
           <div className="vpad" key="vpad-bot" />, // headroom after the last line
@@ -163,8 +172,8 @@ export function TranscriptView() {
   );
 }
 
-function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, searchQuery, curOcc }: {
-  line: Line;
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, searchQuery, current }: {
+  group: Group;
   selected: boolean;
   cols: number;
   laned: LanedSeg[];
@@ -175,15 +184,18 @@ function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, on
   onLaneHover: (sid: number | null) => void;
   hl: { start: number; end: number; color: string } | null;
   searchQuery: string;
-  curOcc: number;
+  current: { line: number; occ: number } | null;
 }) {
+  const { startId, endId } = group;
   const lanes = [];
   for (let i = 0; i < cols; i++) {
-    const seg = laned.find((s) => s.lane === i && s.start <= line.id && line.id <= s.end);
+    const seg = laned.find((s) => s.lane === i && s.start <= endId && startId <= s.end);
     if (!seg) { lanes.push(<span key={i} className="laneEmpty" />); continue; }
     const rej = seg.status === "rejected";
     const color = codebook[seg.code]?.color || "#999";
-    const cls = "laneBar" + (rej ? " rejected" : "") + (seg.start === line.id ? " segStart" : "") + (seg.end === line.id ? " segEnd" : "");
+    const isStart = seg.start >= startId && seg.start <= endId;
+    const isEnd = seg.end >= startId && seg.end <= endId;
+    const cls = "laneBar" + (rej ? " rejected" : "") + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
     // rejected: keep the code color, but faded + striped + outlined to read as inactive
     const style = rej
       ? { background: `repeating-linear-gradient(45deg, ${color}55, ${color}55 3px, transparent 3px, transparent 6px)`, border: `1.5px solid ${color}` }
@@ -193,28 +205,36 @@ function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, on
         style={style}
         onMouseEnter={() => onLaneHover(seg.sid)} onMouseLeave={() => onLaneHover(null)}
         onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}>
-        {seg.start === line.id && <span className="grip gripTop" onMouseDown={(e) => onGripDown(e, seg, "start")} />}
-        {seg.end === line.id && <span className="grip gripBot" onMouseDown={(e) => onGripDown(e, seg, "end")} />}
+        {isStart && <span className="grip gripTop" onMouseDown={(e) => onGripDown(e, seg, "start")} />}
+        {isEnd && <span className="grip gripBot" onMouseDown={(e) => onGripDown(e, seg, "end")} />}
       </span>
     );
   }
-  // inset shadow brackets the hovered segment: top border on its first line, bottom on its last
+  // inset shadow brackets the hovered segment: top border on its first unit, bottom on its last
   const shadow: string[] = [];
   const bracket = `${hl?.color}a6`; // 0xa6 ≈ 65% opacity (codebook colors are #RRGGBB)
-  if (hl && line.id === hl.start) shadow.push(`inset 0 2px 0 ${bracket}`);
-  if (hl && line.id === hl.end) shadow.push(`inset 0 -2px 0 ${bracket}`);
+  if (hl && hl.start >= startId && hl.start <= endId) shadow.push(`inset 0 2px 0 ${bracket}`);
+  if (hl && hl.end >= startId && hl.end <= endId) shadow.push(`inset 0 -2px 0 ${bracket}`);
+  const merged = startId !== endId;
 
   return (
-    <div className={"lineRow" + (isR(line.speaker) ? " rspk" : "") + (selected ? " selected" : "")}
-      data-lid={line.id} onMouseDown={onRowDown}
+    <div className={"lineRow" + (isR(group.speaker) ? " rspk" : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
+      data-lid={startId} data-end={endId} onMouseDown={onRowDown}
       style={shadow.length ? { boxShadow: shadow.join(",") } : undefined}>
-      <span className="lid">{line.id}</span>
-      <button className="ts" onClick={(e) => { e.stopPropagation(); seekVideo(line.ts); }}
+      <span className="lid">{lidLabel(group)}</span>
+      <button className="ts" onClick={(e) => { e.stopPropagation(); seekVideo(group.ts); }}
         title="play from here">
-        {line.ts.split(".")[0]}
+        {group.ts.split(".")[0]}
       </button>
-      <span className="spk">{line.speaker}</span>
-      <span className="txt">{searchQuery ? renderText(line.text, searchQuery, curOcc) : line.text}</span>
+      <span className="spk">{group.speaker}</span>
+      <span className="txt">
+        {group.lines.map((l, k) => (
+          <Fragment key={l.id}>
+            {k > 0 && " "}
+            {searchQuery ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1) : l.text}
+          </Fragment>
+        ))}
+      </span>
       <span className="lanes">{lanes}</span>
     </div>
   );

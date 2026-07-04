@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
+import { mergeGroups, type Group } from "../merge";
 
 const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
@@ -18,6 +19,7 @@ export interface Ui {
   sidebarWidth: number; browseLeftWidth: number;
   palettePos: "auto" | "centered";
   helpSeen: boolean;
+  mergeLines: boolean; // merge partial (non-terminated) same-speaker lines into one unit
 }
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
@@ -87,6 +89,21 @@ interface State {
 
 const emptySel = (): Selection => ({ pid: null, anchor: null, head: null, lines: new Set() });
 
+// Display units for the active transcript. When mergeLines is off these are
+// one-line singletons, so the group-aware selection below reduces to per-line.
+// anchor/head are the startId of the anchor/head group.
+function groupsOf(s: State): Group[] {
+  const t = s.transcripts[s.active];
+  return t ? mergeGroups(t.lines, s.ui.mergeLines) : [];
+}
+const groupIdxOf = (gs: Group[], lineId: number) => gs.findIndex((g) => lineId >= g.startId && lineId <= g.endId);
+function idsBetween(gs: Group[], i: number, j: number): number[] {
+  const [lo, hi] = i < j ? [i, j] : [j, i];
+  const out: number[] = [];
+  for (let k = lo; k <= hi; k++) out.push(...gs[k].ids);
+  return out;
+}
+
 function snapshot(s: State): string {
   return JSON.stringify({ segments: s.segments, codebook: s.codebook, hotbar: s.hotbar });
 }
@@ -109,7 +126,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false },
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false },
       selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
 
@@ -147,48 +164,58 @@ export const useStore = create<State>()(
         }
       },
 
+      // clicking a line selects its whole merged unit (a singleton when merge is off)
       selectLine: (id, opts = {}) => {
         const s = get();
-        let sel = s.selection.pid === s.active ? s.selection : emptySel();
-        sel = { pid: s.active, anchor: sel.anchor, head: sel.head, lines: new Set(sel.lines) };
-        if (opts.extend && sel.anchor !== null) {
-          sel.lines = new Set();
-          const [a, b] = [Math.min(sel.anchor, id), Math.max(sel.anchor, id)];
-          for (let i = a; i <= b; i++) sel.lines.add(i);
-          sel.head = id;
+        const gs = groupsOf(s);
+        const gi = groupIdxOf(gs, id);
+        if (gi < 0) return;
+        const g = gs[gi];
+        const cur = s.selection.pid === s.active ? s.selection : emptySel();
+        if (opts.extend && cur.anchor !== null) {
+          const base = Math.max(0, groupIdxOf(gs, cur.anchor));
+          set({ selection: { pid: s.active, anchor: gs[base].startId, head: g.startId, lines: new Set(idsBetween(gs, base, gi)) } });
         } else if (opts.toggle) {
-          if (sel.lines.has(id)) sel.lines.delete(id); else sel.lines.add(id);
-          sel.anchor = id; sel.head = id;
-        } else if (sel.lines.has(id) && sel.lines.size === 1) {
-          sel = emptySel();
-        } else { sel.lines = new Set([id]); sel.anchor = id; sel.head = id; }
-        set({ selection: sel });
+          const lines = new Set(cur.lines);
+          const allIn = g.ids.every((x) => lines.has(x));
+          for (const x of g.ids) allIn ? lines.delete(x) : lines.add(x);
+          set({ selection: { pid: s.active, anchor: g.startId, head: g.startId, lines } });
+        } else if (g.ids.every((x) => cur.lines.has(x)) && cur.lines.size === g.ids.length) {
+          set({ selection: emptySel() }); // re-click the sole unit clears
+        } else {
+          set({ selection: { pid: s.active, anchor: g.startId, head: g.startId, lines: new Set(g.ids) } });
+        }
       },
-      // shift+arrow moves the head; plain arrow jumps to a single adjacent line (transcript order)
+      // shift+arrow moves the head unit; plain arrow jumps to the adjacent unit
       moveSelection: (dir, extend) => {
         const s = get();
-        const t = s.transcripts[s.active];
-        if (!t || s.selection.pid !== s.active || !s.selection.lines.size) return;
-        const arr = t.lines;
-        const idx = (id: number) => arr.findIndex((l) => l.id === id);
+        const gs = groupsOf(s);
+        if (!gs.length || s.selection.pid !== s.active || !s.selection.lines.size) return;
         if (extend) {
-          const ids = [...s.selection.lines].sort((a, b) => a - b);
-          const anchor = s.selection.anchor ?? ids[0];
-          const head = s.selection.head ?? (dir > 0 ? ids[ids.length - 1] : ids[0]);
-          const nh = arr[idx(head) + dir];
-          if (!nh) return;
-          const a = idx(anchor), b = idx(nh.id);
-          const [lo, hi] = a < b ? [a, b] : [b, a];
-          set({ selection: { pid: s.active, anchor, head: nh.id, lines: new Set(arr.slice(lo, hi + 1).map((l) => l.id)) } });
+          const anchorGi = s.selection.anchor !== null ? groupIdxOf(gs, s.selection.anchor) : -1;
+          const headGi = s.selection.head !== null ? groupIdxOf(gs, s.selection.head) : anchorGi;
+          const ni = Math.max(0, Math.min(gs.length - 1, (headGi < 0 ? anchorGi : headGi) + dir));
+          if (ni === headGi) return;
+          const base = anchorGi < 0 ? ni : anchorGi;
+          set({ selection: { pid: s.active, anchor: gs[base].startId, head: gs[ni].startId, lines: new Set(idsBetween(gs, base, ni)) } });
         } else {
-          const ids = [...s.selection.lines].sort((a, b) => a - b);
-          const nl = arr[idx(dir > 0 ? ids[ids.length - 1] : ids[0]) + dir];
-          if (!nl) return;
-          set({ selection: { pid: s.active, anchor: nl.id, head: nl.id, lines: new Set([nl.id]) } });
+          const ids = [...s.selection.lines];
+          const edgeGi = groupIdxOf(gs, dir > 0 ? Math.max(...ids) : Math.min(...ids));
+          const ni = edgeGi + dir;
+          if (ni < 0 || ni >= gs.length) return;
+          const g = gs[ni];
+          set({ selection: { pid: s.active, anchor: g.startId, head: g.startId, lines: new Set(g.ids) } });
         }
       },
 
-      startSelection: (id) => set({ selection: { pid: get().active, anchor: id, head: id, lines: new Set([id]) } }),
+      startSelection: (id) => {
+        const s = get();
+        const gs = groupsOf(s);
+        const gi = groupIdxOf(gs, id);
+        if (gi < 0) return;
+        const g = gs[gi];
+        set({ selection: { pid: s.active, anchor: g.startId, head: g.startId, lines: new Set(g.ids) } });
+      },
       clearSelection: () => set({ selection: emptySel() }),
       setActive: (pid) => set({ active: pid, selection: emptySel() }),
       jumpTo: (pid, line) => set({ active: pid, selection: emptySel(), jump: { pid, line } }),
