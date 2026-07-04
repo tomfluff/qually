@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "../state/store";
 import { speakerGroupedText } from "../format";
+import { excerptOf } from "../contract/excerpt";
 import { Icon } from "./Icon";
 
 export function SegmentPopover({ sid, x, y, onClose }: {
@@ -49,6 +50,11 @@ export function SegmentPopover({ sid, x, y, onClose }: {
 
   if (!seg) return null;
   const range = seg.start === seg.end ? `${seg.start}` : `${seg.start}-${seg.end}`;
+  // read-only transcript, no need to subscribe
+  const tr = useStore.getState().transcripts[seg.pid];
+  const closeCall = tr
+    ? excerptOf(tr.lines.filter((l) => l.id >= seg.start && l.id <= seg.end).map((l) => ({ text: l.text, speaker: l.speaker }))).closeCall
+    : false;
 
   return (
     <div className="pop" ref={ref}
@@ -58,6 +64,9 @@ export function SegmentPopover({ sid, x, y, onClose }: {
         <strong>{seg.code}</strong>
         <span className="meta">  ·  {seg.pid}:{range}  ·  {seg.proposedBy}/{seg.status}</span>
       </div>
+      {closeCall && (
+        <div className="pop-warn">⚠ Near-balanced speakers — the excerpt keeps only the dominant speaker's lines, so the other speaker's substance drops out. Check this segment.</div>
+      )}
       <textarea value={seg.notes} placeholder="notes" onChange={(e) => setNotes(sid, e.target.value)} />
       <div className="row">
         <button className="btn danger" onClick={() => { deleteSegment(sid); onClose(); }}>Delete</button>

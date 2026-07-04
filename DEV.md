@@ -40,6 +40,7 @@ below as the original spec and decision record, not a live TODO. What shipped:
   Source lives in `tools/coding-app-src/`.
 
 New change requests get appended to §3 with dates, same as before.
+Unscheduled ideas / backlog live in `CODING-APP-FUTURE.md`.
 
 ---
 
@@ -274,6 +275,11 @@ changes, so the Python scripts and `docs/QUAL-WORKFLOW.md` are untouched.
 25. **Tabs**: font size follows the sidebar text setting (`ui.sidebarFontSize`)
     instead of a fixed 13px. The **Browse** tab is restyled as a distinct tinted
     rounded pill with a list glyph, set apart from the square participant tabs.
+26. **In-app close-call warnings.** The excerpt rule's `closeCall` flag (losing
+    speaker ≥40% of chars — a mixed-substance segment) is surfaced while coding,
+    not just at export: an amber dot on the segment's lane bar + a warning line
+    in the segment popover. Consumes the existing `excerptOf().closeCall`; no
+    rule change. Follow-up on W7 item 18. (First item from `CODING-APP-FUTURE.md`.)
 
 ## 4. Decisions log (was: open questions)
 

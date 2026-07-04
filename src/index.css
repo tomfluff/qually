@@ -231,6 +231,10 @@ button { font-family:inherit; }
 .laneBar { width:18px; flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
+/* close-call flag: mixed-substance segment (excerpt drops the other speaker) */
+.laneWarn { position:absolute; top:2px; left:50%; transform:translateX(-50%);
+  width:10px; height:10px; border-radius:50%; background:#e0a020;
+  border:1.5px solid var(--bg); pointer-events:none; z-index:2; }
 .laneBar .grip { position:absolute; left:-3px; right:-3px; height:8px; cursor:ns-resize; }
 .laneBar .gripTop { top:-3px; } .laneBar .gripBot { bottom:-3px; }
 .laneEmpty { width:18px; flex-shrink:0; }
@@ -387,6 +391,9 @@ button { font-family:inherit; }
   border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,.25); padding:12px;
   font-size:13px; width:280px; }
 .pop .meta { color:var(--muted); }
+.pop .pop-warn { margin-top:8px; padding:6px 8px; border-radius:6px; font-size:12px;
+  line-height:1.4; color:#7a5200; background:#fbeecb; border:1px solid #e8cf8a; }
+:root[data-theme="dark"] .pop .pop-warn { color:#f0cf8a; background:#3a2f14; border-color:#6b551f; }
 .pop textarea { width:100%; max-width:100%; height:52px; margin-top:8px;
   resize:vertical; font-size:12px;
   background:var(--panel); color:var(--fg); border:1px solid var(--line);

@@ -5,6 +5,7 @@ import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { seekVideo } from "../video/seek";
 import { findMatches } from "../search";
+import { excerptOf } from "../contract/excerpt";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
@@ -90,6 +91,19 @@ export function TranscriptView() {
   // reserve 5 lanes; grow past that so text contracts instead of the strip scrolling
   const cols = Math.max(5, laned.reduce((m, s) => Math.max(m, s.lane + 1), 0));
 
+  // close-call segments: the excerpt rule's losing speaker held >=40% of chars
+  // (mixed-substance flag, surfaced while coding — CODING-APP-DEV.md W7 item 18)
+  const closeCallSids = useMemo(() => {
+    const set = new Set<number>();
+    const lines = transcript?.lines ?? [];
+    for (const s of laned) {
+      if (s.status === "rejected") continue;
+      const range = lines.filter((l) => l.id >= s.start && l.id <= s.end).map((l) => ({ text: l.text, speaker: l.speaker }));
+      if (excerptOf(range).closeCall) set.add(s.sid);
+    }
+    return set;
+  }, [laned, transcript]);
+
   // drag a segment edge to another unit (elementFromPoint -> that unit's boundary line id)
   const dragEdge = (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => {
     e.preventDefault(); e.stopPropagation();
@@ -161,6 +175,7 @@ export function TranscriptView() {
               onGripDown={dragEdge}
               onLaneHover={onLaneHover}
               hl={hl}
+              closeCallSids={closeCallSids}
               showLid={showLineNumbers}
               searchQuery={search.query}
               current={search.current}
@@ -174,7 +189,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, showLid, searchQuery, current }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, showLid, searchQuery, current }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -185,6 +200,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   onGripDown: (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => void;
   onLaneHover: (sid: number | null) => void;
   hl: { start: number; end: number; color: string } | null;
+  closeCallSids: Set<number>;
   showLid: boolean;
   searchQuery: string;
   current: { line: number; occ: number } | null;
@@ -198,16 +214,18 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const color = codebook[seg.code]?.color || "#999";
     const isStart = seg.start >= startId && seg.start <= endId;
     const isEnd = seg.end >= startId && seg.end <= endId;
+    const cc = !rej && closeCallSids.has(seg.sid);
     const cls = "laneBar" + (rej ? " rejected" : "") + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
     // rejected: keep the code color, but faded + striped + outlined to read as inactive
     const style = rej
       ? { background: `repeating-linear-gradient(45deg, ${color}55, ${color}55 3px, transparent 3px, transparent 6px)`, border: `1.5px solid ${color}` }
       : { background: color };
     lanes.push(
-      <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}`}
+      <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
         style={style}
         onMouseEnter={() => onLaneHover(seg.sid)} onMouseLeave={() => onLaneHover(null)}
         onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}>
+        {isStart && cc && <span className="laneWarn" />}
         {isStart && <span className="grip gripTop" onMouseDown={(e) => onGripDown(e, seg, "start")} />}
         {isEnd && <span className="grip gripBot" onMouseDown={(e) => onGripDown(e, seg, "end")} />}
       </span>
