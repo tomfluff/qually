@@ -297,12 +297,15 @@ button { font-family:inherit; }
   resize:vertical; font-size:12px;
   background:var(--panel); color:var(--fg); border:1px solid var(--line);
   border-radius:6px; font-family:inherit; }
-.pop .row { display:flex; gap:8px; margin-top:12px; align-items:center; }
-.pop .row .btn { padding:6px 14px; font-weight:600; }
+.pop .row { display:flex; gap:6px; margin-top:12px; align-items:center; }
+.pop .row .btn { padding:3px 9px; font-size:12px; font-weight:600; }
+.pop .row .btn.copy, .pop .row .btn.iconclose { display:inline-flex; align-items:center; padding:4px 8px; }
+.pop .row .btn.copy { margin-left:auto; } /* copy + close pushed to the right */
+.pop .row .btn.iconclose { border:none; background:transparent; color:var(--muted); }
+.pop .row .btn.iconclose:hover { color:var(--fg); background:var(--line); }
 .btn.danger { background:#e0554f; color:#fff; border-color:#e0554f; }
 .btn.danger:hover { background:#c8443e; border-color:#c8443e; }
 .btn.ok { background:#3fa860; color:#fff; border-color:#3fa860; }
 .btn.ok:hover { background:#369152; border-color:#369152; }
 .btn.warn { background:#c98a2a; color:#fff; border-color:#c98a2a; }
 .btn.warn:hover { background:#b17722; border-color:#b17722; }
-.btn.close { margin-left:auto; }

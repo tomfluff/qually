@@ -9,6 +9,7 @@ import { BrowseView } from "./components/BrowseView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
+import { speakerGroupedText } from "./format";
 
 export function App() {
   const active = useStore((s) => s.active);
@@ -53,20 +54,14 @@ export function App() {
     const onCopy = (e: ClipboardEvent) => {
       const el = document.activeElement;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (document.querySelector(".pop")) return; // an open segment popover copies itself
       const s = useStore.getState();
       if (s.active === "browse" || s.selection.pid !== s.active || !s.selection.lines.size) return;
       const tr = s.transcripts[s.active];
       if (!tr) return;
       const sel = tr.lines.filter((l) => s.selection.lines.has(l.id));
       if (!sel.length) return;
-      const groups: { speaker: string; texts: string[] }[] = [];
-      for (const l of sel) {
-        const last = groups[groups.length - 1];
-        if (last && last.speaker === l.speaker) last.texts.push(l.text.trim());
-        else groups.push({ speaker: l.speaker, texts: [l.text.trim()] });
-      }
-      e.clipboardData?.setData("text/plain",
-        groups.map((g) => `${g.speaker} : ${g.texts.join(" ")}`).join("\n"));
+      e.clipboardData?.setData("text/plain", speakerGroupedText(sel));
       e.preventDefault();
     };
     document.addEventListener("copy", onCopy);
