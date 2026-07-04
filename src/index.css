@@ -1,10 +1,12 @@
 :root {
   --bg:#ffffff; --fg:#1a1a1a; --muted:#8a8a8a; --line:#e4e4e4;
   --panel:#f6f6f6; --accent:#3b6ea5; --sel:#dbeafe;
+  --row-hover:#ebebeb; --row-sel:#d2e6fc; --row-sel-hover:#bfdeff;
 }
 [data-theme=dark] {
   --bg:#161a1e; --fg:#e6e6e6; --muted:#7f8a94; --line:#2c333a;
   --panel:#1e242a; --accent:#7aa7d6; --sel:#243b55;
+  --row-hover:#23282e; --row-sel:#243b55; --row-sel-hover:#2e4a6b;
 }
 * { box-sizing:border-box; }
 html,body,#root { margin:0; height:100%; background:var(--bg); color:var(--fg);
@@ -129,10 +131,10 @@ button { font-family:inherit; }
 /* vertical spacing lives on the text so the lane strip spans the full row
    height and multiline segment bars connect (no inter-row gap) */
 .lineRow .txt { padding-block:6px; }
-/* one family, all from --sel: faint on hover, full on select, deeper on both */
-.lineRow:hover { background:color-mix(in srgb, var(--sel) 55%, transparent); }
-.lineRow.selected { background:var(--sel); }
-.lineRow.selected:hover { background:color-mix(in srgb, var(--sel), var(--fg) 12%); }
+/* gray hover, light-primary select, slightly-deeper primary on select+hover */
+.lineRow:hover { background:var(--row-hover); }
+.lineRow.selected { background:var(--row-sel); }
+.lineRow.selected:hover { background:var(--row-sel-hover); }
 .lineRow .lid { width:4ch; text-align:right; color:var(--muted); flex-shrink:0;
   user-select:none; }
 .lineRow .ts { font-size:0.8em; color:var(--bg); background:var(--muted);
