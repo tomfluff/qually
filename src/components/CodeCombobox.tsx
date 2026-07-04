@@ -26,7 +26,15 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose }:
   const [open, setOpen] = useState(!!autoFocus);
   const [hl, setHl] = useState(0);
   const ref = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const lastPt = useRef({ x: -1, y: -1 });
+  const wantScroll = useRef(false); // only keyboard nav scrolls the list, not hover
   useEffect(() => { if (autoFocus) ref.current?.focus(); }, [autoFocus]);
+  useEffect(() => {
+    if (!wantScroll.current) return;
+    wantScroll.current = false;
+    (listRef.current?.children[hl] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" });
+  }, [hl]);
 
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -56,8 +64,8 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose }:
     onClose?.();
   };
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowDown") { e.preventDefault(); setHl((h) => Math.min(h + 1, entries.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
+    if (e.key === "ArrowDown") { e.preventDefault(); wantScroll.current = true; setHl((h) => Math.min(h + 1, entries.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); wantScroll.current = true; setHl((h) => Math.max(h - 1, 0)); }
     else if (e.key === "Enter") { e.preventDefault(); const en = entries[Math.min(hl, entries.length - 1)]; if (en) choose(en); }
     else if (e.key === "Escape") { if (onClose) onClose(); else if (showList) setOpen(false); else e.currentTarget.blur(); }
   };
@@ -65,16 +73,21 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose }:
   return (
     <div className="newCodeWrap">
       <input ref={ref} className="newCode" value={draft} placeholder={placeholder} autoComplete="off"
-        onChange={(e) => { setDraft(e.target.value); setOpen(true); setHl(0); }}
+        onChange={(e) => { setDraft(e.target.value); setOpen(true); setHl(0); wantScroll.current = true; }}
         onFocus={() => setOpen(true)}
         onBlur={() => { if (!onClose) setOpen(false); }}
         onKeyDown={onKey} />
       {showList && (
-        <div className="acList nicescroll">
+        <div className="acList nicescroll" ref={listRef}>
           {entries.map((en, i) => (
             <div key={en.type + en.name} className={"acItem" + (i === hl ? " hl" : "")}
               onMouseDown={(e) => { e.preventDefault(); choose(en); }}
-              onMouseEnter={() => setHl(i)}>
+              onMouseMove={(e) => {
+                // only real cursor movement changes the highlight (scroll fires enter/move at same coords)
+                if (e.clientX === lastPt.current.x && e.clientY === lastPt.current.y) return;
+                lastPt.current = { x: e.clientX, y: e.clientY };
+                setHl(i);
+              }}>
               {en.type === "code" ? (
                 <>
                   <span className="swatch" style={{ background: codebook[en.name].color }} />
