@@ -129,9 +129,8 @@ button { font-family:inherit; }
 /* vertical spacing lives on the text so the lane strip spans the full row
    height and multiline segment bars connect (no inter-row gap) */
 .lineRow .txt { padding-block:6px; }
-.lineRow.selected { background:var(--sel); }
-.lineRow.laneHover { background:rgba(127,127,127,.12); } /* the line under a hovered lane bar */
-.lineRow.selected.laneHover { background:var(--sel); }
+.lineRow:hover { background:rgba(127,127,127,.12); } /* indicate the line under the cursor */
+.lineRow.selected, .lineRow.selected:hover { background:var(--sel); }
 .lineRow .lid { width:4ch; text-align:right; color:var(--muted); flex-shrink:0;
   user-select:none; }
 .lineRow .ts { font-size:0.8em; color:var(--bg); background:var(--muted);

@@ -22,13 +22,13 @@ export function TranscriptView() {
   const clearJump = useStore((s) => s.clearJump);
   const vref = useRef<VListHandle>(null);
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
-  const [hover, setHover] = useState<{ sid: number; line: number } | null>(null);
+  const [hoverSid, setHoverSid] = useState<number | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // debounce clearing so moving between a segment's bars doesn't flicker the brackets
-  const onLaneHover = (sid: number | null, lineId?: number) => {
+  const onLaneHover = (sid: number | null) => {
     clearTimeout(hoverTimer.current);
-    if (sid === null) hoverTimer.current = setTimeout(() => setHover(null), 40);
-    else setHover({ sid, line: lineId! });
+    if (sid === null) hoverTimer.current = setTimeout(() => setHoverSid(null), 40);
+    else setHoverSid(sid);
   };
 
   // Browse -> jump: scroll the virtualized list to the requested line, then clear
@@ -95,8 +95,7 @@ export function TranscriptView() {
   const spkWidth = `${Math.max(2.5, spkChars)}ch`;
 
   // bracket the hovered (or popover-open) segment's first/last lines
-  const activeSid = hover?.sid ?? pop?.sid ?? null;
-  const hoverLine = hover?.line ?? null; // the specific line under the cursor
+  const activeSid = hoverSid ?? pop?.sid ?? null;
   const hlSeg = activeSid !== null ? laned.find((s) => s.sid === activeSid) : undefined;
   const hl = hlSeg ? { start: hlSeg.start, end: hlSeg.end, color: codebook[hlSeg.code]?.color || "#999" } : null;
 
@@ -116,7 +115,6 @@ export function TranscriptView() {
             onGripDown={dragEdge}
             onLaneHover={onLaneHover}
             hl={hl}
-            laneHover={l.id === hoverLine}
           />
         ))}
       </VList>
@@ -125,7 +123,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, laneHover }: {
+function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl }: {
   line: Line;
   selected: boolean;
   cols: number;
@@ -134,9 +132,8 @@ function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, on
   onRowDown: (e: MouseEvent) => void;
   onLaneClick: (seg: LanedSeg, e: MouseEvent) => void;
   onGripDown: (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => void;
-  onLaneHover: (sid: number | null, lineId?: number) => void;
+  onLaneHover: (sid: number | null) => void;
   hl: { start: number; end: number; color: string } | null;
-  laneHover: boolean;
 }) {
   const lanes = [];
   for (let i = 0; i < cols; i++) {
@@ -152,7 +149,7 @@ function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, on
     lanes.push(
       <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}`}
         style={style}
-        onMouseEnter={() => onLaneHover(seg.sid, line.id)} onMouseLeave={() => onLaneHover(null)}
+        onMouseEnter={() => onLaneHover(seg.sid)} onMouseLeave={() => onLaneHover(null)}
         onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}>
         {seg.start === line.id && <span className="grip gripTop" onMouseDown={(e) => onGripDown(e, seg, "start")} />}
         {seg.end === line.id && <span className="grip gripBot" onMouseDown={(e) => onGripDown(e, seg, "end")} />}
@@ -166,7 +163,7 @@ function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, on
   if (hl && line.id === hl.end) shadow.push(`inset 0 -2px 0 ${bracket}`);
 
   return (
-    <div className={"lineRow" + (isR(line.speaker) ? " rspk" : "") + (selected ? " selected" : "") + (laneHover ? " laneHover" : "")}
+    <div className={"lineRow" + (isR(line.speaker) ? " rspk" : "") + (selected ? " selected" : "")}
       data-lid={line.id} onMouseDown={onRowDown}
       style={shadow.length ? { boxShadow: shadow.join(",") } : undefined}>
       <span className="lid">{line.id}</span>
