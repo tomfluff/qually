@@ -74,30 +74,32 @@ export function SearchBar() {
   return (
     <div className="searchbar">
       <div className="searchrow">
-        <input ref={inputRef} className="searchinput" value={query} placeholder="Find in transcript…"
-          onChange={(e) => setSearch({ query: e.target.value })}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
-            else if (e.key === "Escape") { e.preventDefault(); closeSearch(); }
-          }} />
-        <span className="searchcount">
-          {scope === "tab"
-            ? (query ? `${tabMatches.length ? idx + 1 : 0}/${tabMatches.length}` : "")
-            : (query ? `${allTotal}` : "")}
-        </span>
-        {scope === "tab" && <>
-          <button className="btn iconbtn" onClick={() => step(-1)} disabled={!tabMatches.length} title="Previous (Shift+Enter)">
-            <Icon name="chevron-up" size={16} />
-          </button>
-          <button className="btn iconbtn" onClick={() => step(1)} disabled={!tabMatches.length} title="Next (Enter)">
-            <Icon name="chevron-down" size={16} />
-          </button>
-        </>}
-        <div className="seg searchscope">
-          <button className={scope === "tab" ? "on" : ""} onClick={() => setSearch({ scope: "tab", current: null })}>This tab</button>
-          <button className={scope === "all" ? "on" : ""} onClick={() => setSearch({ scope: "all", current: null })}>All</button>
+        <div className="searchmain">
+          <input ref={inputRef} className="searchinput" value={query} placeholder="Find in transcript…"
+            onChange={(e) => setSearch({ query: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+              else if (e.key === "Escape") { e.preventDefault(); closeSearch(); }
+            }} />
+          <span className="searchcount">
+            {scope === "tab"
+              ? (query ? `${tabMatches.length ? idx + 1 : 0}/${tabMatches.length}` : "")
+              : (query ? `${allTotal}` : "")}
+          </span>
+          {scope === "tab" && <>
+            <button className="btn iconbtn" onClick={() => step(-1)} disabled={!tabMatches.length} title="Previous (Shift+Enter)">
+              <Icon name="chevron-up" size={16} />
+            </button>
+            <button className="btn iconbtn" onClick={() => step(1)} disabled={!tabMatches.length} title="Next (Enter)">
+              <Icon name="chevron-down" size={16} />
+            </button>
+          </>}
+          <div className="seg searchscope">
+            <button className={scope === "tab" ? "on" : ""} onClick={() => setSearch({ scope: "tab", current: null })}>This tab</button>
+            <button className={scope === "all" ? "on" : ""} onClick={() => setSearch({ scope: "all", current: null })}>All</button>
+          </div>
         </div>
-        <button className="btn iconbtn" onClick={closeSearch} title="Close (Esc)"><Icon name="x" size={16} /></button>
+        <button className="searchclose" onClick={closeSearch} title="Close (Esc)"><Icon name="x" size={16} /></button>
       </div>
 
       {scope === "all" && query && (
