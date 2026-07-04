@@ -3,6 +3,7 @@ import { useStore } from "./state/store";
 import { Toolbar } from "./components/Toolbar";
 import { Tabs } from "./components/Tabs";
 import { CodeSidebar } from "./components/CodeSidebar";
+import { Resizer } from "./components/Resizer";
 import { TranscriptView } from "./components/TranscriptView";
 import { BrowseView } from "./components/BrowseView";
 import { VideoDock } from "./components/VideoDock";
@@ -76,6 +77,7 @@ export function App() {
       <Tabs />
       <div id="main">
         <CodeSidebar />
+        <Resizer onWidth={(w) => useStore.getState().setUi({ sidebarWidth: Math.max(160, Math.min(560, w)) })} />
         <div id="content">
           {active === "browse" ? <BrowseView /> : <TranscriptView />}
         </div>

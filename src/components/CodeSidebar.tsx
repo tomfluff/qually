@@ -8,6 +8,7 @@ export function CodeSidebar() {
   const hotbarCache = useStore((s) => s.hotbarCache);
   const hasSel = useStore((s) => s.selection.lines.size > 0);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
+  const sidebarWidth = useStore((s) => s.ui.sidebarWidth);
   const ensureCode = useStore((s) => s.ensureCode);
   const applyCode = useStore((s) => s.applyCode);
   const setColor = useStore((s) => s.setColor);
@@ -31,7 +32,7 @@ export function CodeSidebar() {
   };
 
   return (
-    <div id="sidebar" style={{ fontSize: sidebarFontSize }}>
+    <div id="sidebar" style={{ fontSize: sidebarFontSize, width: sidebarWidth }}>
       {/* + new code moved to the TOP of the list (W3 item 12) */}
       <input id="newCode" value={draft} placeholder="+ new code (Enter)"
         onChange={(e) => setDraft(e.target.value)}

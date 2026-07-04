@@ -63,7 +63,14 @@ button { font-family:inherit; }
 
 /* main layout */
 #main { display:flex; flex:1; min-height:0; }
-#sidebar { width:250px; border-right:1px solid var(--line); overflow:hidden;
+
+/* draggable panel divider — lifted above the content so its grab zone wins */
+.resizer { flex:0 0 5px; align-self:stretch; cursor:col-resize; background:var(--line);
+  position:relative; z-index:3; }
+.resizer::after { content:""; position:absolute; inset:0 -5px; } /* wider hit area */
+.resizer:hover, .resizer:active { background:var(--accent); }
+#app.zen .resizer { display:none; }
+#sidebar { width:250px; overflow:hidden;
   padding:10px; background:var(--panel); flex-shrink:0;
   display:flex; flex-direction:column; }
 #sidebar .codeList { flex:1; min-height:0; overflow-y:auto; padding-right:6px; }
@@ -127,8 +134,7 @@ button { font-family:inherit; }
 
 /* browse view — two panes: codes (left) | excerpts (right) */
 #browse { display:flex; height:100%; overflow:hidden; }
-.browse-left { width:264px; flex-shrink:0; border-right:1px solid var(--line);
-  overflow-y:auto; padding:12px; }
+.browse-left { width:264px; flex-shrink:0; overflow-y:auto; padding:12px; }
 .browse-right { flex:1; min-width:0; overflow-y:auto; padding:16px 22px; }
 .browse-left input[type=search] { width:100%; padding:7px 10px; margin-bottom:8px;
   border:1px solid var(--line); border-radius:8px; background:var(--panel);

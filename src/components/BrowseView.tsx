@@ -2,12 +2,15 @@ import { useState } from "react";
 import { useStore, type Segment } from "../state/store";
 import { norm } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
+import { Resizer } from "./Resizer";
 
 export function BrowseView() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
   const fontSize = useStore((s) => s.ui.fontSize);
+  const leftWidth = useStore((s) => s.ui.browseLeftWidth);
+  const setUi = useStore((s) => s.setUi);
   const jumpTo = useStore((s) => s.jumpTo);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [anchor, setAnchor] = useState<string | null>(null);
@@ -49,7 +52,7 @@ export function BrowseView() {
 
   return (
     <div id="browse" style={{ fontSize }}>
-      <div className="browse-left nicescroll">
+      <div className="browse-left nicescroll" style={{ width: leftWidth }}>
         <input type="search" placeholder="filter codes…" value={filter}
           onChange={(e) => setFilter(e.target.value)} />
         {listed.map((c) => (
@@ -63,6 +66,8 @@ export function BrowseView() {
           </div>
         ))}
       </div>
+
+      <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(160, Math.min(520, w)) })} />
 
       <div className="browse-right nicescroll">
         {chosen.length === 0 ? (

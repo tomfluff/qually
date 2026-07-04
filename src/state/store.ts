@@ -13,6 +13,10 @@ export interface Segment {
   notes: string; proposedBy: string; status: string;
 }
 export interface Selection { pid: string | null; anchor: number | null; head: number | null; lines: Set<number>; }
+export interface Ui {
+  fontSize: number; sidebarFontSize: number; dark: boolean; zen: boolean;
+  sidebarWidth: number; browseLeftWidth: number;
+}
 
 interface State {
   transcripts: Record<string, { lines: Line[] }>;
@@ -24,7 +28,7 @@ interface State {
   hotbar: { mode: "auto" | "pinned"; pinned: string[] };
   hotbarCache: string[];
   video: Record<string, { name?: string; offset: number }>;
-  ui: { fontSize: number; sidebarFontSize: number; dark: boolean; zen: boolean };
+  ui: Ui;
   // transient (not persisted)
   selection: Selection;
   undoStack: string[];
@@ -61,6 +65,7 @@ interface State {
   setDef: (code: string, def: string) => void;
   setFontSize: (n: number) => void;
   setSidebarFontSize: (n: number) => void;
+  setUi: (patch: Partial<Ui>) => void;
   toggleTheme: () => void;
   setHotbarMode: (mode: "auto" | "pinned") => void;
   setZen: (v: boolean) => void;
@@ -91,7 +96,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false },
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264 },
       selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null,
 
       importFiles: async (files) => {
@@ -267,6 +272,7 @@ export const useStore = create<State>()(
 
       setFontSize: (n) => set({ ui: { ...get().ui, fontSize: n } }),
       setSidebarFontSize: (n) => set({ ui: { ...get().ui, sidebarFontSize: n } }),
+      setUi: (patch) => set({ ui: { ...get().ui, ...patch } }),
       toggleTheme: () => set({ ui: { ...get().ui, dark: !get().ui.dark } }),
       setHotbarMode: (mode) => { set({ hotbar: { ...get().hotbar, mode } }); set({ hotbarCache: hotbarCodes(get()) }); },
       setZen: (v) => set({ ui: { ...get().ui, zen: v } }),
