@@ -53,7 +53,7 @@ export function TranscriptView() {
   useEffect(() => {
     if (!jump || jump.pid !== active || !transcript) return;
     const idx = transcript.lines.findIndex((l) => l.id === jump.line);
-    if (idx >= 0) vref.current?.scrollToIndex(idx, { align: "center" });
+    if (idx >= 0) vref.current?.scrollToIndex(idx + 1, { align: "center" }); // +1 for the top vpad
     clearJump();
   }, [jump, active, transcript, clearJump]);
 
@@ -120,23 +120,27 @@ export function TranscriptView() {
   return (
     <>
       <VList ref={vref} style={{ height: "100%", fontSize, "--spk-w": spkWidth } as CSSProperties}>
-        {transcript.lines.map((l) => (
-          <Row
-            key={l.id}
-            line={l}
-            selected={!!selLines?.has(l.id)}
-            cols={cols}
-            laned={laned}
-            codebook={codebook}
-            onRowDown={(e) => onRowDown(e, l.id)}
-            onLaneClick={(seg, e) => setPop({ sid: seg.sid, x: e.clientX, y: e.clientY })}
-            onGripDown={dragEdge}
-            onLaneHover={onLaneHover}
-            hl={hl}
-            searchQuery={search.query}
-            curOcc={search.current && search.current.line === l.id ? search.current.occ : -1}
-          />
-        ))}
+        {[
+          <div className="vpad" key="vpad-top" />, // headroom before the first line
+          ...transcript.lines.map((l) => (
+            <Row
+              key={l.id}
+              line={l}
+              selected={!!selLines?.has(l.id)}
+              cols={cols}
+              laned={laned}
+              codebook={codebook}
+              onRowDown={(e) => onRowDown(e, l.id)}
+              onLaneClick={(seg, e) => setPop({ sid: seg.sid, x: e.clientX, y: e.clientY })}
+              onGripDown={dragEdge}
+              onLaneHover={onLaneHover}
+              hl={hl}
+              searchQuery={search.query}
+              curOcc={search.current && search.current.line === l.id ? search.current.occ : -1}
+            />
+          )),
+          <div className="vpad" key="vpad-bot" />, // headroom after the last line
+        ]}
       </VList>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
     </>

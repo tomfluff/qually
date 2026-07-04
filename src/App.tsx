@@ -100,7 +100,11 @@ export function App() {
       </div>
       {active !== "browse" && <HotbarDock />}
       <VideoDock />
-      {zen && <button className="zenexit" onClick={() => useStore.getState().setZen(false)}>exit zen (Esc)</button>}
+      {zen && (
+        <button className="zenexit" onClick={() => useStore.getState().setZen(false)}>
+          <Icon name="x" size={13} /> Exit zen <kbd>Esc</kbd>
+        </button>
+      )}
       <CommandPalette />
     </div>
   );
