@@ -13,6 +13,7 @@ export function SettingsButton() {
   const setHotbarMode = useStore((s) => s.setHotbarMode);
   const palettePos = useStore((s) => s.ui.palettePos);
   const mergeLines = useStore((s) => s.ui.mergeLines);
+  const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const setUi = useStore((s) => s.setUi);
   const dark = useStore((s) => s.ui.dark);
   const toggleTheme = useStore((s) => s.toggleTheme);
@@ -72,6 +73,13 @@ export function SettingsButton() {
             </div>
           </div>
           <div className="settings-note">Joins consecutive same-speaker lines that don't end in . ? ! … into one unit.</div>
+          <div className="srow">
+            <span>Line numbers</span>
+            <div className="seg">
+              <button className={!showLineNumbers ? "on" : ""} onClick={() => setUi({ showLineNumbers: false })}>off</button>
+              <button className={showLineNumbers ? "on" : ""} onClick={() => setUi({ showLineNumbers: true })}>on</button>
+            </div>
+          </div>
           <div className="settings-div" />
           <button className="btn zenbtn" onClick={() => { setZen(true); setOpen(false); }}>Enter zen mode</button>
           <div className="settings-note">Hides the toolbar and panels. Press Esc to exit.</div>

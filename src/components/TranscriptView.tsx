@@ -31,6 +31,7 @@ export function TranscriptView() {
   const active = useStore((s) => s.active);
   const transcript = useStore((s) => s.transcripts[s.active]);
   const mergeLines = useStore((s) => s.ui.mergeLines);
+  const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
@@ -160,6 +161,7 @@ export function TranscriptView() {
               onGripDown={dragEdge}
               onLaneHover={onLaneHover}
               hl={hl}
+              showLid={showLineNumbers}
               searchQuery={search.query}
               current={search.current}
             />
@@ -172,7 +174,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, searchQuery, current }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, showLid, searchQuery, current }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -183,6 +185,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   onGripDown: (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => void;
   onLaneHover: (sid: number | null) => void;
   hl: { start: number; end: number; color: string } | null;
+  showLid: boolean;
   searchQuery: string;
   current: { line: number; occ: number } | null;
 }) {
@@ -221,7 +224,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     <div className={"lineRow" + (isR(group.speaker) ? " rspk" : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
       style={shadow.length ? { boxShadow: shadow.join(",") } : undefined}>
-      <span className="lid">{lidLabel(group)}</span>
+      {showLid && <span className="lid">{lidLabel(group)}</span>}
       <button className="ts" onClick={(e) => { e.stopPropagation(); seekVideo(group.ts); }}
         title="play from here">
         {group.ts.split(".")[0]}
