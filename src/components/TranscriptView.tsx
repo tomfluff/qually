@@ -57,6 +57,22 @@ export function TranscriptView() {
     clearJump();
   }, [jump, active, transcript, clearJump]);
 
+  // PageUp/PageDown/Home/End scroll the transcript list
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+      const v = vref.current;
+      if (!v) return;
+      if (e.key === "PageDown") { e.preventDefault(); v.scrollBy(v.viewportSize * 0.9); }
+      else if (e.key === "PageUp") { e.preventDefault(); v.scrollBy(-v.viewportSize * 0.9); }
+      else if (e.key === "Home") { e.preventDefault(); v.scrollTo(0); }
+      else if (e.key === "End") { e.preventDefault(); v.scrollTo(v.scrollSize); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // lane assignment for the active transcript (greedy interval graph)
   // rejected segments stay in the lanes (styled distinctly) so they can be re-accepted
   const laned = useMemo(
