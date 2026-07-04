@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
+import { CodeMenu } from "./CodeMenu";
 
 export function CodeSidebar() {
   const codebook = useStore((s) => s.codebook);
@@ -11,9 +12,9 @@ export function CodeSidebar() {
   const applyCode = useStore((s) => s.applyCode);
   const setColor = useStore((s) => s.setColor);
   const pushUndo = useStore((s) => s.pushUndo);
-  const togglePin = useStore((s) => s.togglePin);
   const pinned = useStore((s) => s.hotbar.pinned);
   const [draft, setDraft] = useState("");
+  const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
 
   const counts: Record<string, { segs: number; pids: Set<string> }> = {};
   segments.filter((s) => s.status === "accepted").forEach((s) => {
@@ -43,8 +44,8 @@ export function CodeSidebar() {
         return (
           <div key={code} className="codeItem"
             onClick={() => { if (hasSel) { pushUndo(); applyCode(code); } }}
-            onContextMenu={(e) => { e.preventDefault(); togglePin(code); }}
-            title={`${code}  (right-click: pin/unpin for hotbar)`}>
+            onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
+            title={`${code}  (right-click for options)`}>
             <span className="swatch" style={{ background: codebook[code].color }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -61,6 +62,7 @@ export function CodeSidebar() {
         );
       })}
       </div>
+      {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
     </div>
   );
 }

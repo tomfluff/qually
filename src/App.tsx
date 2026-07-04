@@ -22,7 +22,10 @@ export function App() {
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
       const s = useStore.getState();
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); s.undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
+        e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); s.redo(); return; }
       if (e.key === "Escape") { if (s.ui.zen) s.setZen(false); s.clearSelection(); return; }
       // arrow nav: plain moves selection to the adjacent line, Shift extends (W2 item 7)
       if ((e.key === "ArrowUp" || e.key === "ArrowDown") && s.active !== "browse"

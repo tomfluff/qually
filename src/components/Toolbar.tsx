@@ -1,10 +1,15 @@
 import { useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { SettingsButton } from "./SettingsButton";
+import { Icon } from "./Icon";
 
 export function Toolbar() {
   const importFiles = useStore((s) => s.importFiles);
   const exportCSV = useStore((s) => s.exportCSV);
+  const undo = useStore((s) => s.undo);
+  const redo = useStore((s) => s.redo);
+  const canUndo = useStore((s) => s.undoStack.length > 0);
+  const canRedo = useStore((s) => s.redoStack.length > 0);
   const fileRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState("");
 
@@ -26,6 +31,13 @@ export function Toolbar() {
 
   return (
     <div id="toolbar">
+      <button className="btn iconbtn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
+        <Icon name="undo" size={16} />
+      </button>
+      <button className="btn iconbtn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
+        <Icon name="redo" size={16} />
+      </button>
+      <span className="tbdiv" />
       <button className="btn" onClick={() => fileRef.current?.click()}>Import files…</button>
       <button className="btn" onClick={doExport}>Export coded-segments.csv</button>
       <SettingsButton />

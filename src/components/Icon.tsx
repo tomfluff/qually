@@ -6,6 +6,14 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   play: { d: ["M7 4v16l13 -8z"], fill: true },
   pause: { d: ["M6 5h4v14h-4z", "M14 5h4v14h-4z"], fill: true },
   refresh: { d: ["M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4", "M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"] },
+  undo: { d: ["M9 14l-4 -4l4 -4", "M5 10h11a4 4 0 1 1 0 8h-1"] },
+  redo: { d: ["M15 14l4 -4l-4 -4", "M19 10h-11a4 4 0 1 0 0 8h1"] },
+  pencil: { d: ["M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4z", "M13.5 6.5l4 4"] },
+  text: { d: ["M4 6h16", "M4 12h10", "M4 18h14"] },
+  droplet: { d: ["M6.8 11a6 6 0 1 0 10.4 0l-5.2 -9l-5.2 9"] },
+  pin: { d: ["M9 4v6l-2 4v2h10v-2l-2 -4v-6", "M12 16v5", "M8 4h8"] },
+  merge: { d: ["M7 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M7 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M17 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M7 8v8", "M7 8a4 4 0 0 0 4 4h4"] },
+  trash: { d: ["M4 7h16", "M10 11v6", "M14 11v6", "M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12", "M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"] },
 };
 
 export function Icon({ name, size = 18 }: { name: keyof typeof PATHS; size?: number }) {

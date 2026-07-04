@@ -28,6 +28,7 @@ interface State {
   // transient (not persisted)
   selection: Selection;
   undoStack: string[];
+  redoStack: string[];
   nextSid: number;
   jump: { pid: string; line: number } | null;
 
@@ -51,6 +52,11 @@ interface State {
   refreshHotbar: () => void;
   pushUndo: () => void;
   undo: () => void;
+  redo: () => void;
+  renameCode: (code: string, newName: string) => void;
+  deleteCode: (code: string) => void;
+  mergeCode: (from: string, into: string) => void;
+  setDef: (code: string, def: string) => void;
   setFontSize: (n: number) => void;
   setSidebarFontSize: (n: number) => void;
   toggleTheme: () => void;
@@ -60,6 +66,15 @@ interface State {
 }
 
 const emptySel = (): Selection => ({ pid: null, anchor: null, lines: new Set() });
+
+function snapshot(s: State): string {
+  return JSON.stringify({ segments: s.segments, codebook: s.codebook, hotbar: s.hotbar });
+}
+function restore(get: () => State, set: (p: Partial<State>) => void, json: string) {
+  const o = JSON.parse(json);
+  const next = { ...get(), segments: o.segments, codebook: o.codebook, hotbar: o.hotbar };
+  set({ segments: o.segments, codebook: o.codebook, hotbar: o.hotbar, hotbarCache: hotbarCodes(next) });
+}
 
 function hotbarCodes(s: State): string[] {
   if (s.hotbar.mode === "pinned") return s.hotbar.pinned.slice(0, 9);
@@ -75,7 +90,7 @@ export const useStore = create<State>()(
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false },
-      selection: emptySel(), undoStack: [], nextSid: 1, jump: null,
+      selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null,
 
       importFiles: async (files) => {
         for (const f of Array.from(files)) {
@@ -147,6 +162,55 @@ export const useStore = create<State>()(
       },
       setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x) }),
       setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } } }),
+      setDef: (code, def) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], def } } }),
+      renameCode: (code, newName) => {
+        const name = newName.trim();
+        if (!name || name === code) return;
+        const s = get();
+        const existing = Object.keys(s.codebook).find((c) => norm(c) === norm(name) && c !== code);
+        if (existing) { get().mergeCode(code, existing); return; } // rename into existing -> merge
+        get().pushUndo();
+        const cb: State["codebook"] = {};
+        for (const k of Object.keys(s.codebook)) cb[k === code ? name : k] = s.codebook[k];
+        set({
+          codebook: cb,
+          segments: s.segments.map((x) => norm(x.code) === norm(code) ? { ...x, code: name } : x),
+          hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.map((c) => c === code ? name : c) },
+        });
+        set({ hotbarCache: hotbarCodes(get()) });
+      },
+      deleteCode: (code) => {
+        const s = get();
+        if (!s.codebook[code]) return;
+        get().pushUndo();
+        const cb = { ...s.codebook }; delete cb[code];
+        set({
+          codebook: cb,
+          segments: s.segments.filter((x) => norm(x.code) !== norm(code)), // A: drop its segments too
+          hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== code) },
+        });
+        set({ hotbarCache: hotbarCodes(get()) });
+      },
+      mergeCode: (from, into) => {
+        if (norm(from) === norm(into)) return;
+        const s = get();
+        get().pushUndo();
+        const seen = new Set<string>();
+        const merged = s.segments
+          .map((x) => norm(x.code) === norm(from) ? { ...x, code: into } : x)
+          .filter((x) => {
+            const key = `${x.pid}|${x.start}|${x.end}|${norm(x.code)}`;
+            if (seen.has(key)) return false;
+            seen.add(key); return true;
+          });
+        const cb = { ...s.codebook }; delete cb[from];
+        set({
+          codebook: cb,
+          segments: merged,
+          hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== from) },
+        });
+        set({ hotbarCache: hotbarCodes(get()) });
+      },
       togglePin: (code) => {
         const p = get().hotbar.pinned;
         const pinned = p.includes(code) ? p.filter((c) => c !== code) : [...p, code];
@@ -157,16 +221,21 @@ export const useStore = create<State>()(
 
       pushUndo: () => {
         const s = get();
-        const stack = [...s.undoStack, JSON.stringify({ segments: s.segments, codebook: s.codebook })];
+        const stack = [...s.undoStack, snapshot(s)];
         if (stack.length > 80) stack.shift();
-        set({ undoStack: stack });
+        set({ undoStack: stack, redoStack: [] }); // new action invalidates redo
       },
       undo: () => {
         const s = get();
-        const prev = s.undoStack[s.undoStack.length - 1];
-        if (!prev) return;
-        const o = JSON.parse(prev);
-        set({ segments: o.segments, codebook: o.codebook, undoStack: s.undoStack.slice(0, -1) });
+        if (!s.undoStack.length) return;
+        set({ redoStack: [...s.redoStack, snapshot(s)], undoStack: s.undoStack.slice(0, -1) });
+        restore(get, set, s.undoStack[s.undoStack.length - 1]);
+      },
+      redo: () => {
+        const s = get();
+        if (!s.redoStack.length) return;
+        set({ undoStack: [...s.undoStack, snapshot(s)], redoStack: s.redoStack.slice(0, -1) });
+        restore(get, set, s.redoStack[s.redoStack.length - 1]);
       },
 
       setFontSize: (n) => set({ ui: { ...get().ui, fontSize: n } }),
