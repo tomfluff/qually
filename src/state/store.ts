@@ -17,6 +17,7 @@ export interface Ui {
   fontSize: number; sidebarFontSize: number; dark: boolean; zen: boolean;
   sidebarWidth: number; browseLeftWidth: number;
   palettePos: "auto" | "centered";
+  helpSeen: boolean;
 }
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
@@ -108,7 +109,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto" },
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false },
       selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
 

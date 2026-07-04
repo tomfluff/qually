@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { SettingsButton } from "./SettingsButton";
+import { AboutButton } from "./AboutButton";
 import { Icon } from "./Icon";
 
 export function Toolbar() {
@@ -42,6 +43,7 @@ export function Toolbar() {
       <button className="btn" onClick={() => fileRef.current?.click()}>Import files…</button>
       <button className="btn" onClick={doExport}>Export coded-segments.csv</button>
       <SettingsButton />
+      <AboutButton />
       <span className="status">{status}</span>
       <input ref={fileRef} type="file" multiple accept=".csv" style={{ display: "none" }}
         onChange={(e) => { doImport(e.target.files); e.target.value = ""; }} />
