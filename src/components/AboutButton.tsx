@@ -36,9 +36,7 @@ export function AboutButton() {
 
   return (
     <>
-      <button className="helpbtn" title="Help & shortcuts" onClick={() => setOpen(true)}>
-        <Icon name="question" size={15} />
-      </button>
+      <button className="helpbtn" title="Help & shortcuts" onClick={() => setOpen(true)}>?</button>
       {open && (
         <div className="about-backdrop" onMouseDown={close}>
           <div className="about" onMouseDown={(e) => e.stopPropagation()}>
