@@ -16,6 +16,7 @@ export interface Selection { pid: string | null; anchor: number | null; head: nu
 export interface Ui {
   fontSize: number; sidebarFontSize: number; dark: boolean; zen: boolean;
   sidebarWidth: number; browseLeftWidth: number;
+  palettePos: "auto" | "centered";
 }
 
 interface State {
@@ -98,7 +99,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264 },
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto" },
       selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false,
 
       importFiles: async (files) => {

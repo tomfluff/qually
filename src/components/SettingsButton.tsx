@@ -11,6 +11,8 @@ export function SettingsButton() {
   const setSidebarFontSize = useStore((s) => s.setSidebarFontSize);
   const mode = useStore((s) => s.hotbar.mode);
   const setHotbarMode = useStore((s) => s.setHotbarMode);
+  const palettePos = useStore((s) => s.ui.palettePos);
+  const setUi = useStore((s) => s.setUi);
   const dark = useStore((s) => s.ui.dark);
   const toggleTheme = useStore((s) => s.toggleTheme);
   const setZen = useStore((s) => s.setZen);
@@ -45,6 +47,13 @@ export function SettingsButton() {
             <div className="seg">
               <button className={mode === "auto" ? "on" : ""} onClick={() => setHotbarMode("auto")}>auto</button>
               <button className={mode === "pinned" ? "on" : ""} onClick={() => setHotbarMode("pinned")}>pinned</button>
+            </div>
+          </div>
+          <div className="srow">
+            <span>Palette</span>
+            <div className="seg">
+              <button className={palettePos === "auto" ? "on" : ""} onClick={() => setUi({ palettePos: "auto" })}>near</button>
+              <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
             </div>
           </div>
           <div className="srow">

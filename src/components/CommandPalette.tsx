@@ -13,11 +13,12 @@ const LIST_MAX = 240;
 export function CommandPalette() {
   const open = useStore((s) => s.paletteOpen);
   const selCount = useStore((s) => s.selection.lines.size);
+  const palettePos = useStore((s) => s.ui.palettePos);
   const setPalette = useStore((s) => s.setPalette);
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; listMax: number } | null>(null);
 
   useLayoutEffect(() => {
-    if (!open) { setPos(null); return; }
+    if (!open || palettePos === "centered") { setPos(null); return; } // forced centered
     const els = document.querySelectorAll<HTMLElement>(".lineRow.selected");
     if (!els.length) { setPos(null); return; } // centered fallback
     let top = Infinity, bottom = -Infinity, cx = 0;
@@ -37,7 +38,7 @@ export function CommandPalette() {
     setPos(placeBelow
       ? { top: bottom + GAP, left, listMax }
       : { bottom: window.innerHeight - top + GAP, left, listMax });
-  }, [open]);
+  }, [open, palettePos]);
 
   if (!open) return null;
   const anchored = pos !== null;
