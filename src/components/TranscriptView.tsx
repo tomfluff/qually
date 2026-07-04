@@ -216,16 +216,27 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const isEnd = seg.end >= startId && seg.end <= endId;
     const cc = !rej && closeCallSids.has(seg.sid);
     const cls = "laneBar" + (rej ? " rejected" : "") + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
-    // rejected: keep the code color, but faded + striped + outlined to read as inactive
+    // rejected: keep the code color, but faded + striped + outlined to read as inactive.
+    // draw top/bottom only on the segment's first/last line so a multi-line reject
+    // reads as one continuous outline instead of per-line notches.
+    const b = `1.5px solid ${color}`;
     const style = rej
-      ? { background: `repeating-linear-gradient(45deg, ${color}55, ${color}55 3px, transparent 3px, transparent 6px)`, border: `1.5px solid ${color}` }
+      ? {
+          // vertical (90deg) stripes, 2px on / 2px off — aligns across a multi-line
+          // reject since the pattern is invariant along y
+          background: `repeating-linear-gradient(90deg, ${color}55, ${color}55 2px, transparent 2px, transparent 4px)`,
+          backgroundPosition: "1px 0",
+          borderLeft: b, borderRight: b,
+          borderTop: isStart ? b : undefined,
+          borderBottom: isEnd ? b : undefined,
+        }
       : { background: color };
     lanes.push(
       <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
         style={style}
         onMouseEnter={() => onLaneHover(seg.sid)} onMouseLeave={() => onLaneHover(null)}
         onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}>
-        {isStart && cc && <span className="laneWarn" />}
+        {isStart && cc && <span className="laneWarn">{"⚠️"}</span>}
         {isStart && <span className="grip gripTop" onMouseDown={(e) => onGripDown(e, seg, "start")} />}
         {isEnd && <span className="grip gripBot" onMouseDown={(e) => onGripDown(e, seg, "end")} />}
       </span>
