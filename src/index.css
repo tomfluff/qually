@@ -271,7 +271,7 @@ button { font-family:inherit; }
 
 /* settings popover */
 .settings-wrap { position:relative; display:inline-flex; }
-.settings-pop { position:absolute; top:calc(100% + 6px); left:0; z-index:70;
+.settings-pop { position:absolute; top:calc(100% + 6px); right:0; z-index:70;
   width:286px; background:var(--bg); border:1px solid var(--line); border-radius:12px;
   box-shadow:0 10px 34px rgba(0,0,0,.28); padding:14px; display:flex;
   flex-direction:column; gap:11px; font-size:1rem; }
