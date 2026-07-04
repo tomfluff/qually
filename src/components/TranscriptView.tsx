@@ -3,9 +3,26 @@ import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign, type Line } from "../state/store";
 import { SegmentPopover } from "./SegmentPopover";
 import { seekVideo } from "../video/seek";
+import { findMatches } from "../search";
+import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 const isR = (sp: string) => sp.trim().toUpperCase().startsWith("R");
+
+// text with search matches wrapped in <mark>; the occ == curOcc match is emphasized
+function renderText(text: string, query: string, curOcc: number): ReactNode {
+  const m = findMatches(text, query);
+  if (!m.length) return text;
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  m.forEach(([s, e], k) => {
+    if (s > last) nodes.push(text.slice(last, s));
+    nodes.push(<mark key={k} className={k === curOcc ? "cur" : ""}>{text.slice(s, e)}</mark>);
+    last = e;
+  });
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
 
 export function TranscriptView() {
   const active = useStore((s) => s.active);
@@ -14,6 +31,7 @@ export function TranscriptView() {
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
   const fontSize = useStore((s) => s.ui.fontSize);
+  const search = useStore((s) => s.search);
   const selectLine = useStore((s) => s.selectLine);
   const startSelection = useStore((s) => s.startSelection);
   const pushUndo = useStore((s) => s.pushUndo);
@@ -115,6 +133,8 @@ export function TranscriptView() {
             onGripDown={dragEdge}
             onLaneHover={onLaneHover}
             hl={hl}
+            searchQuery={search.query}
+            curOcc={search.current && search.current.line === l.id ? search.current.occ : -1}
           />
         ))}
       </VList>
@@ -123,7 +143,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl }: {
+function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, searchQuery, curOcc }: {
   line: Line;
   selected: boolean;
   cols: number;
@@ -134,6 +154,8 @@ function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, on
   onGripDown: (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => void;
   onLaneHover: (sid: number | null) => void;
   hl: { start: number; end: number; color: string } | null;
+  searchQuery: string;
+  curOcc: number;
 }) {
   const lanes = [];
   for (let i = 0; i < cols; i++) {
@@ -172,7 +194,7 @@ function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, on
         {line.ts.split(".")[0]}
       </button>
       <span className="spk">{line.speaker}</span>
-      <span className="txt">{line.text}</span>
+      <span className="txt">{searchQuery ? renderText(line.text, searchQuery, curOcc) : line.text}</span>
       <span className="lanes">{lanes}</span>
     </div>
   );

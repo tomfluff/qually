@@ -9,6 +9,7 @@ import { BrowseView } from "./components/BrowseView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
+import { SearchBar } from "./components/SearchBar";
 import { speakerGroupedText } from "./format";
 
 export function App() {
@@ -22,14 +23,19 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const s = useStore.getState();
+      // Ctrl+F opens transcript search (works from anywhere, incl. inputs)
+      if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
+        if (s.active !== "browse") { e.preventDefault(); s.openSearch(); }
+        return;
+      }
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
-      const s = useStore.getState();
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
         e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); return;
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); s.redo(); return; }
-      if (e.key === "Escape") { if (s.ui.zen) s.setZen(false); s.clearSelection(); return; }
+      if (e.key === "Escape") { if (s.search.open) s.closeSearch(); if (s.ui.zen) s.setZen(false); s.clearSelection(); return; }
       // arrow nav: plain jumps to the adjacent line, Shift moves the head (W2 item 7)
       if ((e.key === "ArrowUp" || e.key === "ArrowDown") && s.active !== "browse"
         && s.selection.pid === s.active && s.selection.lines.size) {
@@ -80,6 +86,7 @@ export function App() {
           </>
         )}
         <div id="content">
+          {active !== "browse" && <SearchBar />}
           {active === "browse" ? <BrowseView /> : <TranscriptView />}
         </div>
       </div>

@@ -18,6 +18,10 @@ export interface Ui {
   sidebarWidth: number; browseLeftWidth: number;
   palettePos: "auto" | "centered";
 }
+export interface Search {
+  open: boolean; query: string; scope: "tab" | "all";
+  current: { line: number; occ: number } | null; // the emphasized occurrence
+}
 
 interface State {
   transcripts: Record<string, { lines: Line[] }>;
@@ -37,6 +41,7 @@ interface State {
   nextSid: number;
   jump: { pid: string; line: number } | null;
   paletteOpen: boolean;
+  search: Search;
 
   importFiles: (files: FileList | File[]) => Promise<void>;
   ensureCode: (code: string) => string;
@@ -51,7 +56,11 @@ interface State {
   closeTab: (pid: string) => void;
   jumpTo: (pid: string, line: number) => void;
   clearJump: () => void;
+  scrollToLine: (line: number) => void;
   setPalette: (v: boolean) => void;
+  openSearch: () => void;
+  closeSearch: () => void;
+  setSearch: (patch: Partial<Search>) => void;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
   toggleReject: (sid: number) => void;
@@ -101,6 +110,7 @@ export const useStore = create<State>()(
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto" },
       selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false,
+      search: { open: false, query: "", scope: "tab", current: null },
 
       importFiles: async (files) => {
         for (const f of Array.from(files)) {
@@ -182,7 +192,11 @@ export const useStore = create<State>()(
       setActive: (pid) => set({ active: pid, selection: emptySel() }),
       jumpTo: (pid, line) => set({ active: pid, selection: emptySel(), jump: { pid, line } }),
       clearJump: () => set({ jump: null }),
+      scrollToLine: (line) => set({ jump: { pid: get().active, line } }), // same-tab scroll, no selection change
       setPalette: (v) => set({ paletteOpen: v }),
+      openSearch: () => set({ search: { ...get().search, open: true } }),
+      closeSearch: () => set({ search: { open: false, query: "", scope: "tab", current: null } }),
+      setSearch: (patch) => set({ search: { ...get().search, ...patch } }),
       closeTab: (pid) => {
         const s = get();
         const tabs = s.tabs.filter((p) => p !== pid);
