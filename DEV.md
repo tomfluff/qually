@@ -8,6 +8,31 @@ punch list (§3) directly as the component spec.
 
 ---
 
+## Status — BUILT (2026-07-04)
+
+v2 is implemented, verified, and shipped to `tools/coding-app.html` (via
+`npm run release`). **The punch list in §3 (W1–W7) is DONE** — treat §3/§4/§5
+below as the original spec and decision record, not a live TODO. What shipped:
+
+- **W1–W6:** layout/typography, selection + keyboard + clipboard, hotbar dock,
+  settings popover, video dock, two-pane Browse — all built.
+- **W2 (items 7–8):** arrow-key selection (anchor/head model), speaker-grouped
+  Ctrl+C copy.
+- **W7:** excerpt rule v2 mirrored into `analysis/sync_coding.py` with a Python
+  parity suite (`analysis/test_excerpt.py`) matching the vitest suite; docs
+  updated (`docs/QUAL-WORKFLOW.md`).
+- **Beyond the list:** undo/redo, command palette (`0`) with fuzzy code search,
+  full code management (rename / edit-definition / recolor / merge / delete) via
+  right-click, resizable panel dividers, connected multiline lane bars with
+  hover brackets + per-line hover, segment popover copy (button + Ctrl+C).
+- **Verified:** vitest contract + smoke suites and the Python parity suite green;
+  headless data-pipeline round-trip (import→code→export→re-import idempotent);
+  full live browser smoke of the UI. Source lives in `tools/coding-app-src/`.
+
+New change requests get appended to §3 with dates, same as before.
+
+---
+
 ## 1. Constraints (non-negotiable)
 
 1. **The BUILT ARTIFACT is a single self-contained HTML file**, produced via
