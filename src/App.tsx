@@ -10,12 +10,14 @@ import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
 import { SearchBar } from "./components/SearchBar";
+import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 
 export function App() {
   const active = useStore((s) => s.active);
   const dark = useStore((s) => s.ui.dark);
   const zen = useStore((s) => s.ui.zen);
+  const searchOpen = useStore((s) => s.search.open);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "";
@@ -86,6 +88,12 @@ export function App() {
           </>
         )}
         <div id="content">
+          {active !== "browse" && !searchOpen && (
+            <button className="searchtoggle" title="Search (Ctrl+F)"
+              onClick={() => useStore.getState().openSearch()}>
+              <Icon name="search" size={17} />
+            </button>
+          )}
           {active !== "browse" && <SearchBar />}
           {active === "browse" ? <BrowseView /> : <TranscriptView />}
         </div>

@@ -133,7 +133,12 @@ button { font-family:inherit; }
   border-radius:6px; background:var(--panel); color:var(--fg); font-family:inherit; }
 .searchcount { min-width:3ch; text-align:center; font-size:12px; color:var(--muted);
   font-variant-numeric:tabular-nums; }
-.searchbar .iconbtn { padding:4px 8px; line-height:1; }
+.searchbar .iconbtn { padding:4px 7px; line-height:1; display:inline-flex; align-items:center; }
+/* magnifier toggle, top-right of the transcript */
+.searchtoggle { position:absolute; top:8px; right:16px; z-index:40; padding:6px 8px;
+  display:inline-flex; align-items:center; background:var(--bg); border:1px solid var(--line);
+  border-radius:8px; color:var(--muted); cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,.14); }
+.searchtoggle:hover { color:var(--fg); border-color:var(--accent); }
 .seg.searchscope { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
 .seg.searchscope button { border:none; background:var(--bg); color:var(--muted);
   padding:4px 8px; font-size:12px; cursor:pointer; }

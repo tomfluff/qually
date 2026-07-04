@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStore } from "../state/store";
 import { findMatches } from "../search";
+import { Icon } from "./Icon";
 
 // render text with all query matches wrapped in <mark>
 function highlight(text: string, query: string): ReactNode {
@@ -85,14 +86,18 @@ export function SearchBar() {
             : (query ? `${allTotal}` : "")}
         </span>
         {scope === "tab" && <>
-          <button className="btn iconbtn" onClick={() => step(-1)} disabled={!tabMatches.length} title="Previous (Shift+Enter)">⌃</button>
-          <button className="btn iconbtn" onClick={() => step(1)} disabled={!tabMatches.length} title="Next (Enter)">⌄</button>
+          <button className="btn iconbtn" onClick={() => step(-1)} disabled={!tabMatches.length} title="Previous (Shift+Enter)">
+            <Icon name="chevron-up" size={16} />
+          </button>
+          <button className="btn iconbtn" onClick={() => step(1)} disabled={!tabMatches.length} title="Next (Enter)">
+            <Icon name="chevron-down" size={16} />
+          </button>
         </>}
         <div className="seg searchscope">
           <button className={scope === "tab" ? "on" : ""} onClick={() => setSearch({ scope: "tab", current: null })}>This tab</button>
           <button className={scope === "all" ? "on" : ""} onClick={() => setSearch({ scope: "all", current: null })}>All</button>
         </div>
-        <button className="btn iconbtn" onClick={closeSearch} title="Close (Esc)">✕</button>
+        <button className="btn iconbtn" onClick={closeSearch} title="Close (Esc)"><Icon name="x" size={16} /></button>
       </div>
 
       {scope === "all" && query && (
