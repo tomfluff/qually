@@ -1,0 +1,66 @@
+// Smoke test: drive the REAL store through import -> code -> export -> re-import,
+// verifying the data pipeline that writes coded-segments.csv. Node env; a tiny
+// localStorage shim lets zustand's persist middleware load.
+import { beforeAll, test, expect } from "vitest";
+import { parseCSV } from "./contract/csv";
+
+let useStore: typeof import("./state/store").useStore;
+
+beforeAll(async () => {
+  const mem: Record<string, string> = {};
+  (globalThis as unknown as { localStorage: Storage }).localStorage = {
+    getItem: (k: string) => (k in mem ? mem[k] : null),
+    setItem: (k: string, v: string) => { mem[k] = v; },
+    removeItem: (k: string) => { delete mem[k]; },
+    clear: () => { for (const k in mem) delete mem[k]; },
+    key: () => null, length: 0,
+  } as Storage;
+  ({ useStore } = await import("./state/store"));
+});
+
+const TRANSCRIPT = `line_id,timestamp,speaker,text,codes
+1,00:00:03,R,So how do you read a chart,
+2,00:00:09,P,I zoom in really close,magnification
+3,00:00:15,P,and pan across to follow it,magnification
+4,00:00:22,P,but then I lose the axis labels,lost context
+5,00:00:29,R,that sounds exhausting,
+`;
+
+test("import transcript -> inline codes collapse into segments", async () => {
+  const s = useStore.getState();
+  await s.importFiles([new File([TRANSCRIPT], "P01.csv")]);
+  const st = useStore.getState();
+  expect(Object.keys(st.transcripts)).toContain("P01");
+  expect(st.active).toBe("P01");
+  const refs = st.segments.map((x) => `${x.pid}:${x.start}${x.end !== x.start ? "-" + x.end : ""}:${x.code}`).sort();
+  // magnification collapses 2-3; lost context on 4
+  expect(refs).toContain("P01:2-3:magnification");
+  expect(refs).toContain("P01:4:lost context");
+});
+
+test("apply a code to a drag-style selection", () => {
+  const s = useStore.getState();
+  s.selectLine(2);
+  s.selectLine(3, { extend: true });     // select 2-3
+  s.applyCode("member check");
+  const segs = useStore.getState().segments;
+  expect(segs.some((x) => x.pid === "P01" && x.start === 2 && x.end === 3 && x.code === "member check")).toBe(true);
+});
+
+test("export produces a valid coded-segments.csv with computed excerpts", () => {
+  const csv = useStore.getState().exportCSV();
+  const rows = parseCSV(csv);
+  expect(Object.keys(rows[0])).toEqual(["segment_ref", "pid", "excerpt", "code", "proposed_by", "status", "notes"]);
+  const mag = rows.find((r) => r.segment_ref === "P01:2-3" && r.code === "magnification");
+  expect(mag).toBeTruthy();
+  // dominant-speaker excerpt = the P lines joined, no [R:] prefix
+  expect(mag!.excerpt).toBe("I zoom in really close and pan across to follow it");
+});
+
+test("re-importing the exported CSV is idempotent (no dupes, identical re-export)", async () => {
+  const csv1 = useStore.getState().exportCSV();
+  const before = useStore.getState().segments.length;
+  await useStore.getState().importFiles([new File([csv1], "coded-segments.csv")]);
+  expect(useStore.getState().segments.length).toBe(before); // dedup held
+  expect(useStore.getState().exportCSV()).toBe(csv1);        // round-trips exactly
+});

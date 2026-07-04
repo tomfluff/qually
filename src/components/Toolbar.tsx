@@ -15,8 +15,9 @@ export function Toolbar() {
 
   const doImport = async (files: FileList | null) => {
     if (!files?.length) return;
+    const n = files.length; // capture before await; the caller clears the live FileList (value="")
     await importFiles(files);
-    setStatus(`imported ${files.length} file(s)`);
+    setStatus(`imported ${n} file(s)`);
   };
 
   const doExport = () => {
