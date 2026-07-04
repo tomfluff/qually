@@ -8,6 +8,7 @@ import { TranscriptView } from "./components/TranscriptView";
 import { BrowseView } from "./components/BrowseView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
+import { CommandPalette } from "./components/CommandPalette";
 
 export function App() {
   const active = useStore((s) => s.active);
@@ -35,6 +36,7 @@ export function App() {
         s.moveSelection(e.key === "ArrowDown" ? 1 : -1, e.shiftKey);
         return;
       }
+      if (e.key === "0") { e.preventDefault(); s.setPalette(true); return; }
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= 9 && s.selection.lines.size) {
         const code = s.hotbarCache[n - 1];
@@ -85,6 +87,7 @@ export function App() {
       {active !== "browse" && <HotbarDock />}
       <VideoDock />
       {zen && <button className="zenexit" onClick={() => useStore.getState().setZen(false)}>exit zen (Esc)</button>}
+      <CommandPalette />
     </div>
   );
 }

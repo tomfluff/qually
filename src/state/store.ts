@@ -35,6 +35,7 @@ interface State {
   redoStack: string[];
   nextSid: number;
   jump: { pid: string; line: number } | null;
+  paletteOpen: boolean;
 
   importFiles: (files: FileList | File[]) => Promise<void>;
   ensureCode: (code: string) => string;
@@ -49,6 +50,7 @@ interface State {
   closeTab: (pid: string) => void;
   jumpTo: (pid: string, line: number) => void;
   clearJump: () => void;
+  setPalette: (v: boolean) => void;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
   toggleReject: (sid: number) => void;
@@ -97,7 +99,7 @@ export const useStore = create<State>()(
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264 },
-      selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null,
+      selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false,
 
       importFiles: async (files) => {
         for (const f of Array.from(files)) {
@@ -179,6 +181,7 @@ export const useStore = create<State>()(
       setActive: (pid) => set({ active: pid, selection: emptySel() }),
       jumpTo: (pid, line) => set({ active: pid, selection: emptySel(), jump: { pid, line } }),
       clearJump: () => set({ jump: null }),
+      setPalette: (v) => set({ paletteOpen: v }),
       closeTab: (pid) => {
         const s = get();
         const tabs = s.tabs.filter((p) => p !== pid);

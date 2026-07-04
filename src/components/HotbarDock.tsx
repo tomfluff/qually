@@ -39,6 +39,11 @@ export function HotbarDock() {
             <span className="tname" style={{ fontSize }}>{code}</span>
           </button>
         ))}
+        <button className="tile newcode" onClick={() => useStore.getState().setPalette(true)}
+          title="open the code palette (fuzzy search)">
+          <span className="tnum">0</span>
+          <span className="tname" style={{ fontSize }}>new / find code…</span>
+        </button>
         {mode === "auto"
           ? (
             <button className="tile refresh" onClick={refreshHotbar} title="recompute by usage">

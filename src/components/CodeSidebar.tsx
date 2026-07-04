@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
 import { CodeMenu } from "./CodeMenu";
+import { CodeCombobox } from "./CodeCombobox";
 
 export function CodeSidebar() {
   const codebook = useStore((s) => s.codebook);
@@ -9,12 +10,10 @@ export function CodeSidebar() {
   const hasSel = useStore((s) => s.selection.lines.size > 0);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const sidebarWidth = useStore((s) => s.ui.sidebarWidth);
-  const ensureCode = useStore((s) => s.ensureCode);
   const applyCode = useStore((s) => s.applyCode);
   const setColor = useStore((s) => s.setColor);
   const pushUndo = useStore((s) => s.pushUndo);
   const pinned = useStore((s) => s.hotbar.pinned);
-  const [draft, setDraft] = useState("");
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
 
   const counts: Record<string, { segs: number; pids: Set<string> }> = {};
@@ -23,20 +22,10 @@ export function CodeSidebar() {
     counts[s.code].segs++; counts[s.code].pids.add(s.pid);
   });
 
-  const addNew = () => {
-    if (!draft.trim()) return;
-    pushUndo();
-    const c = ensureCode(draft.trim());
-    setDraft("");
-    if (hasSel) applyCode(c);
-  };
-
   return (
     <div id="sidebar" style={{ fontSize: sidebarFontSize, width: sidebarWidth }}>
-      {/* + new code moved to the TOP of the list (W3 item 12) */}
-      <input id="newCode" value={draft} placeholder="+ new code (Enter)"
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && addNew()} />
+      {/* + new code (top of list); fuzzy autocomplete. 0 opens the command palette. */}
+      <CodeCombobox placeholder="+ new code" />
       <div className="codeList nicescroll">
       <h3>all codes</h3>
       {Object.keys(codebook).sort().map((code) => {
