@@ -3,6 +3,7 @@ import { useStore, type Segment } from "../state/store";
 import { norm } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
 import { Resizer } from "./Resizer";
+import { CodeMenu } from "./CodeMenu";
 
 export function BrowseView() {
   const codebook = useStore((s) => s.codebook);
@@ -11,11 +12,13 @@ export function BrowseView() {
   const fontSize = useStore((s) => s.ui.fontSize);
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
   const setUi = useStore((s) => s.setUi);
+  const setColor = useStore((s) => s.setColor);
   const jumpTo = useStore((s) => s.jumpTo);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [anchor, setAnchor] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [showRejected, setShowRejected] = useState(false);
+  const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
 
   const counts: Record<string, { segs: number; pids: Set<string> }> = {};
   segments.filter((s) => s.status === "accepted").forEach((s) => {
@@ -56,9 +59,18 @@ export function BrowseView() {
         <input type="search" placeholder="filter codes…" value={filter}
           onChange={(e) => setFilter(e.target.value)} />
         {listed.map((c) => (
-          <div key={c} className={"bCode" + (selected.has(c) ? " sel" : "")} onClick={(e) => select(c, e)}>
+          <div key={c} className={"bCode" + (selected.has(c) ? " sel" : "")} onClick={(e) => select(c, e)}
+            onContextMenu={(e) => { e.preventDefault(); setMenu({ code: c, x: e.clientX, y: e.clientY }); }}
+            title={`${c}  (right-click for options)`}>
             <div className="bCodeMain">
-              <span className="swatch" style={{ background: codebook[c].color }} />
+              <span className="swatch" style={{ background: codebook[c].color }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const inp = document.createElement("input");
+                  inp.type = "color"; inp.value = codebook[c].color;
+                  inp.oninput = () => setColor(c, inp.value);
+                  inp.click();
+                }} />
               <span className="bCodeName">{c}</span>
               <span className="cnt">{counts[c]?.segs || 0}·{counts[c]?.pids.size || 0}</span>
             </div>
@@ -109,6 +121,7 @@ export function BrowseView() {
           </>
         )}
       </div>
+      {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
     </div>
   );
 }

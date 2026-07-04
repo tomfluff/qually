@@ -78,8 +78,12 @@ export function App() {
       <Toolbar />
       <Tabs />
       <div id="main">
-        <CodeSidebar />
-        <Resizer onWidth={(w) => useStore.getState().setUi({ sidebarWidth: Math.max(160, Math.min(560, w)) })} />
+        {active !== "browse" && (
+          <>
+            <CodeSidebar />
+            <Resizer onWidth={(w) => useStore.getState().setUi({ sidebarWidth: Math.max(160, Math.min(560, w)) })} />
+          </>
+        )}
         <div id="content">
           {active === "browse" ? <BrowseView /> : <TranscriptView />}
         </div>
