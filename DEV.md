@@ -25,9 +25,19 @@ below as the original spec and decision record, not a live TODO. What shipped:
   full code management (rename / edit-definition / recolor / merge / delete) via
   right-click, resizable panel dividers, connected multiline lane bars with
   hover brackets + per-line hover, segment popover copy (button + Ctrl+C).
-- **Verified:** vitest contract + smoke suites and the Python parity suite green;
-  headless data-pipeline round-trip (import→code→export→re-import idempotent);
-  full live browser smoke of the UI. Source lives in `tools/coding-app-src/`.
+- **Post-v2 UI additions (2026-07-04, W8 in §3):** transcript search (in-tab
+  find-bar + cross-transcript "All" scope, magnifier toggle, prev/next nav);
+  Help/About modal (shortcut reference + first-run onboarding); toolbar reorg
+  (Import/Export · Undo/Redo divider · Settings/Help flushed right); scroll
+  headroom (hatched 3rem pad before first / after last line) with
+  PageUp/PageDown/Home/End list scrolling; **merge partial lines** toggle;
+  **line-numbers** toggle (off by default); tabs inherit the sidebar text size
+  and the Browse tab is a distinct tinted pill. New Settings controls: palette
+  position (near/center), merge lines, line numbers.
+- **Verified:** vitest contract + smoke + merge suites and the Python parity
+  suite green; headless data-pipeline round-trip
+  (import→code→export→re-import idempotent); full live browser smoke of the UI.
+  Source lives in `tools/coding-app-src/`.
 
 New change requests get appended to §3 with dates, same as before.
 
@@ -74,9 +84,13 @@ src/contract/            THE parity module, plain TS, no React imports:
                          (see "Parity tests" below)
 src/state/               store (zustand or useReducer, keep it simple),
                          undo stack, localStorage persistence
+src/merge.ts             pure line-grouping for "merge partial lines" (§3 W8
+                         item 23); + merge.test.ts
+src/search.ts            substring match helper for transcript search (W8 item 19)
 src/components/          Toolbar, Tabs, CodeSidebar, TranscriptView (rows +
-                         lanes + edge-drag), HotbarDock, SettingsPopover,
-                         VideoDock, BrowseView, SegmentPopover
+                         lanes + edge-drag), HotbarDock, SettingsButton,
+                         VideoDock, BrowseView, SegmentPopover, SearchBar,
+                         AboutButton, CommandPalette
 src/App.tsx, main.tsx
 ```
 
@@ -225,6 +239,42 @@ lines, add react-window, not before.
     ⚠ PROVISIONAL: revisit after Tom's trial ("I have to try it out and
     see"), the function boundary exists precisely so the rule is swappable.
 
+### W8 — Post-build change requests (Tom, 2026-07-04)
+
+All shipped and released. UI/ergonomics only — no CSV-contract or excerpt-rule
+changes, so the Python scripts and `docs/QUAL-WORKFLOW.md` are untouched.
+
+19. **Transcript search.** In-tab find-bar (Ctrl+F) with prev/next nav and a
+    cross-transcript "All" scope; magnifier toggle button. Substring match,
+    highlights via `<mark>`, current occurrence emphasized. `src/search.ts`,
+    `SearchBar.tsx`.
+20. **Help/About modal** (`AboutButton.tsx`): keyboard-shortcut reference +
+    first-run onboarding (auto-opens once, gated on `ui.helpSeen`). Standout
+    accent-circle `?` button.
+21. **Toolbar layout**: Import/Export · divider · Undo/Redo, with Settings and
+    Help flushed right. Settings popover right-aligned so it can't clip
+    off-screen.
+22. **Scroll headroom**: 3rem hatched pads (`.vpad`) before the first and after
+    the last line so both ends can center. PageUp/PageDown/Home/End scroll the
+    virtualized list (`TranscriptView` keydown effect, virtua handle).
+23. **Merge partial lines** (Settings toggle, off by default, `ui.mergeLines`):
+    joins consecutive same-speaker lines where each but the last is "partial"
+    (doesn't end in `. ? ! …`, trailing quotes/brackets ignored) into one
+    display **unit**, never crossing a speaker change. Approved as **Tier B —
+    merged units**: the unit is one selectable/codeable row (select, arrow +
+    shift nav, lanes, hover brackets, search-scroll all operate at unit level),
+    but it is purely a **view over lines [start..end]** — `line_id`,
+    `segment_ref`, excerpts, and export stay per-line (constraint #4 intact).
+    Pure grouping in `src/merge.ts` (+ `merge.test.ts`); the group-aware
+    selection reduces to per-line when the toggle is off (groups are singletons).
+    Known display-only fuzziness: a segment covering only part of a unit renders
+    on the whole unit (true per-line ref still exported).
+24. **Line-numbers toggle** (Settings, off by default, `ui.showLineNumbers`):
+    hides the line-# column. When on, a merged unit shows its range (`5–6`).
+25. **Tabs**: font size follows the sidebar text setting (`ui.sidebarFontSize`)
+    instead of a fixed 13px. The **Browse** tab is restyled as a distinct tinted
+    rounded pill with a list glyph, set apart from the square participant tabs.
+
 ## 4. Decisions log (was: open questions)
 
 - **Arrow keys (item 7): APPROVED** — plain arrow moves the selection to the
@@ -239,6 +289,10 @@ lines, add react-window, not before.
   remains repositionable. Revisit only if real use shows collisions.
 - **Excerpt rule (item 18): Tom's dominant-speaker rule adopted, marker
   `[R:]`, PROVISIONAL pending his trial.**
+- **Merge partial lines (item 23): Tier B (merged units) APPROVED; terminators
+  `. ? ! …`** (Tom, 2026-07-04). Display-only over per-line data; a unit is one
+  selectable/codeable row. Tier A (continuation styling) was the lighter
+  alternative, declined.
 - Still open: none. New notes from Tom's continued use get appended to §3
   with dates.
 
