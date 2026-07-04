@@ -12,7 +12,7 @@ export interface Segment {
   sid: number; pid: string; start: number; end: number; code: string;
   notes: string; proposedBy: string; status: string;
 }
-export interface Selection { pid: string | null; anchor: number | null; lines: Set<number>; }
+export interface Selection { pid: string | null; anchor: number | null; head: number | null; lines: Set<number>; }
 
 interface State {
   transcripts: Record<string, { lines: Line[] }>;
@@ -38,6 +38,8 @@ interface State {
     proposedBy?: string, status?: string, notes?: string) => void;
   applyCode: (code: string) => void;
   selectLine: (id: number, opts?: { extend?: boolean; toggle?: boolean }) => void;
+  moveSelection: (dir: -1 | 1, extend: boolean) => void;
+  startSelection: (id: number) => void;
   clearSelection: () => void;
   setActive: (pid: string) => void;
   closeTab: (pid: string) => void;
@@ -65,7 +67,7 @@ interface State {
   exportCSV: () => string;
 }
 
-const emptySel = (): Selection => ({ pid: null, anchor: null, lines: new Set() });
+const emptySel = (): Selection => ({ pid: null, anchor: null, head: null, lines: new Set() });
 
 function snapshot(s: State): string {
   return JSON.stringify({ segments: s.segments, codebook: s.codebook, hotbar: s.hotbar });
@@ -129,20 +131,45 @@ export const useStore = create<State>()(
       selectLine: (id, opts = {}) => {
         const s = get();
         let sel = s.selection.pid === s.active ? s.selection : emptySel();
-        sel = { pid: s.active, anchor: sel.anchor, lines: new Set(sel.lines) };
+        sel = { pid: s.active, anchor: sel.anchor, head: sel.head, lines: new Set(sel.lines) };
         if (opts.extend && sel.anchor !== null) {
           sel.lines = new Set();
           const [a, b] = [Math.min(sel.anchor, id), Math.max(sel.anchor, id)];
           for (let i = a; i <= b; i++) sel.lines.add(i);
+          sel.head = id;
         } else if (opts.toggle) {
           if (sel.lines.has(id)) sel.lines.delete(id); else sel.lines.add(id);
-          sel.anchor = id;
+          sel.anchor = id; sel.head = id;
         } else if (sel.lines.has(id) && sel.lines.size === 1) {
           sel = emptySel();
-        } else { sel.lines = new Set([id]); sel.anchor = id; }
+        } else { sel.lines = new Set([id]); sel.anchor = id; sel.head = id; }
         set({ selection: sel });
       },
+      // shift+arrow moves the head; plain arrow jumps to a single adjacent line (transcript order)
+      moveSelection: (dir, extend) => {
+        const s = get();
+        const t = s.transcripts[s.active];
+        if (!t || s.selection.pid !== s.active || !s.selection.lines.size) return;
+        const arr = t.lines;
+        const idx = (id: number) => arr.findIndex((l) => l.id === id);
+        if (extend) {
+          const ids = [...s.selection.lines].sort((a, b) => a - b);
+          const anchor = s.selection.anchor ?? ids[0];
+          const head = s.selection.head ?? (dir > 0 ? ids[ids.length - 1] : ids[0]);
+          const nh = arr[idx(head) + dir];
+          if (!nh) return;
+          const a = idx(anchor), b = idx(nh.id);
+          const [lo, hi] = a < b ? [a, b] : [b, a];
+          set({ selection: { pid: s.active, anchor, head: nh.id, lines: new Set(arr.slice(lo, hi + 1).map((l) => l.id)) } });
+        } else {
+          const ids = [...s.selection.lines].sort((a, b) => a - b);
+          const nl = arr[idx(dir > 0 ? ids[ids.length - 1] : ids[0]) + dir];
+          if (!nl) return;
+          set({ selection: { pid: s.active, anchor: nl.id, head: nl.id, lines: new Set([nl.id]) } });
+        }
+      },
 
+      startSelection: (id) => set({ selection: { pid: get().active, anchor: id, head: id, lines: new Set([id]) } }),
       clearSelection: () => set({ selection: emptySel() }),
       setActive: (pid) => set({ active: pid, selection: emptySel() }),
       jumpTo: (pid, line) => set({ active: pid, selection: emptySel(), jump: { pid, line } }),

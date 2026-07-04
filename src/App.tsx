@@ -27,20 +27,12 @@ export function App() {
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); s.redo(); return; }
       if (e.key === "Escape") { if (s.ui.zen) s.setZen(false); s.clearSelection(); return; }
-      // arrow nav: plain moves selection to the adjacent line, Shift extends (W2 item 7)
+      // arrow nav: plain jumps to the adjacent line, Shift moves the head (W2 item 7)
       if ((e.key === "ArrowUp" || e.key === "ArrowDown") && s.active !== "browse"
         && s.selection.pid === s.active && s.selection.lines.size) {
-        const tr = s.transcripts[s.active];
-        if (tr) {
-          e.preventDefault();
-          const ids = [...s.selection.lines].sort((a, b) => a - b);
-          const arr = tr.lines;
-          const target = e.key === "ArrowUp"
-            ? arr[arr.findIndex((l) => l.id === ids[0]) - 1]
-            : arr[arr.findIndex((l) => l.id === ids[ids.length - 1]) + 1];
-          if (target) s.selectLine(target.id, { extend: e.shiftKey });
-          return;
-        }
+        e.preventDefault();
+        s.moveSelection(e.key === "ArrowDown" ? 1 : -1, e.shiftKey);
+        return;
       }
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= 9 && s.selection.lines.size) {

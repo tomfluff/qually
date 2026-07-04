@@ -15,6 +15,7 @@ export function TranscriptView() {
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
   const fontSize = useStore((s) => s.ui.fontSize);
   const selectLine = useStore((s) => s.selectLine);
+  const startSelection = useStore((s) => s.startSelection);
   const pushUndo = useStore((s) => s.pushUndo);
   const setSegmentRange = useStore((s) => s.setSegmentRange);
   const jump = useStore((s) => s.jump);
@@ -55,6 +56,28 @@ export function TranscriptView() {
     document.addEventListener("mouseup", up);
   };
 
+  // click selects; click+drag selects a range (Shift extends, Ctrl toggles — no drag)
+  const onRowDown = (e: MouseEvent, id: number) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts")) return;
+    if (e.shiftKey) { selectLine(id, { extend: true }); return; }
+    if (e.ctrlKey || e.metaKey) { selectLine(id, { toggle: true }); return; }
+    let moved = false;
+    const sx = e.clientX, sy = e.clientY;
+    const move = (ev: globalThis.MouseEvent) => {
+      if (!moved && Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 4) return;
+      if (!moved) { moved = true; startSelection(id); }
+      const row = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest(".lineRow") as HTMLElement | null;
+      if (row?.dataset.lid) selectLine(+row.dataset.lid, { extend: true });
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      if (!moved) selectLine(id); // plain click (toggles off if already the sole selection)
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  };
+
   if (!transcript) {
     return <div className="empty">Import transcript CSVs to begin (Import files…).</div>;
   }
@@ -74,7 +97,7 @@ export function TranscriptView() {
             cols={cols}
             laned={laned}
             codebook={codebook}
-            onSelect={(e) => selectLine(l.id, { extend: e.shiftKey, toggle: e.ctrlKey || e.metaKey })}
+            onRowDown={(e) => onRowDown(e, l.id)}
             onLaneClick={(seg, e) => setPop({ sid: seg.sid, x: e.clientX, y: e.clientY })}
             onGripDown={dragEdge}
           />
@@ -85,13 +108,13 @@ export function TranscriptView() {
   );
 }
 
-function Row({ line, selected, cols, laned, codebook, onSelect, onLaneClick, onGripDown }: {
+function Row({ line, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown }: {
   line: Line;
   selected: boolean;
   cols: number;
   laned: LanedSeg[];
   codebook: Record<string, { color: string }>;
-  onSelect: (e: MouseEvent) => void;
+  onRowDown: (e: MouseEvent) => void;
   onLaneClick: (seg: LanedSeg, e: MouseEvent) => void;
   onGripDown: (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => void;
 }) {
@@ -117,7 +140,7 @@ function Row({ line, selected, cols, laned, codebook, onSelect, onLaneClick, onG
   }
   return (
     <div className={"lineRow" + (isR(line.speaker) ? " rspk" : "") + (selected ? " selected" : "")}
-      data-lid={line.id} onClick={onSelect}>
+      data-lid={line.id} onMouseDown={onRowDown}>
       <span className="lid">{line.id}</span>
       <button className="ts" onClick={(e) => { e.stopPropagation(); seekVideo(line.ts); }}
         title="play from here">
