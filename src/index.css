@@ -235,7 +235,7 @@ button { font-family:inherit; }
   pointer-events:none; box-shadow:0 4px 16px rgba(0,0,0,.32); }
 
 .empty { padding:16px; color:var(--muted); }
-.vpad { height:16px; } /* scroll headroom before first / after last line */
+.vpad { height:3rem; } /* scroll headroom before first / after last line */
 
 /* browse view — two panes: codes (left) | excerpts (right) */
 #browse { display:flex; height:100%; overflow:hidden; }
