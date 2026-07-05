@@ -15,7 +15,6 @@
 .about-body li { margin-bottom:5px; }
 .about-body code { background:var(--panel); border:1px solid var(--line); border-radius:4px;
   padding:0 4px; font-size:.9em; }
-.about-import { margin-top:10px; }
 .about-keys { width:100%; border-collapse:collapse; }
 .about-keys td { padding:4px 8px 4px 0; vertical-align:top; line-height:1.4; }
 .about-keys td:first-child { white-space:nowrap; width:1%; }

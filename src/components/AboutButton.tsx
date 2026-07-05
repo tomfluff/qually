@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import { Icon } from "./Icon";
 
@@ -20,9 +20,7 @@ const KEYS: [string, string][] = [
 export function AboutButton() {
   const helpSeen = useStore((s) => s.ui.helpSeen);
   const setUi = useStore((s) => s.setUi);
-  const importFiles = useStore((s) => s.importFiles);
   const [open, setOpen] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   // auto-open once, on the first ever launch
   useEffect(() => { if (!helpSeen) setOpen(true); }, [helpSeen]);
@@ -60,9 +58,6 @@ export function AboutButton() {
                   <li><b>Select</b> lines and <b>apply codes</b> (below).</li>
                   <li><b>Export</b> the coded segments when done.</li>
                 </ol>
-                <button className="btn about-import" onClick={() => fileRef.current?.click()}>Import a transcript…</button>
-                <input ref={fileRef} type="file" multiple accept=".csv" style={{ display: "none" }}
-                  onChange={(e) => { const f = e.target.files; if (f?.length) { importFiles(f); close(); } e.target.value = ""; }} />
               </section>
 
               <section>
