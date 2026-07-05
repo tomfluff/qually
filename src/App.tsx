@@ -12,16 +12,20 @@ import { CommandPalette } from "./components/CommandPalette";
 import { SearchBar } from "./components/SearchBar";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
+import { accentFor } from "./palettes";
 
 export function App() {
   const active = useStore((s) => s.active);
   const dark = useStore((s) => s.ui.dark);
+  const accent = useStore((s) => s.ui.accent);
   const zen = useStore((s) => s.ui.zen);
   const searchOpen = useStore((s) => s.search.open);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "";
-  }, [dark]);
+    // chosen primary for this theme; CSS derives every other chromatic tint from it
+    document.documentElement.style.setProperty("--accent", accentFor(accent, dark));
+  }, [dark, accent]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

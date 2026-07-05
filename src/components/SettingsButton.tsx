@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
+import { PALETTES } from "../palettes";
 
 // Settings popover: instant-apply controls (no save button), all persisted via ui autosave.
 export function SettingsButton() {
@@ -12,6 +13,7 @@ export function SettingsButton() {
   const mode = useStore((s) => s.hotbar.mode);
   const setHotbarMode = useStore((s) => s.setHotbarMode);
   const palettePos = useStore((s) => s.ui.palettePos);
+  const accent = useStore((s) => s.ui.accent);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const setUi = useStore((s) => s.setUi);
@@ -63,6 +65,16 @@ export function SettingsButton() {
             <div className="seg">
               <button className={!dark ? "on" : ""} onClick={() => { if (dark) toggleTheme(); }}>light</button>
               <button className={dark ? "on" : ""} onClick={() => { if (!dark) toggleTheme(); }}>dark</button>
+            </div>
+          </div>
+          <div className="srow">
+            <span>Primary</span>
+            <div className="swatches">
+              {PALETTES.map((p) => (
+                <button key={p.id} className={"swatchbtn" + (accent === p.id ? " on" : "")}
+                  style={{ background: dark ? p.dark : p.light }}
+                  title={p.name} aria-label={p.name} onClick={() => setUi({ accent: p.id })} />
+              ))}
             </div>
           </div>
           <div className="srow">

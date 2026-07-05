@@ -1,12 +1,17 @@
 :root {
   --bg:#ffffff; --fg:#1a1a1a; --muted:#8a8a8a; --line:#e4e4e4;
-  --panel:#f6f6f6; --accent:#3b6ea5; --sel:#dbeafe;
-  --row-hover:#ebebeb; --row-sel:#d2e6fc; --row-sel-hover:#bfdeff;
+  --panel:#f6f6f6; --accent:#3b6ea5;
+  --row-hover:#ebebeb;
+  /* chromatic tints derive from the chosen primary, adapting to the theme via
+     --bg — so one variable (--accent, set per theme in App.tsx) recolors all */
+  --sel:color-mix(in srgb, var(--accent) 18%, var(--bg));
+  --row-sel:color-mix(in srgb, var(--accent) 26%, var(--bg));
+  --row-sel-hover:color-mix(in srgb, var(--accent) 36%, var(--bg));
 }
 [data-theme=dark] {
   --bg:#161a1e; --fg:#e6e6e6; --muted:#7f8a94; --line:#2c333a;
-  --panel:#1e242a; --accent:#7aa7d6; --sel:#243b55;
-  --row-hover:#23282e; --row-sel:#243b55; --row-sel-hover:#2e4a6b;
+  --panel:#1e242a; --accent:#7aa7d6;
+  --row-hover:#23282e;
 }
 * { box-sizing:border-box; }
 html,body,#root { margin:0; height:100%; background:var(--bg); color:var(--fg);
@@ -321,6 +326,10 @@ button { font-family:inherit; }
   transition:background .12s, color .12s; }
 .settings-pop .seg button:hover { background:var(--panel); }
 .settings-pop .seg button.on { background:var(--accent); color:#fff; }
+.settings-pop .swatches { display:flex; gap:7px; }
+.settings-pop .swatchbtn { width:22px; height:22px; border-radius:50%; padding:0;
+  border:2px solid transparent; cursor:pointer; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); }
+.settings-pop .swatchbtn.on { border-color:var(--fg); }
 .settings-div { height:1px; background:var(--line); margin:2px 0; }
 .settings-pop .zenbtn { width:100%; justify-content:center; text-align:center; }
 .settings-note { font-size:11px; color:var(--muted); text-align:center; }
