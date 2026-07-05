@@ -26,6 +26,8 @@ export interface Ui {
   warnCorner: "left" | "right"; // close-call badge corner
   warnSize: "xs" | "sm" | "md" | "lg"; // close-call badge size
   laneWidth: "xs" | "sm" | "md" | "lg"; // width of the code lane bars
+  minimapWidth: number; // transcript minimap width (px)
+  minimapDetail: "detailed" | "simplified"; // minimap abstraction level
 }
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
@@ -132,7 +134,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: "blue", speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md" },
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: "blue", speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed" },
       selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
 

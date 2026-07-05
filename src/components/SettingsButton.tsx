@@ -17,6 +17,7 @@ export function SettingsButton() {
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnSize = useStore((s) => s.ui.warnSize);
   const laneWidth = useStore((s) => s.ui.laneWidth);
+  const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const setUi = useStore((s) => s.setUi);
@@ -97,6 +98,14 @@ export function SettingsButton() {
             </div>
           </div>
           <div className="settings-note">Joins consecutive same-speaker lines that don't end in . ? ! … into one unit.</div>
+          <div className="srow">
+            <span>Minimap</span>
+            <div className="seg">
+              <button className={minimapDetail === "detailed" ? "on" : ""} onClick={() => setUi({ minimapDetail: "detailed" })}>detailed</button>
+              <button className={minimapDetail === "simplified" ? "on" : ""} onClick={() => setUi({ minimapDetail: "simplified" })}>simple</button>
+            </div>
+          </div>
+          <div className="settings-note">Drag the minimap's left edge to resize it.</div>
 
           <div className="settings-sub">Codes</div>
           <div className="srow">

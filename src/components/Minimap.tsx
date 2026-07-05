@@ -18,8 +18,9 @@ export const Minimap = forwardRef<MinimapHandle, {
   cols: number;
   codebook: Record<string, { color: string }>;
   closeCallSids: Set<number>;
+  detail: "detailed" | "simplified";
   vref: RefObject<VListHandle | null>;
-}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, vref }, ref) {
+}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, detail, vref }, ref) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -64,23 +65,46 @@ export const Minimap = forwardRef<MinimapHandle, {
       ctx.clearRect(0, 0, w, h);
       if (!N) return;
       const m = lineToGi.current;
-      // columns: [0..warnW] warnings gutter · text bars · lane columns (flush right)
-      const warnW = 4;
-      const laneAreaW = Math.min(w * 0.5, cols * 7);
+      const simple = detail === "simplified";
+      // columns: [0..warnW] warnings gutter · text · lane columns (flush right).
+      // simplified widens everything and enforces min sizes so marks stay obvious.
+      const warnW = simple ? 6 : 4;
+      const laneAreaW = Math.min(w * (simple ? 0.6 : 0.5), cols * (simple ? 10 : 7));
       const laneX = w - laneAreaW - 2;
       const colW = laneAreaW / Math.max(1, cols);
       const textX = warnW + 3;
       const textW = Math.max(4, laneX - textX - 3);
+      const codeMinH = simple ? 5 : 1.5;
+      const warnMinH = simple ? 6 : 2.5;
       const muted = getComputedStyle(cv).getPropertyValue("--muted").trim() || "#888";
-      const CAP = 80; // chars for a "full-width" text bar
 
-      // faint per-group text representation (width ∝ text length, dimmer for R)
       ctx.fillStyle = muted;
-      for (let i = 0; i < N; i++) {
-        const g = groups[i];
-        const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
-        ctx.globalAlpha = isR(g.speaker) ? 0.28 : 0.5;
-        ctx.fillRect(textX, (i / N) * h, Math.max(2, Math.min(1, len / CAP) * textW), Math.max(0.6, (h / N) * 0.7));
+      if (simple) {
+        // blocky text: bucket the height, fill each block tinted by dominant speaker
+        const bh = 6;
+        const nb = Math.max(1, Math.ceil(h / bh));
+        const buckets: [number, number][] = Array.from({ length: nb }, () => [0, 0]); // [P, R] chars
+        for (let i = 0; i < N; i++) {
+          const g = groups[i];
+          const k = Math.min(nb - 1, Math.floor(((i / N) * h) / bh));
+          const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
+          buckets[k][isR(g.speaker) ? 1 : 0] += len;
+        }
+        for (let k = 0; k < nb; k++) {
+          const [p, r] = buckets[k];
+          if (!p && !r) continue;
+          ctx.globalAlpha = r > p ? 0.3 : 0.55;
+          ctx.fillRect(textX, k * bh, textW, bh - 1);
+        }
+      } else {
+        // detailed text: one faint bar per group, width ∝ length, dimmer for R
+        const CAP = 80;
+        for (let i = 0; i < N; i++) {
+          const g = groups[i];
+          const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
+          ctx.globalAlpha = isR(g.speaker) ? 0.28 : 0.5;
+          ctx.fillRect(textX, (i / N) * h, Math.max(2, Math.min(1, len / CAP) * textW), Math.max(0.6, (h / N) * 0.7));
+        }
       }
 
       // segment lanes + close-call markers in the left gutter
@@ -91,10 +115,10 @@ export const Minimap = forwardRef<MinimapHandle, {
         const y1 = ((gi1 + 1) / N) * h;
         ctx.globalAlpha = s.status === "rejected" ? 0.3 : 0.9;
         ctx.fillStyle = codebook[s.code]?.color || "#999";
-        ctx.fillRect(laneX + s.lane * colW, y0, Math.max(1, colW - 1.5), Math.max(1.5, y1 - y0));
+        ctx.fillRect(laneX + s.lane * colW, y0, Math.max(1, colW - 1.5), Math.max(codeMinH, y1 - y0));
         if (s.status !== "rejected" && closeCallSids.has(s.sid)) {
           ctx.globalAlpha = 1; ctx.fillStyle = WARN;
-          ctx.fillRect(0, y0, warnW, Math.max(2.5, y1 - y0));
+          ctx.fillRect(0, y0, warnW, Math.max(warnMinH, y1 - y0));
         }
       }
       ctx.globalAlpha = 1;
@@ -104,7 +128,7 @@ export const Minimap = forwardRef<MinimapHandle, {
     const ro = new ResizeObserver(() => { draw(); syncFromList(); });
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [groups, laned, cols, codebook, closeCallSids, N]);
+  }, [groups, laned, cols, codebook, closeCallSids, detail, N]);
 
   const scrubTo = (clientY: number) => {
     const wrap = wrapRef.current, v = vref.current;

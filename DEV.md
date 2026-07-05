@@ -300,6 +300,13 @@ changes, so the Python scripts and `docs/QUAL-WORKFLOW.md` are untouched.
     setting (xs/sm/md/lg → `--lane-w`). Ctrl+C now defers to a real text selection.
     Settings reorganized (Zen at top; Appearance / Transcript / Codes sections);
     Help modal refreshed (minimap, badge, new settings).
+29. **Minimap resize + abstraction level (2026-07-05).** Minimap width is now
+    drag-resizable (Resizer gained a `side="right"` mode; `ui.minimapWidth`, clamped
+    44–160, drives `--mm-w` from App so the search offset tracks it; the canvas
+    stretches via its ResizeObserver). New `ui.minimapDetail` toggle: **detailed**
+    (per-line bars) vs **simplified** (text bucketed into speaker-tinted blocks;
+    lanes/warnings widened with enforced min heights — bigger/obvious at the cost of
+    pixel accuracy; codes keep their lanes, option A).
 
 ## 4. Decisions log (was: open questions)
 

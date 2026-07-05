@@ -1,14 +1,15 @@
-// Draggable vertical gutter between two panels. Reports the target width for
-// the panel immediately to its left, computed as startWidth + (cursorX - startX)
-// so the bar stays under the cursor and re-aligns correctly at the clamp edges.
-export function Resizer({ onWidth }: { onWidth: (w: number) => void }) {
+// Draggable vertical gutter between two panels. Reports the target width for an
+// adjacent panel: the one to its left (default) or right (side="right"), so the
+// bar stays under the cursor and re-aligns correctly at the clamp edges.
+export function Resizer({ onWidth, side = "left" }: { onWidth: (w: number) => void; side?: "left" | "right" }) {
   const down = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
-    const panel = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null;
+    const el = e.currentTarget as HTMLElement;
+    const panel = (side === "right" ? el.nextElementSibling : el.previousElementSibling) as HTMLElement | null;
     if (!panel) return;
     const startX = e.clientX;
     const startW = panel.getBoundingClientRect().width;
-    const move = (ev: MouseEvent) => onWidth(startW + (ev.clientX - startX));
+    const move = (ev: MouseEvent) => onWidth(side === "right" ? startW - (ev.clientX - startX) : startW + (ev.clientX - startX));
     const up = () => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);

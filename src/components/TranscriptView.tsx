@@ -4,6 +4,7 @@ import { useStore, laneAssign } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { Minimap, type MinimapHandle } from "./Minimap";
+import { Resizer } from "./Resizer";
 import { seekVideo } from "../video/seek";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
@@ -39,6 +40,8 @@ export function TranscriptView() {
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnCls = useStore((s) => `cc-${s.ui.warnSize} cc-${s.ui.warnCorner}`);
   const laneWidth = useStore((s) => s.ui.laneWidth);
+  const minimapDetail = useStore((s) => s.ui.minimapDetail);
+  const setUi = useStore((s) => s.setUi);
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
@@ -202,8 +205,9 @@ export function TranscriptView() {
           <div className="vpad vpad-bot" key="vpad-bot" />, // headroom after the last line
         ]}
       </VList>
+      <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
       <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
-        closeCallSids={closeCallSids} vref={vref} />
+        closeCallSids={closeCallSids} detail={minimapDetail} vref={vref} />
       </div>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
     </>

@@ -18,6 +18,7 @@ export function App() {
   const active = useStore((s) => s.active);
   const dark = useStore((s) => s.ui.dark);
   const accent = useStore((s) => s.ui.accent);
+  const minimapWidth = useStore((s) => s.ui.minimapWidth);
   const zen = useStore((s) => s.ui.zen);
   const searchOpen = useStore((s) => s.search.open);
 
@@ -26,6 +27,11 @@ export function App() {
     // chosen primary for this theme; CSS derives every other chromatic tint from it
     document.documentElement.style.setProperty("--accent", accentFor(accent, dark));
   }, [dark, accent]);
+
+  // minimap width drives its own width + the search bar/toggle offset
+  useEffect(() => {
+    document.documentElement.style.setProperty("--mm-w", `${minimapWidth}px`);
+  }, [minimapWidth]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
