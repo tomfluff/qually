@@ -6,7 +6,9 @@
 /* color pill indicator (shared with the Browse code list) */
 .codebar { width:5px; height:1.5rem; border-radius:3px; flex-shrink:0; cursor:pointer; }
 .codeItem .cnt { margin-left:auto; color:var(--muted); font-size:.8em; }
-/* shortcut number: keycap style, flushed to the right */
+/* when a key is present it takes the gap; the count sits right next to it */
+.codeItem .key ~ .cnt { margin-left:0; }
+/* shortcut number: keycap style, flushed all the way right next to the count */
 .codeItem .key { margin-left:auto; font-size:.72em; font-weight:700;
   font-family:ui-monospace, SFMono-Regular, Menlo, monospace; min-width:1.5em; text-align:center;
   border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 3px;

@@ -8,7 +8,7 @@
 .bCode { display:flex; flex-direction:column; gap:3px; padding:7px 9px;
   border-radius:8px; cursor:pointer; user-select:none; }
 .bCode:hover { background:var(--sel); }
-.bCode.sel { background:var(--sel); box-shadow:inset 3px 0 0 var(--accent); }
+.bCode.sel { background:var(--sel); }
 .bCodeMain { display:flex; align-items:center; gap:8px; line-height:1; }
 .bCodeName { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .bCodeMain .cnt { margin-left:auto; color:var(--muted); font-size:.8em; flex-shrink:0; }
