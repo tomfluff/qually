@@ -18,10 +18,11 @@ Shipped items get moved to the "Done" list with the commit.
 
 - **(1) In-app close-call warnings — SHIPPED 2026-07-04.** The excerpt rule's
   `closeCall` flag (losing speaker held ≥40% of chars, i.e. a mixed-substance
-  segment) is now surfaced while coding, not just at export: an amber dot on the
-  segment's lane bar + a warning line in the segment popover. `excerptOf` already
-  computed it; this only consumes it. Closes the visible half of the W7 item 18
-  provisional-rule loop (the rule itself is still on trial).
+  segment) is now surfaced while coding, not just at export: a thick amber outline
+  around the segment's lane block (additive over a rejected border, not a
+  replacement) + a minimap gutter tick + a warning line in the segment popover.
+  `excerptOf` already computed it; this only consumes it. Closes the visible half
+  of the W7 item 18 provisional-rule loop (the rule itself is still on trial).
 
 ---
 

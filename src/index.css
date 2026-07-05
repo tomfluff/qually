@@ -252,12 +252,6 @@ button { font-family:inherit; }
 .laneBar { width:18px; flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
-/* close-call flag: mixed-substance segment (excerpt drops the other speaker) */
-.laneWarn { position:absolute; top:2px; left:50%; transform:translateX(-50%);
-  font-size:1.5rem; line-height:1; pointer-events:none; z-index:2;
-  /* stacked drop-shadows follow the emoji's alpha edge -> a tight black outline */
-  filter:drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000)
-    drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000); }
 .laneBar .grip { position:absolute; left:-3px; right:-3px; height:8px; cursor:ns-resize; }
 .laneBar .gripTop { top:-3px; } .laneBar .gripBot { bottom:-3px; }
 .laneEmpty { width:18px; flex-shrink:0; }

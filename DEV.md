@@ -277,8 +277,10 @@ changes, so the Python scripts and `docs/QUAL-WORKFLOW.md` are untouched.
     rounded pill with a list glyph, set apart from the square participant tabs.
 26. **In-app close-call warnings.** The excerpt rule's `closeCall` flag (losing
     speaker ≥40% of chars — a mixed-substance segment) is surfaced while coding,
-    not just at export: an amber dot on the segment's lane bar + a warning line
-    in the segment popover. Consumes the existing `excerptOf().closeCall`; no
+    not just at export: a thick amber outline (layered inset shadow, so it adds
+    to a rejected segment's border rather than replacing it) around the segment's
+    lane block + an amber gutter tick on the minimap + a warning line in the
+    segment popover. Consumes the existing `excerptOf().closeCall`; no
     rule change. Follow-up on W7 item 18. (First item from `CODING-APP-FUTURE.md`.)
 27. **Transcript minimap** (`Minimap.tsx`). Fixed-width (~56px) lane-mirror strip
     down the right edge, drawn on a `<canvas>` from the store (virtua only mounts

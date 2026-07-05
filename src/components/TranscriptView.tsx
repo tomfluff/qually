@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 const isR = (sp: string) => sp.trim().toUpperCase().startsWith("R");
+const WARN = "#e0a020"; // close-call (near-balanced) outline, matches the minimap gutter
 
 // text with search matches wrapped in <mark>; the occ == curOcc match is emphasized
 function renderText(text: string, query: string, curOcc: number): ReactNode {
@@ -108,7 +109,6 @@ export function TranscriptView() {
     const set = new Set<number>();
     const lines = transcript?.lines ?? [];
     for (const s of laned) {
-      if (s.status === "rejected") continue;
       const range = lines.filter((l) => l.id >= s.start && l.id <= s.end).map((l) => ({ text: l.text, speaker: l.speaker }));
       if (excerptOf(range).closeCall) set.add(s.sid);
     }
@@ -233,13 +233,13 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const color = codebook[seg.code]?.color || "#999";
     const isStart = seg.start >= startId && seg.start <= endId;
     const isEnd = seg.end >= startId && seg.end <= endId;
-    const cc = !rej && closeCallSids.has(seg.sid);
+    const cc = closeCallSids.has(seg.sid);
     const cls = "laneBar" + (rej ? " rejected" : "") + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
     // rejected: keep the code color, but faded + striped + outlined to read as inactive.
     // draw top/bottom only on the segment's first/last line so a multi-line reject
     // reads as one continuous outline instead of per-line notches.
     const b = `1.5px solid ${color}`;
-    const style = rej
+    const style: CSSProperties = rej
       ? {
           // vertical (90deg) stripes, 2px on / 2px off — aligns across a multi-line
           // reject since the pattern is invariant along y
@@ -250,12 +250,20 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
           borderBottom: isEnd ? b : undefined,
         }
       : { background: color };
+    // close-call (near-balanced excerpt): an ADDITIONAL thick amber ring, layered
+    // as an inset shadow so it composes with any existing border (e.g. rejected)
+    // instead of replacing it; per-edge so a multi-line block stays one outline.
+    if (cc) {
+      const ring = [`inset 3px 0 0 ${WARN}`, `inset -3px 0 0 ${WARN}`];
+      if (isStart) ring.push(`inset 0 3px 0 ${WARN}`);
+      if (isEnd) ring.push(`inset 0 -3px 0 ${WARN}`);
+      style.boxShadow = ring.join(",");
+    }
     lanes.push(
       <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
         style={style}
         onMouseEnter={() => onLaneHover(seg.sid)} onMouseLeave={() => onLaneHover(null)}
         onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}>
-        {isStart && cc && <span className="laneWarn">{"⚠️"}</span>}
         {isStart && <span className="grip gripTop" onMouseDown={(e) => onGripDown(e, seg, "start")} />}
         {isEnd && <span className="grip gripBot" onMouseDown={(e) => onGripDown(e, seg, "end")} />}
       </span>
