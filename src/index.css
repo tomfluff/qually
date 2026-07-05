@@ -252,6 +252,17 @@ button { font-family:inherit; }
 .laneBar { width:18px; flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
+/* close-call flag: exclamation badge on a top corner of the segment block.
+   size (xs/sm/md/lg) and corner (left/right) are settings */
+.ccbadge { position:absolute; top:-5px; z-index:3; pointer-events:none;
+  border-radius:50%; background:#e0a020; color:#fff; font-weight:800;
+  text-align:center; box-shadow:0 0 0 1.5px var(--bg); }
+.ccbadge.cc-right { right:-5px; }
+.ccbadge.cc-left { left:-5px; }
+.ccbadge.cc-xs { width:11px; height:11px; font-size:8px; line-height:11px; }
+.ccbadge.cc-sm { width:14px; height:14px; font-size:10px; line-height:14px; }
+.ccbadge.cc-md { width:18px; height:18px; font-size:12px; line-height:18px; }
+.ccbadge.cc-lg { width:22px; height:22px; font-size:14px; line-height:22px; }
 .laneBar .grip { position:absolute; left:-3px; right:-3px; height:8px; cursor:ns-resize; }
 .laneBar .gripTop { top:-3px; } .laneBar .gripBot { bottom:-3px; }
 .laneEmpty { width:18px; flex-shrink:0; }

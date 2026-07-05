@@ -11,7 +11,6 @@ import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 const isR = (sp: string) => sp.trim().toUpperCase().startsWith("R");
-const WARN = "#e0a020"; // close-call (near-balanced) outline, matches the minimap gutter
 
 // text with search matches wrapped in <mark>; the occ == curOcc match is emphasized
 function renderText(text: string, query: string, curOcc: number): ReactNode {
@@ -37,6 +36,7 @@ export function TranscriptView() {
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const speakerNames = useStore((s) => s.ui.speakerNames);
+  const warnCls = useStore((s) => `cc-${s.ui.warnSize} cc-${s.ui.warnCorner}`);
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
@@ -190,6 +190,7 @@ export function TranscriptView() {
               onLaneHover={onLaneHover}
               hl={hl}
               closeCallSids={closeCallSids}
+              warnCls={warnCls}
               showLid={showLineNumbers}
               speakerNames={speakerNames}
               searchQuery={search.query}
@@ -207,7 +208,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, showLid, speakerNames, searchQuery, current }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, showLid, speakerNames, searchQuery, current }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -219,6 +220,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   onLaneHover: (sid: number | null) => void;
   hl: { start: number; end: number; color: string } | null;
   closeCallSids: Set<number>;
+  warnCls: string;
   showLid: boolean;
   speakerNames: "full" | "short";
   searchQuery: string;
@@ -250,22 +252,13 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
           borderBottom: isEnd ? b : undefined,
         }
       : { background: color };
-    // close-call (near-balanced excerpt): an ADDITIONAL thick amber ring OUTSIDE
-    // any existing border (e.g. rejected) — an outset shadow per-edge, so it adds
-    // to the border instead of replacing it and a multi-line block stays one
-    // outline. z-index lifts it above adjacent lane bars.
-    if (cc) {
-      const ring = [`-3px 0 0 0 ${WARN}`, `3px 0 0 0 ${WARN}`];
-      if (isStart) ring.push(`0 -3px 0 0 ${WARN}`);
-      if (isEnd) ring.push(`0 3px 0 0 ${WARN}`);
-      style.boxShadow = ring.join(",");
-      style.zIndex = 2;
-    }
     lanes.push(
       <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
         style={style}
         onMouseEnter={() => onLaneHover(seg.sid)} onMouseLeave={() => onLaneHover(null)}
         onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}>
+        {/* close-call (near-balanced excerpt): corner warning badge (side/size configurable) */}
+        {isStart && cc && <span className={"ccbadge " + warnCls}>!</span>}
         {isStart && <span className="grip gripTop" onMouseDown={(e) => onGripDown(e, seg, "start")} />}
         {isEnd && <span className="grip gripBot" onMouseDown={(e) => onGripDown(e, seg, "end")} />}
       </span>

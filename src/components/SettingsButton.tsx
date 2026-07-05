@@ -15,6 +15,8 @@ export function SettingsButton() {
   const palettePos = useStore((s) => s.ui.palettePos);
   const accent = useStore((s) => s.ui.accent);
   const speakerNames = useStore((s) => s.ui.speakerNames);
+  const warnCorner = useStore((s) => s.ui.warnCorner);
+  const warnSize = useStore((s) => s.ui.warnSize);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const setUi = useStore((s) => s.setUi);
@@ -109,6 +111,22 @@ export function SettingsButton() {
               <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
             </div>
           </div>
+          <div className="srow">
+            <span>Warning corner</span>
+            <div className="seg">
+              <button className={warnCorner === "left" ? "on" : ""} onClick={() => setUi({ warnCorner: "left" })}>left</button>
+              <button className={warnCorner === "right" ? "on" : ""} onClick={() => setUi({ warnCorner: "right" })}>right</button>
+            </div>
+          </div>
+          <div className="srow">
+            <span>Warning size</span>
+            <div className="seg">
+              {(["xs", "sm", "md", "lg"] as const).map((sz) => (
+                <button key={sz} className={warnSize === sz ? "on" : ""} onClick={() => setUi({ warnSize: sz })}>{sz}</button>
+              ))}
+            </div>
+          </div>
+          <div className="settings-note">The near-balanced (⚠) marker on coded segments.</div>
 
           <div className="settings-div" />
           <button className="btn zenbtn" onClick={() => { setZen(true); setOpen(false); }}>Enter zen mode</button>
