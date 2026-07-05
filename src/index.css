@@ -256,7 +256,9 @@ button { font-family:inherit; }
 
 .empty { padding:16px; color:var(--muted); }
 /* scroll headroom: hatched light-gray lines on a very light gray background */
-.vpad { height:3rem; background-color:var(--panel);
+.vpad { height:3rem; background-color:#fcfcfc;
+  background-image:repeating-linear-gradient(-45deg, #f6f6f6, #f6f6f6 1px, transparent 1px, transparent 8px); }
+[data-theme=dark] .vpad { background-color:var(--panel);
   background-image:repeating-linear-gradient(-45deg, var(--line), var(--line) 1px, transparent 1px, transparent 8px); }
 
 /* browse view — two panes: codes (left) | excerpts (right) */
