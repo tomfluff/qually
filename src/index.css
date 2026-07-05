@@ -249,7 +249,7 @@ button { font-family:inherit; }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
 .lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;
   justify-content:flex-start; }
-.laneBar { width:18px; flex-shrink:0; position:relative; cursor:pointer; }
+.laneBar { width:var(--lane-w, 18px); flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
 /* close-call flag: exclamation badge on a top corner of the segment block.
@@ -267,7 +267,7 @@ button { font-family:inherit; }
 .ccbadge.cc-lg { width:22px; height:22px; font-size:14px; line-height:22px; }
 .laneBar .grip { position:absolute; left:-3px; right:-3px; height:8px; cursor:ns-resize; }
 .laneBar .gripTop { top:-3px; } .laneBar .gripBot { bottom:-3px; }
-.laneEmpty { width:18px; flex-shrink:0; }
+.laneEmpty { width:var(--lane-w, 18px); flex-shrink:0; }
 
 /* custom lane tooltip (left of the bar, styled for legibility) */
 .laneBar[data-tip]:hover::after {

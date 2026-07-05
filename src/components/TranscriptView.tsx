@@ -29,6 +29,7 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
 
 const lidLabel = (g: Group) => g.startId === g.endId ? `${g.startId}` : `${g.startId}–${g.endId}`;
 const shortSpeaker = (s: string) => s.trim().slice(0, 3);
+const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 
 export function TranscriptView() {
   const active = useStore((s) => s.active);
@@ -37,6 +38,7 @@ export function TranscriptView() {
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnCls = useStore((s) => `cc-${s.ui.warnSize} cc-${s.ui.warnCorner}`);
+  const laneWidth = useStore((s) => s.ui.laneWidth);
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
@@ -173,7 +175,7 @@ export function TranscriptView() {
     <>
       <div className="tview">
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
-        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth } as CSSProperties}>
+        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" />, // headroom before the first line
           ...groups.map((g) => (

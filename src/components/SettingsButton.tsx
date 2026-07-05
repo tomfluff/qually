@@ -17,6 +17,7 @@ export function SettingsButton() {
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnCorner = useStore((s) => s.ui.warnCorner);
   const warnSize = useStore((s) => s.ui.warnSize);
+  const laneWidth = useStore((s) => s.ui.laneWidth);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const setUi = useStore((s) => s.setUi);
@@ -109,6 +110,14 @@ export function SettingsButton() {
             <div className="seg">
               <button className={palettePos === "auto" ? "on" : ""} onClick={() => setUi({ palettePos: "auto" })}>near</button>
               <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
+            </div>
+          </div>
+          <div className="srow">
+            <span>Lane width</span>
+            <div className="seg">
+              {(["xs", "sm", "md", "lg"] as const).map((sz) => (
+                <button key={sz} className={laneWidth === sz ? "on" : ""} onClick={() => setUi({ laneWidth: sz })}>{sz}</button>
+              ))}
             </div>
           </div>
           <div className="srow">
