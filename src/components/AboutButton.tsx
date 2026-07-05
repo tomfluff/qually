@@ -7,6 +7,8 @@ const KEYS: [string, string][] = [
   ["Shift-click / Ctrl-click", "Extend the range / toggle individual lines"],
   ["↑ ↓", "Move selection to the next/previous line"],
   ["Shift + ↑ ↓", "Extend the selection"],
+  ["PageUp / PageDn", "Scroll the transcript by about a screen"],
+  ["Home / End", "Jump to the top / bottom of the transcript"],
   ["1 – 9", "Apply the matching hotbar code to the selection"],
   ["0", "Open the code palette (fuzzy search or create a code)"],
   ["Ctrl + C", "Copy the selected lines (speaker-grouped)"],
@@ -69,7 +71,8 @@ export function AboutButton() {
                   <li><b>Apply a code:</b> press <b>1–9</b> for the hotbar, <b>0</b> for the fuzzy code palette, or click a code in the sidebar.</li>
                   <li><b>Edit a segment:</b> click its colored lane bar (notes, reject, delete, copy) or drag its top/bottom edge to resize. Hover a bar to see its line range.</li>
                   <li><b>Manage codes:</b> right-click a code (sidebar or Browse) to rename, edit its definition, recolor, merge, pin, or delete.</li>
-                  <li><b>Browse tab:</b> pick codes on the left, read their excerpts on the right; click a ref to jump to it.</li>
+                  <li><b>Mixed-speaker flag:</b> a <span aria-hidden="true">⚠️</span> on a segment means its excerpt keeps only the dominant speaker — the other speaker's words may drop out, so double-check it.</li>
+                  <li><b>Browse tab:</b> pick codes on the left, read their excerpts on the right; click a ref to jump to it. Turn on <b>Show rejected</b> to include rejected segments.</li>
                 </ul>
               </section>
 
@@ -88,7 +91,7 @@ export function AboutButton() {
                 <h3>Also</h3>
                 <ul>
                   <li><b>Video dock</b> (bottom-right): click a timecode chip to play from that moment; collapse for audio-only.</li>
-                  <li><b>Settings</b> (gear): text sizes, hotbar mode, theme, and zen mode.</li>
+                  <li><b>Settings:</b> theme &amp; primary color, text sizes, line numbers, short/full speaker names, merge partial lines, hotbar &amp; palette position, and zen mode.</li>
                   <li>Drag the panel dividers to resize; drag lane bars past 5 and the text reflows.</li>
                 </ul>
               </section>
