@@ -1,0 +1,26 @@
+/* code context menu */
+.ctxmenu { position:fixed; z-index:75; width:214px; background:var(--bg);
+  border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 34px rgba(0,0,0,.3);
+  padding:6px; display:flex; flex-direction:column; gap:1px; font-size:13px; }
+.ctxmenu .ctxhead { font-weight:700; color:var(--fg); padding:5px 8px 3px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ctxmenu button { text-align:left; background:transparent; border:none; color:var(--fg);
+  padding:7px 8px; border-radius:6px; cursor:pointer; font-size:13px;
+  display:flex; align-items:center; gap:7px; }
+.ctxmenu button:hover { background:var(--sel); }
+.ctxmenu button svg { flex-shrink:0; color:var(--muted); }
+.ctxmenu button.danger svg { color:inherit; }
+.ctxmenu button.danger { color:#e0554f; }
+.ctxmenu button.danger:hover { background:#e0554f; color:#fff; }
+.ctxmenu .ctxdiv { height:1px; background:var(--line); margin:4px 2px; }
+.ctxmenu .ctxlist { max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:1px; }
+.ctxmenu .ctxlist .swatch { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+.ctxmenu .ctxform { display:flex; flex-direction:column; gap:8px; padding:2px; }
+.ctxmenu .ctxform input,
+.ctxmenu .ctxform textarea { padding:6px 8px; border:1px solid var(--line); border-radius:6px;
+  background:var(--panel); color:var(--fg); font-family:inherit; font-size:13px;
+  width:100%; box-sizing:border-box; }
+.ctxmenu .ctxform textarea { line-height:1.4; resize:none; overflow-y:auto;
+  max-height:calc(1.4em * 3 + 14px); }
+.ctxmenu .ctxrow { display:flex; gap:6px; }
+.ctxmenu .ctxrow .btn { flex:1; justify-content:center; font-size:13px; }

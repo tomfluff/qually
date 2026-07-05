@@ -1,0 +1,10 @@
+/* zen mode: hide chrome, keep transcript + video */
+#app.zen #toolbar, #app.zen #tabs, #app.zen #sidebar, #app.zen .hotbar { display:none; }
+.zenexit { position:fixed; top:10px; left:12px; z-index:60;
+  display:inline-flex; align-items:center; gap:6px; padding:5px 11px;
+  background:var(--panel); border:1px solid var(--line); border-radius:999px;
+  color:var(--muted); font:inherit; font-size:12px; line-height:1; cursor:pointer; opacity:.5;
+  box-shadow:0 2px 10px rgba(0,0,0,.16); transition:opacity .15s, color .15s, border-color .15s; }
+.zenexit:hover { opacity:1; color:var(--fg); border-color:var(--accent); }
+.zenexit kbd { display:inline-flex; align-items:center; line-height:1; padding:2px 5px;
+  border:1px solid var(--line); border-radius:4px; font:inherit; font-size:.85em; }

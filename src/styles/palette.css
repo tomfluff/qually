@@ -1,0 +1,13 @@
+/* command palette (0) */
+.palette-backdrop { position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.28);
+  display:flex; justify-content:center; align-items:flex-start; padding-top:16vh; }
+.palette { width:min(460px, 90vw); background:var(--bg); border:1px solid var(--line);
+  border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.4); padding:14px; }
+.palette-head { font-size:12px; color:var(--muted); margin-bottom:8px; }
+.palette .newCodeWrap { margin-bottom:0; }
+.palette .newCode { padding:9px 11px; font-size:15px; }
+.palette .acList { max-height:44vh; }
+/* anchored to the selection: no dim, tighter list */
+.palette-backdrop.anchored { background:transparent; }
+.palette-anchored { padding:12px; box-shadow:0 12px 40px rgba(0,0,0,.38); }
+.palette-anchored .acList { max-height:var(--ac-max, 240px); }

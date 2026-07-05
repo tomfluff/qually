@@ -92,6 +92,10 @@ src/components/          Toolbar, Tabs, CodeSidebar, TranscriptView (rows +
                          lanes + edge-drag), HotbarDock, SettingsButton,
                          VideoDock, BrowseView, SegmentPopover, SearchBar,
                          AboutButton, CommandPalette
+src/index.css            @imports styles/*.css in cascade order (build inlines all)
+src/styles/              CSS split per area: base, buttons, toolbar, menu, tabs,
+                         layout, sidebar, about, palette, search, transcript,
+                         browse, settings, zen, hotbar, video, popover
 src/App.tsx, main.tsx
 ```
 

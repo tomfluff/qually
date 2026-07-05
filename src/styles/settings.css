@@ -1,0 +1,32 @@
+/* settings popover */
+.settings-wrap { position:relative; display:inline-flex; }
+.settings-pop { position:absolute; top:calc(100% + 6px); right:0; z-index:70;
+  width:286px; background:var(--bg); border:1px solid var(--line); border-radius:12px;
+  box-shadow:0 10px 34px rgba(0,0,0,.28); padding:14px; display:flex;
+  flex-direction:column; gap:9px; font-size:1rem;
+  max-height:calc(100vh - 62px); overflow-y:auto; }
+.settings-title { font-size:15px; font-weight:700; color:var(--fg); margin-bottom:2px; }
+.settings-sub { font-size:10px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--muted); font-weight:700; margin-top:5px; padding-bottom:4px;
+  border-bottom:1px solid var(--line); }
+.settings-pop .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
+.settings-pop .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
+.settings-pop .srow input[type=range] { width:92px; margin:0; align-self:center;
+  accent-color:var(--accent); }
+.settings-pop .sval { min-width:2.2ch; padding:2px 4px; text-align:center;
+  color:var(--fg); font-variant-numeric:tabular-nums; background:var(--panel);
+  border:1px solid var(--line); border-radius:5px; }
+.settings-pop .seg { display:flex; width:140px; border:1px solid var(--line);
+  border-radius:7px; overflow:hidden; }
+.settings-pop .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
+  padding:5px 0; font-weight:500; text-align:center; cursor:pointer;
+  transition:background .12s, color .12s; }
+.settings-pop .seg button:hover { background:var(--panel); }
+.settings-pop .seg button.on { background:var(--accent); color:#fff; }
+.settings-pop .swatches { display:flex; gap:7px; }
+.settings-pop .swatchbtn { width:22px; height:22px; border-radius:50%; padding:0;
+  border:2px solid transparent; cursor:pointer; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); }
+.settings-pop .swatchbtn.on { border-color:var(--fg); }
+.settings-div { height:1px; background:var(--line); margin:2px 0; }
+.settings-pop .zenbtn { width:100%; justify-content:center; text-align:center; }
+.settings-note { font-size:11px; color:var(--muted); text-align:left; margin-top:-3px; line-height:1.35; }

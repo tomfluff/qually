@@ -1,0 +1,14 @@
+/* toolbar (above tabs, W1 item 4) */
+#toolbar { display:flex; align-items:center; gap:8px; padding:6px 10px;
+  border-bottom:1px solid var(--line); font-size:12px; background:var(--panel); }
+#toolbar .status { color:var(--muted); flex:1; min-width:12px; } /* fills the gap; Settings+Help flush right */
+.helpbtn { flex-shrink:0; width:28px; height:28px; border-radius:50%; border:none;
+  background:var(--accent); color:#fff; cursor:pointer; padding:0;
+  font-size:17px; font-weight:800; line-height:1; font-family:inherit;
+  display:inline-flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+.helpbtn:hover { filter:brightness(1.12); }
+#toolbar .iconbtn { display:inline-flex; align-items:center; padding:5px 8px; }
+#toolbar .btn:disabled { opacity:.35; cursor:default; }
+#toolbar .btn:disabled:hover { border-color:var(--line); }
+#toolbar .tbdiv { width:1px; align-self:stretch; background:var(--line); margin:2px 2px; }
+

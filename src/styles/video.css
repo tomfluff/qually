@@ -1,0 +1,28 @@
+/* video dock */
+.vdock { position:fixed; z-index:50; background:var(--panel); border:1px solid var(--line);
+  border-radius:12px; box-shadow:0 10px 34px rgba(0,0,0,.3); overflow:hidden;
+  min-width:220px; }
+.vhead { display:flex; align-items:center; gap:4px; padding:6px 10px; cursor:move;
+  font-size:12px; color:var(--muted); user-select:none; }
+.vhead .vtitle { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vhead .btn { padding:4px 8px; display:inline-flex; align-items:center; }
+.vhead .btn.speed.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+.vhead .btn.vcollapse { padding:0; width:28px; height:28px; border-radius:50%;
+  justify-content:center; background:var(--line); }
+.vbody { position:relative; }
+.vctrl { display:flex; gap:8px; padding:8px 10px; align-items:center; font-size:12px; color:var(--muted); }
+.vctrl .vlabel { color:var(--fg); font-weight:600; }
+.vctrl .stepper { display:flex; align-items:center; border:1px solid var(--line);
+  border-radius:7px; overflow:hidden; background:var(--bg); }
+.vctrl .stepper button { border:none; background:transparent; color:var(--fg);
+  width:24px; height:26px; cursor:pointer; font-size:15px; line-height:1; padding:0; }
+.vctrl .stepper button:hover { background:var(--sel); }
+.vctrl .stepper input { width:40px; height:26px; text-align:center; color:var(--fg);
+  background:transparent; border:none; border-left:1px solid var(--line);
+  border-right:1px solid var(--line); font-family:inherit; font-size:12px;
+  -moz-appearance:textfield; }
+.vctrl .stepper input::-webkit-inner-spin-button,
+.vctrl .stepper input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+.vempty { padding:16px; text-align:center; font-size:13px; color:var(--muted); }
+.vresize { position:absolute; right:0; bottom:0; width:16px; height:16px;
+  cursor:ew-resize; background:linear-gradient(135deg, transparent 50%, var(--muted) 50%); }

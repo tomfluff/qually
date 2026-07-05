@@ -1,0 +1,21 @@
+:root {
+  --bg:#ffffff; --fg:#1a1a1a; --muted:#8a8a8a; --line:#e4e4e4;
+  --panel:#f6f6f6; --accent:#3b6ea5;
+  --row-hover:#ebebeb; --mm-w:66px;
+  /* chromatic tints derive from the chosen primary, adapting to the theme via
+     --bg — so one variable (--accent, set per theme in App.tsx) recolors all */
+  --sel:color-mix(in srgb, var(--accent) 18%, var(--bg));
+  --row-sel:color-mix(in srgb, var(--accent) 26%, var(--bg));
+  --row-sel-hover:color-mix(in srgb, var(--accent) 36%, var(--bg));
+}
+[data-theme=dark] {
+  --bg:#161a1e; --fg:#e6e6e6; --muted:#7f8a94; --line:#2c333a;
+  --panel:#1e242a; --accent:#7aa7d6;
+  --row-hover:#23282e;
+}
+* { box-sizing:border-box; }
+html,body,#root { margin:0; height:100%; background:var(--bg); color:var(--fg);
+  font-family:system-ui,Segoe UI,Roboto,sans-serif; }
+#app { display:flex; flex-direction:column; height:100%; }
+button { font-family:inherit; }
+

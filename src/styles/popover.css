@@ -1,0 +1,18 @@
+/* segment popover */
+.pop { position:fixed; z-index:70; background:var(--bg); border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,.25); padding:12px;
+  font-size:13px; width:280px; }
+.pop .meta { color:var(--muted); }
+.pop .pop-warn { margin-top:8px; padding:6px 8px; border-radius:6px; font-size:12px;
+  line-height:1.4; color:#7a5200; background:#fbeecb; border:1px solid #e8cf8a; }
+:root[data-theme="dark"] .pop .pop-warn { color:#f0cf8a; background:#3a2f14; border-color:#6b551f; }
+.pop textarea { width:100%; max-width:100%; height:52px; margin-top:8px;
+  resize:vertical; font-size:12px;
+  background:var(--panel); color:var(--fg); border:1px solid var(--line);
+  border-radius:6px; font-family:inherit; }
+.pop .row { display:flex; gap:6px; margin-top:12px; align-items:center; }
+.pop .row .btn { padding:3px 9px; font-size:12px; font-weight:600; }
+.pop .row .btn.copy, .pop .row .btn.iconclose { display:inline-flex; align-items:center; padding:4px 8px; }
+.pop .row .btn.copy { margin-left:auto; } /* copy + close pushed to the right */
+.pop .row .btn.iconclose { border:none; background:transparent; color:var(--muted); }
+.pop .row .btn.iconclose:hover { color:var(--fg); background:var(--line); }

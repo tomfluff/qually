@@ -1,0 +1,43 @@
+#content { flex:1; min-height:0; overflow:hidden; position:relative; }
+
+/* transcript search */
+.searchbar { position:absolute; top:8px; right:calc(16px + var(--mm-w)); z-index:40; width:min(440px, calc(100% - 32px - var(--mm-w)));
+  background:var(--bg); border:1px solid var(--line); border-radius:10px; overflow:hidden;
+  box-shadow:0 8px 26px rgba(0,0,0,.28); }
+.searchrow { display:flex; align-items:stretch; }
+.searchmain { flex:1; min-width:0; display:flex; align-items:center; gap:6px; padding:6px 8px; }
+/* close is a flush, full-height right cap the same width as the magnifier */
+.searchclose { flex-shrink:0; width:43px; border:none; border-left:1px solid var(--line);
+  background:var(--bg); color:var(--muted); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; }
+.searchclose:hover { color:var(--fg); background:var(--panel); }
+.searchinput { flex:1; min-width:0; padding:5px 8px; border:1px solid var(--line);
+  border-radius:6px; background:var(--panel); color:var(--fg); font-family:inherit; }
+.searchcount { min-width:3ch; text-align:center; font-size:12px; color:var(--muted);
+  font-variant-numeric:tabular-nums; }
+.searchbar .iconbtn { padding:4px 7px; line-height:1; display:inline-flex; align-items:center; }
+/* magnifier toggle — same top-right anchor, height, radius, and shadow as the
+   search bar, so opening the bar looks like it grows from the magnifier */
+.searchtoggle { position:absolute; top:8px; right:calc(16px + var(--mm-w)); z-index:40;
+  width:43px; height:43px; display:inline-flex; align-items:center; justify-content:center;
+  background:var(--bg); border:1px solid var(--line); border-radius:10px; color:var(--muted);
+  cursor:pointer; box-shadow:0 8px 26px rgba(0,0,0,.28); }
+.searchtoggle:hover { color:var(--fg); border-color:var(--accent); }
+.seg.searchscope { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+.seg.searchscope button { border:none; background:var(--bg); color:var(--muted);
+  padding:4px 8px; font-size:12px; cursor:pointer; }
+.seg.searchscope button.on { background:var(--accent); color:#fff; }
+.searchresults { max-height:min(50vh, 420px); overflow-y:auto; border-top:1px solid var(--line);
+  padding:6px; }
+.searchgroup { margin-bottom:6px; }
+.searchgrouphead { font-size:11px; font-weight:700; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.06em; padding:4px 6px 2px; }
+.searchgrouphead .cnt { color:var(--muted); font-weight:400; }
+.searchhit { display:flex; gap:8px; align-items:baseline; padding:4px 6px; border-radius:6px; cursor:pointer; }
+.searchhit:hover { background:var(--sel); }
+.searchhit .searchlid { color:var(--muted); font-size:.85em; min-width:3ch; text-align:right; flex-shrink:0; }
+.searchhit .searchtext { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.txt mark, .searchtext mark { background:#ffe58a; color:inherit; border-radius:2px; padding:0 1px; }
+[data-theme=dark] .txt mark, [data-theme=dark] .searchtext mark { background:#7a6320; color:#fff; }
+.txt mark.cur { background:#ff9d3b; color:#1a1a1a; }
+[data-theme=dark] .txt mark.cur { background:#c9741a; color:#fff; }

@@ -1,0 +1,80 @@
+/* transcript rows — order: line# · timecode · speaker · text · lanes (right).
+   Uniform typography: everything at the transcript font-size; muting via color only. */
+/* transcript + minimap layout; minimap replaces the native scrollbar */
+.tview { display:flex; height:100%; min-height:0; }
+.tview > .tviewlist { scrollbar-width:none; }
+.tview > .tviewlist::-webkit-scrollbar { display:none; }
+.minimap { position:relative; width:var(--mm-w); flex-shrink:0; cursor:pointer;
+  border-left:1px solid var(--line); background:var(--panel); overflow:hidden; }
+.minimap canvas { display:block; width:100%; height:100%; }
+.minimap-box { position:absolute; left:0; right:0; top:0; height:0;
+  background:color-mix(in srgb, var(--accent) 18%, transparent);
+  border-top:1px solid var(--accent); border-bottom:1px solid var(--accent);
+  pointer-events:none; }
+
+.lineRow { display:flex; align-items:center; gap:8px; padding:0 16px;
+  cursor:pointer; user-select:none; }
+/* vertical spacing lives on the text so the lane strip spans the full row
+   height and multiline segment bars connect (no inter-row gap) */
+.lineRow .txt { padding-block:6px; }
+/* gray hover, light-primary select, slightly-deeper primary on select+hover */
+.lineRow:hover { background:var(--row-hover); }
+.lineRow.selected { background:var(--row-sel); }
+.lineRow.selected:hover { background:var(--row-sel-hover); }
+.lineRow .lid { width:var(--lid-w, 4ch); text-align:right; color:var(--muted); flex-shrink:0;
+  user-select:none; white-space:nowrap; }
+.lineRow.merged .lid { font-variant-numeric:tabular-nums; }
+.lineRow .ts { font-size:0.8em; color:var(--bg); background:var(--muted);
+  flex-shrink:0; border:none; border-radius:999px; padding:0 9px; cursor:pointer;
+  line-height:1.4; }
+.lineRow .ts:hover { background:var(--accent); }
+.lineRow .spk { width:var(--spk-w, 2.5ch); text-align:center; font-weight:700;
+  flex-shrink:0; color:var(--muted); white-space:nowrap; }
+/* dim researcher rows via the text columns only, so the lane strip and its
+   tooltip keep full-strength colors regardless of speaker */
+.lineRow.rspk .lid, .lineRow.rspk .ts,
+.lineRow.rspk .spk, .lineRow.rspk .txt { opacity:.6; }
+.lineRow .txt { flex:1; line-height:1.45; }
+/* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
+.lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;
+  justify-content:flex-start; }
+.laneBar { width:var(--lane-w, 18px); flex-shrink:0; position:relative; cursor:pointer; }
+.laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
+.laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
+/* close-call flag: exclamation badge on a top corner of the segment block.
+   size (xs/sm/md/lg) and corner (left/right) are settings */
+.ccbadge { position:absolute; top:-5px; z-index:3; pointer-events:none;
+  border-radius:50%; background:#e0a020; color:#fff; font-weight:800;
+  text-align:center; box-shadow:0 0 0 1.5px var(--bg); }
+/* anchor the badge's inner edge to the bar's horizontal center, so it overlaps
+   at most half the block width (and grows outward) at any size */
+.ccbadge.cc-right { left:50%; }
+.ccbadge.cc-left { right:50%; }
+.ccbadge.cc-xs { width:11px; height:11px; font-size:8px; line-height:11px; }
+.ccbadge.cc-sm { width:14px; height:14px; font-size:10px; line-height:14px; }
+.ccbadge.cc-md { width:18px; height:18px; font-size:12px; line-height:18px; }
+.ccbadge.cc-lg { width:22px; height:22px; font-size:14px; line-height:22px; }
+.laneBar .grip { position:absolute; left:-3px; right:-3px; height:8px; cursor:ns-resize; }
+.laneBar .gripTop { top:-3px; } .laneBar .gripBot { bottom:-3px; }
+.laneEmpty { width:var(--lane-w, 18px); flex-shrink:0; }
+
+/* custom lane tooltip (left of the bar, styled for legibility) */
+.laneBar[data-tip]:hover::after {
+  content: attr(data-tip);
+  position:absolute; right:calc(100% + 8px); top:50%; transform:translateY(-50%);
+  display:flex; align-items:center; line-height:1;
+  background:var(--fg); color:var(--bg); padding:4px 9px; border-radius:6px;
+  font-size:1em; font-weight:600; white-space:nowrap; z-index:80;
+  pointer-events:none; box-shadow:0 4px 16px rgba(0,0,0,.32); }
+
+.empty { padding:16px; color:var(--muted); }
+/* scroll headroom: hatched light-gray lines on a very light gray background */
+.vpad { height:3rem; background-color:#fcfcfc;
+  background-image:repeating-linear-gradient(-45deg, #f6f6f6, #f6f6f6 1px, transparent 1px, transparent 8px); }
+[data-theme=dark] .vpad { background-color:var(--panel);
+  background-image:repeating-linear-gradient(-45deg, var(--line), var(--line) 1px, transparent 1px, transparent 8px); }
+/* border on the edge that meets the transcript, same color as the hatches */
+.vpad-top { border-bottom:1px solid #f6f6f6; }
+.vpad-bot { border-top:1px solid #f6f6f6; }
+[data-theme=dark] .vpad-top { border-bottom-color:var(--line); }
+[data-theme=dark] .vpad-bot { border-top-color:var(--line); }
