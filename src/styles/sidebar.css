@@ -4,7 +4,7 @@
   border-radius:6px; cursor:pointer; }
 .codeItem:hover { background:var(--sel); }
 /* color pill indicator (shared with the Browse code list) */
-.codebar { width:5px; height:1.5rem; border-radius:3px; flex-shrink:0; cursor:pointer; }
+.codebar { width:10px; height:1.5rem; border-radius:3px; flex-shrink:0; cursor:pointer; }
 .codeItem .cnt { margin-left:auto; color:var(--muted); font-size:.8em; }
 /* when a key is present it takes the gap; the count sits right next to it */
 .codeItem .key ~ .cnt { margin-left:0; }
