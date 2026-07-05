@@ -80,21 +80,25 @@ export const Minimap = forwardRef<MinimapHandle, {
 
       ctx.fillStyle = muted;
       if (simple) {
-        // blocky text: bucket the height, fill each block tinted by dominant speaker
+        // blocky text: bucket the height; block width ≈ the bucket's text amount
+        // (avg line fill), tinted by the bucket's dominant speaker
         const bh = 6;
+        const CAP = 80; // chars for a "full" line
         const nb = Math.max(1, Math.ceil(h / bh));
-        const buckets: [number, number][] = Array.from({ length: nb }, () => [0, 0]); // [P, R] chars
+        const buckets: [number, number, number][] = Array.from({ length: nb }, () => [0, 0, 0]); // [P, R, lineCount]
         for (let i = 0; i < N; i++) {
           const g = groups[i];
           const k = Math.min(nb - 1, Math.floor(((i / N) * h) / bh));
           const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
           buckets[k][isR(g.speaker) ? 1 : 0] += len;
+          buckets[k][2]++;
         }
         for (let k = 0; k < nb; k++) {
-          const [p, r] = buckets[k];
-          if (!p && !r) continue;
+          const [p, r, n] = buckets[k];
+          if (!n || (!p && !r)) continue;
+          const bw = Math.max(3, Math.min(1, (p + r) / (n * CAP)) * textW);
           ctx.globalAlpha = r > p ? 0.3 : 0.55;
-          ctx.fillRect(textX, k * bh, textW, bh - 1);
+          ctx.fillRect(textX, k * bh, bw, bh - 1);
         }
       } else {
         // detailed text: one faint bar per group, width ∝ length, dimmer for R
