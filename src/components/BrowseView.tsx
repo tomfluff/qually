@@ -10,6 +10,7 @@ export function BrowseView() {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
   const fontSize = useStore((s) => s.ui.fontSize);
+  const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
   const setUi = useStore((s) => s.setUi);
   const setColor = useStore((s) => s.setColor);
@@ -55,7 +56,7 @@ export function BrowseView() {
 
   return (
     <div id="browse" style={{ fontSize }}>
-      <div className="browse-left nicescroll" style={{ width: leftWidth }}>
+      <div className="browse-left nicescroll" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
         <input type="search" placeholder="filter codes…" value={filter}
           onChange={(e) => setFilter(e.target.value)} />
         {listed.map((c) => (
