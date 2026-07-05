@@ -291,9 +291,9 @@ button { font-family:inherit; }
 .bTitle { display:flex; align-items:center; gap:8px; margin:0 0 6px; line-height:1; }
 .bTitle .swatch { width:.9em; height:.9em; border-radius:.3em; flex-shrink:0; align-self:center; }
 .bDef { color:var(--muted); font-size:.85em; line-height:1.4; margin-bottom:8px; }
-.bToggle { display:inline-flex; align-items:center; gap:6px; font-size:.85em;
+.bToggle { display:inline-flex; align-items:center; gap:6px;
   color:var(--muted); cursor:pointer; margin-bottom:6px; }
-.bToggle input { accent-color:var(--accent); cursor:pointer; }
+.bToggle input { accent-color:var(--accent); cursor:pointer; width:1em; height:1em; margin:0; }
 .bExcerpt { border-left:4px solid var(--line); margin:10px 0; padding:6px 12px; line-height:1.45; }
 .bExcerpt.rejected { opacity:.62; }
 .bExcerpt .rejtag { display:inline-block; margin-right:6px; padding:0 6px;
