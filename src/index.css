@@ -1,7 +1,7 @@
 :root {
   --bg:#ffffff; --fg:#1a1a1a; --muted:#8a8a8a; --line:#e4e4e4;
   --panel:#f6f6f6; --accent:#3b6ea5;
-  --row-hover:#ebebeb;
+  --row-hover:#ebebeb; --mm-w:56px;
   /* chromatic tints derive from the chosen primary, adapting to the theme via
      --bg — so one variable (--accent, set per theme in App.tsx) recolors all */
   --sel:color-mix(in srgb, var(--accent) 18%, var(--bg));
@@ -168,7 +168,7 @@ button { font-family:inherit; }
 #content { flex:1; min-height:0; overflow:hidden; position:relative; }
 
 /* transcript search */
-.searchbar { position:absolute; top:8px; right:16px; z-index:40; width:min(440px, calc(100% - 32px));
+.searchbar { position:absolute; top:8px; right:calc(16px + var(--mm-w)); z-index:40; width:min(440px, calc(100% - 32px - var(--mm-w)));
   background:var(--bg); border:1px solid var(--line); border-radius:10px; overflow:hidden;
   box-shadow:0 8px 26px rgba(0,0,0,.28); }
 .searchrow { display:flex; align-items:stretch; }
@@ -185,7 +185,7 @@ button { font-family:inherit; }
 .searchbar .iconbtn { padding:4px 7px; line-height:1; display:inline-flex; align-items:center; }
 /* magnifier toggle — same top-right anchor, height, radius, and shadow as the
    search bar, so opening the bar looks like it grows from the magnifier */
-.searchtoggle { position:absolute; top:8px; right:16px; z-index:40;
+.searchtoggle { position:absolute; top:8px; right:calc(16px + var(--mm-w)); z-index:40;
   width:43px; height:43px; display:inline-flex; align-items:center; justify-content:center;
   background:var(--bg); border:1px solid var(--line); border-radius:10px; color:var(--muted);
   cursor:pointer; box-shadow:0 8px 26px rgba(0,0,0,.28); }
@@ -211,6 +211,18 @@ button { font-family:inherit; }
 
 /* transcript rows — order: line# · timecode · speaker · text · lanes (right).
    Uniform typography: everything at the transcript font-size; muting via color only. */
+/* transcript + minimap layout; minimap replaces the native scrollbar */
+.tview { display:flex; height:100%; min-height:0; }
+.tview > .tviewlist { scrollbar-width:none; }
+.tview > .tviewlist::-webkit-scrollbar { display:none; }
+.minimap { position:relative; width:var(--mm-w); flex-shrink:0; cursor:pointer;
+  border-left:1px solid var(--line); background:var(--panel); overflow:hidden; }
+.minimap canvas { display:block; width:100%; height:100%; }
+.minimap-box { position:absolute; left:0; right:0; top:0; height:0;
+  background:color-mix(in srgb, var(--accent) 18%, transparent);
+  border-top:1px solid var(--accent); border-bottom:1px solid var(--accent);
+  pointer-events:none; }
+
 .lineRow { display:flex; align-items:center; gap:8px; padding:0 16px;
   cursor:pointer; user-select:none; }
 /* vertical spacing lives on the text so the lane strip spans the full row

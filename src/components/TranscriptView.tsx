@@ -3,6 +3,7 @@ import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
+import { Minimap, type MinimapHandle } from "./Minimap";
 import { seekVideo } from "../video/seek";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
@@ -47,6 +48,11 @@ export function TranscriptView() {
   const jump = useStore((s) => s.jump);
   const clearJump = useStore((s) => s.clearJump);
   const vref = useRef<VListHandle>(null);
+  const mmRef = useRef<MinimapHandle>(null);
+  const syncMinimap = () => {
+    const v = vref.current;
+    if (v && v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
+  };
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
   const [hoverSid, setHoverSid] = useState<number | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -67,6 +73,9 @@ export function TranscriptView() {
     if (idx >= 0) vref.current?.scrollToIndex(idx + 1, { align: "center" }); // +1 for the top vpad
     clearJump();
   }, [jump, active, transcript, groups, clearJump]);
+
+  // sync the minimap viewport box on mount and whenever the list content changes
+  useEffect(() => { const id = requestAnimationFrame(syncMinimap); return () => cancelAnimationFrame(id); });
 
   // PageUp/PageDown/Home/End scroll the transcript list
   useEffect(() => {
@@ -162,7 +171,9 @@ export function TranscriptView() {
 
   return (
     <>
-      <VList ref={vref} style={{ height: "100%", fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth } as CSSProperties}>
+      <div className="tview">
+      <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
+        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" />, // headroom before the first line
           ...groups.map((g) => (
@@ -188,6 +199,8 @@ export function TranscriptView() {
           <div className="vpad vpad-bot" key="vpad-bot" />, // headroom after the last line
         ]}
       </VList>
+      <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook} vref={vref} />
+      </div>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
     </>
   );

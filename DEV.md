@@ -280,6 +280,14 @@ changes, so the Python scripts and `docs/QUAL-WORKFLOW.md` are untouched.
     not just at export: an amber dot on the segment's lane bar + a warning line
     in the segment popover. Consumes the existing `excerptOf().closeCall`; no
     rule change. Follow-up on W7 item 18. (First item from `CODING-APP-FUTURE.md`.)
+27. **Transcript minimap** (`Minimap.tsx`). Fixed-width (~56px) lane-mirror strip
+    down the right edge, drawn on a `<canvas>` from the store (virtua only mounts
+    visible rows). Maps by group index (the axis virtua scrolls), so nav is exact
+    despite variable row heights. Accent viewport box updated imperatively on
+    `onScroll` (no list re-render); click/drag calls `scrollToIndex`. Replaces the
+    native transcript scrollbar (hidden via CSS); the search bar/toggle offset by
+    `--mm-w` to clear it. Also user-selectable primary color (5 palettes), full/
+    short speaker names, and the grouped Settings panel landed in this batch.
 
 ## 4. Decisions log (was: open questions)
 

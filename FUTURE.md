@@ -45,8 +45,9 @@ Shipped items get moved to the "Done" list with the commit.
 - **Filter the transcript view**: show only lines carrying code X, or only
   speaker P. Search is substring-only today; a code/speaker filter is a different,
   high-use axis.
-- **Density minimap** down the side of the transcript showing where segments sit —
-  orientation in a 2000-line transcript.
+- ~~**Density minimap**~~ — **SHIPPED 2026-07-05.** Lane-mirror strip on the right
+  edge (`Minimap.tsx`, canvas): zoomed-out segment density, accent viewport box,
+  click/drag to navigate; replaces the native transcript scrollbar.
 
 ### Codes → paper — shortens the part after coding
 - **Export excerpts grouped by code** as a quote-ready doc (respecting the `[R:]`
