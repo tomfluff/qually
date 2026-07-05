@@ -161,7 +161,7 @@ export function TranscriptView() {
     <>
       <VList ref={vref} style={{ height: "100%", fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth } as CSSProperties}>
         {[
-          <div className="vpad" key="vpad-top" />, // headroom before the first line
+          <div className="vpad vpad-top" key="vpad-top" />, // headroom before the first line
           ...groups.map((g) => (
             <Row
               key={g.startId}
@@ -181,7 +181,7 @@ export function TranscriptView() {
               current={search.current}
             />
           )),
-          <div className="vpad" key="vpad-bot" />, // headroom after the last line
+          <div className="vpad vpad-bot" key="vpad-bot" />, // headroom after the last line
         ]}
       </VList>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}

@@ -260,6 +260,11 @@ button { font-family:inherit; }
   background-image:repeating-linear-gradient(-45deg, #f6f6f6, #f6f6f6 1px, transparent 1px, transparent 8px); }
 [data-theme=dark] .vpad { background-color:var(--panel);
   background-image:repeating-linear-gradient(-45deg, var(--line), var(--line) 1px, transparent 1px, transparent 8px); }
+/* border on the edge that meets the transcript, same color as the hatches */
+.vpad-top { border-bottom:1px solid #f6f6f6; }
+.vpad-bot { border-top:1px solid #f6f6f6; }
+[data-theme=dark] .vpad-top { border-bottom-color:var(--line); }
+[data-theme=dark] .vpad-bot { border-top-color:var(--line); }
 
 /* browse view — two panes: codes (left) | excerpts (right) */
 #browse { display:flex; height:100%; overflow:hidden; }
