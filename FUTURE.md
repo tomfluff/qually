@@ -84,6 +84,16 @@ Shipped items get moved to the "Done" list with the commit.
 
 ## Decided against (with rationale)
 
+- **Warning-badge corner (left/right) setting — HIDDEN 2026-07-05.** The
+  close-call `!` badge had a Settings control to place it on the top-left or
+  top-right corner of the code block. Pulled from the UI because it wasn't
+  visually stable: with badges free to sit on either side, it was hard to tell
+  which warning belonged to which lane block (ambiguous association, especially
+  with adjacent lanes). Badge is fixed to the **right** for now. The state
+  (`ui.warnCorner`) and `.ccbadge.cc-left`/`.cc-right` CSS remain, so re-adding
+  the control is a one-line change if a clearer association is found (e.g. always
+  the side away from the neighboring lane).
+
 - **ShadCN UI — NO (2026-07-05).** ShadCN isn't a paste-in of plain components:
   it's coupled to **Tailwind CSS** + **Radix UI** runtime deps. That collides
   with the project's constraints (single offline hand-rolled-CSS artifact; §6
