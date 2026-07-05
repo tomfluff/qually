@@ -14,6 +14,7 @@ export function SettingsButton() {
   const setHotbarMode = useStore((s) => s.setHotbarMode);
   const palettePos = useStore((s) => s.ui.palettePos);
   const accent = useStore((s) => s.ui.accent);
+  const speakerNames = useStore((s) => s.ui.speakerNames);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const setUi = useStore((s) => s.setUi);
@@ -92,6 +93,14 @@ export function SettingsButton() {
               <button className={showLineNumbers ? "on" : ""} onClick={() => setUi({ showLineNumbers: true })}>on</button>
             </div>
           </div>
+          <div className="srow">
+            <span>Speakers</span>
+            <div className="seg">
+              <button className={speakerNames === "full" ? "on" : ""} onClick={() => setUi({ speakerNames: "full" })}>full</button>
+              <button className={speakerNames === "short" ? "on" : ""} onClick={() => setUi({ speakerNames: "short" })}>short</button>
+            </div>
+          </div>
+          <div className="settings-note">Short shows the first 3 characters (hover for the full name).</div>
           <div className="settings-div" />
           <button className="btn zenbtn" onClick={() => { setZen(true); setOpen(false); }}>Enter zen mode</button>
           <div className="settings-note">Hides the toolbar and panels. Press Esc to exit.</div>

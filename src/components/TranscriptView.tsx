@@ -27,12 +27,14 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
 }
 
 const lidLabel = (g: Group) => g.startId === g.endId ? `${g.startId}` : `${g.startId}–${g.endId}`;
+const shortSpeaker = (s: string) => s.trim().slice(0, 3);
 
 export function TranscriptView() {
   const active = useStore((s) => s.active);
   const transcript = useStore((s) => s.transcripts[s.active]);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
+  const speakerNames = useStore((s) => s.ui.speakerNames);
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
@@ -146,8 +148,9 @@ export function TranscriptView() {
     return <div className="empty">Import transcript CSVs to begin (Import files…).</div>;
   }
 
-  // uniform column widths sized to the longest label in this transcript
-  const spkChars = transcript.lines.reduce((m, l) => Math.max(m, l.speaker.trim().length), 0);
+  // uniform column widths sized to the longest displayed label in this transcript
+  const spkLen = (s: string) => (speakerNames === "short" ? shortSpeaker(s) : s.trim()).length;
+  const spkChars = transcript.lines.reduce((m, l) => Math.max(m, spkLen(l.speaker)), 0);
   const spkWidth = `${Math.max(2.5, spkChars)}ch`;
   const lidChars = groups.reduce((m, g) => Math.max(m, lidLabel(g).length), 1);
   const lidWidth = `${Math.max(2, lidChars)}ch`;
@@ -177,6 +180,7 @@ export function TranscriptView() {
               hl={hl}
               closeCallSids={closeCallSids}
               showLid={showLineNumbers}
+              speakerNames={speakerNames}
               searchQuery={search.query}
               current={search.current}
             />
@@ -189,7 +193,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, showLid, searchQuery, current }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, showLid, speakerNames, searchQuery, current }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -202,6 +206,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   hl: { start: number; end: number; color: string } | null;
   closeCallSids: Set<number>;
   showLid: boolean;
+  speakerNames: "full" | "short";
   searchQuery: string;
   current: { line: number; occ: number } | null;
 }) {
@@ -258,7 +263,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
         title="play from here">
         {group.ts.split(".")[0]}
       </button>
-      <span className="spk">{group.speaker}</span>
+      <span className="spk" title={group.speaker}>{speakerNames === "short" ? shortSpeaker(group.speaker) : group.speaker}</span>
       <span className="txt">
         {group.lines.map((l, k) => (
           <Fragment key={l.id}>
