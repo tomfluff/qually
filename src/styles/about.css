@@ -21,3 +21,15 @@
 .about-keys td:first-child { white-space:nowrap; width:1%; }
 .about-keys kbd { display:inline-block; background:var(--panel); border:1px solid var(--line);
   border-bottom-width:2px; border-radius:5px; padding:1px 6px; font:inherit; font-size:.82em; color:var(--fg); }
+
+/* transcript format & import modal */
+.fmt-table { width:100%; border-collapse:collapse; margin:4px 0 8px; }
+.fmt-table td { padding:4px 8px 4px 0; vertical-align:top; line-height:1.45; }
+.fmt-table td:first-child { white-space:nowrap; width:1%; }
+.fmt-note { color:var(--muted); font-size:.92em; line-height:1.45; margin:4px 0 10px; }
+.aiprompt-wrap { position:relative; }
+.aiprompt { margin:0; max-height:280px; overflow:auto; padding:12px 12px 12px; white-space:pre-wrap;
+  word-break:break-word; background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; line-height:1.5; color:var(--fg); }
+.copyprompt { position:absolute; top:8px; right:8px; z-index:1; display:inline-flex; align-items:center;
+  gap:5px; padding:4px 9px; font-size:12px; }

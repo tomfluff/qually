@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { SettingsButton } from "./SettingsButton";
 import { AboutButton } from "./AboutButton";
+import { DataFormatButton } from "./DataFormatButton";
 import { Icon } from "./Icon";
 
 export function Toolbar() {
@@ -34,6 +35,7 @@ export function Toolbar() {
   return (
     <div id="toolbar">
       <button className="btn" onClick={() => fileRef.current?.click()}>Import files…</button>
+      <DataFormatButton />
       <button className="btn" onClick={doExport}>Export coded-segments.csv</button>
       <span className="tbdiv" />
       <button className="btn iconbtn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">

@@ -322,6 +322,13 @@ changes, so the Python scripts and `docs/QUAL-WORKFLOW.md` are untouched.
     by pid, restored on tab switch unless a Browse→line jump is pending) — session
     scoped, not persisted across reloads.
 
+31. **Transcript format & import guide (2026-07-05).** New in-app modal
+    (`DataFormatButton.tsx`, file-text button next to Import): CSV column spec,
+    local-data/export notes, a "Download example.csv" button, and a copy-able
+    **AI prompt** that makes an LLM write a Python script converting any transcript
+    to the app's CSV. Mirrored in `CODING-APP-DATA-FORMAT.md` (keep the two prompts
+    in sync). Reuses the `.about-*` modal styles.
+
 ## 4. Decisions log (was: open questions)
 
 - **Arrow keys (item 7): APPROVED** — plain arrow moves the selection to the
