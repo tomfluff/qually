@@ -87,10 +87,10 @@ export function BrowseView() {
           <div className="empty">Select a code on the left to see its excerpts.</div>
         ) : (
           <>
-            <label className="bToggle">
-              <input type="checkbox" checked={showRejected} onChange={(e) => setShowRejected(e.target.checked)} />
+            <button className={"bToggle" + (showRejected ? " on" : "")}
+              onClick={() => setShowRejected((v) => !v)}>
               Show rejected
-            </label>
+            </button>
             {chosen.map((code) => {
               const segs = segments.filter((s) => norm(s.code) === norm(code) &&
                 (s.status === "accepted" || (showRejected && s.status === "rejected")));
