@@ -64,7 +64,7 @@ export function BrowseView() {
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code: c, x: e.clientX, y: e.clientY }); }}
             title={`${c}  (right-click for options)`}>
             <div className="bCodeMain">
-              <span className="swatch" style={{ background: codebook[c].color }}
+              <span className="codebar" style={{ background: codebook[c].color }} title="recolor"
                 onClick={(e) => {
                   e.stopPropagation();
                   const inp = document.createElement("input");

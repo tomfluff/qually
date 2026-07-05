@@ -8,9 +8,9 @@
 .hotbar .tiles { display:flex; gap:5px; align-items:flex-start; }
 /* each slot stacks the colored block over its keyboard number */
 .hbslot { display:flex; flex-direction:column; align-items:center; gap:3px; }
-.hbslot .tnum { font-size:10px; font-weight:700; color:var(--muted); line-height:1.4;
-  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; min-width:1.5em; text-align:center;
-  border:1px solid var(--line); border-bottom-width:2px; border-radius:3px; background:var(--bg); }
+/* plain (not a keycap) so it can be larger; monospace for even digit width */
+.hbslot .tnum { font-size:14px; font-weight:700; color:var(--muted); line-height:1;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
 .hbhint { display:flex; align-items:center; height:36px; padding:0 10px;
   color:var(--muted); font-size:12px; white-space:nowrap; }
 .tile { position:relative; width:36px; height:36px; padding:0; flex:0 0 auto;
