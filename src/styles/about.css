@@ -33,3 +33,6 @@
   font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; line-height:1.5; color:var(--fg); }
 .copyprompt { position:absolute; top:8px; right:8px; z-index:1; display:inline-flex; align-items:center;
   gap:5px; padding:4px 9px; font-size:12px; }
+/* the toolbar "File format" button: same .btn look as Import, with a doc icon */
+.dfbtn { display:inline-flex; align-items:center; gap:6px; }
+.dfbtn svg { color:var(--muted); }
