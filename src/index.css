@@ -257,8 +257,10 @@ button { font-family:inherit; }
 .ccbadge { position:absolute; top:-5px; z-index:3; pointer-events:none;
   border-radius:50%; background:#e0a020; color:#fff; font-weight:800;
   text-align:center; box-shadow:0 0 0 1.5px var(--bg); }
-.ccbadge.cc-right { right:-5px; }
-.ccbadge.cc-left { left:-5px; }
+/* anchor the badge's inner edge to the bar's horizontal center, so it overlaps
+   at most half the block width (and grows outward) at any size */
+.ccbadge.cc-right { left:50%; }
+.ccbadge.cc-left { right:50%; }
 .ccbadge.cc-xs { width:11px; height:11px; font-size:8px; line-height:11px; }
 .ccbadge.cc-sm { width:14px; height:14px; font-size:10px; line-height:14px; }
 .ccbadge.cc-md { width:18px; height:18px; font-size:12px; line-height:18px; }
