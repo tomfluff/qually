@@ -290,6 +290,16 @@ changes, so the Python scripts and `docs/QUAL-WORKFLOW.md` are untouched.
     native transcript scrollbar (hidden via CSS); the search bar/toggle offset by
     `--mm-w` to clear it. Also user-selectable primary color (5 palettes), full/
     short speaker names, and the grouped Settings panel landed in this batch.
+28. **Minimap layers + close-call polish + lane width (2026-07-05).** Minimap also
+    draws a faint per-line text representation (bar width ∝ line length, dimmer for
+    R) and amber close-call ticks in a left gutter. Close-call marker iterated
+    emoji → amber outline → **corner `!` badge**, configurable size (xs/sm/md/lg)
+    via Settings, anchored to the bar center so it overlaps at most half the block;
+    it flags rejected segments too. Corner (left/right) setting was built then
+    hidden (not visually stable — see `CODING-APP-FUTURE.md`). New **lane width**
+    setting (xs/sm/md/lg → `--lane-w`). Ctrl+C now defers to a real text selection.
+    Settings reorganized (Zen at top; Appearance / Transcript / Codes sections);
+    Help modal refreshed (minimap, badge, new settings).
 
 ## 4. Decisions log (was: open questions)
 

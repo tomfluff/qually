@@ -40,6 +40,10 @@ export function SettingsButton() {
         <div className="settings-pop nicescroll">
           <div className="settings-title">Settings</div>
 
+          <button className="btn zenbtn" onClick={() => { setZen(true); setOpen(false); }}>Enter zen mode</button>
+          <div className="settings-note">Hides the toolbar and panels for distraction-free coding. Press Esc to exit.</div>
+          <div className="settings-div" />
+
           <div className="settings-sub">Appearance</div>
           <div className="srow">
             <span>Theme</span>
@@ -58,15 +62,13 @@ export function SettingsButton() {
               ))}
             </div>
           </div>
-
-          <div className="settings-sub">Text size</div>
           <label className="srow">
-            <span>Transcript</span>
+            <span>Transcript text</span>
             <input type="range" min={12} max={30} value={fontSize} onChange={(e) => setFontSize(+e.target.value)} />
             <span className="sval">{fontSize}</span>
           </label>
           <label className="srow">
-            <span>Sidebar</span>
+            <span>Sidebar text</span>
             <input type="range" min={10} max={30} value={sidebarFontSize} onChange={(e) => setSidebarFontSize(+e.target.value)} />
             <span className="sval">{sidebarFontSize}</span>
           </label>
@@ -96,21 +98,7 @@ export function SettingsButton() {
           </div>
           <div className="settings-note">Joins consecutive same-speaker lines that don't end in . ? ! … into one unit.</div>
 
-          <div className="settings-sub">Coding</div>
-          <div className="srow">
-            <span>Hotbar</span>
-            <div className="seg">
-              <button className={mode === "auto" ? "on" : ""} onClick={() => setHotbarMode("auto")}>auto</button>
-              <button className={mode === "pinned" ? "on" : ""} onClick={() => setHotbarMode("pinned")}>pinned</button>
-            </div>
-          </div>
-          <div className="srow">
-            <span>Cmd palette</span>
-            <div className="seg">
-              <button className={palettePos === "auto" ? "on" : ""} onClick={() => setUi({ palettePos: "auto" })}>near</button>
-              <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
-            </div>
-          </div>
+          <div className="settings-sub">Codes</div>
           <div className="srow">
             <span>Lane width</span>
             <div className="seg">
@@ -127,11 +115,21 @@ export function SettingsButton() {
               ))}
             </div>
           </div>
-          <div className="settings-note">The near-balanced (⚠) marker on coded segments.</div>
-
-          <div className="settings-div" />
-          <button className="btn zenbtn" onClick={() => { setZen(true); setOpen(false); }}>Enter zen mode</button>
-          <div className="settings-note">Hides the toolbar and panels. Press Esc to exit.</div>
+          <div className="settings-note">Lane bar width and the near-balanced (⚠) marker size.</div>
+          <div className="srow">
+            <span>Hotbar</span>
+            <div className="seg">
+              <button className={mode === "auto" ? "on" : ""} onClick={() => setHotbarMode("auto")}>auto</button>
+              <button className={mode === "pinned" ? "on" : ""} onClick={() => setHotbarMode("pinned")}>pinned</button>
+            </div>
+          </div>
+          <div className="srow">
+            <span>Cmd palette</span>
+            <div className="seg">
+              <button className={palettePos === "auto" ? "on" : ""} onClick={() => setUi({ palettePos: "auto" })}>near</button>
+              <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
