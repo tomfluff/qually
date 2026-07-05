@@ -80,6 +80,28 @@ Shipped items get moved to the "Done" list with the commit.
 
 ---
 
+## Decided against (with rationale)
+
+- **ShadCN UI — NO (2026-07-05).** ShadCN isn't a paste-in of plain components:
+  it's coupled to **Tailwind CSS** + **Radix UI** runtime deps. That collides
+  with the project's constraints (single offline hand-rolled-CSS artifact; §6
+  "no UI component libraries"; "no new runtime deps without sign-off"). The
+  domain components (lane bars, hover brackets, transcript virtualization,
+  hotbar, command palette) get zero benefit — it would only touch the generic
+  Settings/Help/menu/tooltip/combobox bits, which already work and are
+  hand-tuned. Migration cost + bundle bloat (~276KB artifact today) outweighs the
+  gain for a solo internal tool. The general "use ShadCN" advice targets
+  greenfield dashboards/SaaS, not retrofitting a deliberately hand-rolled niche
+  app.
+  - **Fallback IF tool a11y ever becomes a goal** (see "Meta / ironic" above):
+    adopt **Radix headless primitives only** — `@radix-ui/react-dialog` /
+    `-dropdown-menu` / `-tooltip` — for the modal/menu/tooltip, keeping the
+    existing CSS. Radix is unstyled and a11y-correct (focus trap, ARIA, keyboard
+    nav). That's the surgical version; still weigh it against the no-new-deps
+    rule. Skip Tailwind/ShadCN entirely.
+
+---
+
 ## If picking next (recommendation, not a commitment)
 
 1. ~~In-app close-call warnings~~ — **done.**
