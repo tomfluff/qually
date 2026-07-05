@@ -34,9 +34,13 @@ export function Toolbar() {
 
   return (
     <div id="toolbar">
-      <button className="btn" onClick={() => fileRef.current?.click()}>Import files…</button>
+      <button className="btn primary iconlabel" onClick={() => fileRef.current?.click()}>
+        <Icon name="upload" size={16} /> Import files…
+      </button>
+      <button className="btn iconlabel" onClick={doExport} title="Export the complete coded-segments.csv">
+        <Icon name="download" size={16} /> Export
+      </button>
       <DataFormatButton />
-      <button className="btn" onClick={doExport}>Export coded-segments.csv</button>
       <span className="tbdiv" />
       <button className="btn iconbtn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
         <Icon name="undo" size={16} />

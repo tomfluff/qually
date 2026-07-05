@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useStore } from "../state/store";
 import { Icon } from "./Icon";
 
 // The prompt a user pastes into an AI (ChatGPT / Claude) to turn any transcript
@@ -27,7 +28,8 @@ const EXAMPLE_CSV = `line_id,timestamp,speaker,text,codes
 `;
 
 export function DataFormatButton() {
-  const [open, setOpen] = useState(false);
+  const open = useStore((s) => s.formatOpen);
+  const setOpen = useStore((s) => s.setFormatOpen);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {

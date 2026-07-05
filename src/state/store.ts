@@ -52,6 +52,7 @@ interface State {
   nextSid: number;
   jump: { pid: string; line: number } | null;
   paletteOpen: boolean;
+  formatOpen: boolean;
   search: Search;
 
   importFiles: (files: FileList | File[]) => Promise<void>;
@@ -69,6 +70,7 @@ interface State {
   clearJump: () => void;
   scrollToLine: (line: number) => void;
   setPalette: (v: boolean) => void;
+  setFormatOpen: (v: boolean) => void;
   openSearch: () => void;
   closeSearch: () => void;
   setSearch: (patch: Partial<Search>) => void;
@@ -135,7 +137,7 @@ export const useStore = create<State>()(
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: "blue", speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed" },
-      selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false,
+      selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
 
       importFiles: async (files) => {
@@ -230,6 +232,7 @@ export const useStore = create<State>()(
       clearJump: () => set({ jump: null }),
       scrollToLine: (line) => set({ jump: { pid: get().active, line } }), // same-tab scroll, no selection change
       setPalette: (v) => set({ paletteOpen: v }),
+      setFormatOpen: (v) => set({ formatOpen: v }),
       openSearch: () => set({ search: { ...get().search, open: true } }),
       closeSearch: () => set({ search: { open: false, query: "", scope: "tab", current: null } }),
       setSearch: (patch) => set({ search: { ...get().search, ...patch } }),

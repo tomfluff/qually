@@ -2,6 +2,7 @@
    Build inlines it all into the single-file artifact (vite-plugin-singlefile). */
 @import "./styles/base.css";       /* theme vars, reset, html/#app */
 @import "./styles/buttons.css";    /* shared .btn base + color variants */
+@import "./styles/welcome.css";    /* first-run get-started screen */
 @import "./styles/toolbar.css";
 @import "./styles/menu.css";        /* code context menu */
 @import "./styles/tabs.css";

@@ -329,6 +329,15 @@ changes, so the Python scripts and `docs/QUAL-WORKFLOW.md` are untouched.
     to the app's CSV. Mirrored in `CODING-APP-DATA-FORMAT.md` (keep the two prompts
     in sync). Reuses the `.about-*` modal styles.
 
+32. **Novice on-ramp (2026-07-06).** First run used to land on an empty Browse view
+    with a misleading "select a code" message. Now: a `Welcome` get-started screen
+    (shown when `tabs.length === 0`) with a primary Import button + a link to the
+    format guide (via new transient `formatOpen` store flag, so the welcome and the
+    toolbar share the one modal); the lone Browse tab is hidden until data exists.
+    Toolbar: Import is a **primary** (accent) button with an upload icon; Export
+    shortened to "Export" + download icon (full name in tooltip); order is Import ·
+    Export · File format │ undo/redo │ Settings · Help.
+
 ## 4. Decisions log (was: open questions)
 
 - **Arrow keys (item 7): APPROVED** — plain arrow moves the selection to the

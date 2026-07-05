@@ -10,12 +10,14 @@ import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
 import { SearchBar } from "./components/SearchBar";
+import { Welcome } from "./components/Welcome";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
 
 export function App() {
   const active = useStore((s) => s.active);
+  const hasData = useStore((s) => s.tabs.length > 0);
   const dark = useStore((s) => s.ui.dark);
   const accent = useStore((s) => s.ui.accent);
   const minimapWidth = useStore((s) => s.ui.minimapWidth);
@@ -90,23 +92,23 @@ export function App() {
   return (
     <div id="app" className={zen ? "zen" : ""}>
       <Toolbar />
-      <Tabs />
+      {hasData && <Tabs />}
       <div id="main">
-        {active !== "browse" && (
+        {hasData && active !== "browse" && (
           <>
             <CodeSidebar />
             <Resizer onWidth={(w) => useStore.getState().setUi({ sidebarWidth: Math.max(160, Math.min(560, w)) })} />
           </>
         )}
         <div id="content">
-          {active !== "browse" && !searchOpen && (
+          {hasData && active !== "browse" && !searchOpen && (
             <button className="searchtoggle" title="Search (Ctrl+F)"
               onClick={() => useStore.getState().openSearch()}>
               <Icon name="search" size={17} />
             </button>
           )}
-          {active !== "browse" && <SearchBar />}
-          {active === "browse" ? <BrowseView /> : <TranscriptView />}
+          {hasData && active !== "browse" && <SearchBar />}
+          {!hasData ? <Welcome /> : (active === "browse" ? <BrowseView /> : <TranscriptView />)}
         </div>
       </div>
       {active !== "browse" && <HotbarDock />}
