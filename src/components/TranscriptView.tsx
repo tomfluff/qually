@@ -55,9 +55,12 @@ export function TranscriptView() {
   const clearJump = useStore((s) => s.clearJump);
   const vref = useRef<VListHandle>(null);
   const mmRef = useRef<MinimapHandle>(null);
+  const scrollByPid = useRef<Record<string, number>>({}); // each transcript's own scroll offset
   const syncMinimap = () => {
     const v = vref.current;
-    if (v && v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
+    if (!v) return;
+    scrollByPid.current[active] = v.scrollOffset;
+    if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
   };
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
   const [hoverSid, setHoverSid] = useState<number | null>(null);
@@ -82,6 +85,15 @@ export function TranscriptView() {
 
   // sync the minimap viewport box on mount and whenever the list content changes
   useEffect(() => { const id = requestAnimationFrame(syncMinimap); return () => cancelAnimationFrame(id); });
+
+  // restore each transcript's own scroll position when switching tabs
+  useEffect(() => {
+    if (jump) return; // a Browse -> line jump takes precedence over the saved position
+    const off = scrollByPid.current[active] ?? 0;
+    const id = requestAnimationFrame(() => vref.current?.scrollTo(off));
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   // PageUp/PageDown/Home/End scroll the transcript list
   useEffect(() => {

@@ -36,7 +36,7 @@ export function CodeSidebar() {
             onClick={() => { if (hasSel) { pushUndo(); applyCode(code); } }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
             title={`${code}  (right-click for options)`}>
-            <span className="swatch" style={{ background: codebook[code].color }}
+            <span className="codebar" style={{ background: codebook[code].color }} title="recolor"
               onClick={(e) => {
                 e.stopPropagation();
                 const inp = document.createElement("input");
@@ -44,7 +44,7 @@ export function CodeSidebar() {
                 inp.oninput = () => setColor(code, inp.value);
                 inp.click();
               }} />
-            <span>{code}</span>
+            <span className="cname">{code}</span>
             {pinned.includes(code) && <span className="pindot" title="pinned">●</span>}
             {slot >= 0 && slot < 9 && <span className="key">{slot + 1}</span>}
             <span className="cnt">{c ? `${c.segs}·${c.pids.size}` : "0"}</span>

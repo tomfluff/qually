@@ -2,6 +2,15 @@ import { useState } from "react";
 import { useStore } from "../state/store";
 import { Icon } from "./Icon";
 
+// up to 2 initials from the code's first two significant words (skip stopwords)
+const STOP = new Set(["the", "a", "an", "of", "on", "in", "to", "for", "and", "or", "at", "by", "with", "is"]);
+function initials(code: string): string {
+  const words = code.split(/[\s\-_/]+/).filter((w) => w && !STOP.has(w.toLowerCase()));
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return code.slice(0, 2).toUpperCase();
+}
+
 // Game-style hotbar: bottom-center row of numbered colored tiles (1-9) + a
 // refresh tile. Clicking a tile applies that code to the selection (mirrors the
 // number-key shortcuts). Mode (auto/pinned) selection moves to Settings (W4);
@@ -33,17 +42,23 @@ export function HotbarDock() {
       </button>
       <div className="tiles">
         {tiles.map((code, i) => (
-          <button key={code} className="tile" style={{ background: codebook[code].color }}
-            onClick={() => apply(code)}>
+          <div key={code} className="hbslot">
+            <button className="tile" style={{ background: codebook[code].color }}
+              onClick={() => apply(code)}>
+              <span className="tinit">{initials(code)}</span>
+              <span className="tname" style={{ fontSize }}>{code}</span>
+            </button>
             <span className="tnum">{i + 1}</span>
-            <span className="tname" style={{ fontSize }}>{code}</span>
-          </button>
+          </div>
         ))}
-        <button className="tile newcode" onClick={() => useStore.getState().setPalette(true)}
-          title="open the code palette (fuzzy search)">
+        <div className="hbslot">
+          <button className="tile newcode" onClick={() => useStore.getState().setPalette(true)}
+            title="open the code palette (fuzzy search)">
+            <Icon name="library-plus" size={20} />
+            <span className="tname" style={{ fontSize }}>new / find code…</span>
+          </button>
           <span className="tnum">0</span>
-          <span className="tname" style={{ fontSize }}>new / find code…</span>
-        </button>
+        </div>
         {mode === "auto"
           ? (
             <button className="tile refresh" onClick={refreshHotbar} title="recompute by usage">

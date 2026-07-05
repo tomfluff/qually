@@ -78,7 +78,7 @@ button { font-family:inherit; }
 .tab.browsetab { display:inline-flex; align-items:center; gap:5px; margin-left:8px;
   padding:6px 12px 6px 10px;
   background:var(--accent); color:#fff; border-color:var(--accent); }
-.tab.browsetab svg { opacity:.9; }
+.tab.browsetab svg { opacity:.9; width:1.15em; height:1.15em; }
 /* the lighter dark-theme accent needs dark text to stay legible */
 [data-theme=dark] .tab.browsetab { color:#12161a; }
 
@@ -105,13 +105,19 @@ button { font-family:inherit; }
 .nicescroll:hover::-webkit-scrollbar-thumb { background:var(--muted); background-clip:content-box; }
 #sidebar h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
   color:var(--muted); margin:14px 0 6px; }
-.codeItem { display:flex; align-items:center; gap:7px; padding:4px 6px;
+.codeItem { display:flex; align-items:stretch; gap:8px; padding:4px 6px;
   border-radius:6px; cursor:pointer; }
 .codeItem:hover { background:var(--sel); }
-.codeItem .swatch { width:13px; height:13px; border-radius:4px; flex-shrink:0; cursor:pointer; }
-.codeItem .cnt { margin-left:auto; color:var(--muted); font-size:.8em; }
-.codeItem .key { font-size:.7em; border:1px solid var(--line); border-radius:3px;
-  padding:0 4px; color:var(--muted); }
+/* full-height color bar (scales with the row height, so it grows with the text) */
+.codeItem .codebar { align-self:stretch; width:0.32em; min-width:4px; border-radius:2px;
+  flex-shrink:0; cursor:pointer; }
+.codeItem .cname { align-self:center; }
+.codeItem .cnt { margin-left:auto; align-self:center; color:var(--muted); font-size:.8em; }
+/* shortcut number styled as a small keycap */
+.codeItem .key { align-self:center; font-size:.72em; font-weight:700;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; min-width:1.5em; text-align:center;
+  border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 3px;
+  color:var(--muted); background:var(--panel); line-height:1.5; }
 .newCodeWrap { position:relative; flex-shrink:0; margin-bottom:8px; }
 .newCode { width:100%; padding:5px 7px;
   border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg);
@@ -367,7 +373,7 @@ button { font-family:inherit; }
 .settings-pop .zenbtn { width:100%; justify-content:center; text-align:center; }
 .settings-note { font-size:11px; color:var(--muted); text-align:left; margin-top:-3px; line-height:1.35; }
 
-.codeItem .pindot { color:var(--accent); font-size:.7em; }
+.codeItem .pindot { align-self:center; color:var(--accent); font-size:.7em; }
 
 /* zen mode: hide chrome, keep transcript + video */
 #app.zen #toolbar, #app.zen #tabs, #app.zen #sidebar, #app.zen .hotbar { display:none; }
@@ -387,13 +393,19 @@ button { font-family:inherit; }
   border-bottom:none; border-radius:12px 12px 0 0; box-shadow:0 6px 24px rgba(0,0,0,.28); }
 .hotbar.collapsed { padding:0; background:transparent; border:none; box-shadow:none; }
 .hotbar.collapsed .tiles { display:none; }
-.hotbar .tiles { display:flex; gap:5px; align-items:center; min-height:36px; }
+.hotbar .tiles { display:flex; gap:5px; align-items:flex-start; }
+/* each slot stacks the colored block over its keyboard number */
+.hbslot { display:flex; flex-direction:column; align-items:center; gap:3px; }
+.hbslot .tnum { font-size:10px; font-weight:700; color:var(--muted); line-height:1.4;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; min-width:1.5em; text-align:center;
+  border:1px solid var(--line); border-bottom-width:2px; border-radius:3px; background:var(--bg); }
 .hbhint { display:flex; align-items:center; height:36px; padding:0 10px;
   color:var(--muted); font-size:12px; white-space:nowrap; }
 .tile { position:relative; width:36px; height:36px; padding:0; flex:0 0 auto;
   box-sizing:border-box; border:1px solid rgba(0,0,0,.18); border-radius:7px;
   cursor:pointer; color:#fff; font-weight:700; font-size:13px; display:flex;
   align-items:center; justify-content:center; text-shadow:0 1px 2px rgba(0,0,0,.55); }
+.tile .tinit { letter-spacing:.5px; font-size:15px; font-weight:800; }
 .tile:hover { filter:brightness(1.08); }
 .tile.refresh { background:#fff; color:#333; text-shadow:none;
   border-color:rgba(0,0,0,.32); }
@@ -402,7 +414,7 @@ button { font-family:inherit; }
 .tile .tname { position:absolute; bottom:calc(100% + 8px); left:50%;
   transform:translateX(-50%); background:var(--fg); color:var(--bg);
   padding:3px 9px; border-radius:6px; white-space:nowrap; display:none;
-  pointer-events:none; box-shadow:0 4px 14px rgba(0,0,0,.3); z-index:80; }
+  pointer-events:none; z-index:80; }
 .tile:hover .tname { display:block; }
 /* extruding tab on the top-center edge of the dock (always visible) */
 .hbhandle { position:absolute; bottom:100%; left:50%; transform:translateX(-50%);

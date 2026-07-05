@@ -308,6 +308,16 @@ changes, so the Python scripts and `docs/QUAL-WORKFLOW.md` are untouched.
     lanes/warnings widened with enforced min heights — bigger/obvious at the cost of
     pixel accuracy; codes keep their lanes, option A).
 
+30. **Sidebar/hotbar polish + per-transcript scroll (2026-07-05).** Browse-tab
+    glyph, code-list color indicator, and hotbar tooltip now scale with the sidebar
+    text size (svg `em`; the square swatch became a full-height color bar; tooltip
+    drop-shadow removed). Sidebar shortcut numbers styled as keycaps. Hotbar tiles
+    now show 2-letter code initials (first letters of the first two non-stopword
+    words) with the shortcut number as a keycap underneath; the `0` tile uses a
+    library-plus glyph. Each transcript remembers its own scroll offset (ref keyed
+    by pid, restored on tab switch unless a Browse→line jump is pending) — session
+    scoped, not persisted across reloads.
+
 ## 4. Decisions log (was: open questions)
 
 - **Arrow keys (item 7): APPROVED** — plain arrow moves the selection to the
