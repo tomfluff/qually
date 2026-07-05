@@ -250,14 +250,16 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
           borderBottom: isEnd ? b : undefined,
         }
       : { background: color };
-    // close-call (near-balanced excerpt): an ADDITIONAL thick amber ring, layered
-    // as an inset shadow so it composes with any existing border (e.g. rejected)
-    // instead of replacing it; per-edge so a multi-line block stays one outline.
+    // close-call (near-balanced excerpt): an ADDITIONAL thick amber ring OUTSIDE
+    // any existing border (e.g. rejected) — an outset shadow per-edge, so it adds
+    // to the border instead of replacing it and a multi-line block stays one
+    // outline. z-index lifts it above adjacent lane bars.
     if (cc) {
-      const ring = [`inset 3px 0 0 ${WARN}`, `inset -3px 0 0 ${WARN}`];
-      if (isStart) ring.push(`inset 0 3px 0 ${WARN}`);
-      if (isEnd) ring.push(`inset 0 -3px 0 ${WARN}`);
+      const ring = [`-3px 0 0 0 ${WARN}`, `3px 0 0 0 ${WARN}`];
+      if (isStart) ring.push(`0 -3px 0 0 ${WARN}`);
+      if (isEnd) ring.push(`0 3px 0 0 ${WARN}`);
       style.boxShadow = ring.join(",");
+      style.zIndex = 2;
     }
     lanes.push(
       <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}

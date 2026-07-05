@@ -33,6 +33,7 @@ export function SegmentPopover({ sid, x, y, onClose }: {
     const onCopy = (e: ClipboardEvent) => {
       const t = document.activeElement;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return; // let native copy in the notes field
+      if (window.getSelection()?.toString().trim()) return; // let a real text selection copy itself
       const txt = segText();
       if (!txt) return;
       e.clipboardData?.setData("text/plain", txt);

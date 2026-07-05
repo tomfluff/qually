@@ -66,6 +66,7 @@ export function App() {
     const onCopy = (e: ClipboardEvent) => {
       const el = document.activeElement;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (window.getSelection()?.toString().trim()) return; // let a real text selection copy itself
       if (document.querySelector(".pop")) return; // an open segment popover copies itself
       const s = useStore.getState();
       if (s.active === "browse" || s.selection.pid !== s.active || !s.selection.lines.size) return;
