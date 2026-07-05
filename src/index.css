@@ -291,13 +291,20 @@ button { font-family:inherit; }
 .bTitle { display:flex; align-items:center; gap:8px; margin:0 0 6px; line-height:1; }
 .bTitle .swatch { width:.9em; height:.9em; border-radius:.3em; flex-shrink:0; align-self:center; }
 .bDef { color:var(--muted); font-size:.85em; line-height:1.4; margin-bottom:8px; }
-/* filter-chip toggle (scales with the excerpt font via font:inherit) */
-.bToggle { font:inherit; display:inline-flex; align-items:center; padding:3px 12px;
-  border:1px solid var(--line); border-radius:999px; background:var(--bg);
-  color:var(--muted); cursor:pointer; margin-bottom:8px; }
-.bToggle:hover { border-color:var(--accent); }
-.bToggle.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-[data-theme=dark] .bToggle.on { color:#12161a; }
+/* bordered options bar holding view settings for the excerpt list */
+.bOptions { display:flex; margin-bottom:14px; padding:8px 12px;
+  border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+/* toggle switch (em-based so it scales with the excerpt font) */
+.switchRow { font:inherit; display:inline-flex; align-items:center; gap:9px;
+  background:none; border:none; padding:0; cursor:pointer; color:var(--fg); }
+.switchLabel { font-weight:500; }
+.switch { position:relative; width:2.1em; height:1.2em; border-radius:999px;
+  background:var(--line); flex-shrink:0; transition:background .15s; }
+.switch.on { background:var(--accent); }
+.switch .knob { position:absolute; top:0.15em; left:0.15em; width:0.9em; height:0.9em;
+  border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.35);
+  transition:left .15s; }
+.switch.on .knob { left:calc(100% - 0.9em - 0.15em); }
 .bExcerpt { border-left:4px solid var(--line); margin:10px 0; padding:6px 12px; line-height:1.45; }
 .bExcerpt.rejected { opacity:.62; }
 .bExcerpt .rejtag { display:inline-block; margin-right:6px; padding:0 6px;
