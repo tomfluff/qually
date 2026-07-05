@@ -5,6 +5,8 @@ import type { Group } from "../merge";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 export interface MinimapHandle { setRange: (start: number, end: number) => void; }
+const isR = (s: string) => s.trim().toUpperCase().startsWith("R");
+const WARN = "#e0a020";
 
 // A zoomed-out lane view down the right edge. Drawn from the store (virtua only
 // mounts visible rows) onto a canvas; the viewport box is updated imperatively on
@@ -15,8 +17,9 @@ export const Minimap = forwardRef<MinimapHandle, {
   laned: LanedSeg[];
   cols: number;
   codebook: Record<string, { color: string }>;
+  closeCallSids: Set<number>;
   vref: RefObject<VListHandle | null>;
-}>(function Minimap({ groups, laned, cols, codebook, vref }, ref) {
+}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, vref }, ref) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -60,9 +63,27 @@ export const Minimap = forwardRef<MinimapHandle, {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
       if (!N) return;
-      const pad = 3;
-      const colW = (w - pad * 2) / Math.max(1, cols);
       const m = lineToGi.current;
+      // columns: [0..warnW] warnings gutter · text bars · lane columns (flush right)
+      const warnW = 4;
+      const laneAreaW = Math.min(w * 0.5, cols * 7);
+      const laneX = w - laneAreaW - 2;
+      const colW = laneAreaW / Math.max(1, cols);
+      const textX = warnW + 3;
+      const textW = Math.max(4, laneX - textX - 3);
+      const muted = getComputedStyle(cv).getPropertyValue("--muted").trim() || "#888";
+      const CAP = 80; // chars for a "full-width" text bar
+
+      // faint per-group text representation (width ∝ text length, dimmer for R)
+      ctx.fillStyle = muted;
+      for (let i = 0; i < N; i++) {
+        const g = groups[i];
+        const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
+        ctx.globalAlpha = isR(g.speaker) ? 0.28 : 0.5;
+        ctx.fillRect(textX, (i / N) * h, Math.max(2, Math.min(1, len / CAP) * textW), Math.max(0.6, (h / N) * 0.7));
+      }
+
+      // segment lanes + close-call markers in the left gutter
       for (const s of laned) {
         const gi0 = m.get(s.start) ?? 0;
         const gi1 = m.get(s.end) ?? gi0;
@@ -70,7 +91,11 @@ export const Minimap = forwardRef<MinimapHandle, {
         const y1 = ((gi1 + 1) / N) * h;
         ctx.globalAlpha = s.status === "rejected" ? 0.3 : 0.9;
         ctx.fillStyle = codebook[s.code]?.color || "#999";
-        ctx.fillRect(pad + s.lane * colW, y0, Math.max(1, colW - 1.5), Math.max(1.5, y1 - y0));
+        ctx.fillRect(laneX + s.lane * colW, y0, Math.max(1, colW - 1.5), Math.max(1.5, y1 - y0));
+        if (s.status !== "rejected" && closeCallSids.has(s.sid)) {
+          ctx.globalAlpha = 1; ctx.fillStyle = WARN;
+          ctx.fillRect(0, y0, warnW, Math.max(2.5, y1 - y0));
+        }
       }
       ctx.globalAlpha = 1;
     };
@@ -79,7 +104,7 @@ export const Minimap = forwardRef<MinimapHandle, {
     const ro = new ResizeObserver(() => { draw(); syncFromList(); });
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [groups, laned, cols, codebook, N]);
+  }, [groups, laned, cols, codebook, closeCallSids, N]);
 
   const scrubTo = (clientY: number) => {
     const wrap = wrapRef.current, v = vref.current;

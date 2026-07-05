@@ -199,7 +199,8 @@ export function TranscriptView() {
           <div className="vpad vpad-bot" key="vpad-bot" />, // headroom after the last line
         ]}
       </VList>
-      <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook} vref={vref} />
+      <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
+        closeCallSids={closeCallSids} vref={vref} />
       </div>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
     </>

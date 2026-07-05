@@ -1,7 +1,7 @@
 :root {
   --bg:#ffffff; --fg:#1a1a1a; --muted:#8a8a8a; --line:#e4e4e4;
   --panel:#f6f6f6; --accent:#3b6ea5;
-  --row-hover:#ebebeb; --mm-w:56px;
+  --row-hover:#ebebeb; --mm-w:66px;
   /* chromatic tints derive from the chosen primary, adapting to the theme via
      --bg — so one variable (--accent, set per theme in App.tsx) recolors all */
   --sel:color-mix(in srgb, var(--accent) 18%, var(--bg));
