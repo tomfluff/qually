@@ -265,7 +265,7 @@ button { font-family:inherit; }
 .browse-right { flex:1; min-width:0; overflow-y:auto; padding:16px 22px; }
 .browse-left input[type=search] { width:100%; padding:7px 10px; margin-bottom:8px;
   border:1px solid var(--line); border-radius:8px; background:var(--panel);
-  color:var(--fg); font-family:inherit; }
+  color:var(--fg); font-family:inherit; font-size:inherit; }
 .bCode { display:flex; flex-direction:column; gap:3px; padding:7px 9px;
   border-radius:8px; cursor:pointer; user-select:none; }
 .bCode:hover { background:var(--sel); }
