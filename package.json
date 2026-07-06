@@ -1,13 +1,15 @@
 {
-  "name": "coding-app",
+  "name": "qually",
   "private": true,
   "version": "2.0.0",
   "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "description": "Offline, single-file qualitative coding tool for interview and session transcripts.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "release": "npm run build && node -e \"require('fs').copyFileSync('dist/index.html','../coding-app.html')\""
+    "release": "npm run build && node -e \"require('fs').copyFileSync('dist/index.html','docs/index.html')\""
   },
   "dependencies": {
     "react": "19.2.7",
