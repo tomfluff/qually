@@ -1,0 +1,43 @@
+name: Auto release
+
+# Rebuild the single-file app whenever source lands on main, and commit the
+# refreshed docs/index.html back (GitHub Pages serves it from /docs). The push
+# below is made with GITHUB_TOKEN, which does not retrigger workflows, so there
+# is no loop.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run release
+      - name: Commit rebuilt single-file if it changed
+        run: |
+          if git diff --quiet -- docs/index.html; then
+            echo "docs/index.html already up to date."
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add docs/index.html
+            git commit -m "chore: rebuild docs/index.html [skip ci]"
+            git push
+          fi
