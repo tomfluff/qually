@@ -353,7 +353,7 @@ export const useStore = create<State>()(
       partialize: (s) => ({
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
         extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
-        hotbar: s.hotbar, video: s.video, ui: s.ui,
+        hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
