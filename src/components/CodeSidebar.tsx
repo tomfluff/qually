@@ -12,7 +12,6 @@ export function CodeSidebar() {
   const sidebarWidth = useStore((s) => s.ui.sidebarWidth);
   const applyCode = useStore((s) => s.applyCode);
   const setColor = useStore((s) => s.setColor);
-  const pushUndo = useStore((s) => s.pushUndo);
   const pinned = useStore((s) => s.hotbar.pinned);
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
 
@@ -33,7 +32,7 @@ export function CodeSidebar() {
         const c = counts[code];
         return (
           <div key={code} className="codeItem"
-            onClick={() => { if (hasSel) { pushUndo(); applyCode(code); } }}
+            onClick={() => { if (hasSel) applyCode(code); }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
             title={`${code}  (right-click for options)`}>
             <span className="codebar" style={{ background: codebook[code].color }} title="recolor"
