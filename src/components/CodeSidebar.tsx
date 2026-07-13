@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../state/store";
 import { CodeMenu } from "./CodeMenu";
 import { CodeCombobox } from "./CodeCombobox";
+import { openColorPicker } from "../colorPicker";
 
 export function CodeSidebar() {
   const codebook = useStore((s) => s.codebook);
@@ -38,10 +39,7 @@ export function CodeSidebar() {
             <span className="codebar" style={{ background: codebook[code].color }} title="recolor"
               onClick={(e) => {
                 e.stopPropagation();
-                const inp = document.createElement("input");
-                inp.type = "color"; inp.value = codebook[code].color;
-                inp.oninput = () => setColor(code, inp.value);
-                inp.click();
+                openColorPicker(codebook[code].color, (v) => setColor(code, v));
               }} />
             <span className="cname">{code}</span>
             {pinned.includes(code) && <span className="pindot" title="pinned">●</span>}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
+import { openColorPicker } from "../colorPicker";
 
 export function CodeMenu({ code, x, y, onClose }: {
   code: string; x: number; y: number; onClose: () => void;
@@ -31,10 +32,8 @@ export function CodeMenu({ code, x, y, onClose }: {
   }, [mode, onClose]);
 
   const pickColor = () => {
-    const inp = document.createElement("input");
-    inp.type = "color"; inp.value = codebook[code]?.color || "#888888";
-    inp.oninput = () => setColor(code, inp.value);
-    inp.click(); onClose();
+    openColorPicker(codebook[code]?.color || "#888888", (v) => setColor(code, v));
+    onClose();
   };
 
   return (

@@ -4,6 +4,7 @@ import { norm } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
 import { Resizer } from "./Resizer";
 import { CodeMenu } from "./CodeMenu";
+import { openColorPicker } from "../colorPicker";
 
 export function BrowseView() {
   const codebook = useStore((s) => s.codebook);
@@ -67,10 +68,7 @@ export function BrowseView() {
               <span className="codebar" style={{ background: codebook[c].color }} title="recolor"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const inp = document.createElement("input");
-                  inp.type = "color"; inp.value = codebook[c].color;
-                  inp.oninput = () => setColor(c, inp.value);
-                  inp.click();
+                  openColorPicker(codebook[c].color, (v) => setColor(c, v));
                 }} />
               <span className="bCodeName">{c}</span>
               <span className="cnt">{counts[c]?.segs || 0}·{counts[c]?.pids.size || 0}</span>
