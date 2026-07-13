@@ -184,7 +184,8 @@ export function TranscriptView() {
   // bracket the hovered (or popover-open) segment's first/last lines
   const activeSid = hoverSid ?? pop?.sid ?? null;
   const hlSeg = activeSid !== null ? laned.find((s) => s.sid === activeSid) : undefined;
-  const hl = hlSeg ? { start: hlSeg.start, end: hlSeg.end, color: codebook[hlSeg.code]?.color || "#999" } : null;
+  // fallback must be 6-digit: an "a6" alpha suffix is appended below
+  const hl = hlSeg ? { start: hlSeg.start, end: hlSeg.end, color: codebook[hlSeg.code]?.color || "#999999" } : null;
 
   return (
     <>
