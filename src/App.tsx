@@ -57,6 +57,8 @@ export function App() {
         s.moveSelection(e.key === "ArrowDown" ? 1 : -1, e.shiftKey);
         return;
       }
+      // plain digits only — Ctrl+0 (zoom reset), Ctrl+1-9 (tab switch), Alt+digit stay with the browser
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "0") { e.preventDefault(); s.setPalette(true); return; }
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= 9 && s.selection.lines.size) {
