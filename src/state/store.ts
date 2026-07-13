@@ -4,6 +4,7 @@ import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
 import { mergeGroups, type Group } from "../merge";
+import { previewImport, remapSegment, type ImportPreview } from "../align";
 
 const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
@@ -33,6 +34,14 @@ export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
   current: { line: number; occ: number } | null; // the emphasized occurrence
 }
+// A re-import of an already-coded transcript, held until the user picks what to do.
+export interface PendingImport {
+  pid: string;
+  lines: Line[];
+  rows: Record<string, string>[]; // kept for the inline `codes` column
+  preview: ImportPreview;
+}
+export type ImportChoice = "update" | "replace" | "new" | "cancel";
 
 interface State {
   transcripts: Record<string, { lines: Line[] }>;
@@ -54,8 +63,10 @@ interface State {
   paletteOpen: boolean;
   formatOpen: boolean;
   search: Search;
+  pendingImports: PendingImport[]; // re-imports awaiting a user decision
 
   importFiles: (files: FileList | File[]) => Promise<void>;
+  resolveImport: (choice: ImportChoice) => void;
   ensureCode: (code: string) => string;
   addSegment: (pid: string, start: number, end: number, code: string,
     proposedBy?: string, status?: string, notes?: string) => void;
@@ -139,6 +150,7 @@ export const useStore = create<State>()(
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: "blue", speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed" },
       selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
+      pendingImports: [],
 
       importFiles: async (files) => {
         for (const f of Array.from(files)) {
@@ -148,8 +160,53 @@ export const useStore = create<State>()(
           if (cols.includes("segment_ref")) importSegments(get, set, rows);
           else if (cols.includes("short_def") || (cols.includes("code") && cols.includes("status")))
             importCodebook(get, set, rows);
-          else if (cols.includes("line_id") && cols.includes("text"))
-            importTranscript(get, set, f.name.replace(/\.csv$/i, ""), rows);
+          else if (cols.includes("line_id") && cols.includes("text")) {
+            const pid = f.name.replace(/\.csv$/i, "");
+            const s = get();
+            const old = s.transcripts[pid];
+            const segs = s.segments.filter((x) => x.pid === pid);
+            // Re-importing over existing coding would silently move every segment
+            // onto whatever line now holds that number: ask first (see ImportModal).
+            if (old && segs.length) {
+              const lines = rowsToLines(rows);
+              const { map: _m, ...preview } = previewImport(segs, old.lines, lines);
+              set({ pendingImports: [...get().pendingImports, { pid, lines, rows, preview }] });
+            } else {
+              importTranscript(get, set, pid, rows);
+            }
+          }
+        }
+        set({ hotbarCache: hotbarCodes(get()) });
+      },
+
+      resolveImport: (choice) => {
+        const [p, ...rest] = get().pendingImports;
+        if (!p) return;
+        set({ pendingImports: rest });
+        if (choice === "cancel") return;
+
+        if (choice === "new") {
+          importTranscript(get, set, uniquePid(get(), p.pid), p.rows);
+        } else {
+          const s = get();
+          const segs = s.segments.filter((x) => x.pid === p.pid);
+          let kept: Segment[] = []; // "replace": the transcript's coding goes with it
+          if (choice === "update") {
+            const { map } = previewImport(segs, s.transcripts[p.pid].lines, p.lines);
+            kept = segs.flatMap((seg) => {
+              const r = remapSegment(seg, map);
+              return r ? [{ ...seg, start: r.start, end: r.end }] : [];
+            });
+          }
+          set({
+            segments: [...s.segments.filter((x) => x.pid !== p.pid), ...kept],
+            // The undo stack snapshots segments but not transcripts, so replaying it
+            // after a re-import would restore segments pointing at the old line ids.
+            // The modal's preview is the safety net instead.
+            undoStack: [], redoStack: [],
+            selection: s.selection.pid === p.pid ? emptySel() : s.selection,
+          });
+          importTranscript(get, set, p.pid, p.rows);
         }
         set({ hotbarCache: hotbarCodes(get()) });
       },
@@ -378,9 +435,21 @@ function ensureCode(get: Get, set: Set_, code: string): string {
   return code;
 }
 
-function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string, string>[]) {
-  const lines: Line[] = rows.map((r) => ({ id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" }))
+export function rowsToLines(rows: Record<string, string>[]): Line[] {
+  return rows
+    .map((r) => ({ id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" }))
     .filter((l) => Number.isFinite(l.id));
+}
+
+// "interview-p3" -> "interview-p3 (2)" when the name is taken (import-as-new)
+function uniquePid(s: State, pid: string): string {
+  let n = 2;
+  while (s.transcripts[`${pid} (${n})`]) n++;
+  return `${pid} (${n})`;
+}
+
+function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string, string>[]) {
+  const lines = rowsToLines(rows);
   const s = get();
   set({
     transcripts: { ...s.transcripts, [pid]: { lines } },

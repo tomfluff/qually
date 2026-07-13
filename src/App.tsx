@@ -9,6 +9,7 @@ import { BrowseView } from "./components/BrowseView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
+import { ImportModal } from "./components/ImportModal";
 import { SearchBar } from "./components/SearchBar";
 import { Welcome } from "./components/Welcome";
 import { Icon } from "./components/Icon";
@@ -38,6 +39,13 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState();
+      // The re-import modal is a decision point: it owns the keyboard until
+      // answered. Checked before the input guard below — the file input still
+      // holds focus right after an import, and Esc has to close the modal anyway.
+      if (s.pendingImports.length) {
+        if (e.key === "Escape") s.resolveImport("cancel");
+        return;
+      }
       // Ctrl+F opens transcript search (works from anywhere, incl. inputs)
       if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
         if (s.active !== "browse") { e.preventDefault(); s.openSearch(); }
@@ -128,6 +136,7 @@ export function App() {
         </button>
       )}
       <CommandPalette />
+      <ImportModal />
     </div>
   );
 }

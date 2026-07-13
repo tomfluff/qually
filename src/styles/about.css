@@ -35,3 +35,14 @@
 /* the toolbar "File format" button: same .btn look as Import, with a doc icon */
 .dfbtn { display:inline-flex; align-items:center; gap:6px; }
 .dfbtn svg { color:var(--muted); }
+
+/* re-import conflict modal */
+.imp { width:min(520px, 100%); }
+.imp-warn { background:color-mix(in srgb, #e0a020 14%, var(--bg)); border:1px solid #e0a020;
+  border-radius:8px; padding:10px 12px; margin:6px 0 2px; line-height:1.5; }
+.imp-stats { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  padding:10px 12px; line-height:1.7; }
+.imp-drop { color:var(--muted); }
+.imp-actions { display:flex; flex-direction:column; gap:6px; margin-top:14px; }
+.imp-actions .btn { width:100%; justify-content:center; }
+.imp-note { color:var(--muted); font-size:.86em; text-align:center; margin-top:10px; }
