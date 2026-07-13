@@ -34,6 +34,12 @@ const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 const MIN_PAD = 48;    // headroom floor, before the viewport has been measured
 const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
 
+// Per-tab scroll memory. Module scope, NOT component refs: TranscriptView unmounts
+// entirely while the Browse tab is shown, so refs would forget every position on the
+// way through Browse. (Selection memory is the store's savedSelections, same reason.)
+const savedScroll: Record<string, number> = {};
+const positioned = new Set<string>(); // tabs whose initial position has been applied
+
 export function TranscriptView() {
   const active = useStore((s) => s.active);
   const transcript = useStore((s) => s.transcripts[s.active]);
@@ -58,14 +64,15 @@ export function TranscriptView() {
   const vref = useRef<VListHandle>(null);
   const mmRef = useRef<MinimapHandle>(null);
   const tviewRef = useRef<HTMLDivElement>(null);
-  const scrollByPid = useRef<Record<string, number>>({}); // each transcript's own scroll offset
-  const posed = useRef<Record<string, number>>({}); // pid -> the pad it was parked at
+  const positioning = useRef(false); // true while the effect below is moving the list itself
   const syncMinimap = () => {
     const v = vref.current;
     if (!v) return;
-    // don't record a position before the transcript has been parked, or the initial
-    // offset-0 (inside the top headroom) would be saved as if the user chose it
-    if (posed.current[active] !== undefined) scrollByPid.current[active] = v.scrollOffset;
+    // Record the tab's position only when the user owns the scroll: not before the
+    // initial placement (offset 0 is inside the top headroom), and not while we're
+    // positioning — during a tab switch the browser clamp-scrolls the old offset
+    // against the new content, which would overwrite the new tab's saved position.
+    if (positioned.has(active) && !positioning.current) savedScroll[active] = v.scrollOffset;
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
   };
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
@@ -101,37 +108,34 @@ export function TranscriptView() {
     return () => ro.disconnect();
   }, [fontSize]);
 
-  // Park a transcript on its first line the first time it's shown: scroll offset 0 is
-  // now a screen of empty headroom. Two things make this fiddly, and both are why this
-  // sets scrollTop on the scroller rather than calling scrollToIndex:
+  // Position the list whenever the active tab (or the pad geometry) changes: restore
+  // the tab's remembered offset, or park a first-time tab on line 1 — scroll offset 0
+  // is now a screen of empty headroom. Two things make this fiddly, and both are why
+  // this sets scrollTop on the scroller rather than calling scrollToIndex:
   //   - virtua's scrollToIndex is a no-op until it has measured the list (after mount);
-  //   - the browser clamps scrollTop to the scrollable height, and at mount virtua has
-  //     not rendered the bottom pad yet, so an early park lands short.
-  // So: attempt it, check whether it actually took, and retry on the next frame (the
-  // caller below runs this every render) until it does.
+  //   - the browser clamps scrollTop to the scrollable height, and until virtua has
+  //     rendered the bottom pad the list isn't tall enough, so an early set lands short.
+  // So: attempt, check whether it took, and retry on a self-driven rAF chain (a short
+  // transcript barely re-renders, so per-render retries would never fire). If the
+  // scroll moves in a way we didn't cause, the user grabbed it — their position wins.
   useEffect(() => {
     if (pad <= MIN_PAD) return;                 // container not laid out yet; the pad is a guess
-    if (posed.current[active] === pad) return;  // already parked for this geometry
-    let raf = 0, tries = 0;
+    if (useStore.getState().jump) return;       // a Browse -> line jump owns the position
+    const target = savedScroll[active] ?? pad;  // remembered offset, or park on line 1
+    let raf = 0, tries = 0, lastSet = -1;
+    positioning.current = true;
+    const done = () => { positioned.add(active); positioning.current = false; };
     const attempt = () => {
       const list = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
-      if (!list) return;
-      const done = () => { posed.current[active] = pad; };
-      if (useStore.getState().jump) return done(); // a Browse -> line jump owns the position
-      const at = posed.current[active];
-      // scrolled away since we last parked: adopt the new geometry, but don't yank them back
-      if (at !== undefined && Math.abs(list.scrollTop - at) > 1) return done();
-      list.scrollTop = pad;
-      if (Math.abs(list.scrollTop - pad) <= 1) return done(); // it stuck
-      // Clamped: virtua hasn't measured the bottom pad yet, so the list isn't tall enough
-      // to accept the offset. Each partial scroll brings the pad closer to being rendered,
-      // so try again next frame. Self-driven rather than once-per-render: a short transcript
-      // barely re-renders, and the retries would never fire.
-      if (++tries < 40) raf = requestAnimationFrame(attempt);
-      else done(); // shorter than one row: the offset is unreachable, stop burning frames
+      if (!list) return done();
+      if (lastSet >= 0 && Math.abs(list.scrollTop - lastSet) > 1) return done(); // user scrolled: theirs wins
+      list.scrollTop = target;
+      lastSet = list.scrollTop; // post-clamp
+      if (Math.abs(lastSet - target) <= 1 || ++tries >= 40) return done();
+      raf = requestAnimationFrame(attempt);
     };
     raf = requestAnimationFrame(attempt);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); positioning.current = false; };
   }, [active, pad]);
 
   // With a viewport-sized top pad, offset 0 is a blank screen: "the top" now means
@@ -139,27 +143,20 @@ export function TranscriptView() {
   const toTop = () => vref.current?.scrollToIndex(1, { align: "start" });
   const toBottom = () => vref.current?.scrollToIndex(groups.length, { align: "end" });
 
-  // Browse -> jump: scroll the virtualized list to the unit containing the line
+  // Browse -> jump: scroll the virtualized list to the unit containing the line.
+  // Waits for the measured pad (jump stays pending): on a fresh mount the top pad is
+  // still the 48px placeholder, and jumping first means the pad's growth afterwards
+  // shoves the content down under an unchanged scrollTop.
   useEffect(() => {
-    if (!jump || jump.pid !== active || !transcript) return;
+    if (pad <= MIN_PAD || !jump || jump.pid !== active || !transcript) return;
     const idx = groups.findIndex((g) => jump.line >= g.startId && jump.line <= g.endId);
     if (idx >= 0) vref.current?.scrollToIndex(idx + 1, { align: "center" }); // +1 for the top vpad
+    positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
     clearJump();
-  }, [jump, active, transcript, groups, clearJump]);
+  }, [jump, active, transcript, groups, clearJump, pad]);
 
   // sync the minimap viewport box on mount and whenever the list content changes
   useEffect(() => { const id = requestAnimationFrame(syncMinimap); return () => cancelAnimationFrame(id); });
-
-  // restore each transcript's own scroll position when switching tabs (the first
-  // showing is parked on line 1 by the measure effect above)
-  useEffect(() => {
-    if (jump) return; // a Browse -> line jump takes precedence over the saved position
-    const off = scrollByPid.current[active];
-    if (off === undefined) return;
-    const id = requestAnimationFrame(() => vref.current?.scrollTo(off));
-    return () => cancelAnimationFrame(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
 
   // PageUp/PageDown/Home/End scroll the transcript list
   useEffect(() => {

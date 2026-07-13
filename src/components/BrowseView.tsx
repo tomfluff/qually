@@ -1,10 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore, type Segment } from "../state/store";
 import { norm } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
 import { Resizer } from "./Resizer";
 import { CodeMenu } from "./CodeMenu";
 import { openColorPicker } from "../colorPicker";
+
+// Browse's working state (chosen codes, filter, toggles) survives leaving the tab —
+// the view unmounts, so plain useState would reset it on every visit.
+const remembered = {
+  selected: new Set<string>(),
+  anchor: null as string | null,
+  filter: "",
+  showRejected: false,
+};
 
 export function BrowseView() {
   const codebook = useStore((s) => s.codebook);
@@ -16,11 +25,13 @@ export function BrowseView() {
   const setUi = useStore((s) => s.setUi);
   const setColor = useStore((s) => s.setColor);
   const jumpTo = useStore((s) => s.jumpTo);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [anchor, setAnchor] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
-  const [showRejected, setShowRejected] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(remembered.selected);
+  const [anchor, setAnchor] = useState<string | null>(remembered.anchor);
+  const [filter, setFilter] = useState(remembered.filter);
+  const [showRejected, setShowRejected] = useState(remembered.showRejected);
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
+  useEffect(() => { Object.assign(remembered, { selected, anchor, filter, showRejected }); },
+    [selected, anchor, filter, showRejected]);
 
   const counts: Record<string, { segs: number; pids: Set<string> }> = {};
   segments.filter((s) => s.status === "accepted").forEach((s) => {

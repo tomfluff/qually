@@ -56,6 +56,7 @@ interface State {
   ui: Ui;
   // transient (not persisted)
   selection: Selection;
+  savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
   undoStack: string[];
   redoStack: string[];
   nextSid: number;
@@ -148,7 +149,7 @@ export const useStore = create<State>()(
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: "blue", speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed" },
-      selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
+      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [],
 
@@ -198,6 +199,8 @@ export const useStore = create<State>()(
               return r ? [{ ...seg, start: r.start, end: r.end }] : [];
             });
           }
+          const saved = { ...s.savedSelections };
+          delete saved[p.pid]; // a stashed selection points at the old line ids
           set({
             segments: [...s.segments.filter((x) => x.pid !== p.pid), ...kept],
             // The undo stack snapshots segments but not transcripts, so replaying it
@@ -205,6 +208,7 @@ export const useStore = create<State>()(
             // The modal's preview is the safety net instead.
             undoStack: [], redoStack: [],
             selection: s.selection.pid === p.pid ? emptySel() : s.selection,
+            savedSelections: saved,
           });
           importTranscript(get, set, p.pid, p.rows);
         }
@@ -284,8 +288,22 @@ export const useStore = create<State>()(
         set({ selection: { pid: s.active, anchor: g.startId, head: g.startId, lines: new Set(g.ids) } });
       },
       clearSelection: () => set({ selection: emptySel() }),
-      setActive: (pid) => set({ active: pid, selection: emptySel() }),
-      jumpTo: (pid, line) => set({ active: pid, selection: emptySel(), jump: { pid, line } }),
+      // Tab switches stash the outgoing tab's selection and restore the incoming
+      // tab's, so returning to a tab finds the lines still selected. Every consumer
+      // already guards on selection.pid === active, so a restored selection only
+      // acts on its own tab.
+      setActive: (pid) => {
+        const s = get();
+        if (pid === s.active) return; // same-tab: stashing live over saved would wipe a cleared selection
+        const saved = { ...s.savedSelections, [s.active]: s.selection };
+        set({ active: pid, selection: saved[pid] ?? emptySel(), savedSelections: saved });
+      },
+      jumpTo: (pid, line) => {
+        const s = get();
+        if (pid === s.active) { set({ jump: { pid, line } }); return; } // same-tab jump: don't touch selection
+        const saved = { ...s.savedSelections, [s.active]: s.selection };
+        set({ active: pid, selection: saved[pid] ?? emptySel(), savedSelections: saved, jump: { pid, line } });
+      },
       clearJump: () => set({ jump: null }),
       scrollToLine: (line) => set({ jump: { pid: get().active, line } }), // same-tab scroll, no selection change
       setPalette: (v) => set({ paletteOpen: v }),
@@ -296,7 +314,11 @@ export const useStore = create<State>()(
       closeTab: (pid) => {
         const s = get();
         const tabs = s.tabs.filter((p) => p !== pid);
-        set({ tabs, active: s.active === pid ? (tabs[0] || "browse") : s.active });
+        const saved = { ...s.savedSelections };
+        delete saved[pid]; // a closed tab's selection dies with it
+        if (s.active !== pid) { set({ tabs, savedSelections: saved }); return; }
+        const next = tabs[0] || "browse";
+        set({ tabs, active: next, selection: saved[next] ?? emptySel(), savedSelections: saved });
       },
 
       setSegmentRange: (sid, start, end) =>
