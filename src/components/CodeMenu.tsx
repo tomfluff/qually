@@ -23,7 +23,8 @@ export function CodeMenu({ code, x, y, onClose }: {
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { mode === "menu" ? onClose() : setMode("menu"); } };
+    // stopPropagation so App's global Esc doesn't also clear the line selection
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); mode === "menu" ? onClose() : setMode("menu"); } };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onEsc);
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onEsc); };

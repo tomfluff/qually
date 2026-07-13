@@ -28,7 +28,8 @@ export function SegmentPopover({ sid, x, y, onClose }: {
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
-    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    // stopPropagation so App's global Esc doesn't also clear the line selection
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
     // Ctrl+C while the popover is open copies the segment (App's copy handler defers to us)
     const onCopy = (e: ClipboardEvent) => {
       const t = document.activeElement;

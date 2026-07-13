@@ -49,7 +49,14 @@ export function App() {
         e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); return;
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); s.redo(); return; }
-      if (e.key === "Escape") { if (s.search.open) s.closeSearch(); if (s.ui.zen) s.setZen(false); s.clearSelection(); return; }
+      // Esc peels one layer at a time: palette -> search -> zen -> selection
+      if (e.key === "Escape") {
+        if (s.paletteOpen) s.setPalette(false);
+        else if (s.search.open) s.closeSearch();
+        else if (s.ui.zen) s.setZen(false);
+        else s.clearSelection();
+        return;
+      }
       // arrow nav: plain jumps to the adjacent line, Shift moves the head (W2 item 7)
       if ((e.key === "ArrowUp" || e.key === "ArrowDown") && s.active !== "browse"
         && s.selection.pid === s.active && s.selection.lines.size) {
