@@ -8,7 +8,7 @@ const KEYS: [string, string][] = [
   ["↑ ↓", "Move selection to the next/previous line"],
   ["Shift + ↑ ↓", "Extend the selection"],
   ["PageUp / PageDn", "Scroll the transcript by about a screen"],
-  ["Home / End", "Jump to the top / bottom of the transcript"],
+  ["Home / End", "Jump to the first / last line of the transcript"],
   ["1 – 9", "Apply the matching hotbar code to the selection"],
   ["0", "Open the code palette (fuzzy search or create a code)"],
   ["Ctrl + C", "Copy the selected lines (speaker-grouped)"],

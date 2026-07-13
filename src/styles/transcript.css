@@ -68,13 +68,15 @@
   pointer-events:none; box-shadow:0 4px 16px rgba(0,0,0,.32); }
 
 .empty { padding:16px; color:var(--muted); }
-/* scroll headroom: hatched light-gray lines on a very light gray background */
-.vpad { height:3rem; background-color:#fcfcfc;
+/* Scroll headroom (height set inline: viewport − one row, at both ends). The hatch
+   only marks the 3rem nearest the text — a full screen of stripes is noise, but the
+   band still reads as "edge of document". */
+.vpad { background-color:#fcfcfc; background-repeat:no-repeat; background-size:100% 3rem;
   background-image:repeating-linear-gradient(-45deg, #f6f6f6, #f6f6f6 1px, transparent 1px, transparent 8px); }
 [data-theme=dark] .vpad { background-color:var(--panel);
   background-image:repeating-linear-gradient(-45deg, var(--line), var(--line) 1px, transparent 1px, transparent 8px); }
 /* border on the edge that meets the transcript, same color as the hatches */
-.vpad-top { border-bottom:1px solid #f6f6f6; }
-.vpad-bot { border-top:1px solid #f6f6f6; }
+.vpad-top { background-position:bottom; border-bottom:1px solid #f6f6f6; }
+.vpad-bot { background-position:top; border-top:1px solid #f6f6f6; }
 [data-theme=dark] .vpad-top { border-bottom-color:var(--line); }
 [data-theme=dark] .vpad-bot { border-top-color:var(--line); }

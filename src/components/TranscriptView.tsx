@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
@@ -31,6 +31,8 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
 const lidLabel = (g: Group) => g.startId === g.endId ? `${g.startId}` : `${g.startId}–${g.endId}`;
 const shortSpeaker = (s: string) => s.trim().slice(0, 3);
 const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
+const MIN_PAD = 48;    // headroom floor, before the viewport has been measured
+const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
 
 export function TranscriptView() {
   const active = useStore((s) => s.active);
@@ -55,11 +57,15 @@ export function TranscriptView() {
   const clearJump = useStore((s) => s.clearJump);
   const vref = useRef<VListHandle>(null);
   const mmRef = useRef<MinimapHandle>(null);
+  const tviewRef = useRef<HTMLDivElement>(null);
   const scrollByPid = useRef<Record<string, number>>({}); // each transcript's own scroll offset
+  const posed = useRef<Record<string, number>>({}); // pid -> the pad it was parked at
   const syncMinimap = () => {
     const v = vref.current;
     if (!v) return;
-    scrollByPid.current[active] = v.scrollOffset;
+    // don't record a position before the transcript has been parked, or the initial
+    // offset-0 (inside the top headroom) would be saved as if the user chose it
+    if (posed.current[active] !== undefined) scrollByPid.current[active] = v.scrollOffset;
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
   };
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
@@ -75,6 +81,64 @@ export function TranscriptView() {
   // merged display units (singletons when the toggle is off)
   const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
 
+  // Scroll headroom, VS Code's `scrollBeyondLastLine` but on both ends: a pad of
+  // (viewport − one row) lets ANY line be pulled to the top or the bottom of the
+  // screen, so the first and last lines get coded under the same conditions as the
+  // middle — same room for the anchored command palette, same reading position.
+  // Measured, not a constant: it has to track the viewport and the row height.
+  const [pad, setPad] = useState(MIN_PAD);
+  useLayoutEffect(() => {
+    const el = tviewRef.current;
+    if (!el) return;
+    // One unwrapped row's worth is kept visible (ROW_RATIO · fontSize). Deliberately
+    // NOT measured from a rendered row: row heights vary with wrapping, and the row at
+    // the top depends on the scroll position the pad itself sets — that feeds back and
+    // never settles.
+    const measure = () => setPad(Math.max(MIN_PAD, Math.round(el.clientHeight - fontSize * ROW_RATIO)));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fontSize]);
+
+  // Park a transcript on its first line the first time it's shown: scroll offset 0 is
+  // now a screen of empty headroom. Two things make this fiddly, and both are why this
+  // sets scrollTop on the scroller rather than calling scrollToIndex:
+  //   - virtua's scrollToIndex is a no-op until it has measured the list (after mount);
+  //   - the browser clamps scrollTop to the scrollable height, and at mount virtua has
+  //     not rendered the bottom pad yet, so an early park lands short.
+  // So: attempt it, check whether it actually took, and retry on the next frame (the
+  // caller below runs this every render) until it does.
+  useEffect(() => {
+    if (pad <= MIN_PAD) return;                 // container not laid out yet; the pad is a guess
+    if (posed.current[active] === pad) return;  // already parked for this geometry
+    let raf = 0, tries = 0;
+    const attempt = () => {
+      const list = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
+      if (!list) return;
+      const done = () => { posed.current[active] = pad; };
+      if (useStore.getState().jump) return done(); // a Browse -> line jump owns the position
+      const at = posed.current[active];
+      // scrolled away since we last parked: adopt the new geometry, but don't yank them back
+      if (at !== undefined && Math.abs(list.scrollTop - at) > 1) return done();
+      list.scrollTop = pad;
+      if (Math.abs(list.scrollTop - pad) <= 1) return done(); // it stuck
+      // Clamped: virtua hasn't measured the bottom pad yet, so the list isn't tall enough
+      // to accept the offset. Each partial scroll brings the pad closer to being rendered,
+      // so try again next frame. Self-driven rather than once-per-render: a short transcript
+      // barely re-renders, and the retries would never fire.
+      if (++tries < 40) raf = requestAnimationFrame(attempt);
+      else done(); // shorter than one row: the offset is unreachable, stop burning frames
+    };
+    raf = requestAnimationFrame(attempt);
+    return () => cancelAnimationFrame(raf);
+  }, [active, pad]);
+
+  // With a viewport-sized top pad, offset 0 is a blank screen: "the top" now means
+  // the first line parked at the top of the viewport, which is index 1 (0 = the pad).
+  const toTop = () => vref.current?.scrollToIndex(1, { align: "start" });
+  const toBottom = () => vref.current?.scrollToIndex(groups.length, { align: "end" });
+
   // Browse -> jump: scroll the virtualized list to the unit containing the line
   useEffect(() => {
     if (!jump || jump.pid !== active || !transcript) return;
@@ -86,10 +150,12 @@ export function TranscriptView() {
   // sync the minimap viewport box on mount and whenever the list content changes
   useEffect(() => { const id = requestAnimationFrame(syncMinimap); return () => cancelAnimationFrame(id); });
 
-  // restore each transcript's own scroll position when switching tabs
+  // restore each transcript's own scroll position when switching tabs (the first
+  // showing is parked on line 1 by the measure effect above)
   useEffect(() => {
     if (jump) return; // a Browse -> line jump takes precedence over the saved position
-    const off = scrollByPid.current[active] ?? 0;
+    const off = scrollByPid.current[active];
+    if (off === undefined) return;
     const id = requestAnimationFrame(() => vref.current?.scrollTo(off));
     return () => cancelAnimationFrame(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,12 +170,15 @@ export function TranscriptView() {
       if (!v) return;
       if (e.key === "PageDown") { e.preventDefault(); v.scrollBy(v.viewportSize * 0.9); }
       else if (e.key === "PageUp") { e.preventDefault(); v.scrollBy(-v.viewportSize * 0.9); }
-      else if (e.key === "Home") { e.preventDefault(); v.scrollTo(0); }
-      else if (e.key === "End") { e.preventDefault(); v.scrollTo(v.scrollSize); }
+      // Home/End mean first/last LINE, not the ends of the scrollable area — those
+      // are now a screen of empty headroom.
+      else if (e.key === "Home") { e.preventDefault(); toTop(); }
+      else if (e.key === "End") { e.preventDefault(); toBottom(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups.length]);
 
   // lane assignment for the active transcript (greedy interval graph)
   // rejected segments stay in the lanes (styled distinctly) so they can be re-accepted
@@ -189,11 +258,11 @@ export function TranscriptView() {
 
   return (
     <>
-      <div className="tview">
+      <div className="tview" ref={tviewRef}>
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
-          <div className="vpad vpad-top" key="vpad-top" />, // headroom before the first line
+          <div className="vpad vpad-top" key="vpad-top" style={{ height: pad }} />, // headroom before the first line
           ...groups.map((g) => (
             <Row
               key={g.startId}
@@ -215,7 +284,7 @@ export function TranscriptView() {
               current={search.current}
             />
           )),
-          <div className="vpad vpad-bot" key="vpad-bot" />, // headroom after the last line
+          <div className="vpad vpad-bot" key="vpad-bot" style={{ height: pad }} />, // headroom after the last line
         ]}
       </VList>
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
