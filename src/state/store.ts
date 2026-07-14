@@ -94,7 +94,7 @@ interface State {
   savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
   undoStack: string[];
   redoStack: string[];
-  selGesture: string | null; // coalesces one undo entry per selection gesture
+  selRun: boolean; // top undo entry already captures the state before this run of selection-only changes
   nextSid: number;
   jump: { pid: string; line: number } | null;
   paletteOpen: boolean;
@@ -145,7 +145,7 @@ interface State {
   togglePin: (code: string) => void;
   refreshHotbar: () => void;
   pushUndo: () => void;
-  pushSelUndo: (gesture: string) => void;
+  pushSelUndo: () => void;
   endSelGesture: () => void;
   undo: () => void;
   redo: () => void;
@@ -179,12 +179,17 @@ function idsBetween(gs: Group[], i: number, j: number): number[] {
   return out;
 }
 
-// The selection rides in the snapshot too: undoing a code now also puts back the lines
-// it was applied to, and a selection change is itself undoable. Set isn't JSON, so the
-// line ids go as an array.
+// The selection rides in the snapshot too: undoing a code also puts back the lines it was
+// applied to, and a selection change is itself undoable. `active` rides along as well --
+// WITHOUT it, tab identity had to be inferred from selection.pid, which is null for an
+// EMPTY selection. Undo could then follow a selection INTO a tab but never restore "no
+// selection" BACK to one: the entry was consumed, nothing changed on screen, and
+// savedSelections still held the selection it was supposed to remove -- which then
+// resurrected itself the next time you opened that tab, with no undo left to kill it.
+// Set isn't JSON, so the line ids go as an array.
 function snapshot(s: State): string {
   return JSON.stringify({
-    segments: s.segments, codebook: s.codebook, hotbar: s.hotbar,
+    segments: s.segments, codebook: s.codebook, hotbar: s.hotbar, active: s.active,
     sel: { ...s.selection, lines: [...s.selection.lines] },
   });
 }
@@ -194,25 +199,31 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
   const next = { ...cur, segments: o.segments, codebook: o.codebook, hotbar: o.hotbar };
   let sel: Selection = o.sel
     ? { pid: o.sel.pid, anchor: o.sel.anchor, head: o.sel.head, lines: new Set<number>(o.sel.lines) }
-    : cur.selection; // a snapshot taken before selections were tracked
+    : cur.selection; // a snapshot from before selections were tracked
 
-  // The tab this selection belonged to may have been CLOSED since the snapshot. Drop it:
-  // leaving it live meant applyCode (which trusts selection.pid) and the digit hotkeys
-  // (which only check lines.size) would write segments onto a transcript that isn't even
-  // on screen. Guarding `active` alone was not enough — the selection itself is the hazard.
+  // The tab may have been CLOSED since the snapshot. Drop a selection that points into it:
+  // applyCode trusts selection.pid and the digit hotkeys only check lines.size, so a live
+  // selection on a closed tab writes segments onto a transcript that isn't on screen.
   if (sel.pid && !cur.tabs.includes(sel.pid)) sel = emptySel();
+  const active = o.active && (o.active === "browse" || cur.tabs.includes(o.active))
+    ? o.active : cur.active;
 
-  // Crossing tabs here bypasses setActive(), which is what normally stashes the outgoing
-  // tab's selection and parks the incoming one. Do its bookkeeping by hand, or the parked
-  // copy goes stale and reappears the next time you visit that tab.
-  const active = sel.pid ?? cur.active;
+  // Crossing tabs here bypasses setActive(), which is what stashes the outgoing tab's
+  // selection and parks the incoming one. Do its bookkeeping by hand, or the parked copy
+  // goes stale and reappears next time you visit that tab.
   const saved = { ...cur.savedSelections };
-  if (active !== cur.active) saved[cur.active] = cur.selection; // park what we're leaving
-  if (sel.pid) saved[sel.pid] = sel;                            // and what we're restoring
+  if (active !== cur.active) saved[cur.active] = cur.selection; // park what we leave
+  if (active !== "browse") saved[active] = sel;                 // and what we restore, EMPTY OR NOT
 
   set({
     segments: o.segments, codebook: o.codebook, hotbar: o.hotbar,
     hotbarCache: hotbarCodes(next), selection: sel, active, savedSelections: saved,
+    // One cache must own the scroll after a tab change, or the tab's remembered anchor
+    // (restored in a rAF) races the selection-follow (synchronous) and wins -- landing you
+    // nowhere near what you just undid. `jump` is that ownership token; the positioning
+    // effect defers to it.
+    jump: active !== cur.active && sel.pid && sel.head !== null
+      ? { pid: sel.pid, line: sel.head } : cur.jump,
   });
 }
 
@@ -232,7 +243,7 @@ export const useStore = create<State>()(
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false,
         speakerColors: {}, speakerWeight: {} },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
-      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selGesture: null, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
+      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [], pendingProject: null,
 
@@ -357,7 +368,7 @@ export const useStore = create<State>()(
         const s = get();
         const gs = groupsOf(s);
         if (!gs.length || s.selection.pid !== s.active || !s.selection.lines.size) return;
-        s.pushUndo(); // each keypress is its own undo step
+        s.pushSelUndo(); // a run of arrow presses collapses into one entry
         if (extend) {
           const anchorGi = s.selection.anchor !== null ? groupIdxOf(gs, s.selection.anchor) : -1;
           const headGi = s.selection.head !== null ? groupIdxOf(gs, s.selection.head) : anchorGi;
@@ -386,7 +397,7 @@ export const useStore = create<State>()(
       clearSelection: () => {
         const s = get();
         if (!s.selection.lines.size) return; // nothing to clear, nothing to undo
-        s.pushUndo();
+        s.pushSelUndo();
         set({ selection: emptySel() });
       },
       // Tab switches stash the outgoing tab's selection and restore the incoming
@@ -416,7 +427,9 @@ export const useStore = create<State>()(
         const s = get();
         const tabs = s.tabs.filter((p) => p !== pid);
         const saved = { ...s.savedSelections };
-        delete saved[pid]; // a closed tab's selection dies with it
+        delete saved[pid]; // a closed tab's selection dies with it...
+        forgetScroll(pid); // ...and so does its scroll anchor. The two caches had different
+                           // lifetimes at one call site -- the shape of the bug already fixed.
         if (s.active !== pid) { set({ tabs, savedSelections: saved }); return; }
         const next = tabs[0] || "browse";
         set({ tabs, active: next, selection: saved[next] ?? emptySel(), savedSelections: saved });
@@ -649,24 +662,33 @@ export const useStore = create<State>()(
         if (stack.length > 80) stack.shift();
         // clears the selection gesture too: any real edit ends it, so the NEXT click is
         // its own undo step rather than being swallowed as "the same gesture"
-        set({ undoStack: stack, redoStack: [], selGesture: null }); // new action invalidates redo
+        set({ undoStack: stack, redoStack: [], selRun: false }); // new action invalidates redo
       },
-      // ONLY the mouse needs coalescing: a drag calls selectLine on every mousemove, and
-      // pushing each would bury the real edits under dozens of selection steps. One entry
-      // per drag, snapshotted before its first mutation; mouseup closes it. Every keyboard
-      // path is already one discrete gesture per press and just calls pushUndo().
+      // Selection changes are undoable, but they must not DROWN the real edits: a drag
+      // fires selectLine on every mousemove, and holding an arrow key on key-repeat used to
+      // push an entry per press -- enough to evict every actual coding edit from the
+      // 80-entry stack in about a second. So a RUN of consecutive selection-only changes
+      // collapses into the single entry taken before the run; the next real edit (or a
+      // mouseup) ends the run. Undo steps back over a whole drag, or a whole burst of
+      // arrowing, in one go -- and your coding history survives.
       //
-      // This used to take a gesture NAME, and the keyboard passed `key:${undoStack.length}`
-      // to be unique per press. The stack is capped at 80 — so once full, that length stops
-      // changing, every press produced the SAME name, and this swallowed them all as "the
-      // same gesture". Arrow-key selection silently stopped being undoable after 80 edits.
-      pushSelUndo: (gesture) => {
+      // (This used to key off a gesture NAME, with the keyboard passing
+      // `key:${undoStack.length}` to be unique per press. The stack is capped at 80, so once
+      // full that number stops changing, every press produced the same name, and the
+      // coalescer swallowed them all: arrow-key selection silently stopped being undoable.
+      // A boolean cannot have that bug.)
+      pushSelUndo: () => {
         const s = get();
-        if (s.selGesture === gesture) return; // already inside this drag
-        s.pushUndo();                 // clears selGesture...
-        set({ selGesture: gesture }); // ...so claim it after
+        if (s.selRun) {
+          // still inside the run: no new entry, but this IS a new action, so a stale redo
+          // branch must not survive it (pushUndo would normally do this)
+          if (s.redoStack.length) set({ redoStack: [] });
+          return;
+        }
+        s.pushUndo();           // clears selRun...
+        set({ selRun: true });  // ...so claim it after
       },
-      endSelGesture: () => set({ selGesture: null }),
+      endSelGesture: () => set({ selRun: false }),
       undo: () => {
         const s = get();
         if (!s.undoStack.length) return;
@@ -767,7 +789,7 @@ function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string,
     delete saved[pid];
     forgetScroll(pid);
     set({
-      undoStack: [], redoStack: [], selGesture: null,
+      undoStack: [], redoStack: [], selRun: false,
       selection: s.selection.pid === pid ? emptySel() : s.selection,
       savedSelections: saved,
     });

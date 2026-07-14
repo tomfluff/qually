@@ -286,7 +286,7 @@ export function TranscriptView() {
     // keypress seeds; the next one moves.
     e.stopPropagation();
     const gi = Math.min(groups.length - 1, Math.max(0, v.findItemIndex(v.scrollOffset) - 1)); // -1: the top vpad is item 0
-    s.pushUndo(); // a keypress is its own undo step
+    s.pushSelUndo(); // coalesces with a run of arrow presses
     s.startSelection(groups[gi].startId);
   };
 
@@ -404,7 +404,7 @@ export function TranscriptView() {
     if (e.detail > 1) return; // second press of a double-click: that's an edit, not a re-select
     const st = useStore.getState();
     // open the gesture BEFORE any mutation — a click and a whole drag are one undo step
-    st.pushSelUndo("mouse");
+    st.pushSelUndo();
     if (e.shiftKey) { selectLine(id, { extend: true }); st.endSelGesture(); return; }
     if (e.ctrlKey || e.metaKey) { selectLine(id, { toggle: true }); st.endSelGesture(); return; }
     let moved = false;

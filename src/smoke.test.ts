@@ -79,11 +79,11 @@ test("selection is undoable, and a whole drag is ONE step", () => {
   const s = useStore.getState();
   s.clearSelection();
 
-  s.pushSelUndo("mouse"); s.selectLine(2); s.endSelGesture();      // click line 2
+  s.pushSelUndo(); s.selectLine(2); s.endSelGesture();      // click line 2
   expect([...useStore.getState().selection.lines]).toEqual([2]);
 
   // a drag: one gesture, many selectLine calls (the fixture is 5 lines long)
-  s.pushSelUndo("mouse");
+  s.pushSelUndo();
   useStore.getState().selectLine(3);
   useStore.getState().selectLine(4, { extend: true });
   useStore.getState().selectLine(5, { extend: true });
@@ -98,7 +98,7 @@ test("selection is undoable, and a whole drag is ONE step", () => {
 
 test("undoing a code also puts back the lines it was applied to", () => {
   const s = useStore.getState();
-  s.pushSelUndo("mouse"); s.selectLine(2); s.selectLine(3, { extend: true }); s.endSelGesture();
+  s.pushSelUndo(); s.selectLine(2); s.selectLine(3, { extend: true }); s.endSelGesture();
   const before = useStore.getState().segments.length;
 
   useStore.getState().applyCode("undo probe");
@@ -115,7 +115,7 @@ test("undoing a code also puts back the lines it was applied to", () => {
 // undoing after closing a tab made `active` a tab that isn't in the tab bar.
 test("undo never activates a closed tab", () => {
   const s = useStore.getState();
-  s.pushSelUndo("mouse"); s.selectLine(2); s.endSelGesture();  // a selection in P01
+  s.pushSelUndo(); s.selectLine(2); s.endSelGesture();  // a selection in P01
   useStore.setState({ tabs: ["P01", "P02"], transcripts: {
     ...useStore.getState().transcripts, P02: { lines: [{ id: 1, ts: "", speaker: "P", text: "hi" }] },
   } });
@@ -131,25 +131,27 @@ test("undo never activates a closed tab", () => {
 // stack is CAPPED at 80, so once full the length stops changing, every arrow press
 // produced the same name, and pushSelUndo swallowed them all as "the same gesture".
 // Arrow-key selection silently stopped being undoable after 80 edits.
-test("arrow-key selection stays undoable once the undo stack is full", () => {
-  useStore.setState({ active: "P01", tabs: ["P01"] }); // the test above leaves us on P02
+test("a run of arrow presses is ONE undo step, and cannot evict coding history", () => {
+  useStore.setState({ active: "P01", tabs: ["P01"] });
   const s = useStore.getState();
-  for (let i = 0; i < 90; i++) s.pushUndo();          // fill past the 80 cap
-  expect(useStore.getState().undoStack.length).toBe(80);
 
-  s.pushSelUndo("mouse"); s.selectLine(1); s.endSelGesture();
+  s.pushSelUndo(); s.selectLine(1); s.endSelGesture();
+  useStore.getState().applyCode("history");                  // a real edit to protect
+  const stackAfterEdit = useStore.getState().undoStack.length;
+
+  // hold ArrowDown: key-repeat. This used to push an entry PER PRESS, evicting the real
+  // edits from the 80-entry stack in about a second.
+  for (let i = 0; i < 60; i++) useStore.getState().moveSelection(1, false);
+  expect(useStore.getState().undoStack.length).toBe(stackAfterEdit + 1); // ONE entry, not 60
+
+  // and one undo steps back over the whole run
+  useStore.getState().undo();
   expect([...useStore.getState().selection.lines]).toEqual([1]);
-
-  useStore.getState().moveSelection(1, false);       // arrow down -> line 2
-  expect([...useStore.getState().selection.lines]).toEqual([2]);
-  useStore.getState().moveSelection(1, false);       // arrow down -> line 3
-  expect([...useStore.getState().selection.lines]).toEqual([3]);
-
+  // the coding edit is still undoable — it was never evicted
   useStore.getState().undo();
-  expect([...useStore.getState().selection.lines]).toEqual([2]); // the 2nd press was undoable
-  useStore.getState().undo();
-  expect([...useStore.getState().selection.lines]).toEqual([1]); // and so was the 1st
+  expect(useStore.getState().segments.some((x) => x.code === "history")).toBe(false);
 });
+
 
 // Undo after closing a tab left the SELECTION pointing at the closed pid — only `active`
 // was guarded. applyCode codes selection.pid without checking it's open, and the digit
@@ -158,7 +160,7 @@ test("arrow-key selection stays undoable once the undo stack is full", () => {
 test("undo never leaves a live selection on a closed tab", () => {
   useStore.setState({ active: "P01", tabs: ["P01"], selection: { pid: null, anchor: null, head: null, lines: new Set() } });
   const s = useStore.getState();
-  s.pushSelUndo("mouse"); s.selectLine(2); s.endSelGesture();   // selection in P01
+  s.pushSelUndo(); s.selectLine(2); s.endSelGesture();   // selection in P01
   // a further undoable edit WHILE that selection is live, so the top snapshot carries it
   useStore.getState().applyCode("marker");
   useStore.setState({ tabs: ["P01", "P02"], transcripts: {
@@ -187,7 +189,7 @@ test("re-importing an uncoded transcript clears stale undo/selection state", asy
   ], "FRESH.csv")]);
   useStore.setState({ active: "FRESH" });
   const s = useStore.getState();
-  s.pushSelUndo("mouse"); s.selectLine(3); s.endSelGesture();   // select a line that will vanish
+  s.pushSelUndo(); s.selectLine(3); s.endSelGesture();   // select a line that will vanish
   expect(useStore.getState().undoStack.length).toBeGreaterThan(0);
 
   // the corrected file is SHORTER — line 3 is gone
@@ -198,4 +200,28 @@ test("re-importing an uncoded transcript clears stale undo/selection state", asy
   expect(useStore.getState().undoStack).toHaveLength(0);       // stale stack dropped
   expect(useStore.getState().selection.lines.size).toBe(0);    // stale selection dropped
   expect(useStore.getState().transcripts.FRESH.lines).toHaveLength(2);
+});
+
+// snapshot() recorded the selection but NOT the active tab, and tab identity was inferred
+// from selection.pid — which is null for an EMPTY selection. So restore() could follow a
+// selection INTO a tab but never restore "no selection" BACK to one: the undo entry got
+// consumed, nothing changed on screen, and savedSelections still held the selection it
+// was meant to remove. Revisiting the tab resurrected it, with an empty undo stack.
+test("undo can un-select in a tab you have since left", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,codes\n1,00:00:01,P,a,\n2,00:00:02,P,b,\n",
+  ], "TA.csv")]);
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,codes\n1,00:00:01,P,c,\n2,00:00:02,P,d,\n",
+  ], "TB.csv")]);
+
+  useStore.getState().setActive("TA");
+  const s = useStore.getState();
+  s.pushSelUndo(); s.selectLine(2); s.endSelGesture();     // select line 2 in TA
+  useStore.getState().setActive("TB");                     // park it
+  expect(useStore.getState().savedSelections.TA?.lines.has(2)).toBe(true);
+
+  useStore.getState().undo();                              // undo the selection made in TA
+  useStore.getState().setActive("TA");                     // go back and look
+  expect([...useStore.getState().selection.lines]).toEqual([]); // it must be GONE
 });
