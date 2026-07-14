@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useStore } from "../state/store";
 import { registerVideo } from "../video/seek";
 import { Icon } from "./Icon";
@@ -75,11 +76,16 @@ export function VideoDock() {
     };
     const up = () => {
       if (raf) cancelAnimationFrame(raf);
+      // ORDER MATTERS, and it must all happen in ONE task. setGeom from a native
+      // listener is committed by React in a LATER task, and the browser may paint in
+      // between — so "clear transform, then setGeom" showed the dock back at its
+      // pre-drag spot for one frame on the drops that lost the race. flushSync commits
+      // the new left/bottom NOW (the dock is briefly position+transform, doubly offset,
+      // but nothing can paint mid-task), and only then does the transform come off.
+      // track the BOTTOM edge so collapse/expand keeps the dock's bottom pinned
+      flushSync(() => setGeom((g) => ({ ...g, x: left0 + dx, bottom: window.innerHeight - (top0 + dy + h0) })));
       el.style.transform = "";
       el.style.willChange = "";
-      // hand the final position to React — the clamp below keeps it on screen.
-      // track the BOTTOM edge so collapse/expand keeps the dock's bottom pinned
-      setGeom((g) => ({ ...g, x: left0 + dx, bottom: window.innerHeight - (top0 + dy + h0) }));
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
     };
