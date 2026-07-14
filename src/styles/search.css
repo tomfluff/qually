@@ -23,6 +23,12 @@
   background:var(--bg); border:1px solid var(--line); border-radius:10px; color:var(--muted);
   cursor:pointer; box-shadow:0 8px 26px rgba(0,0,0,.28); }
 .searchtoggle:hover { color:var(--fg); border-color:var(--accent); }
+/* eye toggle for AI noticing highlights — sits left of the magnifier, same look */
+.noticetoggle { position:absolute; top:8px; right:calc(16px + var(--mm-w) + 51px); z-index:40;
+  width:43px; height:43px; display:inline-flex; align-items:center; justify-content:center;
+  background:var(--bg); border:1px solid var(--line); border-radius:10px; color:var(--muted);
+  cursor:pointer; box-shadow:0 8px 26px rgba(0,0,0,.28); }
+.noticetoggle:hover { color:var(--fg); border-color:var(--accent); }
 .seg.searchscope { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
 .seg.searchscope button { border:none; background:var(--bg); color:var(--muted);
   padding:4px 8px; font-size:12px; cursor:pointer; }

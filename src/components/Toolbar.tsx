@@ -81,8 +81,8 @@ export function Toolbar() {
       <span className="tbdiv" />
       {onTranscript && (
         <button className="btn iconlabel aibtn" onClick={() => setAiOpen(true)}
-          title="Ask OpenAI to flag likely transcription errors in this transcript">
-          <Icon name="sparkle" size={15} /> Check transcription
+          title="Scan this transcript with AI: transcription errors, plus noticing lenses you choose (emotions, likes/dislikes, desires…)">
+          <Icon name="sparkle" size={15} /> AI scan
         </button>
       )}
       <span className="tbdiv" />

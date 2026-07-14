@@ -47,6 +47,18 @@
 .imp-actions .btn { width:100%; justify-content:center; }
 .imp-note { color:var(--muted); font-size:.86em; text-align:center; margin-top:10px; }
 
+/* AI consent gate — lens + speaker choices */
+.ai-sec { font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
+  font-weight:700; margin:10px 0 6px; padding-bottom:3px; border-bottom:1px solid var(--line); }
+.ai-sec-hint { font-weight:400; text-transform:none; letter-spacing:0; font-size:1.05em; }
+.ai-lenses { display:grid; grid-template-columns:1fr 1fr; gap:3px 14px; }
+.ai-lens, .ai-spk { display:flex; align-items:center; gap:7px; cursor:pointer;
+  font-size:.92em; line-height:1.9; }
+.ai-lens input, .ai-spk input { margin:0; }
+.ai-lens em, .ai-spk em { font-style:normal; color:var(--muted); font-size:.85em; }
+.ai-lens-dot { width:9px; height:9px; border-radius:3px; flex:none; }
+.ai-spks { display:flex; flex-wrap:wrap; gap:2px 18px; }
+
 /* AI consent gate — the payload preview */
 .ai-warn { background:color-mix(in srgb, #e0a020 14%, var(--bg)); border:1px solid #e0a020;
   border-radius:8px; padding:10px 12px; margin:6px 0 12px; line-height:1.5; }

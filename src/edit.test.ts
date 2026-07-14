@@ -58,3 +58,25 @@ test("editing back to the original clears the edited flag", () => {
   expect(l.orig).toBeUndefined();
   expect(parseCSV(useStore.getState().exportEdits())).toHaveLength(0);
 });
+
+test("scan cache accumulates lenses and keeps other lenses' spans on re-scan", () => {
+  const st = useStore.getState();
+  const lines = st.transcripts.P01.lines;
+  // first scan: transcription only
+  st.addFlags("P01", { 1: [{ quote: "ticket marks", reason: "tick marks", lens: "transcription" }] }, lines, ["transcription"]);
+  // second scan: emotion only — must keep the transcription span and merge the lens sets
+  st.addFlags("P01", { 1: [{ quote: "losing", reason: "frustration", lens: "emotion" }] }, lines, ["emotion"]);
+  const f = useStore.getState().aiFlags["P01:1"];
+  expect(f.lenses!.sort()).toEqual(["emotion", "transcription"]);
+  expect(f.spans.map((s) => s.lens).sort()).toEqual(["emotion", "transcription"]);
+  // clean lines are recorded as scanned too (the cache), under both runs' lenses
+  expect(useStore.getState().aiFlags["P01:2"]).toMatchObject({ lenses: ["transcription", "emotion"], spans: [] });
+});
+
+test("dismissing a notice removes the span but keeps the line marked as scanned", () => {
+  const st = useStore.getState();
+  st.dismissNotice("P01", 1, "emotion", "losing");
+  const f = useStore.getState().aiFlags["P01:1"];
+  expect(f.spans.map((s) => s.lens)).toEqual(["transcription"]); // emotion span gone
+  expect(f.lenses).toContain("emotion");                          // no re-fetch of the same mark
+});

@@ -3,7 +3,7 @@
 // quote being rendered over text that doesn't exist.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { redactor } from "./redact";
-import { hashLine, renderChunk, chunksOf, flagChunk, CHUNK } from "./flag";
+import { hashLine, renderChunk, chunksOf, scanChunk, buildSystem, LENSES, CHUNK } from "./flag";
 import { MODELS, DEFAULT_MODEL, modelOf, costOf } from "./openai";
 import type { Line } from "../state/store";
 
@@ -72,33 +72,47 @@ describe("chunking", () => {
   });
 });
 
-describe("flagChunk — what the model says is not trusted", () => {
+describe("scanChunk — what the model says is not trusted", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  const lines = [L(1, "So Ann, how do you read a chart?", "R"), L(2, "I lost the ticket marks.")];
+  const lines = [L(1, "So Ann, how do you read a chart?", "R"), L(2, "I lost the ticket marks and honestly I hate this chart.")];
   const red = redactor(["Ann"]);
-  const run = (flags: unknown[]) => {
+  const run = (flags: unknown[], lenses = ["transcription", "emotion"]) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(apiReply(flags)));
-    return flagChunk({ key: "sk-x", model: DEFAULT_MODEL, lines, redaction: red });
+    return scanChunk({ key: "sk-x", model: DEFAULT_MODEL, lines, lenses, redaction: red });
   };
 
-  it("keeps a genuine flag", async () => {
-    const { flags } = await run([{ line_id: 2, quote: "ticket marks", reason: "tick marks" }]);
-    expect(flags[2]).toEqual([{ quote: "ticket marks", reason: "tick marks" }]);
+  it("keeps a genuine mark, tagged with its lens", async () => {
+    const { flags } = await run([{ line_id: 2, lens: "transcription", quote: "ticket marks", note: "tick marks" }]);
+    expect(flags[2]).toEqual([{ quote: "ticket marks", reason: "tick marks", lens: "transcription" }]);
   });
 
-  it("drops a hallucinated quote that isn't in the line", async () => {
-    const { flags } = await run([{ line_id: 2, quote: "purple monkey", reason: "invented" }]);
+  it("keeps a notice from a different lens on the same line", async () => {
+    const { flags } = await run([
+      { line_id: 2, lens: "transcription", quote: "ticket marks", note: "tick marks" },
+      { line_id: 2, lens: "emotion", quote: "I hate this chart", note: "frustration" },
+    ]);
+    expect(flags[2]).toHaveLength(2);
+    expect(flags[2][1].lens).toBe("emotion");
+  });
+
+  it("drops a mark from a lens that wasn't requested", async () => {
+    const { flags } = await run([{ line_id: 2, lens: "desire", quote: "ticket marks", note: "x" }]);
     expect(flags[2]).toBeUndefined();
   });
 
-  it("drops a flag ON a redaction placeholder — the model never saw the real name, so it cannot judge it", async () => {
-    const { flags } = await run([{ line_id: 1, quote: "[REDACTED_1]", reason: "looks odd" }]);
+  it("drops a hallucinated quote that isn't in the line", async () => {
+    const { flags } = await run([{ line_id: 2, lens: "emotion", quote: "purple monkey", note: "invented" }]);
+    expect(flags[2]).toBeUndefined();
+  });
+
+  it("drops a mark ON a redaction placeholder — the model never saw the real name, so it cannot judge it", async () => {
+    const { flags } = await run([{ line_id: 1, lens: "transcription", quote: "[REDACTED_1]", note: "looks odd" }]);
     expect(flags[1]).toBeUndefined(); // must NOT underline the participant's real name
   });
 
-  it("drops a flag on a line that wasn't sent", async () => {
-    const { flags } = await run([{ line_id: 999, quote: "whatever", reason: "x" }]);
+  it("drops a mark on a line that wasn't sent", async () => {
+    const { flags } = await run([{ line_id: 999, lens: "emotion", quote: "whatever", note: "x" }]);
     expect(Object.keys(flags)).toHaveLength(0);
   });
 
@@ -108,17 +122,33 @@ describe("flagChunk — what the model says is not trusted", () => {
     expect(usage.costUsd).toBeCloseTo((100 / 1e6) * 1 + (20 / 1e6) * 6, 9); // Luna pricing
   });
 
-  it("sends the redacted text and asks for strict JSON", async () => {
+  it("sends the redacted text, only the ticked lenses, and asks for strict JSON", async () => {
     const fetchMock = vi.fn().mockResolvedValue(apiReply([]));
     vi.stubGlobal("fetch", fetchMock);
-    await flagChunk({ key: "sk-x", model: "gpt-5.6-sol", lines, redaction: red });
+    await scanChunk({ key: "sk-x", model: "gpt-5.6-sol", lines, lenses: ["emotion", "desire"], redaction: red });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://api.openai.com/v1/responses");
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body.model).toBe("gpt-5.6-sol");
     expect(body.text.format).toMatchObject({ type: "json_schema", strict: true });
+    expect(body.text.format.schema.properties.flags.items.properties.lens.enum).toEqual(["emotion", "desire"]);
+    expect(body.input[0].content).toContain("[emotion]");
+    expect(body.input[0].content).not.toContain("[transcription]");
     expect(body.input[1].content).not.toContain("Ann");
     expect(body.input[1].content).toContain("[REDACTED_1]");
+  });
+});
+
+describe("lenses", () => {
+  it("cover the proposed set, transcription first", () => {
+    expect(LENSES.map((l) => l.id)).toEqual(
+      ["transcription", "emotion", "evaluation", "desire", "workaround", "tension", "invivo"]);
+  });
+  it("the system prompt includes exactly the requested scans", () => {
+    const sys = buildSystem(["tension", "invivo"]);
+    expect(sys).toContain("[tension]");
+    expect(sys).toContain("[invivo]");
+    expect(sys).not.toContain("[emotion]");
   });
 });
 

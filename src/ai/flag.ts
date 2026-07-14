@@ -1,16 +1,18 @@
-// Task 1: flag likely mis-transcriptions.
+// AI scan: noticing, not coding.
 //
-// The lowest-risk thing an LLM can do here — it makes no interpretive claim about
-// the data, it just says "that word looks wrong". Output feeds the line editor
-// that already exists (double-click to fix against the audio).
+// Every lens marks INSTANCES ("this is an emotional expression") and never proposes
+// a code, theme, or interpretation — that part belongs to the researcher. Each lens
+// maps to an established first-cycle coding method (Saldaña), which is what makes a
+// pre-highlight pass defensible in a methods section. Transcription is the odd one
+// out: it flags recogniser errors, feeding the double-click line editor.
 import type { Line } from "../state/store";
 import { callJson, estimateTokens, type Usage } from "./openai";
 import type { Redaction } from "./redact";
 
 export const CHUNK = 40; // lines per request — the unit of work is a window, never the corpus
 
-// Cheap content hash (FNV-1a). A flag is stored against the hash of the line it
-// was made on, so correcting a line silently invalidates its flags — no cache
+// Cheap content hash (FNV-1a). Spans are stored against the hash of the line they
+// were made on, so correcting a line silently invalidates them — no cache
 // bookkeeping, and the AI can never point at text that no longer exists.
 export function hashLine(text: string): string {
   let h = 0x811c9dc5;
@@ -21,25 +23,64 @@ export function hashLine(text: string): string {
   return (h >>> 0).toString(36);
 }
 
-export interface Flag { quote: string; reason: string }
+export interface Flag { quote: string; reason: string; lens: string }
 
-const SYSTEM = `You check automatic speech-recognition transcripts of research interviews for likely transcription errors.
+export interface Lens {
+  id: string;
+  label: string;   // checkbox + tooltip name
+  method: string;  // the coding tradition it maps to (shown as the checkbox hint)
+  color: string;   // notice underline; transcription keeps its amber error style
+  instruction: string;
+}
 
-Flag ONLY spans that the recogniser probably got wrong:
-- non-words and word salad ("two dance" for "too dense")
-- homophone confusions ("ticket marks" for "tick marks", "guest" for "guessed")
-- words that are implausible in context, especially domain terms
-- garbled proper nouns and product names
+export const LENSES: Lens[] = [
+  {
+    id: "transcription", label: "Transcription errors", method: "feeds the line editor", color: "#e0a020",
+    instruction: `Mark ONLY spans the speech recogniser probably got wrong: non-words and word salad ("two dance" for "too dense"); homophone confusions ("ticket marks" for "tick marks", "guest" for "guessed"); words implausible in context, especially domain terms; garbled proper nouns. Do NOT mark informal speech, filler, false starts, or grammatical errors — real speech is messy, and that is data. note = what it probably should be.`,
+  },
+  {
+    id: "emotion", label: "Emotional expressions", method: "emotion coding", color: "#e0554f",
+    instruction: `Mark expressed feelings — frustration, delight, anxiety, relief, embarrassment — whether named ("I was so annoyed") or performed ("ugh, this again"). note = the feeling, stated neutrally.`,
+  },
+  {
+    id: "evaluation", label: "Likes & dislikes", method: "evaluation coding", color: "#3b82c4",
+    instruction: `Mark evaluative judgments about the thing being studied — likes, dislikes, praise, complaints ("the legend was useless"). note = what is judged and the valence.`,
+  },
+  {
+    id: "desire", label: "Desires & needs", method: "dramaturgical coding", color: "#8e6bc9",
+    instruction: `Mark wishes, wants, needs, and imagined improvements ("I wish it would just tell me"). note = what is wanted.`,
+  },
+  {
+    id: "workaround", label: "Workarounds & strategies", method: "process coding", color: "#3fa860",
+    instruction: `Mark described strategies or workarounds for coping with a problem ("so I zoom in and count the gridlines"). note = the strategy in a few words.`,
+  },
+  {
+    id: "tension", label: "Tensions & contradictions", method: "versus coding", color: "#c98a2a",
+    instruction: `Mark contradictions or ambivalence within the participant's own account ("it's great… but I never use it"). note = the two sides.`,
+  },
+  {
+    id: "invivo", label: "Quotable phrasing", method: "in-vivo coding", color: "#2fa3a3",
+    instruction: `Mark short, vivid, distinctive phrasings in the speaker's own words that would be worth quoting verbatim. note = why it stands out.`,
+  },
+];
+export const lensOf = (id: string) => LENSES.find((l) => l.id === id);
+// old persisted spans predate the lens field: they came from the transcription check
+export const spanLens = (f: { lens?: string }) => f.lens ?? "transcription";
 
-Do NOT flag: informal speech, filler words, false starts, repetition, grammatical
-errors, dialect, or profanity. Real speech is messy — that is data, not an error.
-A quiet transcript with no flags is a perfectly good answer.
+const PREAMBLE = `You are scanning an automatic speech-recognition transcript of a research interview. Apply ONLY the scans listed below, marking instances for the researcher to review — you never code, interpret, or summarise.
 
-Text marked [REDACTED_n] is a removed identifier. Never flag it.
+Rules for every scan:
+- Each quote MUST be copied exactly, character for character, from its line.
+- Mark only what is clearly present. A transcript with few or no marks is a perfectly good answer.
+- Text like [REDACTED_1] is a removed identifier. Never mark it.
 
-Each quote MUST be copied exactly from that line, character for character.`;
+Scans to apply:`;
 
-const SCHEMA = {
+export const buildSystem = (lensIds: string[]): string =>
+  PREAMBLE + "\n" + LENSES.filter((l) => lensIds.includes(l.id))
+    .map((l) => `\n[${l.id}] ${l.instruction}`).join("");
+
+const schemaFor = (lensIds: string[]) => ({
   type: "object",
   properties: {
     flags: {
@@ -47,18 +88,19 @@ const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          line_id: { type: "integer", description: "the id of the line the error is in" },
-          quote: { type: "string", description: "the exact substring that looks mis-transcribed" },
-          reason: { type: "string", description: "a short note on what it probably should be" },
+          line_id: { type: "integer", description: "the id of the line the instance is in" },
+          lens: { type: "string", enum: lensIds, description: "which scan this instance belongs to" },
+          quote: { type: "string", description: "the exact substring, copied verbatim" },
+          note: { type: "string", description: "the short note that scan asks for" },
         },
-        required: ["line_id", "quote", "reason"],
+        required: ["line_id", "lens", "quote", "note"],
         additionalProperties: false,
       },
     },
   },
   required: ["flags"],
   additionalProperties: false,
-} as const;
+});
 
 export const chunksOf = (lines: Line[]): Line[][] => {
   const out: Line[][] = [];
@@ -70,19 +112,19 @@ export const chunksOf = (lines: Line[]): Line[][] => {
 export const renderChunk = (lines: Line[], r: Redaction): string =>
   lines.map((l) => `${l.id}\t${l.speaker}\t${r.redact(l.text)}`).join("\n");
 
-export const estimateChunkTokens = (lines: Line[], r: Redaction) =>
-  estimateTokens(SYSTEM) + estimateTokens(renderChunk(lines, r));
+export const estimateChunkTokens = (lines: Line[], r: Redaction, lensIds: string[]) =>
+  estimateTokens(buildSystem(lensIds)) + estimateTokens(renderChunk(lines, r));
 
-export async function flagChunk(opts: {
-  key: string; model: string; lines: Line[]; redaction: Redaction; signal?: AbortSignal;
+export async function scanChunk(opts: {
+  key: string; model: string; lines: Line[]; lenses: string[]; redaction: Redaction; signal?: AbortSignal;
 }): Promise<{ flags: Record<number, Flag[]>; usage: Usage }> {
-  const { data, usage } = await callJson<{ flags: { line_id: number; quote: string; reason: string }[] }>({
+  const { data, usage } = await callJson<{ flags: { line_id: number; lens: string; quote: string; note: string }[] }>({
     key: opts.key,
     model: opts.model,
-    system: SYSTEM,
+    system: buildSystem(opts.lenses),
     user: renderChunk(opts.lines, opts.redaction),
-    schemaName: "transcription_flags",
-    schema: SCHEMA,
+    schemaName: "scan_instances",
+    schema: schemaFor(opts.lenses),
     signal: opts.signal,
   });
 
@@ -91,15 +133,15 @@ export async function flagChunk(opts: {
   for (const f of data.flags ?? []) {
     const line = byId.get(f.line_id);
     if (!line) continue;
-    // A flag ON a placeholder is meaningless — the model never saw the real term, so
-    // it cannot judge it. Restoring one would underline the participant's actual name
-    // as a suspected mis-transcription. Drop it before restoring anything.
+    if (!opts.lenses.includes(f.lens)) continue; // schema enum should prevent this; belt and braces
+    // A mark ON a placeholder is meaningless — the model never saw the real term, so
+    // it cannot judge it. Restoring one would highlight the participant's actual name.
     if (opts.redaction.hasPlaceholder(f.quote)) continue;
     // Otherwise map the quote back to the real text and DROP anything that isn't a
     // genuine substring — a hallucinated quote would highlight text that isn't there.
     const quote = opts.redaction.restore(f.quote);
     if (!quote || !line.text.includes(quote)) continue;
-    (flags[f.line_id] ??= []).push({ quote, reason: f.reason });
+    (flags[f.line_id] ??= []).push({ quote, reason: f.note, lens: f.lens });
   }
   return { flags, usage };
 }

@@ -6,7 +6,7 @@ import { SegmentPopover } from "./SegmentPopover";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine } from "../video/seek";
-import { hashLine, type Flag } from "../ai/flag";
+import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
@@ -30,23 +30,36 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
   return nodes;
 }
 
-// AI transcription flags: underline each suspect span, reason on hover. Search
+// AI marks in the text. Transcription flags: amber dotted (something's wrong).
+// Noticing lenses: a quiet per-lens tint (something to look at) — hover names the
+// lens, Alt-click dismisses (plain click still selects the line). Search
 // highlighting wins when a query is active — two overlapping mark-ups on the same
 // characters is noise, and you're hunting, not proofreading.
-function renderFlagged(text: string, spans: Flag[]): ReactNode {
-  const hits: { at: number; len: number; why: string }[] = [];
+function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
+  const hits: { at: number; len: number; span: Flag }[] = [];
   for (const s of spans) {
     const at = text.indexOf(s.quote);
-    if (at >= 0) hits.push({ at, len: s.quote.length, why: s.reason });
+    if (at >= 0) hits.push({ at, len: s.quote.length, span: s });
   }
   if (!hits.length) return text;
   hits.sort((a, b) => a.at - b.at);
   const nodes: ReactNode[] = [];
   let last = 0;
   hits.forEach((h, k) => {
-    if (h.at < last) return; // overlapping flags: keep the first
+    if (h.at < last) return; // overlapping marks: keep the first
     if (h.at > last) nodes.push(text.slice(last, h.at));
-    nodes.push(<span key={k} className="aidoubt" data-tip={h.why}>{text.slice(h.at, h.at + h.len)}</span>);
+    const lens = lensOf(spanLens(h.span));
+    const isError = spanLens(h.span) === "transcription";
+    nodes.push(isError
+      ? <span key={k} className="aidoubt" data-tip={h.span.reason}>{text.slice(h.at, h.at + h.len)}</span>
+      : <span key={k} className="ainote" style={{ "--lens-c": lens?.color } as CSSProperties}
+          data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason} · Alt-click to dismiss`}
+          onClick={(e) => {
+            if (!e.altKey) return; // plain click keeps selecting the line
+            e.stopPropagation();
+            const st = useStore.getState();
+            st.dismissNotice(st.active, lineId, spanLens(h.span), h.span.quote);
+          }}>{text.slice(h.at, h.at + h.len)}</span>);
     last = h.at + h.len;
   });
   if (last < text.length) nodes.push(text.slice(last));
@@ -124,18 +137,21 @@ export function TranscriptView() {
   // merged display units (singletons when the toggle is off)
   const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
 
-  // AI flags for this transcript, but only where the line still reads as it did when
-  // it was checked — a correction invalidates its own flags, for free.
+  // AI marks for this transcript, but only where the line still reads as it did when
+  // it was scanned — a correction invalidates its own marks, for free. With notices
+  // hidden (the eye toggle: read/code blind), only transcription flags remain.
   const aiFlags = useStore((s) => s.aiFlags);
+  const showNotices = useStore((s) => s.ui.showNotices);
   const flagsByLine = useMemo(() => {
     const m = new Map<number, Flag[]>();
     for (const l of transcript?.lines ?? []) {
       const f = aiFlags[`${active}:${l.id}`];
-      // an entry with no spans means "checked, clean" — a cache hit, not a highlight
-      if (f && f.spans.length && f.hash === hashLine(l.text)) m.set(l.id, f.spans);
+      if (!f || !f.spans.length || f.hash !== hashLine(l.text)) continue;
+      const spans = showNotices ? f.spans : f.spans.filter((s) => spanLens(s) === "transcription");
+      if (spans.length) m.set(l.id, spans);
     }
     return m;
-  }, [aiFlags, transcript, active]);
+  }, [aiFlags, transcript, active, showNotices]);
 
   // Scroll headroom, VS Code's `scrollBeyondLastLine` but on both ends: a pad of
   // (viewport − one row) lets ANY line be pulled to the top or the bottom of the
@@ -460,7 +476,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
                 {searchQuery
                   ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
                   : flagsByLine.has(l.id)
-                    ? renderFlagged(l.text, flagsByLine.get(l.id)!)
+                    ? renderFlagged(l.text, flagsByLine.get(l.id)!, l.id)
                     : l.text}
                 {l.orig !== undefined && <span className="editmark" data-tip={`was: “${l.orig}”`}>✱</span>}
               </span>

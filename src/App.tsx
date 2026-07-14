@@ -15,6 +15,28 @@ import { Welcome } from "./components/Welcome";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
+import { spanLens } from "./ai/flag";
+import { useMemo } from "react";
+
+// Show/hide the AI noticing highlights — the blind-reading control. Only appears
+// once the active transcript actually has notices, so it costs no chrome before.
+function NoticeToggle() {
+  const active = useStore((s) => s.active);
+  const aiFlags = useStore((s) => s.aiFlags);
+  const show = useStore((s) => s.ui.showNotices);
+  const hasNotices = useMemo(
+    () => Object.entries(aiFlags).some(([k, v]) =>
+      k.startsWith(`${active}:`) && v.spans.some((sp) => spanLens(sp) !== "transcription")),
+    [aiFlags, active]
+  );
+  if (!hasNotices) return null;
+  return (
+    <button className="noticetoggle" onClick={() => useStore.getState().setUi({ showNotices: !show })}
+      title={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}>
+      <Icon name={show ? "eye" : "eye-off"} size={17} />
+    </button>
+  );
+}
 
 export function App() {
   const active = useStore((s) => s.active);
@@ -124,6 +146,7 @@ export function App() {
               <Icon name="search" size={17} />
             </button>
           )}
+          {hasData && active !== "browse" && !searchOpen && <NoticeToggle />}
           {hasData && active !== "browse" && <SearchBar />}
           {!hasData ? <Welcome /> : (active === "browse" ? <BrowseView /> : <TranscriptView />)}
         </div>
