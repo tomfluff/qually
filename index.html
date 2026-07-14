@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>QuAlly</title>
+    <!-- Inline SVG favicon: a favicon renders outside the page, so it can't see the
+         app's --accent; it carries its own theme block and bakes the DEFAULT accent.
+         Data URI (not a file) so the single-file build stays one offline artifact. -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20184%20178%22%3E%3Cstyle%3E%3Aroot%7B--fg%3A%232b2b2b%3B--muted%3A%239d9d9d%3B--accent%3A%236d28d9%7D%40media%28prefers-color-scheme%3Adark%29%7B%3Aroot%7B--fg%3A%23f9f9f9%3B--muted%3A%237f8a94%3B--accent%3A%23a78bfa%7D%7D%3C%2Fstyle%3E%3Crect%20x%3D%228%22%20y%3D%2248%22%20width%3D%22108.648%22%20height%3D%2233%22%20rx%3D%2216.5%22%20fill%3D%22var%28--muted%29%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2294%22%20width%3D%2262%22%20height%3D%2233%22%20rx%3D%2216.5%22%20fill%3D%22var%28--muted%29%22%2F%3E%3Cpath%20fill%3D%22var%28--fg%29%22%20d%3D%22M88%200C136.601%200%20176%2039.3989%20176%2088C176%20136.601%20136.601%20176%2088%20176C39.3989%20176%200%20136.601%200%2088C0%2039.3989%2039.3989%200%2088%200ZM88%2030C55.9675%2030%2030%2055.9675%2030%2088C30%20120.033%2055.9675%20146%2088%20146C120.033%20146%20146%20120.033%20146%2088C146%2055.9675%20120.033%2030%2088%2030Z%22%2F%3E%3Crect%20x%3D%2294.9896%22%20y%3D%2288%22%20width%3D%22108.648%22%20height%3D%2233%22%20rx%3D%2216.5%22%20transform%3D%22rotate%2835.1308%2094.9896%2088%29%22%20fill%3D%22var%28--accent%29%22%2F%3E%3C%2Fsvg%3E" />
   </head>
   <body>
     <div id="root"></div>

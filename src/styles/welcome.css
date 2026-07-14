@@ -1,6 +1,7 @@
 /* first-run get-started screen (no transcript loaded) */
 .welcome { height:100%; display:flex; align-items:center; justify-content:center; padding:24px; }
 .welcome-card { max-width:460px; text-align:center; }
+.welcome-logo { display:inline-block; margin:0 0 18px; }
 .welcome-card h1 { font-size:26px; margin:0 0 10px; color:var(--fg); }
 .welcome-card p { color:var(--muted); line-height:1.55; margin:0 0 24px; font-size:15px; }
 .welcome-import { font-size:15px; padding:10px 20px; }

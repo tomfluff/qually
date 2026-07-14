@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { Icon } from "./Icon";
+import { Logo } from "./Logo";
 
 // First-run get-started screen, shown when no transcript is loaded.
 export function Welcome() {
@@ -12,6 +13,7 @@ export function Welcome() {
   return (
     <div className="welcome">
       <div className="welcome-card">
+        <span className="welcome-logo"><Logo size={72} /></span>
         <h1>Code transcripts, offline.</h1>
         <p>Import a transcript CSV to begin. Everything stays in your browser — no account, and nothing
           is uploaded unless you add your own OpenAI key and approve a request.</p>

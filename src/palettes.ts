@@ -4,13 +4,16 @@
 // changing this recolors the whole app. See index.css :root color-mix tints.
 export interface Palette { id: string; name: string; light: string; dark: string; }
 
+// violet is the brand purple and the default — first here so it's also the fallback
 export const PALETTES: Palette[] = [
+  { id: "violet", name: "Violet", light: "#6d28d9", dark: "#a78bfa" },
   { id: "blue",   name: "Blue",   light: "#3b6ea5", dark: "#7aa7d6" },
   { id: "teal",   name: "Teal",   light: "#178f86", dark: "#4fbcb0" },
-  { id: "violet", name: "Violet", light: "#6a4fc4", dark: "#a08ae8" },
   { id: "green",  name: "Green",  light: "#3a8a4e", dark: "#63b877" },
   { id: "rose",   name: "Rose",   light: "#b8496b", dark: "#e389a1" },
 ];
+
+export const DEFAULT_ACCENT = PALETTES[0].id;
 
 export const accentFor = (id: string, dark: boolean): string => {
   const p = PALETTES.find((x) => x.id === id) ?? PALETTES[0];
