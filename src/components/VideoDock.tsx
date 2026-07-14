@@ -63,11 +63,20 @@ export function VideoDock() {
     if ((e.target as HTMLElement).closest("button,input")) return;
     const el = (e.currentTarget as HTMLElement).parentElement as HTMLElement;
     const r = el.getBoundingClientRect();
-    const x0 = e.clientX, y0 = e.clientY, left0 = r.left, top0 = r.top, h0 = r.height;
+    const x0 = e.clientX, y0 = e.clientY, left0 = r.left, top0 = r.top, h0 = r.height, w0 = r.width;
+    // Clamp DURING the drag, with the same bounds the committed position uses (keep a
+    // 60px grab handle on screen). The drag used to be unclamped while the drop was
+    // clamped, so releasing near an edge visibly relocated the dock — read as flicker.
+    // Clamped live, the drop can never move anything: it commits where you already are.
+    const clampDx = (d: number) =>
+      Math.max(60 - w0, Math.min(left0 + d, window.innerWidth - 60)) - left0;
+    const clampDy = (d: number) => {
+      const bot = Math.max(0, Math.min(window.innerHeight - (top0 + d + h0), window.innerHeight - 40));
+      return window.innerHeight - bot - h0 - top0;
+    };
     let dx = 0, dy = 0, raf = 0;
-    el.style.willChange = "transform";
     const move = (ev: MouseEvent) => {
-      dx = ev.clientX - x0; dy = ev.clientY - y0;
+      dx = clampDx(ev.clientX - x0); dy = clampDy(ev.clientY - y0);
       // coalesce to one write per frame; a mouse can out-pace the display
       if (!raf) raf = requestAnimationFrame(() => {
         raf = 0;
@@ -85,7 +94,6 @@ export function VideoDock() {
       // track the BOTTOM edge so collapse/expand keeps the dock's bottom pinned
       flushSync(() => setGeom((g) => ({ ...g, x: left0 + dx, bottom: window.innerHeight - (top0 + dy + h0) })));
       el.style.transform = "";
-      el.style.willChange = "";
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
     };
