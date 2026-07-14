@@ -46,7 +46,7 @@ function renderFlagged(text: string, spans: Flag[]): ReactNode {
   hits.forEach((h, k) => {
     if (h.at < last) return; // overlapping flags: keep the first
     if (h.at > last) nodes.push(text.slice(last, h.at));
-    nodes.push(<span key={k} className="aidoubt" title={h.why}>{text.slice(h.at, h.at + h.len)}</span>);
+    nodes.push(<span key={k} className="aidoubt" data-tip={h.why}>{text.slice(h.at, h.at + h.len)}</span>);
     last = h.at + h.len;
   });
   if (last < text.length) nodes.push(text.slice(last));
@@ -204,6 +204,23 @@ export function TranscriptView() {
     clearJump();
   }, [jump, active, transcript, groups, clearJump, pad]);
 
+  // Tooltips open upward, but the list is a scroller and clips them — and with the
+  // headroom, the line you're reading is usually parked at the very top. Flip the tip
+  // below when there isn't room above it. Delegated: the rows are virtualized, so
+  // per-row listeners would churn. Lane bars are side-positioned; leave them alone.
+  useEffect(() => {
+    const el = tviewRef.current;
+    if (!el) return;
+    const onOver = (e: globalThis.MouseEvent) => {
+      const t = (e.target as HTMLElement).closest<HTMLElement>("[data-tip]");
+      if (!t || t.classList.contains("laneBar")) return;
+      const room = t.getBoundingClientRect().top - el.getBoundingClientRect().top;
+      t.classList.toggle("tipbelow", room < fontSize * 4.5); // ~ a two-line tip + gap
+    };
+    el.addEventListener("mouseover", onOver);
+    return () => el.removeEventListener("mouseover", onOver);
+  }, [fontSize]);
+
   // sync the minimap viewport box on mount and whenever the list content changes
   useEffect(() => { const id = requestAnimationFrame(syncMinimap); return () => cancelAnimationFrame(id); });
 
@@ -307,7 +324,7 @@ export function TranscriptView() {
     <>
       <div className="tview" ref={tviewRef}>
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
-        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
+        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad }} />, // headroom before the first line
           ...groups.map((g) => (
@@ -437,14 +454,15 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
             {editingId === l.id ? (
               <LineEditor line={l} nextTs={nextTsOf(l.id)} onDone={onEditEnd} />
             ) : (
-              <span onDoubleClick={(e) => { e.preventDefault(); onEditStart(l.id); }}
-                title="double-click to fix transcription">
+              // no title= on this span: a native tip on every line is noise while reading,
+              // and it would fire behind the custom tooltips on the spans inside it
+              <span onDoubleClick={(e) => { e.preventDefault(); onEditStart(l.id); }}>
                 {searchQuery
                   ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
                   : flagsByLine.has(l.id)
                     ? renderFlagged(l.text, flagsByLine.get(l.id)!)
                     : l.text}
-                {l.orig !== undefined && <span className="editmark" title={`edited — was: ${l.orig}`}>✱</span>}
+                {l.orig !== undefined && <span className="editmark" data-tip={`was: “${l.orig}”`}>✱</span>}
               </span>
             )}
           </Fragment>

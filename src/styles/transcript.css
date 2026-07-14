@@ -58,14 +58,32 @@
 .laneBar .gripTop { top:-3px; } .laneBar .gripBot { bottom:-3px; }
 .laneEmpty { width:var(--lane-w, 18px); flex-shrink:0; }
 
-/* custom lane tooltip (left of the bar, styled for legibility) */
-.laneBar[data-tip]:hover::after {
+/* Custom tooltip. Sized from --txt-fs (the transcript's own text size, set on the
+   list) rather than the browser's fixed ~12px native tip — at 28px transcript text a
+   native title is unreadably small next to the words it describes.
+   NOT em-based: a host can shrink its own font (.editmark is .6em), and an em tip
+   would inherit that shrink and come out tiny — the very bug this replaces.
+   Base: above the element, wrapping. The lane bars override it to sit alongside. */
+[data-tip] { position:relative; }
+[data-tip]:hover::after {
   content: attr(data-tip);
-  position:absolute; right:calc(100% + 8px); top:50%; transform:translateY(-50%);
+  position:absolute; bottom:calc(100% + 7px); left:50%; transform:translateX(-50%);
+  background:var(--fg); color:var(--bg); padding:5px 10px; border-radius:7px;
+  font-size:calc(var(--txt-fs, 16px) * .8); font-weight:600; line-height:1.4;
+  font-style:normal; text-align:left; letter-spacing:normal;
+  width:max-content; max-width:min(34ch, 60vw); white-space:normal;
+  z-index:80; pointer-events:none; box-shadow:0 4px 16px rgba(0,0,0,.32); }
+
+/* too close to the top of the scroller to open upward: flip below (set in JS, which
+   is the only thing that can measure the space — CSS can't) */
+[data-tip].tipbelow:hover::after { bottom:auto; top:calc(100% + 7px); }
+
+/* lane bars: to the LEFT of the bar, one line — reset every base property it changes */
+.laneBar[data-tip]:hover::after {
+  bottom:auto; left:auto; right:calc(100% + 8px); top:50%; transform:translateY(-50%);
   display:flex; align-items:center; line-height:1;
-  background:var(--fg); color:var(--bg); padding:4px 9px; border-radius:6px;
-  font-size:1em; font-weight:600; white-space:nowrap; z-index:80;
-  pointer-events:none; box-shadow:0 4px 16px rgba(0,0,0,.32); }
+  padding:4px 9px; border-radius:6px; font-size:var(--txt-fs, 16px);
+  max-width:none; white-space:nowrap; }
 
 .empty { padding:16px; color:var(--muted); }
 
