@@ -489,7 +489,7 @@ export function TranscriptView() {
       </VList>
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
       <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
-        closeCallSids={closeCallSids} detail={minimapDetail} vref={vref} />
+        closeCallSids={closeCallSids} detail={minimapDetail} ui={ui} vref={vref} />
         {selOff && (
           <button className={`backtosel ${selOff}`} onClick={backToSelection}
             data-tip="Scroll back to your selected line(s)">

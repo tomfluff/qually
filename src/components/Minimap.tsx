@@ -1,11 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import type { VListHandle } from "virtua";
-import { laneAssign } from "../state/store";
+import { laneAssign, speakerColor, weightOf } from "../state/store";
+import type { Ui } from "../state/store";
 import type { Group } from "../merge";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 export interface MinimapHandle { setRange: (start: number, end: number) => void; }
-const isR = (s: string) => s.trim().toUpperCase().startsWith("R");
 const WARN = "#e0a020";
 
 // A zoomed-out lane view down the right edge. Drawn from the store (virtua only
@@ -19,8 +19,9 @@ export const Minimap = forwardRef<MinimapHandle, {
   codebook: Record<string, { color: string }>;
   closeCallSids: Set<number>;
   detail: "detailed" | "simplified";
+  ui: Ui; // speaker colours + weights; the minimap was the LAST place still hardcoding "R"
   vref: RefObject<VListHandle | null>;
-}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, detail, vref }, ref) {
+}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, detail, ui, vref }, ref) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -69,10 +70,15 @@ export const Minimap = forwardRef<MinimapHandle, {
       // columns: [0..warnW] warnings gutter · text · lane columns (flush right).
       // simplified widens everything and enforces min sizes so marks stay obvious.
       const warnW = simple ? 6 : 4;
+      // speaker rail: WHO is talking, as its own channel. Deliberately a separate strip
+      // rather than tinting the text bars — the text bars stay a pure "how much was
+      // said" signal, and the two colour systems (speaker, code) never share a column.
+      const railW = simple ? 6 : 4;
+      const railX = warnW + 2;
       const laneAreaW = Math.min(w * (simple ? 0.6 : 0.5), cols * (simple ? 10 : 7));
       const laneX = w - laneAreaW - 2;
       const colW = laneAreaW / Math.max(1, cols);
-      const textX = warnW + 3;
+      const textX = railX + railW + 3;
       const textW = Math.max(4, laneX - textX - 3);
       const codeMinH = simple ? 5 : 1.5;
       const warnMinH = simple ? 6 : 2.5;
@@ -85,29 +91,49 @@ export const Minimap = forwardRef<MinimapHandle, {
         const bh = 6;
         const CAP = 80; // chars for a "full" line
         const nb = Math.max(1, Math.ceil(h / bh));
-        const buckets: [number, number, number][] = Array.from({ length: nb }, () => [0, 0, 0]); // [P, R, lineCount]
+        // Each bucket keeps its DOMINANT speaker (most characters spoken in it) rather
+        // than a P-vs-R split — that split assumed two speakers and the "R" convention,
+        // and collapsed a whole focus group into "not the researcher".
+        const buckets = Array.from({ length: nb }, () => ({
+          chars: 0, n: 0, by: new Map<string, number>(),
+        }));
         for (let i = 0; i < N; i++) {
           const g = groups[i];
           const k = Math.min(nb - 1, Math.floor(((i / N) * h) / bh));
           const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
-          buckets[k][isR(g.speaker) ? 1 : 0] += len;
-          buckets[k][2]++;
+          const b = buckets[k];
+          b.chars += len; b.n++;
+          b.by.set(g.speaker, (b.by.get(g.speaker) ?? 0) + len);
         }
         for (let k = 0; k < nb; k++) {
-          const [p, r, n] = buckets[k];
-          if (!n || (!p && !r)) continue;
-          const bw = Math.max(3, Math.min(1, (p + r) / (n * CAP)) * textW);
-          ctx.globalAlpha = r > p ? 0.3 : 0.55;
-          ctx.fillRect(textX, k * bh, bw, bh - 1);
+          const b = buckets[k];
+          if (!b.n || !b.chars) continue;
+          let top = "", best = -1;
+          for (const [sp, c] of b.by) if (c > best) { best = c; top = sp; }
+          const quiet = weightOf(ui, top) === "quiet";
+          ctx.globalAlpha = quiet ? 0.45 : 0.95;
+          ctx.fillStyle = speakerColor(ui, top);
+          ctx.fillRect(railX, k * bh, railW, bh - 1);
+          ctx.globalAlpha = quiet ? 0.3 : 0.55;
+          ctx.fillStyle = muted;
+          ctx.fillRect(textX, k * bh, Math.max(3, Math.min(1, b.chars / (b.n * CAP)) * textW), bh - 1);
         }
       } else {
-        // detailed text: one faint bar per group, width ∝ length, dimmer for R
+        // detailed: a speaker rail beside one faint text bar per group (width ∝ length).
+        // Quiet speakers fade in BOTH channels — driven by the weight you actually set,
+        // not by whether the label happens to start with "R".
         const CAP = 80;
         for (let i = 0; i < N; i++) {
           const g = groups[i];
+          const quiet = weightOf(ui, g.speaker) === "quiet";
+          const y = (i / N) * h, bh = Math.max(0.6, (h / N) * 0.7);
+          ctx.globalAlpha = quiet ? 0.45 : 0.95;
+          ctx.fillStyle = speakerColor(ui, g.speaker);
+          ctx.fillRect(railX, y, railW, Math.max(0.8, bh));
           const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
-          ctx.globalAlpha = isR(g.speaker) ? 0.28 : 0.5;
-          ctx.fillRect(textX, (i / N) * h, Math.max(2, Math.min(1, len / CAP) * textW), Math.max(0.6, (h / N) * 0.7));
+          ctx.globalAlpha = quiet ? 0.28 : 0.5;
+          ctx.fillStyle = muted;
+          ctx.fillRect(textX, y, Math.max(2, Math.min(1, len / CAP) * textW), bh);
         }
       }
 
@@ -132,7 +158,8 @@ export const Minimap = forwardRef<MinimapHandle, {
     const ro = new ResizeObserver(() => { draw(); syncFromList(); });
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [groups, laned, cols, codebook, closeCallSids, detail, N]);
+  }, [groups, laned, cols, codebook, closeCallSids, detail, N,
+      ui.speakerColors, ui.speakerWeight]); // recolour the rail when the speaker map changes
 
   const scrubTo = (clientY: number) => {
     const wrap = wrapRef.current, v = vref.current;

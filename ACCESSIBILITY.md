@@ -94,7 +94,8 @@ Listed plainly, worst first. These are real; do not read the README as claiming 
    3.96 and 4.26 and have been darkened, with a test that now blocks a regression — but
    none of them is a genuine high-contrast mode.)
 8. **The minimap still encodes codes by hue alone** — it is a canvas, so the CSS patterns
-   don't reach it.
+   don't reach it. (Speakers *are* now on their own rail there, and it follows the
+   quiet/normal/bold weight you set rather than a hardcoded "R".)
 9. **The patterns that vary vertically restart at each row boundary** within a multi-line
    segment. A minor seam, but visible.
 10. **Tabbing through the transcript walks every rendered timecode button.** Focusable
