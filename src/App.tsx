@@ -92,7 +92,9 @@ export function App() {
       // A dialog or popover owns the keyboard while it's up. Without this, arrows and
       // digit hotkeys reached through an open Help modal or segment popover and moved
       // the selection — or applied a code — on the transcript underneath it.
-      if (t.closest(".about-backdrop, .pop, .settings-pop, .exmenu, .menu")) return;
+      // Optional-call: a keydown whose target isn't an Element (window/document) would
+      // otherwise throw here and take every hotkey down with it.
+      if (t?.closest?.(".about-backdrop, .pop, .settings-pop, .exmenu, .menu")) return;
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
         e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); return;
       }

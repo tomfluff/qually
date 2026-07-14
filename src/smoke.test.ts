@@ -74,3 +74,38 @@ test("re-importing the exported CSV is idempotent (no dupes, identical re-export
   expect(useStore.getState().segments.length).toBe(before); // dedup held
   expect(useStore.getState().exportCSV()).toBe(csv1);        // round-trips exactly
 });
+
+test("selection is undoable, and a whole drag is ONE step", () => {
+  const s = useStore.getState();
+  s.clearSelection();
+
+  s.pushSelUndo("mouse"); s.selectLine(2); s.endSelGesture();      // click line 2
+  expect([...useStore.getState().selection.lines]).toEqual([2]);
+
+  // a drag: one gesture, many selectLine calls (the fixture is 5 lines long)
+  s.pushSelUndo("mouse");
+  useStore.getState().selectLine(3);
+  useStore.getState().selectLine(4, { extend: true });
+  useStore.getState().selectLine(5, { extend: true });
+  useStore.getState().endSelGesture();
+  expect([...useStore.getState().selection.lines].sort()).toEqual([3, 4, 5]);
+
+  useStore.getState().undo();                                     // ONE undo, not three
+  expect([...useStore.getState().selection.lines]).toEqual([2]);  // back to the click
+  useStore.getState().redo();
+  expect([...useStore.getState().selection.lines].sort()).toEqual([3, 4, 5]);
+});
+
+test("undoing a code also puts back the lines it was applied to", () => {
+  const s = useStore.getState();
+  s.pushSelUndo("mouse"); s.selectLine(2); s.selectLine(3, { extend: true }); s.endSelGesture();
+  const before = useStore.getState().segments.length;
+
+  useStore.getState().applyCode("undo probe");
+  expect(useStore.getState().segments.length).toBe(before + 1);
+
+  useStore.getState().undo();
+  expect(useStore.getState().segments.length).toBe(before);
+  // the selection that the code was applied to comes back with it
+  expect([...useStore.getState().selection.lines].sort()).toEqual([2, 3]);
+});

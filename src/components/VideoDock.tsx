@@ -41,6 +41,17 @@ export function VideoDock() {
   // apply persisted playback rate whenever the source or rate changes
   useEffect(() => { if (videoRef.current) videoRef.current.playbackRate = geom.rate; }, [cur, geom.rate]);
 
+  // The clamp in `pos` only runs while rendering, and nothing re-renders on a window
+  // resize — so shrinking the window left the dock at its old transform, stranded
+  // offscreen with no way to grab it back. Nudge state so the clamp gets to do its job.
+  // MUST live above the early return below: hooks cannot be conditional, and this one
+  // sitting after it meant the Browse tab ran 20 hooks and a transcript tab 21.
+  useEffect(() => {
+    const onResize = () => setGeom((g) => ({ ...g }));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   if (pid === "browse" || !hasTranscript) return null;
 
   const pickMedia = (f: File | undefined) => {
@@ -110,16 +121,6 @@ export function VideoDock() {
 
   const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? void v.play() : v.pause(); };
   const setRate = (rate: number) => setGeom((g) => ({ ...g, rate }));
-
-  // The clamp below only runs while rendering, and nothing re-renders on a window
-  // resize — so shrinking the window left the dock at its old transform, stranded
-  // offscreen with no way to grab it back until some unrelated state change happened
-  // to re-render. Nudge state on resize so the clamp actually gets to do its job.
-  useEffect(() => {
-    const onResize = () => setGeom((g) => ({ ...g }));
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   // Positioned by transform off a left:0/bottom:0 anchor — the same property the drag
   // writes, so drag and rest are one rendering path (see startDrag). translateY is

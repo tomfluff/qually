@@ -1,7 +1,7 @@
 /* transcript rows — order: line# · timecode · speaker · text · lanes (right).
    Uniform typography: everything at the transcript font-size; muting via color only. */
 /* transcript + minimap layout; minimap replaces the native scrollbar */
-.tview { display:flex; height:100%; min-height:0; }
+.tview { display:flex; height:100%; min-height:0; position:relative; } /* anchors .backtosel */
 .tview > .tviewlist { scrollbar-width:none; }
 .tview > .tviewlist::-webkit-scrollbar { display:none; }
 /* The list fills the pane and #content is overflow:hidden, so the normal focus ring
@@ -41,7 +41,10 @@
   background:color-mix(in srgb, var(--spk-c, var(--muted)) 20%, var(--bg));
   border:1px solid color-mix(in srgb, var(--spk-c, var(--muted)) 45%, var(--bg));
   border-radius:999px; padding:0 9px; line-height:1.4; }
-.lineRow .ts:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+/* hover deepens the speaker's OWN tint rather than jumping to the accent — the chip
+   shouldn't change identity just because the pointer is over it */
+.lineRow .ts:hover { background:color-mix(in srgb, var(--spk-c, var(--muted)) 42%, var(--bg));
+  border-color:var(--spk-c, var(--muted)); }
 
 /* Speaker: a filled chip in the speaker's colour, with the NAME inside it. The label
    is the non-colour channel — colour tells speakers apart fast, but someone who can't
@@ -198,3 +201,19 @@
 .vpad-bot { background-position:top; border-top:1px solid #f6f6f6; }
 [data-theme=dark] .vpad-top { border-bottom-color:var(--line); }
 [data-theme=dark] .vpad-bot { border-top-color:var(--line); }
+
+/* Home/End scroll without moving the selection — your selection is your place in the
+   argument, not your place on screen. But you then have no easy way back, so when the
+   selection scrolls out of view this offers one, and the arrow says which way it went.
+   ONE fixed spot for both directions, deliberately. Bottom-centre collided with the
+   hotbar (centred, and it WIDENS with every code you add); top-centre collides with the
+   search bar (right-anchored, up to 440px). Bottom-left is the only corner free in
+   every configuration — hotbar centre, video dock bottom-right, minimap right. A single
+   predictable place is also easier to find than one that moves with the direction. */
+.backtosel { position:absolute; left:14px; bottom:12px; z-index:20;
+  display:inline-flex; align-items:center; gap:6px; padding:6px 13px;
+  background:var(--accent); color:#fff; border:none; border-radius:999px;
+  font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;
+  box-shadow:0 3px 14px rgba(0,0,0,.3); }
+[data-theme=dark] .backtosel { color:#12161a; }
+.backtosel:hover { filter:brightness(1.08); }

@@ -9,9 +9,13 @@
   --row-hover:#ebebeb; --mm-w:66px;
   /* chromatic tints derive from the chosen primary, adapting to the theme via
      --bg — so one variable (--accent, set per theme in App.tsx) recolors all */
+  /* Selection is now signalled by the RAIL as well as the tint (see .lineRow.selected),
+     so the tint no longer has to shout — a saturated wash sat under the words and made
+     them harder to read, which is the opposite of the point. Lightened; the rail keeps
+     it unmistakable. */
   --sel:color-mix(in srgb, var(--accent) 18%, var(--bg));
-  --row-sel:color-mix(in srgb, var(--accent) 26%, var(--bg));
-  --row-sel-hover:color-mix(in srgb, var(--accent) 36%, var(--bg));
+  --row-sel:color-mix(in srgb, var(--accent) 15%, var(--bg));
+  --row-sel-hover:color-mix(in srgb, var(--accent) 24%, var(--bg));
 }
 [data-theme=dark] {
   --bg:#161a1e; --fg:#e6e6e6; --fg-dim:#a8b0b8; --muted:#97a3ad; --line:#2c333a;

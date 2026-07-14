@@ -141,7 +141,26 @@ export function TranscriptView() {
       savedScroll[active] = { index, delta: v.scrollOffset - v.getItemOffset(index) };
     }
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
+    // Home/End (and any scroll) leave the selection behind. Rather than silently move
+    // it — the selection is your place in the argument, not your place on screen — note
+    // when it has gone off-screen and offer a way back.
+    setSelOff(offscreenDir(v));
   };
+  // which way the selection lies, if it isn't visible
+  const offscreenDir = (v: VListHandle): "up" | "down" | null => {
+    const st = useStore.getState();
+    if (st.selection.pid !== active || !st.selection.lines.size || !v.viewportSize) return null;
+    const first = Math.min(...st.selection.lines), last = Math.max(...st.selection.lines);
+    const gi = groupsRef.current.findIndex((g) => g.endId >= first);
+    const gj = groupsRef.current.findIndex((g) => g.endId >= last);
+    if (gi < 0) return null;
+    const top = v.findItemIndex(v.scrollOffset), bot = v.findItemIndex(v.scrollOffset + v.viewportSize);
+    if (gj + 1 < top) return "up";
+    if (gi + 1 > bot) return "down";
+    return null;
+  };
+  const [selOff, setSelOff] = useState<"up" | "down" | null>(null);
+  const groupsRef = useRef<Group[]>([]);
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
   useEffect(() => { setEditingId(null); }, [active]);
@@ -156,6 +175,18 @@ export function TranscriptView() {
 
   // merged display units (singletons when the toggle is off)
   const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
+  groupsRef.current = groups; // syncMinimap runs outside render and needs the current groups
+  // re-evaluate when the selection itself changes (scroll-follow may bring it back)
+  useEffect(() => { const v = vref.current; if (v) setSelOff(offscreenDir(v)); });
+
+  // scroll the selection back into view — the way home after Home/End
+  const backToSelection = () => {
+    const st = useStore.getState();
+    if (st.selection.pid !== active || !st.selection.lines.size) return;
+    const first = Math.min(...st.selection.lines);
+    const gi = groups.findIndex((g) => g.endId >= first);
+    if (gi >= 0) vref.current?.scrollToIndex(gi + 1, { align: "center" }); // +1 for the top vpad
+  };
 
   // AI marks for this transcript, but only where the line still reads as it did when
   // it was scanned — a correction invalidates its own marks, for free. With notices
@@ -251,6 +282,7 @@ export function TranscriptView() {
     // keypress seeds; the next one moves.
     e.stopPropagation();
     const gi = Math.min(groups.length - 1, Math.max(0, v.findItemIndex(v.scrollOffset) - 1)); // -1: the top vpad is item 0
+    s.pushSelUndo(`kbd:${s.undoStack.length}`); // its own undo step
     s.startSelection(groups[gi].startId);
   };
 
@@ -366,8 +398,11 @@ export function TranscriptView() {
   const onRowDown = (e: MouseEvent, id: number) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts,.lineEdit")) return;
     if (e.detail > 1) return; // second press of a double-click: that's an edit, not a re-select
-    if (e.shiftKey) { selectLine(id, { extend: true }); return; }
-    if (e.ctrlKey || e.metaKey) { selectLine(id, { toggle: true }); return; }
+    const st = useStore.getState();
+    // open the gesture BEFORE any mutation — a click and a whole drag are one undo step
+    st.pushSelUndo("mouse");
+    if (e.shiftKey) { selectLine(id, { extend: true }); st.endSelGesture(); return; }
+    if (e.ctrlKey || e.metaKey) { selectLine(id, { toggle: true }); st.endSelGesture(); return; }
     let moved = false;
     const sx = e.clientX, sy = e.clientY;
     const move = (ev: globalThis.MouseEvent) => {
@@ -380,6 +415,9 @@ export function TranscriptView() {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
       if (!moved) selectLine(id); // plain click (toggles off if already the sole selection)
+      // close the undo gesture: a whole click-or-drag is ONE step, and the next one
+      // starts a new entry rather than coalescing into this one
+      useStore.getState().endSelGesture();
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
@@ -452,6 +490,12 @@ export function TranscriptView() {
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
       <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
         closeCallSids={closeCallSids} detail={minimapDetail} vref={vref} />
+        {selOff && (
+          <button className={`backtosel ${selOff}`} onClick={backToSelection}
+            data-tip="Scroll back to your selected line(s)">
+            {selOff === "up" ? "↑" : "↓"} back to selection
+          </button>
+        )}
       </div>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
     </>

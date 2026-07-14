@@ -93,6 +93,7 @@ interface State {
   savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
   undoStack: string[];
   redoStack: string[];
+  selGesture: string | null; // coalesces one undo entry per selection gesture
   nextSid: number;
   jump: { pid: string; line: number } | null;
   paletteOpen: boolean;
@@ -143,6 +144,8 @@ interface State {
   togglePin: (code: string) => void;
   refreshHotbar: () => void;
   pushUndo: () => void;
+  pushSelUndo: (gesture: string) => void;
+  endSelGesture: () => void;
   undo: () => void;
   redo: () => void;
   renameCode: (code: string, newName: string) => void;
@@ -175,13 +178,27 @@ function idsBetween(gs: Group[], i: number, j: number): number[] {
   return out;
 }
 
+// The selection rides in the snapshot too: undoing a code now also puts back the lines
+// it was applied to, and a selection change is itself undoable. Set isn't JSON, so the
+// line ids go as an array.
 function snapshot(s: State): string {
-  return JSON.stringify({ segments: s.segments, codebook: s.codebook, hotbar: s.hotbar });
+  return JSON.stringify({
+    segments: s.segments, codebook: s.codebook, hotbar: s.hotbar,
+    sel: { ...s.selection, lines: [...s.selection.lines] },
+  });
 }
 function restore(get: () => State, set: (p: Partial<State>) => void, json: string) {
   const o = JSON.parse(json);
   const next = { ...get(), segments: o.segments, codebook: o.codebook, hotbar: o.hotbar };
-  set({ segments: o.segments, codebook: o.codebook, hotbar: o.hotbar, hotbarCache: hotbarCodes(next) });
+  const sel: Selection = o.sel
+    ? { pid: o.sel.pid, anchor: o.sel.anchor, head: o.sel.head, lines: new Set<number>(o.sel.lines) }
+    : get().selection; // a snapshot taken before selections were tracked
+  set({
+    segments: o.segments, codebook: o.codebook, hotbar: o.hotbar,
+    hotbarCache: hotbarCodes(next), selection: sel,
+    // an undone selection may point at another tab; follow it, or it's invisible
+    active: sel.pid && get().transcripts[sel.pid] ? sel.pid : get().active,
+  });
 }
 
 function hotbarCodes(s: State): string[] {
@@ -200,7 +217,7 @@ export const useStore = create<State>()(
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false,
         speakerColors: {}, speakerWeight: {} },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
-      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
+      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selGesture: null, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [], pendingProject: null,
 
@@ -325,6 +342,7 @@ export const useStore = create<State>()(
         const s = get();
         const gs = groupsOf(s);
         if (!gs.length || s.selection.pid !== s.active || !s.selection.lines.size) return;
+        s.pushSelUndo(`key:${s.undoStack.length}`); // each keypress is its own step
         if (extend) {
           const anchorGi = s.selection.anchor !== null ? groupIdxOf(gs, s.selection.anchor) : -1;
           const headGi = s.selection.head !== null ? groupIdxOf(gs, s.selection.head) : anchorGi;
@@ -350,7 +368,12 @@ export const useStore = create<State>()(
         const g = gs[gi];
         set({ selection: { pid: s.active, anchor: g.startId, head: g.startId, lines: new Set(g.ids) } });
       },
-      clearSelection: () => set({ selection: emptySel() }),
+      clearSelection: () => {
+        const s = get();
+        if (!s.selection.lines.size) return; // nothing to clear, nothing to undo
+        s.pushSelUndo(`clear:${s.undoStack.length}`);
+        set({ selection: emptySel() });
+      },
       // Tab switches stash the outgoing tab's selection and restore the incoming
       // tab's, so returning to a tab finds the lines still selected. Every consumer
       // already guards on selection.pid === active, so a restored selection only
@@ -608,8 +631,23 @@ export const useStore = create<State>()(
         const s = get();
         const stack = [...s.undoStack, snapshot(s)];
         if (stack.length > 80) stack.shift();
-        set({ undoStack: stack, redoStack: [] }); // new action invalidates redo
+        // clears the selection gesture too: any real edit ends it, so the NEXT click is
+        // its own undo step rather than being swallowed as "the same gesture"
+        set({ undoStack: stack, redoStack: [], selGesture: null }); // new action invalidates redo
       },
+      // A selection change is undoable, but a drag calls selectLine on every mousemove —
+      // pushing each one would bury the real edits under dozens of selection steps.
+      // Coalesce to ONE entry per gesture, snapshotted before the gesture's first
+      // mutation. Callers open a gesture (a row mousedown, a keypress); the mouseup
+      // closes it. Actions never self-push: only the caller knows where a gesture starts,
+      // and a snapshot taken mid-gesture would restore the middle of a drag.
+      pushSelUndo: (gesture) => {
+        const s = get();
+        if (s.selGesture === gesture) return; // same gesture, already pushed
+        s.pushUndo();          // clears selGesture...
+        set({ selGesture: gesture }); // ...so claim it after
+      },
+      endSelGesture: () => set({ selGesture: null }),
       undo: () => {
         const s = get();
         if (!s.undoStack.length) return;
