@@ -57,6 +57,16 @@ test("export produces a valid coded-segments.csv with computed excerpts", () => 
   expect(mag!.excerpt).toBe("I zoom in really close and pan across to follow it");
 });
 
+test("a wrong-format file rejects with a message naming it, instead of vanishing", async () => {
+  const s = useStore.getState();
+  const tabsBefore = s.tabs.length;
+  await expect(s.importFiles([new File(["just some prose\nnot a csv at all"], "notes.txt")]))
+    .rejects.toThrow(/notes\.txt doesn't match any QuAlly format/);
+  await expect(s.importFiles([new File([""], "empty.csv")]))
+    .rejects.toThrow(/empty\.csv is empty/);
+  expect(useStore.getState().tabs.length).toBe(tabsBefore); // nothing imported
+});
+
 test("re-importing the exported CSV is idempotent (no dupes, identical re-export)", async () => {
   const csv1 = useStore.getState().exportCSV();
   const before = useStore.getState().segments.length;

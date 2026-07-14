@@ -197,6 +197,7 @@ export const useStore = create<State>()(
       pendingImports: [], pendingProject: null,
 
       importFiles: async (files) => {
+        const skipped: string[] = [];
         for (const f of Array.from(files)) {
           // a project file goes through the same one entry point; the modal confirms
           // before it replaces the workspace
@@ -205,8 +206,7 @@ export const useStore = create<State>()(
             continue;
           }
           const rows = parseCSV(await f.text());
-          if (!rows.length) continue;
-          const cols = Object.keys(rows[0]);
+          const cols = rows.length ? Object.keys(rows[0]) : [];
           if (cols.includes("segment_ref")) importSegments(get, set, rows);
           else if (cols.includes("short_def") || (cols.includes("code") && cols.includes("status")))
             importCodebook(get, set, rows);
@@ -224,9 +224,15 @@ export const useStore = create<State>()(
             } else {
               importTranscript(get, set, pid, rows);
             }
+          } else {
+            // an unrecognized file must say so, not vanish without a trace
+            skipped.push(rows.length
+              ? `${f.name} doesn't match any QuAlly format — a transcript CSV needs "line_id" and "text" columns (see File format)`
+              : `${f.name} is empty`);
           }
         }
         set({ hotbarCache: hotbarCodes(get()) });
+        if (skipped.length) throw new Error(skipped.join("; "));
       },
 
       resolveImport: (choice) => {
