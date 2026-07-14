@@ -26,7 +26,14 @@ export function VideoDock() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { localStorage.setItem("coding-app-dock", JSON.stringify(geom)); }, [geom]);
+  // Debounced: geom changes on every mousemove of a drag, and localStorage.setItem is
+  // SYNCHRONOUS — it takes a lock over the whole origin's storage. Writing it ~60×/sec
+  // put disk I/O on the drag's critical path. The dock's position isn't worth one write
+  // per frame; one write once you let go is plenty.
+  useEffect(() => {
+    const t = setTimeout(() => localStorage.setItem("coding-app-dock", JSON.stringify(geom)), 250);
+    return () => clearTimeout(t);
+  }, [geom]);
   const cur = media[pid];
   // keep the seek bridge pointed at the current element + offset
   useEffect(() => { registerVideo(videoRef.current, offset); }, [cur, offset, pid]);
