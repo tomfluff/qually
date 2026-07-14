@@ -6,6 +6,7 @@ import { SegmentPopover } from "./SegmentPopover";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine } from "../video/seek";
+import { hashLine, type Flag } from "../ai/flag";
 import type { Line } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
@@ -24,6 +25,29 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
     if (s > last) nodes.push(text.slice(last, s));
     nodes.push(<mark key={k} className={k === curOcc ? "cur" : ""}>{text.slice(s, e)}</mark>);
     last = e;
+  });
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
+// AI transcription flags: underline each suspect span, reason on hover. Search
+// highlighting wins when a query is active — two overlapping mark-ups on the same
+// characters is noise, and you're hunting, not proofreading.
+function renderFlagged(text: string, spans: Flag[]): ReactNode {
+  const hits: { at: number; len: number; why: string }[] = [];
+  for (const s of spans) {
+    const at = text.indexOf(s.quote);
+    if (at >= 0) hits.push({ at, len: s.quote.length, why: s.reason });
+  }
+  if (!hits.length) return text;
+  hits.sort((a, b) => a.at - b.at);
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  hits.forEach((h, k) => {
+    if (h.at < last) return; // overlapping flags: keep the first
+    if (h.at > last) nodes.push(text.slice(last, h.at));
+    nodes.push(<span key={k} className="aidoubt" title={h.why}>{text.slice(h.at, h.at + h.len)}</span>);
+    last = h.at + h.len;
   });
   if (last < text.length) nodes.push(text.slice(last));
   return nodes;
@@ -99,6 +123,19 @@ export function TranscriptView() {
 
   // merged display units (singletons when the toggle is off)
   const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
+
+  // AI flags for this transcript, but only where the line still reads as it did when
+  // it was checked — a correction invalidates its own flags, for free.
+  const aiFlags = useStore((s) => s.aiFlags);
+  const flagsByLine = useMemo(() => {
+    const m = new Map<number, Flag[]>();
+    for (const l of transcript?.lines ?? []) {
+      const f = aiFlags[`${active}:${l.id}`];
+      // an entry with no spans means "checked, clean" — a cache hit, not a highlight
+      if (f && f.spans.length && f.hash === hashLine(l.text)) m.set(l.id, f.spans);
+    }
+    return m;
+  }, [aiFlags, transcript, active]);
 
   // Scroll headroom, VS Code's `scrollBeyondLastLine` but on both ends: a pad of
   // (viewport − one row) lets ANY line be pulled to the top or the bottom of the
@@ -295,6 +332,7 @@ export function TranscriptView() {
               editingId={editingId}
               onEditStart={setEditingId}
               onEditEnd={() => setEditingId(null)}
+              flagsByLine={flagsByLine}
               nextTsOf={(id) => {
                 const ls = transcript.lines;
                 const i = ls.findIndex((l) => l.id === id);
@@ -314,7 +352,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -335,6 +373,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   onEditStart: (id: number) => void;
   onEditEnd: () => void;
   nextTsOf: (id: number) => string | null;
+  flagsByLine: Map<number, Flag[]>;
 }) {
   const { startId, endId } = group;
   const lanes = [];
@@ -400,7 +439,11 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
             ) : (
               <span onDoubleClick={(e) => { e.preventDefault(); onEditStart(l.id); }}
                 title="double-click to fix transcription">
-                {searchQuery ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1) : l.text}
+                {searchQuery
+                  ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
+                  : flagsByLine.has(l.id)
+                    ? renderFlagged(l.text, flagsByLine.get(l.id)!)
+                    : l.text}
                 {l.orig !== undefined && <span className="editmark" title={`edited — was: ${l.orig}`}>✱</span>}
               </span>
             )}

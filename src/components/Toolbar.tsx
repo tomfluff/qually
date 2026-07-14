@@ -3,6 +3,7 @@ import { useStore } from "../state/store";
 import { SettingsButton } from "./SettingsButton";
 import { AboutButton } from "./AboutButton";
 import { DataFormatButton } from "./DataFormatButton";
+import { AiCheckModal } from "./AiCheckModal";
 import { Icon } from "./Icon";
 
 export function Toolbar() {
@@ -18,8 +19,12 @@ export function Toolbar() {
     () => Object.values(transcripts).reduce((n, t) => n + t.lines.filter((l) => l.orig !== undefined).length, 0),
     [transcripts]
   );
+  const exportAiLog = useStore((s) => s.exportAiLog);
+  const aiCalls = useStore((s) => s.aiLog.length);
+  const onTranscript = useStore((s) => s.active !== "browse" && !!s.transcripts[s.active]);
   const fileRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
 
   const doImport = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -47,6 +52,11 @@ export function Toolbar() {
     setStatus(`exported transcript-edits.csv (${editCount} correction${editCount === 1 ? "" : "s"})`);
   };
 
+  const doExportAiLog = () => {
+    download(exportAiLog(), "ai-provenance.csv");
+    setStatus(`exported ai-provenance.csv (${aiCalls} request${aiCalls === 1 ? "" : "s"})`);
+  };
+
   return (
     <div id="toolbar">
       <button className="btn primary iconlabel" onClick={() => fileRef.current?.click()}>
@@ -61,7 +71,20 @@ export function Toolbar() {
           <Icon name="pencil" size={15} /> Edit log ({editCount})
         </button>
       )}
+      {aiCalls > 0 && (
+        <button className="btn iconlabel" onClick={doExportAiLog}
+          title="Export a record of every AI request made (model, lines sent, cost) as ai-provenance.csv">
+          <Icon name="download" size={15} /> AI log ({aiCalls})
+        </button>
+      )}
       <DataFormatButton />
+      <span className="tbdiv" />
+      {onTranscript && (
+        <button className="btn iconlabel aibtn" onClick={() => setAiOpen(true)}
+          title="Ask OpenAI to flag likely transcription errors in this transcript">
+          <Icon name="sparkle" size={15} /> Check transcription
+        </button>
+      )}
       <span className="tbdiv" />
       <button className="btn iconbtn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
         <Icon name="undo" size={16} />
@@ -74,6 +97,7 @@ export function Toolbar() {
       <AboutButton />
       <input ref={fileRef} type="file" multiple accept=".csv" style={{ display: "none" }}
         onChange={(e) => { doImport(e.target.files); e.target.value = ""; }} />
+      {aiOpen && <AiCheckModal onClose={() => setAiOpen(false)} />}
     </div>
   );
 }

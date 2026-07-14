@@ -5,6 +5,8 @@ import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/se
 import { excerptOf } from "../contract/excerpt";
 import { mergeGroups, type Group } from "../merge";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
+import { DEFAULT_MODEL } from "../ai/openai";
+import { hashLine, type Flag } from "../ai/flag";
 
 const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
@@ -44,6 +46,22 @@ export interface PendingImport {
 }
 export type ImportChoice = "update" | "replace" | "new" | "cancel";
 
+// AI settings. The API key is NOT here — the store is persisted wholesale, so the
+// key lives in ai/key.ts (session-only by default). See docs in that file.
+export interface Ai {
+  model: string;
+  redactTerms: string[]; // participant names / orgs / places, pseudonymized before sending
+}
+// A flag is stored against the hash of the line text it was made on, so editing a
+// line silently invalidates its flags — the AI can never point at text that's gone.
+export interface LineFlags { hash: string; spans: Flag[] }
+// Every call, appended. Exportable as the appendix that lets a reviewer audit what
+// the model was actually used for.
+export interface AiCall {
+  at: string; model: string; task: string; pid: string;
+  lines: number; redactions: number; inTok: number; outTok: number; costUsd: number;
+}
+
 interface State {
   transcripts: Record<string, { lines: Line[] }>;
   segments: Segment[];
@@ -55,6 +73,9 @@ interface State {
   hotbarCache: string[];
   video: Record<string, { name?: string; offset: number }>;
   ui: Ui;
+  ai: Ai;
+  aiFlags: Record<string, LineFlags>; // "pid:lineId" -> flags, valid while the hash matches
+  aiLog: AiCall[];
   // transient (not persisted)
   selection: Selection;
   savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
@@ -89,6 +110,12 @@ interface State {
   setSearch: (patch: Partial<Search>) => void;
   editLine: (pid: string, id: number, text: string) => void;
   exportEdits: () => string;
+  setAi: (patch: Partial<Ai>) => void;
+  addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[]) => void;
+  clearFlags: (pid: string) => void;
+  dismissFlag: (pid: string, id: number) => void;
+  logAiCall: (call: AiCall) => void;
+  exportAiLog: () => string;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
   toggleReject: (sid: number) => void;
@@ -152,6 +179,7 @@ export const useStore = create<State>()(
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: "blue", speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed" },
+      ai: { model: DEFAULT_MODEL, redactTerms: [] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [],
@@ -340,6 +368,33 @@ export const useStore = create<State>()(
         set({ transcripts: { ...get().transcripts, [pid]: { lines } } });
       },
 
+      setAi: (patch) => set({ ai: { ...get().ai, ...patch } }),
+
+      // Record EVERY line that was checked, not just the flagged ones: a clean line
+      // with no record would look unchecked and be re-sent (and re-billed) on the next
+      // run. An empty `spans` means "checked, nothing wrong" — that's the cache.
+      addFlags: (pid, flags, lines) => {
+        const next = { ...get().aiFlags };
+        for (const l of lines) next[`${pid}:${l.id}`] = { hash: hashLine(l.text), spans: flags[l.id] ?? [] };
+        set({ aiFlags: next });
+      },
+      clearFlags: (pid) => {
+        const next: Record<string, LineFlags> = {};
+        for (const [k, v] of Object.entries(get().aiFlags)) if (!k.startsWith(`${pid}:`)) next[k] = v;
+        set({ aiFlags: next });
+      },
+      dismissFlag: (pid, id) => {
+        const next = { ...get().aiFlags };
+        delete next[`${pid}:${id}`];
+        set({ aiFlags: next });
+      },
+
+      logAiCall: (call) => set({ aiLog: [...get().aiLog, call] }),
+      exportAiLog: () => toCSV(
+        get().aiLog as unknown as Record<string, unknown>[],
+        ["at", "model", "task", "pid", "lines", "redactions", "inTok", "outTok", "costUsd"]
+      ),
+
       exportEdits: () => {
         const s = get();
         const rows: Record<string, string>[] = [];
@@ -462,6 +517,7 @@ export const useStore = create<State>()(
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
         extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
+        ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;

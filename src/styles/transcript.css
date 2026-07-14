@@ -85,6 +85,9 @@
 .editrevert:hover { color:var(--accent); }
 .editmark { color:var(--accent); font-size:.6em; vertical-align:super; margin-left:2px;
   cursor:help; }
+/* AI-flagged likely mis-transcription — hover for what it probably should be */
+.aidoubt { border-bottom:2px dotted #e0a020; background:color-mix(in srgb,#e0a020 15%, transparent);
+  border-radius:2px; cursor:help; }
 /* Scroll headroom (height set inline: viewport − one row, at both ends). The hatch
    only marks the 3rem nearest the text — a full screen of stripes is noise, but the
    band still reads as "edge of document". */

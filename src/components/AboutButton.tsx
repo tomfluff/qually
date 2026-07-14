@@ -48,6 +48,7 @@ export function AboutButton() {
             <p className="about-lede">
               Code interview and session transcripts offline. Everything stays in your browser
               (autosaved locally); export a merged <code>coded-segments.csv</code> when you're done.
+              Nothing is uploaded unless you add your own OpenAI key and approve each request.
             </p>
 
             <div className="about-body nicescroll">
@@ -68,6 +69,7 @@ export function AboutButton() {
                   <li><b>Edit a segment:</b> click its colored lane bar (notes, reject, delete, copy) or drag its top/bottom edge to resize. Hover a bar to see its line range.</li>
                   <li><b>Manage codes:</b> right-click a code (sidebar or Browse) to rename, edit its definition, recolor, merge, pin, or delete.</li>
                   <li><b>Fix transcription:</b> double-click a line to correct it in place — with media loaded, the utterance loops at 0.75× while you type. The original is kept (✱ marks edited lines, hover to see it) and every correction exports via the toolbar's <b>Edit log</b> button.</li>
+                  <li><b>AI (optional, off by default):</b> add your own OpenAI key in Settings and <b>Check transcription</b> asks it to flag likely mis-transcriptions (amber underline; hover for the fix; double-click to correct). You see the exact lines before they're sent, listed names are redacted first, and every request is logged for your methods appendix. Nothing leaves your browser without a key and your approval.</li>
                   <li><b>Mixed-speaker flag:</b> a small <b>!</b> badge on a segment's corner means its excerpt keeps only the dominant speaker — the other speaker's words may drop out, so double-check it.</li>
                   <li><b>Browse tab:</b> pick codes on the left, read their excerpts on the right; click a ref to jump to it. Turn on <b>Show rejected</b> to include rejected segments.</li>
                   <li><b>Re-importing a transcript:</b> if you fix the CSV and import it again, the app matches the new lines against the old ones and re-anchors your codes, showing you what carries over before it changes anything. You can also keep both copies instead.</li>

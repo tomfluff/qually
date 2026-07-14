@@ -12,7 +12,8 @@ export function Welcome() {
     <div className="welcome">
       <div className="welcome-card">
         <h1>Code transcripts, offline.</h1>
-        <p>Import a transcript CSV to begin. Everything stays in your browser — no account, nothing uploaded.</p>
+        <p>Import a transcript CSV to begin. Everything stays in your browser — no account, and nothing
+          is uploaded unless you add your own OpenAI key and approve a request.</p>
         <button className="btn primary welcome-import" onClick={() => fileRef.current?.click()}>
           <Icon name="upload" size={17} /> Import a transcript…
         </button>

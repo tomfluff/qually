@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { PALETTES } from "../palettes";
+import { MODELS } from "../ai/openai";
+import { getKey, setKey, isRemembered } from "../ai/key";
 
 // Settings popover: instant-apply controls (no save button), all persisted via ui autosave.
 export function SettingsButton() {
@@ -140,8 +142,79 @@ export function SettingsButton() {
               <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
             </div>
           </div>
+
+          <div className="settings-div" />
+          <AiSettings />
         </div>
       )}
     </div>
+  );
+}
+
+// Optional AI assistance. Off unless a key is entered — the app does nothing over
+// the network without one, which is what keeps the "stays in your browser" promise
+// true for everyone who never comes down here.
+function AiSettings() {
+  const ai = useStore((s) => s.ai);
+  const setAi = useStore((s) => s.setAi);
+  const [key, setKeyInput] = useState(getKey);
+  const [remember, setRemember] = useState(isRemembered);
+  const [terms, setTerms] = useState(ai.redactTerms.join(", "));
+
+  const commitKey = (k: string, r: boolean) => { setKeyInput(k); setRemember(r); setKey(k.trim(), r); };
+  const commitTerms = (v: string) => {
+    setTerms(v);
+    setAi({ redactTerms: v.split(",").map((t) => t.trim()).filter(Boolean) });
+  };
+
+  return (
+    <>
+      <div className="settings-sub">AI assistance <span className="opt">optional</span></div>
+      <div className="settings-note">
+        Off until you add a key. Anything you run sends transcript lines to OpenAI —
+        you approve each request and see exactly what's sent.
+      </div>
+
+      <label className="srow aicol">
+        <span>OpenAI key</span>
+        <input type="password" className="aikey" placeholder="sk-…" value={key} autoComplete="off"
+          onChange={(e) => commitKey(e.target.value, remember)} />
+      </label>
+      <label className="srow aicheck">
+        <input type="checkbox" checked={remember}
+          onChange={(e) => commitKey(key, e.target.checked)} />
+        <span>Remember on this device</span>
+      </label>
+      <div className="settings-note">
+        {remember
+          ? "Stored in this browser until you clear it. Don't tick this on a shared machine."
+          : "Kept for this session only — you'll re-enter it next time."}
+      </div>
+
+      <div className="srow aicol">
+        <span>Model</span>
+        <div className="seg aimodels">
+          {MODELS.map((m) => (
+            <button key={m.id} className={ai.model === m.id ? "on" : ""}
+              title={`${m.blurb} — $${m.in}/$${m.out} per 1M tokens in/out`}
+              onClick={() => setAi({ model: m.id })}>{m.name}</button>
+          ))}
+        </div>
+      </div>
+      <div className="settings-note">
+        {MODELS.find((m) => m.id === ai.model)!.blurb} · ${MODELS.find((m) => m.id === ai.model)!.in} in /
+        ${MODELS.find((m) => m.id === ai.model)!.out} out per 1M tokens.
+      </div>
+
+      <label className="srow aicol">
+        <span>Redact before sending</span>
+        <textarea className="airedact" rows={2} placeholder="Ann Lee, Acme Corp, Springfield"
+          value={terms} onChange={(e) => commitTerms(e.target.value)} />
+      </label>
+      <div className="settings-note">
+        Comma-separated. Participant names, employers, and places are replaced with
+        <code> [REDACTED_n]</code> on the way out and restored on the way back.
+      </div>
+    </>
   );
 }
