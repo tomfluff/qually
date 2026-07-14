@@ -11,11 +11,12 @@ const fuzzy = (q: string, t: string) => {
   return i === q.length;
 };
 
-// Shared code input with fuzzy autocomplete. Used in the sidebar (persistent)
-// and the command palette (autoFocus + onClose). Applies to the current
-// selection; if none, just creates the code.
-export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose }: {
-  autoFocus?: boolean; placeholder?: string; onClose?: () => void;
+// Shared code input with fuzzy autocomplete. Used in the sidebar (persistent),
+// the command palette (autoFocus + onClose), and the noticings panel (onPick).
+// Default behavior applies to the current selection (or just creates the code);
+// onPick overrides that and receives the chosen/created code instead.
+export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose, onPick }: {
+  autoFocus?: boolean; placeholder?: string; onClose?: () => void; onPick?: (code: string) => void;
 }) {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
@@ -58,8 +59,9 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose }:
   const showList = open && entries.length > 0;
 
   const choose = (en: { type: "code" | "create"; name: string }) => {
-    if (en.type === "create") { const c = ensureCode(en.name); if (hasSel) applyCode(c); }
-    else if (hasSel) applyCode(en.name);
+    const code = en.type === "create" ? ensureCode(en.name) : en.name;
+    if (onPick) onPick(code);
+    else if (hasSel) applyCode(code);
     setDraft(""); setHl(0);
     onClose?.();
   };
