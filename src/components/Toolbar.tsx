@@ -7,6 +7,7 @@ import { AiCheckModal } from "./AiCheckModal";
 import { ExportMenu } from "./ExportMenu";
 import { ProjectError } from "../project";
 import { Icon } from "./Icon";
+import { Logo } from "./Logo";
 
 export function Toolbar() {
   const importFiles = useStore((s) => s.importFiles);
@@ -33,6 +34,12 @@ export function Toolbar() {
 
   return (
     <div id="toolbar">
+      <span className="brand">
+        <Logo size={22} />
+        <span className="brandname">QuAlly</span>
+        <span className="brandtag">Qualitative coding, offline</span>
+      </span>
+      <span className="tbdiv" />
       <button className="btn primary iconlabel" onClick={() => fileRef.current?.click()}
         title="Import transcript/codebook/segment CSVs, or open a .qually.json project">
         <Icon name="upload" size={16} /> Import files…
@@ -41,12 +48,14 @@ export function Toolbar() {
       <DataFormatButton />
       <span className="tbdiv" />
       {onTranscript && (
-        <button className="btn iconlabel aibtn" onClick={() => setAiOpen(true)}
-          title="Scan this transcript with AI: transcription errors, plus noticing lenses you choose (emotions, likes/dislikes, desires…)">
-          <Icon name="sparkle" size={15} /> AI scan
-        </button>
+        <>
+          <button className="btn iconlabel aibtn" onClick={() => setAiOpen(true)}
+            title="Scan this transcript with AI: transcription errors, plus noticing lenses you choose (emotions, likes/dislikes, desires…)">
+            <Icon name="sparkle" size={15} /> AI scan
+          </button>
+          <span className="tbdiv" />
+        </>
       )}
-      <span className="tbdiv" />
       <button className="btn iconbtn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
         <Icon name="undo" size={16} />
       </button>
@@ -54,6 +63,10 @@ export function Toolbar() {
         <Icon name="redo" size={16} />
       </button>
       <span className="status">{status}</span>
+      <a className="btn iconbtn ghlink" href="https://github.com/tomfluff/qually" target="_blank"
+        rel="noreferrer" title="Code on GitHub" aria-label="View QuAlly on GitHub">
+        <Icon name="github" size={16} />
+      </a>
       <SettingsButton />
       <AboutButton />
       <input ref={fileRef} type="file" multiple accept=".csv,.json" style={{ display: "none" }}
