@@ -40,3 +40,45 @@
 .bExcerpt .ref { font-size:.8em; color:var(--muted); margin-top:4px; }
 .bExcerpt .ref.open { cursor:pointer; }
 .bExcerpt .ref.open:hover { color:var(--accent); }
+
+/* ── Noticings mode: the AI's marks side by side, staged to become codes ── */
+.bMode { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden;
+  margin-bottom:8px; }
+.bMode button { flex:1; border:0; padding:6px 0; background:var(--bg); color:var(--muted);
+  font:inherit; font-weight:500; cursor:pointer; }
+.bMode button.on { background:var(--accent); color:#fff; font-weight:650; }
+.nLens { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
+  cursor:pointer; }
+.nLens:hover { background:var(--panel); }
+.nLens.sel { background:color-mix(in srgb, var(--accent) 14%, transparent); }
+.nLens.none { opacity:.5; }
+.nDot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+.nName { flex:1; font-weight:500; }
+.nLens .cnt { font-variant-numeric:tabular-nums; color:var(--muted); font-size:.85em; }
+
+.nOpts { display:flex; align-items:center; gap:12px; }
+.nPills { display:flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
+.nPill { border:0; background:var(--bg); color:var(--muted); font:inherit; font-size:.78em;
+  padding:3px 12px; cursor:pointer; }
+.nPill.on { background:var(--accent); color:#fff; font-weight:600; }
+.nCount { color:var(--muted); font-size:.8em; }
+
+.nGrp { font-size:.72em; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
+  font-weight:700; margin:16px 0 6px; }
+.nInst { border:1px solid var(--line); border-left:4px solid var(--lens-c, var(--accent));
+  border-radius:0 8px 8px 0; padding:8px 12px; margin-bottom:8px; background:var(--bg); }
+.nLine { line-height:1.5; }
+.nHl { background:color-mix(in srgb, var(--lens-c) 14%, transparent);
+  border-bottom:2px solid var(--lens-c); border-radius:2px; }
+.nWhy { color:var(--muted); font-size:.85em; margin-top:2px; }
+.nFoot { display:flex; align-items:center; gap:9px; margin-top:6px; }
+.nRef { font-size:.75em; color:var(--muted); font-variant-numeric:tabular-nums; }
+.nCoded { font-size:.7em; color:var(--ok, #3fa860); border:1px solid currentColor;
+  border-radius:999px; padding:1px 8px;
+  background:color-mix(in srgb, #3fa860 10%, transparent); }
+.nActs { margin-left:auto; display:flex; gap:5px; }
+.nBtn { font:inherit; font-size:.75em; border:1px solid var(--line); background:var(--bg);
+  color:var(--muted); border-radius:6px; padding:2px 9px; cursor:pointer; }
+.nBtn:hover { color:var(--fg); border-color:var(--accent); }
+.nBtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+.nCode { margin-top:6px; max-width:340px; }

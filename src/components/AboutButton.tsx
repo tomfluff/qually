@@ -8,9 +8,10 @@ const KEYS: [string, string][] = [
   ["↑ ↓", "Move selection to the next/previous line"],
   ["Shift + ↑ ↓", "Extend the selection"],
   ["PageUp / PageDn", "Scroll the transcript by about a screen"],
-  ["Home / End", "Jump to the top / bottom of the transcript"],
+  ["Home / End", "Jump to the first / last line of the transcript"],
   ["1 – 9", "Apply the matching hotbar code to the selection"],
   ["0", "Open the code palette (fuzzy search or create a code)"],
+  ["Double-click a line", "Fix its transcription in place; Enter saves, Esc cancels"],
   ["Ctrl + C", "Copy the selected lines (speaker-grouped)"],
   ["Ctrl + Z  /  Ctrl + Shift + Z", "Undo / redo"],
   ["Ctrl + F", "Search the transcript (This tab / All); Enter / Shift+Enter step matches"],
@@ -47,6 +48,7 @@ export function AboutButton() {
             <p className="about-lede">
               Code interview and session transcripts offline. Everything stays in your browser
               (autosaved locally); export a merged <code>coded-segments.csv</code> when you're done.
+              Nothing is uploaded unless you add your own OpenAI key and approve each request.
             </p>
 
             <div className="about-body nicescroll">
@@ -66,8 +68,11 @@ export function AboutButton() {
                   <li><b>Apply a code:</b> press <b>1–9</b> for the hotbar, <b>0</b> for the fuzzy code palette, or click a code in the sidebar.</li>
                   <li><b>Edit a segment:</b> click its colored lane bar (notes, reject, delete, copy) or drag its top/bottom edge to resize. Hover a bar to see its line range.</li>
                   <li><b>Manage codes:</b> right-click a code (sidebar or Browse) to rename, edit its definition, recolor, merge, pin, or delete.</li>
+                  <li><b>Fix transcription:</b> double-click a line to correct it in place — with media loaded, the utterance loops at 0.75× while you type. The original is kept (✱ marks edited lines, hover to see it) and every correction exports via the toolbar's <b>Edit log</b> button.</li>
+                  <li><b>AI (optional, off by default):</b> add your own OpenAI key in Settings and <b>AI scan</b> can flag likely mis-transcriptions (amber, dotted — double-click to fix) and, if you tick them, highlight instances for your review: emotional expressions, likes/dislikes, desires, workarounds, tensions, quotable phrasing — each mapped to a first-cycle coding method. It marks instances only; coding stays yours. Choose which speakers to include, see the exact lines before they're sent (listed names redacted first), Alt-click a highlight to dismiss it, hide them all with the eye button to read blind, and every request is logged for your methods appendix.</li>
                   <li><b>Mixed-speaker flag:</b> a small <b>!</b> badge on a segment's corner means its excerpt keeps only the dominant speaker — the other speaker's words may drop out, so double-check it.</li>
-                  <li><b>Browse tab:</b> pick codes on the left, read their excerpts on the right; click a ref to jump to it. Turn on <b>Show rejected</b> to include rejected segments.</li>
+                  <li><b>Browse tab:</b> pick codes on the left, read their excerpts on the right; click a ref to jump to it. Turn on <b>Show rejected</b> to include rejected segments. After an AI scan, a <b>Noticings</b> switch appears: the AI's marks side by side across participants, filterable to what you haven't coded yet — <b>code…</b> writes a segment for that line (authored by you), <b>open</b> jumps to it, <b>dismiss</b> removes it.</li>
+                  <li><b>Re-importing a transcript:</b> if you fix the CSV and import it again, the app matches the new lines against the old ones and re-anchors your codes, showing you what carries over before it changes anything. You can also keep both copies instead.</li>
                 </ul>
               </section>
 

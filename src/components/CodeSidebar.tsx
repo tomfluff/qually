@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../state/store";
 import { CodeMenu } from "./CodeMenu";
 import { CodeCombobox } from "./CodeCombobox";
+import { openColorPicker } from "../colorPicker";
 
 export function CodeSidebar() {
   const codebook = useStore((s) => s.codebook);
@@ -12,7 +13,6 @@ export function CodeSidebar() {
   const sidebarWidth = useStore((s) => s.ui.sidebarWidth);
   const applyCode = useStore((s) => s.applyCode);
   const setColor = useStore((s) => s.setColor);
-  const pushUndo = useStore((s) => s.pushUndo);
   const pinned = useStore((s) => s.hotbar.pinned);
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
 
@@ -33,16 +33,13 @@ export function CodeSidebar() {
         const c = counts[code];
         return (
           <div key={code} className="codeItem"
-            onClick={() => { if (hasSel) { pushUndo(); applyCode(code); } }}
+            onClick={() => { if (hasSel) applyCode(code); }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
             title={`${code}  (right-click for options)`}>
             <span className="codebar" style={{ background: codebook[code].color }} title="recolor"
               onClick={(e) => {
                 e.stopPropagation();
-                const inp = document.createElement("input");
-                inp.type = "color"; inp.value = codebook[code].color;
-                inp.oninput = () => setColor(code, inp.value);
-                inp.click();
+                openColorPicker(codebook[code].color, (v) => setColor(code, v));
               }} />
             <span className="cname">{code}</span>
             {pinned.includes(code) && <span className="pindot" title="pinned">●</span>}

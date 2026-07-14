@@ -9,11 +9,35 @@ import { BrowseView } from "./components/BrowseView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
+import { ImportModal } from "./components/ImportModal";
+import { ProjectModal } from "./components/ProjectModal";
 import { SearchBar } from "./components/SearchBar";
 import { Welcome } from "./components/Welcome";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
+import { spanLens } from "./ai/flag";
+import { useMemo } from "react";
+
+// Show/hide the AI noticing highlights — the blind-reading control. Only appears
+// once the active transcript actually has notices, so it costs no chrome before.
+function NoticeToggle() {
+  const active = useStore((s) => s.active);
+  const aiFlags = useStore((s) => s.aiFlags);
+  const show = useStore((s) => s.ui.showNotices);
+  const hasNotices = useMemo(
+    () => Object.entries(aiFlags).some(([k, v]) =>
+      k.startsWith(`${active}:`) && v.spans.some((sp) => spanLens(sp) !== "transcription")),
+    [aiFlags, active]
+  );
+  if (!hasNotices) return null;
+  return (
+    <button className="noticetoggle" onClick={() => useStore.getState().setUi({ showNotices: !show })}
+      title={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}>
+      <Icon name={show ? "eye" : "eye-off"} size={17} />
+    </button>
+  );
+}
 
 export function App() {
   const active = useStore((s) => s.active);
@@ -38,6 +62,17 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState();
+      // The re-import / open-project modals are decision points: they own the
+      // keyboard until answered. Checked before the input guard below — the file
+      // input still holds focus right after an import, and Esc has to close them.
+      if (s.pendingProject) {
+        if (e.key === "Escape") s.setPendingProject(null);
+        return;
+      }
+      if (s.pendingImports.length) {
+        if (e.key === "Escape") s.resolveImport("cancel");
+        return;
+      }
       // Ctrl+F opens transcript search (works from anywhere, incl. inputs)
       if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
         if (s.active !== "browse") { e.preventDefault(); s.openSearch(); }
@@ -49,7 +84,14 @@ export function App() {
         e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); return;
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) { e.preventDefault(); s.redo(); return; }
-      if (e.key === "Escape") { if (s.search.open) s.closeSearch(); if (s.ui.zen) s.setZen(false); s.clearSelection(); return; }
+      // Esc peels one layer at a time: palette -> search -> zen -> selection
+      if (e.key === "Escape") {
+        if (s.paletteOpen) s.setPalette(false);
+        else if (s.search.open) s.closeSearch();
+        else if (s.ui.zen) s.setZen(false);
+        else s.clearSelection();
+        return;
+      }
       // arrow nav: plain jumps to the adjacent line, Shift moves the head (W2 item 7)
       if ((e.key === "ArrowUp" || e.key === "ArrowDown") && s.active !== "browse"
         && s.selection.pid === s.active && s.selection.lines.size) {
@@ -57,6 +99,8 @@ export function App() {
         s.moveSelection(e.key === "ArrowDown" ? 1 : -1, e.shiftKey);
         return;
       }
+      // plain digits only — Ctrl+0 (zoom reset), Ctrl+1-9 (tab switch), Alt+digit stay with the browser
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "0") { e.preventDefault(); s.setPalette(true); return; }
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= 9 && s.selection.lines.size) {
@@ -107,6 +151,7 @@ export function App() {
               <Icon name="search" size={17} />
             </button>
           )}
+          {hasData && active !== "browse" && !searchOpen && <NoticeToggle />}
           {hasData && active !== "browse" && <SearchBar />}
           {!hasData ? <Welcome /> : (active === "browse" ? <BrowseView /> : <TranscriptView />)}
         </div>
@@ -119,6 +164,8 @@ export function App() {
         </button>
       )}
       <CommandPalette />
+      <ImportModal />
+      <ProjectModal />
     </div>
   );
 }

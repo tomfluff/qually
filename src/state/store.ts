@@ -4,11 +4,16 @@ import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
 import { mergeGroups, type Group } from "../merge";
+import { previewImport, remapSegment, type ImportPreview } from "../align";
+import { DEFAULT_MODEL } from "../ai/openai";
+import { hashLine, type Flag } from "../ai/flag";
+import { FORMAT, VERSION, parseProject, type Project } from "../project";
 
 const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
 
-export interface Line { id: number; ts: string; speaker: string; text: string; }
+// orig = the imported text, present only while an in-app correction differs from it
+export interface Line { id: number; ts: string; speaker: string; text: string; orig?: string; }
 export interface Segment {
   sid: number; pid: string; start: number; end: number; code: string;
   notes: string; proposedBy: string; status: string;
@@ -28,10 +33,38 @@ export interface Ui {
   laneWidth: "xs" | "sm" | "md" | "lg"; // width of the code lane bars
   minimapWidth: number; // transcript minimap width (px)
   minimapDetail: "detailed" | "simplified"; // minimap abstraction level
+  showNotices: boolean; // AI noticing highlights visible (hide to read/code blind)
 }
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
   current: { line: number; occ: number } | null; // the emphasized occurrence
+}
+// A re-import of an already-coded transcript, held until the user picks what to do.
+export interface PendingImport {
+  pid: string;
+  lines: Line[];
+  rows: Record<string, string>[]; // kept for the inline `codes` column
+  preview: ImportPreview;
+}
+export type ImportChoice = "update" | "replace" | "new" | "cancel";
+
+// AI settings. The API key is NOT here — the store is persisted wholesale, so the
+// key lives in ai/key.ts (session-only by default). See docs in that file.
+export interface Ai {
+  model: string;
+  redactTerms: string[]; // participant names / orgs / places, pseudonymized before sending
+  lenses: string[];      // which scans are ticked in the consent modal (remembered)
+}
+// Spans are stored against the hash of the line text they were made on, so editing a
+// line silently invalidates them — the AI can never point at text that's gone.
+// `lenses` records which scans this line has been checked under at that hash: a line
+// already scanned under every requested lens isn't re-sent (or re-billed).
+export interface LineFlags { hash: string; lenses?: string[]; spans: Flag[] }
+// Every call, appended. Exportable as the appendix that lets a reviewer audit what
+// the model was actually used for.
+export interface AiCall {
+  at: string; model: string; task: string; pid: string;
+  lines: number; redactions: number; inTok: number; outTok: number; costUsd: number;
 }
 
 interface State {
@@ -45,8 +78,12 @@ interface State {
   hotbarCache: string[];
   video: Record<string, { name?: string; offset: number }>;
   ui: Ui;
+  ai: Ai;
+  aiFlags: Record<string, LineFlags>; // "pid:lineId" -> flags, valid while the hash matches
+  aiLog: AiCall[];
   // transient (not persisted)
   selection: Selection;
+  savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
   undoStack: string[];
   redoStack: string[];
   nextSid: number;
@@ -54,8 +91,11 @@ interface State {
   paletteOpen: boolean;
   formatOpen: boolean;
   search: Search;
+  pendingImports: PendingImport[]; // re-imports awaiting a user decision
+  pendingProject: Project | null;  // a loaded project awaiting the replace confirmation
 
   importFiles: (files: FileList | File[]) => Promise<void>;
+  resolveImport: (choice: ImportChoice) => void;
   ensureCode: (code: string) => string;
   addSegment: (pid: string, start: number, end: number, code: string,
     proposedBy?: string, status?: string, notes?: string) => void;
@@ -74,6 +114,20 @@ interface State {
   openSearch: () => void;
   closeSearch: () => void;
   setSearch: (patch: Partial<Search>) => void;
+  editLine: (pid: string, id: number, text: string) => void;
+  exportEdits: () => string;
+  setAi: (patch: Partial<Ai>) => void;
+  addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
+  clearFlags: (pid: string) => void;
+  dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
+  logAiCall: (call: AiCall) => void;
+  exportAiLog: () => string;
+  exportCodebook: () => string;
+  exportTranscript: (pid: string) => string;
+  exportNotices: () => string;
+  exportProject: () => string;
+  openProject: (p: Project) => void;
+  setPendingProject: (p: Project | null) => void;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
   toggleReject: (sid: number) => void;
@@ -136,20 +190,76 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: "blue", speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed" },
-      selection: emptySel(), undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: "blue", speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true },
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
+      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
+      pendingImports: [], pendingProject: null,
 
       importFiles: async (files) => {
         for (const f of Array.from(files)) {
+          // a project file goes through the same one entry point; the modal confirms
+          // before it replaces the workspace
+          if (/\.json$/i.test(f.name)) {
+            set({ pendingProject: parseProject(await f.text()) });
+            continue;
+          }
           const rows = parseCSV(await f.text());
           if (!rows.length) continue;
           const cols = Object.keys(rows[0]);
           if (cols.includes("segment_ref")) importSegments(get, set, rows);
           else if (cols.includes("short_def") || (cols.includes("code") && cols.includes("status")))
             importCodebook(get, set, rows);
-          else if (cols.includes("line_id") && cols.includes("text"))
-            importTranscript(get, set, f.name.replace(/\.csv$/i, ""), rows);
+          else if (cols.includes("line_id") && cols.includes("text")) {
+            const pid = f.name.replace(/\.csv$/i, "");
+            const s = get();
+            const old = s.transcripts[pid];
+            const segs = s.segments.filter((x) => x.pid === pid);
+            // Re-importing over existing coding would silently move every segment
+            // onto whatever line now holds that number: ask first (see ImportModal).
+            if (old && segs.length) {
+              const lines = rowsToLines(rows);
+              const { map: _m, ...preview } = previewImport(segs, old.lines, lines);
+              set({ pendingImports: [...get().pendingImports, { pid, lines, rows, preview }] });
+            } else {
+              importTranscript(get, set, pid, rows);
+            }
+          }
+        }
+        set({ hotbarCache: hotbarCodes(get()) });
+      },
+
+      resolveImport: (choice) => {
+        const [p, ...rest] = get().pendingImports;
+        if (!p) return;
+        set({ pendingImports: rest });
+        if (choice === "cancel") return;
+
+        if (choice === "new") {
+          importTranscript(get, set, uniquePid(get(), p.pid), p.rows);
+        } else {
+          const s = get();
+          const segs = s.segments.filter((x) => x.pid === p.pid);
+          let kept: Segment[] = []; // "replace": the transcript's coding goes with it
+          if (choice === "update") {
+            const { map } = previewImport(segs, s.transcripts[p.pid].lines, p.lines);
+            kept = segs.flatMap((seg) => {
+              const r = remapSegment(seg, map);
+              return r ? [{ ...seg, start: r.start, end: r.end }] : [];
+            });
+          }
+          const saved = { ...s.savedSelections };
+          delete saved[p.pid]; // a stashed selection points at the old line ids
+          set({
+            segments: [...s.segments.filter((x) => x.pid !== p.pid), ...kept],
+            // The undo stack snapshots segments but not transcripts, so replaying it
+            // after a re-import would restore segments pointing at the old line ids.
+            // The modal's preview is the safety net instead.
+            undoStack: [], redoStack: [],
+            selection: s.selection.pid === p.pid ? emptySel() : s.selection,
+            savedSelections: saved,
+          });
+          importTranscript(get, set, p.pid, p.rows);
         }
         set({ hotbarCache: hotbarCodes(get()) });
       },
@@ -227,8 +337,22 @@ export const useStore = create<State>()(
         set({ selection: { pid: s.active, anchor: g.startId, head: g.startId, lines: new Set(g.ids) } });
       },
       clearSelection: () => set({ selection: emptySel() }),
-      setActive: (pid) => set({ active: pid, selection: emptySel() }),
-      jumpTo: (pid, line) => set({ active: pid, selection: emptySel(), jump: { pid, line } }),
+      // Tab switches stash the outgoing tab's selection and restore the incoming
+      // tab's, so returning to a tab finds the lines still selected. Every consumer
+      // already guards on selection.pid === active, so a restored selection only
+      // acts on its own tab.
+      setActive: (pid) => {
+        const s = get();
+        if (pid === s.active) return; // same-tab: stashing live over saved would wipe a cleared selection
+        const saved = { ...s.savedSelections, [s.active]: s.selection };
+        set({ active: pid, selection: saved[pid] ?? emptySel(), savedSelections: saved });
+      },
+      jumpTo: (pid, line) => {
+        const s = get();
+        if (pid === s.active) { set({ jump: { pid, line } }); return; } // same-tab jump: don't touch selection
+        const saved = { ...s.savedSelections, [s.active]: s.selection };
+        set({ active: pid, selection: saved[pid] ?? emptySel(), savedSelections: saved, jump: { pid, line } });
+      },
       clearJump: () => set({ jump: null }),
       scrollToLine: (line) => set({ jump: { pid: get().active, line } }), // same-tab scroll, no selection change
       setPalette: (v) => set({ paletteOpen: v }),
@@ -239,7 +363,151 @@ export const useStore = create<State>()(
       closeTab: (pid) => {
         const s = get();
         const tabs = s.tabs.filter((p) => p !== pid);
-        set({ tabs, active: s.active === pid ? (tabs[0] || "browse") : s.active });
+        const saved = { ...s.savedSelections };
+        delete saved[pid]; // a closed tab's selection dies with it
+        if (s.active !== pid) { set({ tabs, savedSelections: saved }); return; }
+        const next = tabs[0] || "browse";
+        set({ tabs, active: next, selection: saved[next] ?? emptySel(), savedSelections: saved });
+      },
+
+      // In-app transcription fix. The imported text is kept in `orig` (first edit
+      // wins) so the correction is a recorded, revertible fact, not a silent change;
+      // editing back to the original clears the flag. Line ids never change, so
+      // segments are untouched. Not on the undo stack — `orig` IS the undo.
+      editLine: (pid, id, text) => {
+        const t = get().transcripts[pid];
+        if (!t) return;
+        const lines = t.lines.map((l) => {
+          if (l.id !== id || l.text === text) return l;
+          const orig = l.orig ?? l.text;
+          const { orig: _drop, ...rest } = l;
+          return orig === text ? { ...rest, text } : { ...rest, orig, text };
+        });
+        set({ transcripts: { ...get().transcripts, [pid]: { lines } } });
+      },
+
+      setAi: (patch) => set({ ai: { ...get().ai, ...patch } }),
+
+      // Record EVERY line that was scanned, not just the marked ones: a clean line
+      // with no record would look unscanned and be re-sent (and re-billed) next run.
+      // A line re-scanned under new lenses keeps its spans from lenses NOT in this
+      // scan (they weren't re-evaluated) and accumulates the scanned-lens set.
+      addFlags: (pid, flags, lines, scanned) => {
+        const next = { ...get().aiFlags };
+        for (const l of lines) {
+          const key = `${pid}:${l.id}`;
+          const hash = hashLine(l.text);
+          const prev = next[key];
+          const fresh = flags[l.id] ?? [];
+          if (prev && prev.hash === hash) {
+            const kept = prev.spans.filter((s) => !scanned.includes(s.lens ?? "transcription"));
+            next[key] = { hash, lenses: [...new Set([...(prev.lenses ?? ["transcription"]), ...scanned])], spans: [...kept, ...fresh] };
+          } else {
+            next[key] = { hash, lenses: scanned, spans: fresh };
+          }
+        }
+        set({ aiFlags: next });
+      },
+      clearFlags: (pid) => {
+        const next: Record<string, LineFlags> = {};
+        for (const [k, v] of Object.entries(get().aiFlags)) if (!k.startsWith(`${pid}:`)) next[k] = v;
+        set({ aiFlags: next });
+      },
+      // "I disagree with this mark": the span goes, but the line stays recorded as
+      // scanned under that lens, so dismissing doesn't cause a re-fetch of the same mark.
+      dismissNotice: (pid, id, lens, quote) => {
+        const key = `${pid}:${id}`;
+        const cur = get().aiFlags[key];
+        if (!cur) return;
+        set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, spans: cur.spans.filter((s) => !((s.lens ?? "transcription") === lens && s.quote === quote)) } } });
+      },
+
+      logAiCall: (call) => set({ aiLog: [...get().aiLog, call] }),
+      exportAiLog: () => toCSV(
+        get().aiLog as unknown as Record<string, unknown>[],
+        ["at", "model", "task", "pid", "lines", "redactions", "inTok", "outTok", "costUsd"]
+      ),
+
+      // The other half of the CSV interchange story: importCodebook has always
+      // existed with no exporter, so colors and definitions could only ever be lost.
+      exportCodebook: () => {
+        const cb = get().codebook;
+        const rows = Object.keys(cb).sort().map((code) => ({
+          code, color: cb[code].color, short_def: cb[code].def, status: cb[code].status,
+        }));
+        return toCSV(rows, ["code", "color", "short_def", "status"]);
+      },
+
+      // Re-importable transcript, carrying the CORRECTED text. `original` is the
+      // pre-correction text (informational; the importer ignores unknown columns).
+      exportTranscript: (pid) => {
+        const t = get().transcripts[pid];
+        if (!t) return "";
+        const rows = t.lines.map((l) => ({
+          line_id: String(l.id), timestamp: l.ts, speaker: l.speaker, text: l.text,
+          original: l.orig ?? "",
+        }));
+        return toCSV(rows, ["line_id", "timestamp", "speaker", "text", "original"]);
+      },
+
+      exportNotices: () => {
+        const s = get();
+        const rows: Record<string, string>[] = [];
+        for (const pid of s.tabs) {
+          const t = s.transcripts[pid];
+          if (!t) continue;
+          for (const l of t.lines) {
+            const f = s.aiFlags[`${pid}:${l.id}`];
+            if (!f || f.hash !== hashLine(l.text)) continue;
+            for (const sp of f.spans) {
+              const lens = sp.lens ?? "transcription";
+              if (lens === "transcription") continue;
+              rows.push({ pid, line_id: String(l.id), speaker: l.speaker, lens, quote: sp.quote, note: sp.reason, line: l.text });
+            }
+          }
+        }
+        return toCSV(rows, ["pid", "line_id", "speaker", "lens", "quote", "note", "line"]);
+      },
+
+      exportProject: () => {
+        const s = get();
+        const p: Project = {
+          format: FORMAT, version: VERSION, savedAt: new Date().toISOString(),
+          transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
+          extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
+          hotbar: s.hotbar, video: s.video,
+          ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog,
+          // NB: no API key (not in the store), no UI prefs, no media — see project.ts
+        };
+        return JSON.stringify(p, null, 2);
+      },
+
+      setPendingProject: (p) => set({ pendingProject: p }),
+
+      // Replaces the workspace wholesale. Merging would mean sid collisions and
+      // code-name conflicts for no benefit; the modal confirms before we get here.
+      openProject: (p) => {
+        set({
+          transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
+          extSegRows: p.extSegRows, tabs: p.tabs, active: p.active,
+          hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiLog: p.aiLog,
+          // transient state belongs to the old workspace, not the loaded one
+          selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
+          jump: null, search: { open: false, query: "", scope: "tab", current: null },
+          pendingImports: [], pendingProject: null,
+          nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
+        });
+        set({ hotbarCache: hotbarCodes(get()) });
+      },
+
+      exportEdits: () => {
+        const s = get();
+        const rows: Record<string, string>[] = [];
+        for (const [pid, t] of Object.entries(s.transcripts))
+          for (const l of t.lines)
+            if (l.orig !== undefined)
+              rows.push({ pid, line_id: String(l.id), timestamp: l.ts, speaker: l.speaker, original: l.orig, corrected: l.text });
+        return toCSV(rows, ["pid", "line_id", "timestamp", "speaker", "original", "corrected"]);
       },
 
       setSegmentRange: (sid, start, end) =>
@@ -353,12 +621,16 @@ export const useStore = create<State>()(
       partialize: (s) => ({
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
         extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
-        hotbar: s.hotbar, video: s.video, ui: s.ui,
+        hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
+        ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
         s.nextSid = Math.max(0, ...s.segments.map((x) => x.sid)) + 1;
         s.hotbarCache = hotbarCodes(s as State);
+        // fields added after a persisted state was written (persist merges shallowly)
+        s.ai.lenses ??= ["transcription"];
+        s.ui.showNotices ??= true;
       },
     }
   )
@@ -378,9 +650,21 @@ function ensureCode(get: Get, set: Set_, code: string): string {
   return code;
 }
 
-function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string, string>[]) {
-  const lines: Line[] = rows.map((r) => ({ id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" }))
+export function rowsToLines(rows: Record<string, string>[]): Line[] {
+  return rows
+    .map((r) => ({ id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" }))
     .filter((l) => Number.isFinite(l.id));
+}
+
+// "interview-p3" -> "interview-p3 (2)" when the name is taken (import-as-new)
+function uniquePid(s: State, pid: string): string {
+  let n = 2;
+  while (s.transcripts[`${pid} (${n})`]) n++;
+  return `${pid} (${n})`;
+}
+
+function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string, string>[]) {
+  const lines = rowsToLines(rows);
   const s = get();
   set({
     transcripts: { ...s.transcripts, [pid]: { lines } },
@@ -403,7 +687,13 @@ function importCodebook(get: Get, set: Set_, rows: Record<string, string>[]) {
     if (!r.code) return;
     const key = ensureCode(get, set, r.code);
     const cb = get().codebook;
-    set({ codebook: { ...cb, [key]: { ...cb[key], def: r.short_def || cb[key].def, status: r.status || cb[key].status } } });
+    set({ codebook: { ...cb, [key]: {
+      ...cb[key],
+      def: r.short_def || cb[key].def,
+      status: r.status || cb[key].status,
+      // colors come from our own codebook.csv export; older files have no column
+      color: /^#[0-9a-f]{6}$/i.test(r.color || "") ? r.color : cb[key].color,
+    } } });
   });
 }
 

@@ -67,8 +67,14 @@ export function VideoDock() {
   const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? void v.play() : v.pause(); };
   const setRate = (rate: number) => setGeom((g) => ({ ...g, rate }));
 
+  // clamp so a drag (or a persisted position from a larger window) can't
+  // strand the dock offscreen with no way to grab it back
   const pos = geom.x !== null && geom.bottom !== null
-    ? { left: geom.x, bottom: geom.bottom, right: "auto" as const, top: "auto" as const }
+    ? {
+        left: Math.max(60 - geom.w, Math.min(geom.x, window.innerWidth - 60)),
+        bottom: Math.max(0, Math.min(geom.bottom, window.innerHeight - 40)),
+        right: "auto" as const, top: "auto" as const,
+      }
     : { right: 24, bottom: 24 };
 
   return (

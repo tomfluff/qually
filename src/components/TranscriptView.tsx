@@ -1,11 +1,13 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
-import { seekVideo } from "../video/seek";
+import { seekVideo, loopLine } from "../video/seek";
+import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
+import type { Line } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
 import type { ReactNode } from "react";
@@ -28,9 +30,59 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
   return nodes;
 }
 
+// AI marks in the text. Transcription flags: amber dotted (something's wrong).
+// Noticing lenses: a quiet per-lens tint (something to look at) — hover names the
+// lens, Alt-click dismisses (plain click still selects the line). Search
+// highlighting wins when a query is active — two overlapping mark-ups on the same
+// characters is noise, and you're hunting, not proofreading.
+function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
+  const hits: { at: number; len: number; span: Flag }[] = [];
+  for (const s of spans) {
+    const at = text.indexOf(s.quote);
+    if (at >= 0) hits.push({ at, len: s.quote.length, span: s });
+  }
+  if (!hits.length) return text;
+  hits.sort((a, b) => a.at - b.at);
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  hits.forEach((h, k) => {
+    if (h.at < last) return; // overlapping marks: keep the first
+    if (h.at > last) nodes.push(text.slice(last, h.at));
+    const lens = lensOf(spanLens(h.span));
+    const isError = spanLens(h.span) === "transcription";
+    nodes.push(isError
+      ? <span key={k} className="aidoubt" data-tip={h.span.reason}>{text.slice(h.at, h.at + h.len)}</span>
+      : <span key={k} className="ainote" style={{ "--lens-c": lens?.color } as CSSProperties}
+          data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason} · Alt-click to dismiss`}
+          onClick={(e) => {
+            if (!e.altKey) return; // plain click keeps selecting the line
+            e.stopPropagation();
+            const st = useStore.getState();
+            st.dismissNotice(st.active, lineId, spanLens(h.span), h.span.quote);
+          }}>{text.slice(h.at, h.at + h.len)}</span>);
+    last = h.at + h.len;
+  });
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
 const lidLabel = (g: Group) => g.startId === g.endId ? `${g.startId}` : `${g.startId}–${g.endId}`;
 const shortSpeaker = (s: string) => s.trim().slice(0, 3);
 const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
+const MIN_PAD = 48;    // headroom floor, before the viewport has been measured
+const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
+
+// Per-tab scroll memory. Module scope, NOT component refs: TranscriptView unmounts
+// entirely while the Browse tab is shown, so refs would forget every position on the
+// way through Browse. (Selection memory is the store's savedSelections, same reason.)
+//
+// The position is an ANCHOR (top item's child index + pixels into it), not a raw
+// scrollTop: row heights above the viewport are virtua estimates, and the same VList
+// instance serves every tab, so after showing another transcript the estimates for
+// this one have changed — a saved pixel offset would land on different text.
+interface ScrollAnchor { index: number; delta: number }
+const savedScroll: Record<string, ScrollAnchor> = {};
+const positioned = new Set<string>(); // tabs whose initial position has been applied
 
 export function TranscriptView() {
   const active = useStore((s) => s.active);
@@ -55,14 +107,24 @@ export function TranscriptView() {
   const clearJump = useStore((s) => s.clearJump);
   const vref = useRef<VListHandle>(null);
   const mmRef = useRef<MinimapHandle>(null);
-  const scrollByPid = useRef<Record<string, number>>({}); // each transcript's own scroll offset
+  const tviewRef = useRef<HTMLDivElement>(null);
+  const positioning = useRef(false); // true while the effect below is moving the list itself
   const syncMinimap = () => {
     const v = vref.current;
     if (!v) return;
-    scrollByPid.current[active] = v.scrollOffset;
+    // Record the tab's position only when the user owns the scroll: not before the
+    // initial placement (offset 0 is inside the top headroom), and not while we're
+    // positioning — during a tab switch the browser clamp-scrolls the old offset
+    // against the new content, which would overwrite the new tab's saved position.
+    if (positioned.has(active) && !positioning.current) {
+      const index = v.findItemIndex(v.scrollOffset);
+      savedScroll[active] = { index, delta: v.scrollOffset - v.getItemOffset(index) };
+    }
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
   };
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
+  useEffect(() => { setEditingId(null); }, [active]);
   const [hoverSid, setHoverSid] = useState<number | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // debounce clearing so moving between a segment's bars doesn't flicker the brackets
@@ -75,25 +137,108 @@ export function TranscriptView() {
   // merged display units (singletons when the toggle is off)
   const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
 
-  // Browse -> jump: scroll the virtualized list to the unit containing the line
+  // AI marks for this transcript, but only where the line still reads as it did when
+  // it was scanned — a correction invalidates its own marks, for free. With notices
+  // hidden (the eye toggle: read/code blind), only transcription flags remain.
+  const aiFlags = useStore((s) => s.aiFlags);
+  const showNotices = useStore((s) => s.ui.showNotices);
+  const flagsByLine = useMemo(() => {
+    const m = new Map<number, Flag[]>();
+    for (const l of transcript?.lines ?? []) {
+      const f = aiFlags[`${active}:${l.id}`];
+      if (!f || !f.spans.length || f.hash !== hashLine(l.text)) continue;
+      const spans = showNotices ? f.spans : f.spans.filter((s) => spanLens(s) === "transcription");
+      if (spans.length) m.set(l.id, spans);
+    }
+    return m;
+  }, [aiFlags, transcript, active, showNotices]);
+
+  // Scroll headroom, VS Code's `scrollBeyondLastLine` but on both ends: a pad of
+  // (viewport − one row) lets ANY line be pulled to the top or the bottom of the
+  // screen, so the first and last lines get coded under the same conditions as the
+  // middle — same room for the anchored command palette, same reading position.
+  // Measured, not a constant: it has to track the viewport and the row height.
+  const [pad, setPad] = useState(MIN_PAD);
+  useLayoutEffect(() => {
+    const el = tviewRef.current;
+    if (!el) return;
+    // One unwrapped row's worth is kept visible (ROW_RATIO · fontSize). Deliberately
+    // NOT measured from a rendered row: row heights vary with wrapping, and the row at
+    // the top depends on the scroll position the pad itself sets — that feeds back and
+    // never settles.
+    const measure = () => setPad(Math.max(MIN_PAD, Math.round(el.clientHeight - fontSize * ROW_RATIO)));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fontSize]);
+
+  // Position the list whenever the active tab (or the pad geometry) changes: restore
+  // the tab's remembered offset, or park a first-time tab on line 1 — scroll offset 0
+  // is now a screen of empty headroom. Two things make this fiddly, and both are why
+  // this sets scrollTop on the scroller rather than calling scrollToIndex:
+  //   - virtua's scrollToIndex is a no-op until it has measured the list (after mount);
+  //   - the browser clamps scrollTop to the scrollable height, and until virtua has
+  //     rendered the bottom pad the list isn't tall enough, so an early set lands short.
+  // So: attempt, check whether it took, and retry on a self-driven rAF chain (a short
+  // transcript barely re-renders, so per-render retries would never fire). If the
+  // scroll moves in a way we didn't cause, the user grabbed it — their position wins.
   useEffect(() => {
-    if (!jump || jump.pid !== active || !transcript) return;
+    if (pad <= MIN_PAD) return;           // container not laid out yet; the pad is a guess
+    if (useStore.getState().jump) return; // a Browse -> line jump owns the position
+    positioning.current = true;
+    // One frame so the swapped-in children are committed, then let virtua do the
+    // scrolling: its scrollToIndex re-evaluates the target after every row
+    // measurement until it goes quiet, which is exactly what an anchor needs on a
+    // list whose heights above the anchor are still estimates. (A raw scrollTop
+    // set can't do this — it chases stale estimates and fights the re-measuring.)
+    const raf = requestAnimationFrame(() => {
+      const v = vref.current;
+      const anchor = savedScroll[active];
+      if (v && anchor) v.scrollToIndex(anchor.index, { align: "start", offset: anchor.delta });
+      else if (v) v.scrollToIndex(1, { align: "start" }); // first showing: park on line 1
+      positioned.add(active);
+      positioning.current = false;
+    });
+    return () => { cancelAnimationFrame(raf); positioning.current = false; };
+  }, [active, pad]);
+
+  // With a viewport-sized top pad, offset 0 is a blank screen: "the top" now means
+  // the first line parked at the top of the viewport, which is index 1 (0 = the pad).
+  const toTop = () => vref.current?.scrollToIndex(1, { align: "start" });
+  const toBottom = () => vref.current?.scrollToIndex(groups.length, { align: "end" });
+
+  // Browse -> jump: scroll the virtualized list to the unit containing the line.
+  // Waits for the measured pad (jump stays pending): on a fresh mount the top pad is
+  // still the 48px placeholder, and jumping first means the pad's growth afterwards
+  // shoves the content down under an unchanged scrollTop.
+  useEffect(() => {
+    if (pad <= MIN_PAD || !jump || jump.pid !== active || !transcript) return;
     const idx = groups.findIndex((g) => jump.line >= g.startId && jump.line <= g.endId);
     if (idx >= 0) vref.current?.scrollToIndex(idx + 1, { align: "center" }); // +1 for the top vpad
+    positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
     clearJump();
-  }, [jump, active, transcript, groups, clearJump]);
+  }, [jump, active, transcript, groups, clearJump, pad]);
+
+  // Tooltips open upward, but the list is a scroller and clips them — and with the
+  // headroom, the line you're reading is usually parked at the very top. Flip the tip
+  // below when there isn't room above it. Delegated: the rows are virtualized, so
+  // per-row listeners would churn. Lane bars are side-positioned; leave them alone.
+  useEffect(() => {
+    const el = tviewRef.current;
+    if (!el) return;
+    const onOver = (e: globalThis.MouseEvent) => {
+      const t = (e.target as HTMLElement).closest<HTMLElement>("[data-tip]");
+      if (!t || t.classList.contains("laneBar")) return;
+      const room = t.getBoundingClientRect().top - el.getBoundingClientRect().top;
+      t.classList.toggle("tipbelow", room < fontSize * 4.5); // ~ a two-line tip + gap
+    };
+    el.addEventListener("mouseover", onOver);
+    return () => el.removeEventListener("mouseover", onOver);
+  }, [fontSize]);
 
   // sync the minimap viewport box on mount and whenever the list content changes
   useEffect(() => { const id = requestAnimationFrame(syncMinimap); return () => cancelAnimationFrame(id); });
-
-  // restore each transcript's own scroll position when switching tabs
-  useEffect(() => {
-    if (jump) return; // a Browse -> line jump takes precedence over the saved position
-    const off = scrollByPid.current[active] ?? 0;
-    const id = requestAnimationFrame(() => vref.current?.scrollTo(off));
-    return () => cancelAnimationFrame(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
 
   // PageUp/PageDown/Home/End scroll the transcript list
   useEffect(() => {
@@ -104,12 +249,15 @@ export function TranscriptView() {
       if (!v) return;
       if (e.key === "PageDown") { e.preventDefault(); v.scrollBy(v.viewportSize * 0.9); }
       else if (e.key === "PageUp") { e.preventDefault(); v.scrollBy(-v.viewportSize * 0.9); }
-      else if (e.key === "Home") { e.preventDefault(); v.scrollTo(0); }
-      else if (e.key === "End") { e.preventDefault(); v.scrollTo(v.scrollSize); }
+      // Home/End mean first/last LINE, not the ends of the scrollable area — those
+      // are now a screen of empty headroom.
+      else if (e.key === "Home") { e.preventDefault(); toTop(); }
+      else if (e.key === "End") { e.preventDefault(); toBottom(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups.length]);
 
   // lane assignment for the active transcript (greedy interval graph)
   // rejected segments stay in the lanes (styled distinctly) so they can be re-accepted
@@ -150,7 +298,8 @@ export function TranscriptView() {
 
   // click selects; click+drag selects a range (Shift extends, Ctrl toggles — no drag)
   const onRowDown = (e: MouseEvent, id: number) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts")) return;
+    if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts,.lineEdit")) return;
+    if (e.detail > 1) return; // second press of a double-click: that's an edit, not a re-select
     if (e.shiftKey) { selectLine(id, { extend: true }); return; }
     if (e.ctrlKey || e.metaKey) { selectLine(id, { toggle: true }); return; }
     let moved = false;
@@ -184,15 +333,16 @@ export function TranscriptView() {
   // bracket the hovered (or popover-open) segment's first/last lines
   const activeSid = hoverSid ?? pop?.sid ?? null;
   const hlSeg = activeSid !== null ? laned.find((s) => s.sid === activeSid) : undefined;
-  const hl = hlSeg ? { start: hlSeg.start, end: hlSeg.end, color: codebook[hlSeg.code]?.color || "#999" } : null;
+  // fallback must be 6-digit: an "a6" alpha suffix is appended below
+  const hl = hlSeg ? { start: hlSeg.start, end: hlSeg.end, color: codebook[hlSeg.code]?.color || "#999999" } : null;
 
   return (
     <>
-      <div className="tview">
+      <div className="tview" ref={tviewRef}>
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
-        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
+        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
-          <div className="vpad vpad-top" key="vpad-top" />, // headroom before the first line
+          <div className="vpad vpad-top" key="vpad-top" style={{ height: pad }} />, // headroom before the first line
           ...groups.map((g) => (
             <Row
               key={g.startId}
@@ -212,9 +362,18 @@ export function TranscriptView() {
               speakerNames={speakerNames}
               searchQuery={search.query}
               current={search.current}
+              editingId={editingId}
+              onEditStart={setEditingId}
+              onEditEnd={() => setEditingId(null)}
+              flagsByLine={flagsByLine}
+              nextTsOf={(id) => {
+                const ls = transcript.lines;
+                const i = ls.findIndex((l) => l.id === id);
+                return i >= 0 && i + 1 < ls.length ? ls[i + 1].ts : null;
+              }}
             />
           )),
-          <div className="vpad vpad-bot" key="vpad-bot" />, // headroom after the last line
+          <div className="vpad vpad-bot" key="vpad-bot" style={{ height: pad }} />, // headroom after the last line
         ]}
       </VList>
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
@@ -226,7 +385,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, showLid, speakerNames, searchQuery, current }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -243,6 +402,11 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   speakerNames: "full" | "short";
   searchQuery: string;
   current: { line: number; occ: number } | null;
+  editingId: number | null;
+  onEditStart: (id: number) => void;
+  onEditEnd: () => void;
+  nextTsOf: (id: number) => string | null;
+  flagsByLine: Map<number, Flag[]>;
 }) {
   const { startId, endId } = group;
   const lanes = [];
@@ -303,11 +467,76 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
         {group.lines.map((l, k) => (
           <Fragment key={l.id}>
             {k > 0 && " "}
-            {searchQuery ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1) : l.text}
+            {editingId === l.id ? (
+              <LineEditor line={l} nextTs={nextTsOf(l.id)} onDone={onEditEnd} />
+            ) : (
+              // no title= on this span: a native tip on every line is noise while reading,
+              // and it would fire behind the custom tooltips on the spans inside it
+              <span onDoubleClick={(e) => { e.preventDefault(); onEditStart(l.id); }}>
+                {searchQuery
+                  ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
+                  : flagsByLine.has(l.id)
+                    ? renderFlagged(l.text, flagsByLine.get(l.id)!, l.id)
+                    : l.text}
+                {l.orig !== undefined && <span className="editmark" data-tip={`was: “${l.orig}”`}>✱</span>}
+              </span>
+            )}
           </Fragment>
         ))}
       </span>
       <span className="lanes">{lanes}</span>
     </div>
+  );
+}
+
+// Inline transcription repair (dblclick a line). While open, the loaded media —
+// if any — loops this utterance at 0.75× so the fix is made against the audio,
+// not from memory. Enter saves, Esc cancels, blur saves (it's a typo fix, losing
+// it to a stray click would hurt more than keeping it).
+function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | null; onDone: () => void }) {
+  const [value, setValue] = useState(line.text);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const looping = useRef<(() => void) | null>(null);
+  const [hasAudio, setHasAudio] = useState(false);
+
+  useEffect(() => {
+    const ta = taRef.current;
+    if (ta) {
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      ta.style.height = "auto"; ta.style.height = `${ta.scrollHeight}px`;
+    }
+    looping.current = loopLine(line.ts, nextTs);
+    setHasAudio(looping.current !== null);
+    return () => { looping.current?.(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = (text: string) => {
+    const t = text.trim();
+    if (t) useStore.getState().editLine(useStore.getState().active, line.id, t);
+    onDone();
+  };
+
+  return (
+    <span className="lineEdit">
+      <textarea ref={taRef} rows={1} value={value}
+        onChange={(e) => { setValue(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight}px`; }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); save(value); }
+          else if (e.key === "Escape") { e.stopPropagation(); onDone(); }
+        }}
+        onBlur={() => save(value)} />
+      <span className="editbar">
+        <kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel
+        {hasAudio && <span className="editloop">▶ looping {line.ts.split(".")[0]} · 0.75×</span>}
+        {line.orig !== undefined && (
+          <button className="editrevert" onMouseDown={(e) => e.preventDefault()}
+            onClick={() => save(line.orig!)}>
+            ↺ was: “{line.orig}”
+          </button>
+        )}
+      </span>
+    </span>
   );
 }

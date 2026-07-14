@@ -22,14 +22,13 @@ export function HotbarDock() {
   const fontSize = useStore((s) => s.ui.fontSize);
   const hasSel = useStore((s) => s.selection.lines.size > 0);
   const applyCode = useStore((s) => s.applyCode);
-  const pushUndo = useStore((s) => s.pushUndo);
   const refreshHotbar = useStore((s) => s.refreshHotbar);
   const [collapsed, setCollapsed] = useState(false);
 
   const tiles = codes.filter((c) => codebook[c]).slice(0, 9);
   if (!Object.keys(codebook).length) return null;
 
-  const apply = (code: string) => { if (hasSel) { pushUndo(); applyCode(code); } };
+  const apply = (code: string) => { if (hasSel) applyCode(code); };
 
   return (
     <div className={"hotbar" + (collapsed ? " collapsed" : "")}>

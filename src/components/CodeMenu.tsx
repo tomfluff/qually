@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
+import { openColorPicker } from "../colorPicker";
 
 export function CodeMenu({ code, x, y, onClose }: {
   code: string; x: number; y: number; onClose: () => void;
@@ -23,17 +24,16 @@ export function CodeMenu({ code, x, y, onClose }: {
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { mode === "menu" ? onClose() : setMode("menu"); } };
+    // stopPropagation so App's global Esc doesn't also clear the line selection
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); mode === "menu" ? onClose() : setMode("menu"); } };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onEsc);
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onEsc); };
   }, [mode, onClose]);
 
   const pickColor = () => {
-    const inp = document.createElement("input");
-    inp.type = "color"; inp.value = codebook[code]?.color || "#888888";
-    inp.oninput = () => setColor(code, inp.value);
-    inp.click(); onClose();
+    openColorPicker(codebook[code]?.color || "#888888", (v) => setColor(code, v));
+    onClose();
   };
 
   return (

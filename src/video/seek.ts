@@ -24,3 +24,27 @@ export function seekVideo(ts: string): boolean {
   void el.play();
   return true;
 }
+
+// Loop one utterance slowly while its line is being retyped (transcript repair).
+// endTs is usually the next line's timestamp; without one, loop a 6s window.
+// Returns a stop function that restores the rate and pauses.
+export function loopLine(startTs: string, endTs: string | null): (() => void) | null {
+  if (!el) return null;
+  const s = tsToSec(startTs);
+  if (s === null) return null;
+  const e = (endTs !== null ? tsToSec(endTs) : null) ?? s + 6;
+  const v = el;
+  const from = Math.max(0, s + offset);
+  const to = Math.max(from + 1, e + offset); // a sub-second range would stutter
+  const prevRate = v.playbackRate;
+  const onTime = () => { if (v.currentTime >= to) v.currentTime = from; };
+  v.playbackRate = 0.75;
+  v.currentTime = from;
+  v.addEventListener("timeupdate", onTime);
+  void v.play();
+  return () => {
+    v.removeEventListener("timeupdate", onTime);
+    v.playbackRate = prevRate;
+    v.pause(); // ponytail: always pause on exit; resuming a pre-existing playback isn't tracked
+  };
+}
