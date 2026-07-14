@@ -1,19 +1,18 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
-import { useStore, laneAssign, patternOf } from "../state/store";
+import { useStore, laneAssign, patternOf, speakerColor, weightOf } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine } from "../video/seek";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
-import type { Line } from "../state/store";
+import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
-const isR = (sp: string) => sp.trim().toUpperCase().startsWith("R");
 
 // text with search matches wrapped in <mark>; the occ == curOcc match is emphasized
 function renderText(text: string, query: string, curOcc: number): ReactNode {
@@ -93,6 +92,7 @@ export function TranscriptView() {
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnCls = useStore((s) => `cc-${s.ui.warnSize} cc-${s.ui.warnCorner}`);
   const lanePattern = useStore((s) => s.ui.lanePattern);
+  const ui = useStore((s) => s.ui);
   const laneWidth = useStore((s) => s.ui.laneWidth);
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const setUi = useStore((s) => s.setUi);
@@ -411,6 +411,8 @@ export function TranscriptView() {
               closeCallSids={closeCallSids}
               warnCls={warnCls}
               lanePattern={lanePattern}
+              spkColor={speakerColor(ui, g.speaker)}
+              weight={weightOf(ui, g.speaker)}
               showLid={showLineNumbers}
               speakerNames={speakerNames}
               searchQuery={search.query}
@@ -438,7 +440,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -452,6 +454,8 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   closeCallSids: Set<number>;
   warnCls: string;
   lanePattern: boolean;
+  spkColor: string;
+  weight: SpeakerWeight;
   showLid: boolean;
   speakerNames: "full" | "short";
   searchQuery: string;
@@ -509,14 +513,16 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   const merged = startId !== endId;
 
   return (
-    <div className={"lineRow" + (isR(group.speaker) ? " rspk" : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
+    <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
-      style={shadow.length ? { boxShadow: shadow.join(",") } : undefined}>
+      style={{ "--spk-c": spkColor, ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
       {showLid && <span className="lid">{lidLabel(group)}</span>}
       <button className="ts" onClick={(e) => { e.stopPropagation(); seekVideo(group.ts); }}
         title="play from here">
         {group.ts.split(".")[0]}
       </button>
+      {/* the NAME is in the chip: colour tells speakers apart at a glance, but never
+          alone -- the label is always there for anyone the colour doesn't reach */}
       <span className="spk" title={group.speaker}>{speakerNames === "short" ? shortSpeaker(group.speaker) : group.speaker}</span>
       <span className="txt">
         {group.lines.map((l, k) => (

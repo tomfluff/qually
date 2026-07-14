@@ -47,3 +47,25 @@
 .seg.aimodels { width:100%; }
 .seg.aimodels button { flex:1; }
 .settings-note { font-size:11px; color:var(--muted); text-align:left; margin-top:-3px; line-height:1.35; }
+
+/* per-speaker row: colour swatch (shows the speaker's initials, so the control itself
+   isn't colour-only either) + name + normal/quiet */
+.settings-pop .spkswatch { width:34px; flex-shrink:0; border:none; border-radius:5px;
+  color:#fff; font:inherit; font-size:.8em; font-weight:700; padding:3px 0; cursor:pointer; }
+.settings-pop .spkname { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* weight picker: an "A" set at the weight it applies, so the button IS the preview */
+.settings-pop .wseg { width:auto; flex-shrink:0; }
+.settings-pop .wseg button { width:30px; font-size:1.05em; line-height:1.5; }
+.settings-pop .wseg .wt-quiet { color:var(--muted); font-weight:300; }
+.settings-pop .wseg .wt-normal { font-weight:400; }
+.settings-pop .wseg .wt-bold { font-weight:600; }
+.settings-pop .wseg button.on { color:#fff; }
+[data-theme=dark] .settings-pop .wseg button.on { color:#12161a; }
+/* .seg is overflow:hidden to clip its children to the rounded track — which also ate
+   the tooltips. Let them escape, and round the end buttons directly instead. */
+.settings-pop .wseg { overflow:visible; }
+.settings-pop .wseg button:first-child { border-radius:6px 0 0 6px; }
+.settings-pop .wseg button:last-child { border-radius:0 6px 6px 0; }
+/* the weight buttons sit at the popover's right edge, so a centred tip overflows it
+   and gets clipped — anchor these to the right and let them grow leftward */
+.settings-pop .wseg button[data-tip]:hover::after { left:auto; right:0; transform:none; }

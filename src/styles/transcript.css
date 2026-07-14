@@ -33,17 +33,34 @@
 .lineRow .lid { width:var(--lid-w, 4ch); text-align:right; color:var(--muted); flex-shrink:0;
   user-select:none; white-space:nowrap; }
 .lineRow.merged .lid { font-variant-numeric:tabular-nums; }
-.lineRow .ts { font-size:0.8em; color:var(--bg); background:var(--muted);
-  flex-shrink:0; border:none; border-radius:999px; padding:0 9px; cursor:pointer;
-  line-height:1.4; }
-.lineRow .ts:hover { background:var(--accent); }
-.lineRow .spk { width:var(--spk-w, 2.5ch); text-align:center; font-weight:700;
-  flex-shrink:0; color:var(--muted); white-space:nowrap; }
-/* Quiet researcher rows with a dimmer COLOUR, not opacity. Opacity composites
-   against whatever is behind it, so .6 dragged the already-muted line number and
-   speaker label to ~2.6:1 — the interviewer's own labels became the least
+/* Timecode: a quiet tint of the speaker's colour — the "who" cue you catch in
+   peripheral vision while reading. Text stays --fg on a light wash, so it is legible
+   whatever the speaker colour is (a fully saturated chip here would have to solve
+   contrast per hue). */
+.lineRow .ts { font-size:0.8em; color:var(--fg); flex-shrink:0; cursor:pointer;
+  background:color-mix(in srgb, var(--spk-c, var(--muted)) 20%, var(--bg));
+  border:1px solid color-mix(in srgb, var(--spk-c, var(--muted)) 45%, var(--bg));
+  border-radius:999px; padding:0 9px; line-height:1.4; }
+.lineRow .ts:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+/* Speaker: a filled chip in the speaker's colour, with the NAME inside it. The label
+   is the non-colour channel — colour tells speakers apart fast, but someone who can't
+   see it still reads "P2". Replaces the old startsWith("R") rule, which mislabelled a
+   participant called Rachel and rendered P1/P2/P3 identically.
+   Every speaker colour is dark enough for white text (>= 4.5:1); see SPEAKER_COLORS. */
+.lineRow .spk { min-width:var(--spk-w, 2.5ch); text-align:center; font-weight:700;
+  flex-shrink:0; white-space:nowrap; background:var(--spk-c, var(--muted)); color:#fff;
+  border-radius:5px; padding:1px 6px; font-size:.82em; }
+/* Per-speaker weight. "quiet" uses a dimmer COLOUR, never opacity: opacity composites
+   against whatever is behind it, and the old opacity:.6 dragged the already-muted line
+   number and speaker label to ~2.6:1 — the interviewer's own labels became the least
    readable text on screen. --fg-dim is 8.86:1 and still visibly quieter. */
-.lineRow.rspk .txt { color:var(--fg-dim); }
+/* An even ramp needs all three steps on the SAME channel. Quiet used to differ from
+   normal only in colour and bold only in weight, so quiet->normal was a whisper and
+   normal->bold a shout. Now weight carries the ramp — 300 / 400 / 600, one notch of the
+   font's own scale each way — and colour only reinforces the quiet end. */
+.lineRow.spk-quiet .txt { font-weight:300; color:var(--fg-dim); }
+.lineRow.spk-bold .txt { font-weight:600; }
 .lineRow .txt { flex:1; line-height:1.45; }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
 .lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;

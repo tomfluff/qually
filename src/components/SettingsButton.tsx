@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useStore, speakersOf, speakerColor, weightOf, type SpeakerWeight } from "../state/store";
+import { openColorPicker } from "../colorPicker";
 import { PALETTES } from "../palettes";
 import { MODELS } from "../ai/openai";
 import { getKey, setKey, isRemembered } from "../ai/key";
@@ -102,6 +103,7 @@ export function SettingsButton() {
             </div>
           </div>
           <div className="settings-note">Short shows the first 3 characters (hover for the full name).</div>
+          <SpeakerRows />
           <div className="srow">
             <span>Merge lines</span>
             <div className="seg">
@@ -170,6 +172,69 @@ export function SettingsButton() {
     </div>
   );
 }
+
+// Who is in this study, and how each one looks. Derived from the transcripts, so it
+// works for a 2-person interview and a 6-person focus group alike, whatever the
+// speakers are called — no "the researcher is R" convention anywhere.
+function SpeakerRows() {
+  const ui = useStore((s) => s.ui);
+  // select STABLE refs and derive — speakersOf() builds a new array on every call, and a
+  // selector that returns a fresh array re-renders forever (same trap as CodeMenu)
+  const transcripts = useStore((s) => s.transcripts);
+  const tabs = useStore((s) => s.tabs);
+  const speakers = useMemo(() => speakersOf({ transcripts, tabs }), [transcripts, tabs]);
+  const setUi = useStore((s) => s.setUi);
+  if (!speakers.length) return null;
+
+  const setWeight = (sp: string, w: SpeakerWeight) =>
+    setUi({ speakerWeight: { ...ui.speakerWeight, [sp]: w } });
+
+  return (
+    <>
+      <div className="settings-sub">Speakers</div>
+      {speakers.map((sp) => {
+        const w = weightOf(ui, sp);
+        return (
+          <div className="srow" key={sp}>
+            <button className="spkswatch" style={{ background: speakerColor(ui, sp) }}
+              data-tip={`Recolour ${sp}`} aria-label={`Recolour ${sp}`}
+              onClick={() => openColorPicker(speakerColor(ui, sp),
+                (v) => setUi({ speakerColors: { ...ui.speakerColors, [sp]: v } }))}>
+              {sp.slice(0, 3)}
+            </button>
+            <span className="spkname">{sp}</span>
+            {/* The control previews its own effect: an "A" at each weight, rather than
+                three words to read (and translate). data-tip, not title — the native
+                tooltip is a fixed ~12px, which is the wrong thing to hand someone
+                who is here because 12px is too small. */}
+            <div className="seg wseg">
+              {WEIGHTS.map(([id, label]) => (
+                // data-tip is short on purpose: it only has to NAME the state the icon
+                // replaced, and the tip scales with the text size, so a sentence here
+                // would grow wider than the popover and clip. The note below carries
+                // the meaning; aria-label carries it for anyone not seeing the tip.
+                <button key={id} className={(w === id ? "on " : "") + `wt-${id}`}
+                  data-tip={id[0].toUpperCase() + id.slice(1)}
+                  aria-label={`${sp}: ${label}`} aria-pressed={w === id}
+                  onClick={() => setWeight(sp, id)}>A</button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      <div className="settings-note">
+        Click a swatch to recolour. Set how loudly each speaker's words are set: <b>quiet</b>
+        for the interviewer, so the participants carry the page — <b>bold</b> for whoever
+        you're following. Guessed on import; correct it here.
+      </div>
+    </>
+  );
+}
+const WEIGHTS: [SpeakerWeight, string][] = [
+  ["quiet", "quiet — dim this speaker's words"],
+  ["normal", "normal weight"],
+  ["bold", "bold — emphasise this speaker's words"],
+];
 
 // Optional AI assistance. Off unless a key is entered — the app does nothing over
 // the network without one, which is what keeps the "stays in your browser" promise

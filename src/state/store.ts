@@ -36,7 +36,12 @@ export interface Ui {
   minimapDetail: "detailed" | "simplified"; // minimap abstraction level
   showNotices: boolean; // AI noticing highlights visible (hide to read/code blind)
   lanePattern: boolean; // give each code a pattern as well as a colour (see patternOf)
+  speakerColors: Record<string, string>; // per-speaker overrides; unset = speakerColor()
+  // How loudly each speaker's words are set. "quiet" is usually the interviewer, so the
+  // participants carry the page; "bold" is the one you're following. Unset = normal.
+  speakerWeight: Record<string, SpeakerWeight>;
 }
+export type SpeakerWeight = "quiet" | "normal" | "bold";
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
   current: { line: number; occ: number } | null; // the emphasized occurrence
@@ -192,7 +197,8 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false },
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false,
+        speakerColors: {}, speakerWeight: {} },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -640,6 +646,8 @@ export const useStore = create<State>()(
         s.ai.lenses ??= ["transcription"];
         s.ui.showNotices ??= true;
         s.ui.lanePattern ??= false;
+        s.ui.speakerColors ??= {};
+        s.ui.speakerWeight ??= {};
       },
     }
   )
@@ -675,11 +683,22 @@ function uniquePid(s: State, pid: string): string {
 function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string, string>[]) {
   const lines = rowsToLines(rows);
   const s = get();
+  const knownBefore = new Set(speakersOf(s)); // must be read BEFORE the import lands
   set({
     transcripts: { ...s.transcripts, [pid]: { lines } },
     tabs: s.tabs.includes(pid) ? s.tabs : [...s.tabs, pid],
     active: s.active === "browse" && !s.tabs.length ? pid : s.active,
   });
+  // Guess the interviewer for speakers we've never seen before. Only for new ones, so
+  // a deliberate change to someone's weight survives a re-import instead of being undone.
+  const fresh = [...new Set(lines.map((l) => l.speaker.trim()).filter(Boolean))]
+    .filter((sp) => !knownBefore.has(sp));
+  const guessed = quietGuess(fresh).filter((sp) => !(sp in get().ui.speakerWeight));
+  if (guessed.length) {
+    const w = { ...get().ui.speakerWeight };
+    for (const sp of guessed) w[sp] = "quiet";
+    set({ ui: { ...get().ui, speakerWeight: w } });
+  }
   // inline codes column -> segments (contract run-collapse, same as sync_coding.py)
   const coded: CodedLine[] = rows.map((r) => ({
     n: +r.line_id,
@@ -718,6 +737,49 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
 }
 
 // selector helpers
+// ── speakers ────────────────────────────────────────────────────────────────────
+// Speaker identity used to be a single hardcoded rule: speaker.startsWith("R") means
+// "researcher, dim it". That silently mislabels a participant called Rachel, renders
+// every member of a focus group (P1/P2/P3) identically, and does nothing at all if the
+// interviewer is called "Interviewer". Speakers are now first-class: each gets a colour
+// and can be quieted, whatever they're called.
+//
+// All chips are dark enough for white text (>= 4.5:1), so the label inside them stays
+// legible without a per-colour contrast dance.
+const SPEAKER_COLORS = ["#6d28d9", "#0f766e", "#b45309", "#b91c1c",
+  "#1d4ed8", "#4d7c0f", "#a21caf", "#0369a1"];
+
+// stable default: the same speaker gets the same colour across sessions and transcripts
+export const speakerColor = (ui: Ui, speaker: string): string => {
+  const key = speaker.trim();
+  const own = ui.speakerColors[key];
+  if (own) return own;
+  let h = 0x811c9dc5; // FNV-1a
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return SPEAKER_COLORS[(h >>> 0) % SPEAKER_COLORS.length];
+};
+
+// every speaker across every loaded transcript, in first-appearance order
+export const speakersOf = (s: Pick<State, "transcripts" | "tabs">): string[] => {
+  const seen: string[] = [];
+  for (const pid of s.tabs) {
+    for (const l of s.transcripts[pid]?.lines ?? []) {
+      const sp = l.speaker.trim();
+      if (sp && !seen.includes(sp)) seen.push(sp);
+    }
+  }
+  return seen;
+};
+
+export const weightOf = (ui: Ui, speaker: string): SpeakerWeight =>
+  ui.speakerWeight[speaker.trim()] ?? "normal";
+
+// A GUESS at who the interviewer is, applied once when a transcript first loads and
+// freely editable afterwards — not a rule enforced on every render. Same "R" heuristic
+// as before, but now it's a default you can correct rather than a law you can't.
+const quietGuess = (speakers: string[]): string[] =>
+  speakers.filter((sp) => /^r\b|^r$|^researcher|^interviewer|^moderator/i.test(sp.trim()));
+
 // A lane bar used to say WHICH code it is by hue alone (the name was hover-only) —
 // unusable at low acuity, and the 12-colour rotation contains near-neighbours.
 // Pattern is a second, independent channel, shown on the lane AND on the sidebar

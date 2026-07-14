@@ -45,6 +45,7 @@ export function App() {
   const dark = useStore((s) => s.ui.dark);
   const accent = useStore((s) => s.ui.accent);
   const minimapWidth = useStore((s) => s.ui.minimapWidth);
+  const fontSize = useStore((s) => s.ui.fontSize);
   const zen = useStore((s) => s.ui.zen);
   const searchOpen = useStore((s) => s.search.open);
 
@@ -58,6 +59,14 @@ export function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--mm-w", `${minimapWidth}px`);
   }, [minimapWidth]);
+
+  // Tooltips size themselves from --txt-fs. It was only ever set on the transcript list,
+  // so every tip OUTSIDE the transcript silently fell back to 16px * .8 = 12.8px — the
+  // unreadably-small tooltip we replaced native `title` to escape. Set it at the root so
+  // the whole app's tips follow the text size the reader actually chose.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--txt-fs", `${fontSize}px`);
+  }, [fontSize]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
