@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { SettingsButton } from "./SettingsButton";
 import { AboutButton } from "./AboutButton";
@@ -12,6 +12,12 @@ export function Toolbar() {
   const redo = useStore((s) => s.redo);
   const canUndo = useStore((s) => s.undoStack.length > 0);
   const canRedo = useStore((s) => s.redoStack.length > 0);
+  const exportEdits = useStore((s) => s.exportEdits);
+  const transcripts = useStore((s) => s.transcripts);
+  const editCount = useMemo(
+    () => Object.values(transcripts).reduce((n, t) => n + t.lines.filter((l) => l.orig !== undefined).length, 0),
+    [transcripts]
+  );
   const fileRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState("");
 
@@ -22,14 +28,23 @@ export function Toolbar() {
     setStatus(`imported ${n} file(s)`);
   };
 
-  const doExport = () => {
-    const blob = new Blob([exportCSV()], { type: "text/csv" });
+  const download = (csv: string, name: string) => {
+    const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "coded-segments.csv";
+    a.download = name;
     a.click();
     URL.revokeObjectURL(a.href);
+  };
+
+  const doExport = () => {
+    download(exportCSV(), "coded-segments.csv");
     setStatus("exported coded-segments.csv (complete file)");
+  };
+
+  const doExportEdits = () => {
+    download(exportEdits(), "transcript-edits.csv");
+    setStatus(`exported transcript-edits.csv (${editCount} correction${editCount === 1 ? "" : "s"})`);
   };
 
   return (
@@ -40,6 +55,12 @@ export function Toolbar() {
       <button className="btn iconlabel" onClick={doExport} title="Export the complete coded-segments.csv">
         <Icon name="download" size={16} /> Export
       </button>
+      {editCount > 0 && (
+        <button className="btn iconlabel" onClick={doExportEdits}
+          title="Export every in-app transcription correction (original vs corrected) as transcript-edits.csv">
+          <Icon name="pencil" size={15} /> Edit log ({editCount})
+        </button>
+      )}
       <DataFormatButton />
       <span className="tbdiv" />
       <button className="btn iconbtn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">

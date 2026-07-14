@@ -68,6 +68,23 @@
   pointer-events:none; box-shadow:0 4px 16px rgba(0,0,0,.32); }
 
 .empty { padding:16px; color:var(--muted); }
+
+/* inline transcription repair (dblclick a line) */
+.lineEdit { display:block; }
+.lineEdit textarea { display:block; width:100%; box-sizing:border-box; resize:none; overflow:hidden;
+  font:inherit; color:inherit; line-height:inherit;
+  background:var(--bg); border:2px solid var(--accent); border-radius:6px; padding:3px 7px; }
+.lineEdit textarea:focus { outline:none; }
+.editbar { display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+  font-size:11px; color:var(--muted); padding:3px 2px 1px; }
+.editbar kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
+  padding:0 4px; background:var(--panel); font:inherit; }
+.editloop { color:var(--accent); }
+.editrevert { border:0; background:none; font:inherit; color:var(--muted); cursor:pointer;
+  font-style:italic; padding:0; }
+.editrevert:hover { color:var(--accent); }
+.editmark { color:var(--accent); font-size:.6em; vertical-align:super; margin-left:2px;
+  cursor:help; }
 /* Scroll headroom (height set inline: viewport − one row, at both ends). The hatch
    only marks the 3rem nearest the text — a full screen of stripes is noise, but the
    band still reads as "edge of document". */

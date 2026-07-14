@@ -9,7 +9,8 @@ import { previewImport, remapSegment, type ImportPreview } from "../align";
 const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
 
-export interface Line { id: number; ts: string; speaker: string; text: string; }
+// orig = the imported text, present only while an in-app correction differs from it
+export interface Line { id: number; ts: string; speaker: string; text: string; orig?: string; }
 export interface Segment {
   sid: number; pid: string; start: number; end: number; code: string;
   notes: string; proposedBy: string; status: string;
@@ -86,6 +87,8 @@ interface State {
   openSearch: () => void;
   closeSearch: () => void;
   setSearch: (patch: Partial<Search>) => void;
+  editLine: (pid: string, id: number, text: string) => void;
+  exportEdits: () => string;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
   toggleReject: (sid: number) => void;
@@ -319,6 +322,32 @@ export const useStore = create<State>()(
         if (s.active !== pid) { set({ tabs, savedSelections: saved }); return; }
         const next = tabs[0] || "browse";
         set({ tabs, active: next, selection: saved[next] ?? emptySel(), savedSelections: saved });
+      },
+
+      // In-app transcription fix. The imported text is kept in `orig` (first edit
+      // wins) so the correction is a recorded, revertible fact, not a silent change;
+      // editing back to the original clears the flag. Line ids never change, so
+      // segments are untouched. Not on the undo stack — `orig` IS the undo.
+      editLine: (pid, id, text) => {
+        const t = get().transcripts[pid];
+        if (!t) return;
+        const lines = t.lines.map((l) => {
+          if (l.id !== id || l.text === text) return l;
+          const orig = l.orig ?? l.text;
+          const { orig: _drop, ...rest } = l;
+          return orig === text ? { ...rest, text } : { ...rest, orig, text };
+        });
+        set({ transcripts: { ...get().transcripts, [pid]: { lines } } });
+      },
+
+      exportEdits: () => {
+        const s = get();
+        const rows: Record<string, string>[] = [];
+        for (const [pid, t] of Object.entries(s.transcripts))
+          for (const l of t.lines)
+            if (l.orig !== undefined)
+              rows.push({ pid, line_id: String(l.id), timestamp: l.ts, speaker: l.speaker, original: l.orig, corrected: l.text });
+        return toCSV(rows, ["pid", "line_id", "timestamp", "speaker", "original", "corrected"]);
       },
 
       setSegmentRange: (sid, start, end) =>

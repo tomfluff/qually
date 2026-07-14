@@ -5,7 +5,8 @@ import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
-import { seekVideo } from "../video/seek";
+import { seekVideo, loopLine } from "../video/seek";
+import type { Line } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
 import type { ReactNode } from "react";
@@ -85,6 +86,8 @@ export function TranscriptView() {
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
   };
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
+  useEffect(() => { setEditingId(null); }, [active]);
   const [hoverSid, setHoverSid] = useState<number | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // debounce clearing so moving between a segment's bars doesn't flicker the brackets
@@ -225,7 +228,8 @@ export function TranscriptView() {
 
   // click selects; click+drag selects a range (Shift extends, Ctrl toggles — no drag)
   const onRowDown = (e: MouseEvent, id: number) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts")) return;
+    if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts,.lineEdit")) return;
+    if (e.detail > 1) return; // second press of a double-click: that's an edit, not a re-select
     if (e.shiftKey) { selectLine(id, { extend: true }); return; }
     if (e.ctrlKey || e.metaKey) { selectLine(id, { toggle: true }); return; }
     let moved = false;
@@ -288,6 +292,14 @@ export function TranscriptView() {
               speakerNames={speakerNames}
               searchQuery={search.query}
               current={search.current}
+              editingId={editingId}
+              onEditStart={setEditingId}
+              onEditEnd={() => setEditingId(null)}
+              nextTsOf={(id) => {
+                const ls = transcript.lines;
+                const i = ls.findIndex((l) => l.id === id);
+                return i >= 0 && i + 1 < ls.length ? ls[i + 1].ts : null;
+              }}
             />
           )),
           <div className="vpad vpad-bot" key="vpad-bot" style={{ height: pad }} />, // headroom after the last line
@@ -302,7 +314,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, showLid, speakerNames, searchQuery, current }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -319,6 +331,10 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   speakerNames: "full" | "short";
   searchQuery: string;
   current: { line: number; occ: number } | null;
+  editingId: number | null;
+  onEditStart: (id: number) => void;
+  onEditEnd: () => void;
+  nextTsOf: (id: number) => string | null;
 }) {
   const { startId, endId } = group;
   const lanes = [];
@@ -379,11 +395,71 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
         {group.lines.map((l, k) => (
           <Fragment key={l.id}>
             {k > 0 && " "}
-            {searchQuery ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1) : l.text}
+            {editingId === l.id ? (
+              <LineEditor line={l} nextTs={nextTsOf(l.id)} onDone={onEditEnd} />
+            ) : (
+              <span onDoubleClick={(e) => { e.preventDefault(); onEditStart(l.id); }}
+                title="double-click to fix transcription">
+                {searchQuery ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1) : l.text}
+                {l.orig !== undefined && <span className="editmark" title={`edited — was: ${l.orig}`}>✱</span>}
+              </span>
+            )}
           </Fragment>
         ))}
       </span>
       <span className="lanes">{lanes}</span>
     </div>
+  );
+}
+
+// Inline transcription repair (dblclick a line). While open, the loaded media —
+// if any — loops this utterance at 0.75× so the fix is made against the audio,
+// not from memory. Enter saves, Esc cancels, blur saves (it's a typo fix, losing
+// it to a stray click would hurt more than keeping it).
+function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | null; onDone: () => void }) {
+  const [value, setValue] = useState(line.text);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const looping = useRef<(() => void) | null>(null);
+  const [hasAudio, setHasAudio] = useState(false);
+
+  useEffect(() => {
+    const ta = taRef.current;
+    if (ta) {
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      ta.style.height = "auto"; ta.style.height = `${ta.scrollHeight}px`;
+    }
+    looping.current = loopLine(line.ts, nextTs);
+    setHasAudio(looping.current !== null);
+    return () => { looping.current?.(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = (text: string) => {
+    const t = text.trim();
+    if (t) useStore.getState().editLine(useStore.getState().active, line.id, t);
+    onDone();
+  };
+
+  return (
+    <span className="lineEdit">
+      <textarea ref={taRef} rows={1} value={value}
+        onChange={(e) => { setValue(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight}px`; }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); save(value); }
+          else if (e.key === "Escape") { e.stopPropagation(); onDone(); }
+        }}
+        onBlur={() => save(value)} />
+      <span className="editbar">
+        <kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel
+        {hasAudio && <span className="editloop">▶ looping {line.ts.split(".")[0]} · 0.75×</span>}
+        {line.orig !== undefined && (
+          <button className="editrevert" onMouseDown={(e) => e.preventDefault()}
+            onClick={() => save(line.orig!)}>
+            ↺ was: “{line.orig}”
+          </button>
+        )}
+      </span>
+    </span>
   );
 }
