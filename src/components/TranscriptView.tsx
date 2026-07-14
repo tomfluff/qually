@@ -10,6 +10,7 @@ import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
+import { savedScroll, positioned } from "../scrollMemory";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
@@ -88,17 +89,8 @@ const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 const MIN_PAD = 48;    // headroom floor, before the viewport has been measured
 const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
 
-// Per-tab scroll memory. Module scope, NOT component refs: TranscriptView unmounts
-// entirely while the Browse tab is shown, so refs would forget every position on the
-// way through Browse. (Selection memory is the store's savedSelections, same reason.)
-//
-// The position is an ANCHOR (top item's child index + pixels into it), not a raw
-// scrollTop: row heights above the viewport are virtua estimates, and the same VList
-// instance serves every tab, so after showing another transcript the estimates for
-// this one have changed — a saved pixel offset would land on different text.
-interface ScrollAnchor { index: number; delta: number }
-const savedScroll: Record<string, ScrollAnchor> = {};
-const positioned = new Set<string>(); // tabs whose initial position has been applied
+// per-tab scroll anchors — shared with the store, which must forget them on a
+// re-import or project swap (a pid is not stable identity). See scrollMemory.ts.
 
 export function TranscriptView() {
   const active = useStore((s) => s.active);
@@ -146,13 +138,15 @@ export function TranscriptView() {
     // when it has gone off-screen and offer a way back.
     setSelOff(offscreenDir(v));
   };
-  // which way the selection lies, if it isn't visible
+  // Which way the selection lies, if it isn't visible. Runs on EVERY scroll event, so it
+  // may not walk the selection: `Math.min(...set)` spreads it, which is O(n) per frame
+  // and throws RangeError (call-stack) once a selection gets big enough. The bounds are
+  // memoised off the selection instead, and this only reads them.
   const offscreenDir = (v: VListHandle): "up" | "down" | null => {
-    const st = useStore.getState();
-    if (st.selection.pid !== active || !st.selection.lines.size || !v.viewportSize) return null;
-    const first = Math.min(...st.selection.lines), last = Math.max(...st.selection.lines);
-    const gi = groupsRef.current.findIndex((g) => g.endId >= first);
-    const gj = groupsRef.current.findIndex((g) => g.endId >= last);
+    const b = selBounds.current;
+    if (!b || !v.viewportSize) return null;
+    const gi = groupsRef.current.findIndex((g) => g.endId >= b.first);
+    const gj = groupsRef.current.findIndex((g) => g.endId >= b.last);
     if (gi < 0) return null;
     const top = v.findItemIndex(v.scrollOffset), bot = v.findItemIndex(v.scrollOffset + v.viewportSize);
     if (gj + 1 < top) return "up";
@@ -161,6 +155,7 @@ export function TranscriptView() {
   };
   const [selOff, setSelOff] = useState<"up" | "down" | null>(null);
   const groupsRef = useRef<Group[]>([]);
+  const selBounds = useRef<{ first: number; last: number } | null>(null);
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
   useEffect(() => { setEditingId(null); }, [active]);
@@ -176,8 +171,17 @@ export function TranscriptView() {
   // merged display units (singletons when the toggle is off)
   const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
   groupsRef.current = groups; // syncMinimap runs outside render and needs the current groups
-  // re-evaluate when the selection itself changes (scroll-follow may bring it back)
-  useEffect(() => { const v = vref.current; if (v) setSelOff(offscreenDir(v)); });
+
+  // min/max of the selection, walked ONCE when it changes rather than on every scroll
+  useEffect(() => {
+    if (!selLines?.size) { selBounds.current = null; setSelOff(null); return; }
+    let first = Infinity, last = -Infinity;
+    for (const id of selLines) { if (id < first) first = id; if (id > last) last = id; }
+    selBounds.current = { first, last };
+    const v = vref.current;
+    if (v) setSelOff(offscreenDir(v)); // the selection may already be off-screen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selLines, groups, active]);
 
   // scroll the selection back into view — the way home after Home/End
   const backToSelection = () => {
@@ -282,7 +286,7 @@ export function TranscriptView() {
     // keypress seeds; the next one moves.
     e.stopPropagation();
     const gi = Math.min(groups.length - 1, Math.max(0, v.findItemIndex(v.scrollOffset) - 1)); // -1: the top vpad is item 0
-    s.pushSelUndo(`kbd:${s.undoStack.length}`); // its own undo step
+    s.pushUndo(); // a keypress is its own undo step
     s.startSelection(groups[gi].startId);
   };
 

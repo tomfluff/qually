@@ -9,6 +9,7 @@ import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, type Flag } from "../ai/flag";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { DEFAULT_ACCENT } from "../palettes";
+import { forgetScroll } from "../scrollMemory";
 
 const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
@@ -189,15 +190,29 @@ function snapshot(s: State): string {
 }
 function restore(get: () => State, set: (p: Partial<State>) => void, json: string) {
   const o = JSON.parse(json);
-  const next = { ...get(), segments: o.segments, codebook: o.codebook, hotbar: o.hotbar };
-  const sel: Selection = o.sel
+  const cur = get();
+  const next = { ...cur, segments: o.segments, codebook: o.codebook, hotbar: o.hotbar };
+  let sel: Selection = o.sel
     ? { pid: o.sel.pid, anchor: o.sel.anchor, head: o.sel.head, lines: new Set<number>(o.sel.lines) }
-    : get().selection; // a snapshot taken before selections were tracked
+    : cur.selection; // a snapshot taken before selections were tracked
+
+  // The tab this selection belonged to may have been CLOSED since the snapshot. Drop it:
+  // leaving it live meant applyCode (which trusts selection.pid) and the digit hotkeys
+  // (which only check lines.size) would write segments onto a transcript that isn't even
+  // on screen. Guarding `active` alone was not enough — the selection itself is the hazard.
+  if (sel.pid && !cur.tabs.includes(sel.pid)) sel = emptySel();
+
+  // Crossing tabs here bypasses setActive(), which is what normally stashes the outgoing
+  // tab's selection and parks the incoming one. Do its bookkeeping by hand, or the parked
+  // copy goes stale and reappears the next time you visit that tab.
+  const active = sel.pid ?? cur.active;
+  const saved = { ...cur.savedSelections };
+  if (active !== cur.active) saved[cur.active] = cur.selection; // park what we're leaving
+  if (sel.pid) saved[sel.pid] = sel;                            // and what we're restoring
+
   set({
     segments: o.segments, codebook: o.codebook, hotbar: o.hotbar,
-    hotbarCache: hotbarCodes(next), selection: sel,
-    // an undone selection may point at another tab; follow it, or it's invisible
-    active: sel.pid && get().transcripts[sel.pid] ? sel.pid : get().active,
+    hotbarCache: hotbarCodes(next), selection: sel, active, savedSelections: saved,
   });
 }
 
@@ -342,7 +357,7 @@ export const useStore = create<State>()(
         const s = get();
         const gs = groupsOf(s);
         if (!gs.length || s.selection.pid !== s.active || !s.selection.lines.size) return;
-        s.pushSelUndo(`key:${s.undoStack.length}`); // each keypress is its own step
+        s.pushUndo(); // each keypress is its own undo step
         if (extend) {
           const anchorGi = s.selection.anchor !== null ? groupIdxOf(gs, s.selection.anchor) : -1;
           const headGi = s.selection.head !== null ? groupIdxOf(gs, s.selection.head) : anchorGi;
@@ -371,7 +386,7 @@ export const useStore = create<State>()(
       clearSelection: () => {
         const s = get();
         if (!s.selection.lines.size) return; // nothing to clear, nothing to undo
-        s.pushSelUndo(`clear:${s.undoStack.length}`);
+        s.pushUndo();
         set({ selection: emptySel() });
       },
       // Tab switches stash the outgoing tab's selection and restore the incoming
@@ -549,6 +564,7 @@ export const useStore = create<State>()(
           nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
         });
         set({ hotbarCache: hotbarCodes(get()) });
+        forgetScroll(); // every pid in the new project is a different transcript
       },
 
       exportEdits: () => {
@@ -635,16 +651,19 @@ export const useStore = create<State>()(
         // its own undo step rather than being swallowed as "the same gesture"
         set({ undoStack: stack, redoStack: [], selGesture: null }); // new action invalidates redo
       },
-      // A selection change is undoable, but a drag calls selectLine on every mousemove —
-      // pushing each one would bury the real edits under dozens of selection steps.
-      // Coalesce to ONE entry per gesture, snapshotted before the gesture's first
-      // mutation. Callers open a gesture (a row mousedown, a keypress); the mouseup
-      // closes it. Actions never self-push: only the caller knows where a gesture starts,
-      // and a snapshot taken mid-gesture would restore the middle of a drag.
+      // ONLY the mouse needs coalescing: a drag calls selectLine on every mousemove, and
+      // pushing each would bury the real edits under dozens of selection steps. One entry
+      // per drag, snapshotted before its first mutation; mouseup closes it. Every keyboard
+      // path is already one discrete gesture per press and just calls pushUndo().
+      //
+      // This used to take a gesture NAME, and the keyboard passed `key:${undoStack.length}`
+      // to be unique per press. The stack is capped at 80 — so once full, that length stops
+      // changing, every press produced the SAME name, and this swallowed them all as "the
+      // same gesture". Arrow-key selection silently stopped being undoable after 80 edits.
       pushSelUndo: (gesture) => {
         const s = get();
-        if (s.selGesture === gesture) return; // same gesture, already pushed
-        s.pushUndo();          // clears selGesture...
+        if (s.selGesture === gesture) return; // already inside this drag
+        s.pushUndo();                 // clears selGesture...
         set({ selGesture: gesture }); // ...so claim it after
       },
       endSelGesture: () => set({ selGesture: null }),
@@ -736,8 +755,25 @@ function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string,
   const lines = rowsToLines(rows);
   const s = get();
   const knownBefore = new Set(speakersOf(s)); // must be read BEFORE the import lands
+  // REPLACING an existing transcript, not adding one. The consent modal path already
+  // clears this state, but it only runs when the transcript has SEGMENTS — re-importing
+  // an uncoded transcript came straight here, leaving an undo stack full of selections
+  // (and a parked selection, and a scroll anchor) that point at line ids the new file may
+  // not have. Coding from a restored one of those writes segments onto lines that no
+  // longer exist.
+  const replacing = !!s.transcripts[pid];
+  if (replacing) {
+    const saved = { ...s.savedSelections };
+    delete saved[pid];
+    forgetScroll(pid);
+    set({
+      undoStack: [], redoStack: [], selGesture: null,
+      selection: s.selection.pid === pid ? emptySel() : s.selection,
+      savedSelections: saved,
+    });
+  }
   set({
-    transcripts: { ...s.transcripts, [pid]: { lines } },
+    transcripts: { ...get().transcripts, [pid]: { lines } },
     tabs: s.tabs.includes(pid) ? s.tabs : [...s.tabs, pid],
     active: s.active === "browse" && !s.tabs.length ? pid : s.active,
   });

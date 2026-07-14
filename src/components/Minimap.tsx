@@ -79,7 +79,13 @@ export const Minimap = forwardRef<MinimapHandle, {
       const laneX = w - laneAreaW - 2;
       const colW = laneAreaW / Math.max(1, cols);
       const textX = railX + railW + 3;
-      const textW = Math.max(4, laneX - textX - 3);
+      // The rail costs the text bars width. At the narrowest minimap (44px, simplified)
+      // textX runs PAST laneX and the bars would be drawn on top of the code lanes — so
+      // below a usable width, drop the bars entirely: "who" and "which code" are worth
+      // more than "how much was said" when there are only 44 pixels to say it in.
+      const textAvail = laneX - textX - 3;
+      const showText = textAvail >= 3;
+      const textW = Math.max(4, textAvail);
       const codeMinH = simple ? 5 : 1.5;
       const warnMinH = simple ? 6 : 2.5;
       const muted = getComputedStyle(cv).getPropertyValue("--muted").trim() || "#888";
@@ -114,9 +120,11 @@ export const Minimap = forwardRef<MinimapHandle, {
           ctx.globalAlpha = quiet ? 0.45 : 0.95;
           ctx.fillStyle = speakerColor(ui, top);
           ctx.fillRect(railX, k * bh, railW, bh - 1);
-          ctx.globalAlpha = quiet ? 0.3 : 0.55;
-          ctx.fillStyle = muted;
-          ctx.fillRect(textX, k * bh, Math.max(3, Math.min(1, b.chars / (b.n * CAP)) * textW), bh - 1);
+          if (showText) {
+            ctx.globalAlpha = quiet ? 0.3 : 0.55;
+            ctx.fillStyle = muted;
+            ctx.fillRect(textX, k * bh, Math.max(3, Math.min(1, b.chars / (b.n * CAP)) * textW), bh - 1);
+          }
         }
       } else {
         // detailed: a speaker rail beside one faint text bar per group (width ∝ length).
@@ -130,10 +138,12 @@ export const Minimap = forwardRef<MinimapHandle, {
           ctx.globalAlpha = quiet ? 0.45 : 0.95;
           ctx.fillStyle = speakerColor(ui, g.speaker);
           ctx.fillRect(railX, y, railW, Math.max(0.8, bh));
-          const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
-          ctx.globalAlpha = quiet ? 0.28 : 0.5;
-          ctx.fillStyle = muted;
-          ctx.fillRect(textX, y, Math.max(2, Math.min(1, len / CAP) * textW), bh);
+          if (showText) {
+            const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
+            ctx.globalAlpha = quiet ? 0.28 : 0.5;
+            ctx.fillStyle = muted;
+            ctx.fillRect(textX, y, Math.max(2, Math.min(1, len / CAP) * textW), bh);
+          }
         }
       }
 
