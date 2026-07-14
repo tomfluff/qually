@@ -17,8 +17,9 @@ export function Welcome() {
         <button className="btn primary welcome-import" onClick={() => fileRef.current?.click()}>
           <Icon name="upload" size={17} /> Import a transcript…
         </button>
-        <input ref={fileRef} type="file" multiple accept=".csv" style={{ display: "none" }}
-          onChange={(e) => { const f = e.target.files; if (f?.length) importFiles(f); e.target.value = ""; }} />
+        <input ref={fileRef} type="file" multiple accept=".csv,.json" style={{ display: "none" }}
+          onChange={(e) => { const f = e.target.files; if (f?.length) void importFiles(f); e.target.value = ""; }} />
+        <p className="welcome-open">Already have a <code>.qually.json</code> project? Import it here to pick up where you left off.</p>
         <button className="linklike" onClick={() => setFormatOpen(true)}>See the expected file format &amp; get a converter prompt</button>
       </div>
     </div>

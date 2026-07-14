@@ -7,6 +7,7 @@ import { mergeGroups, type Group } from "../merge";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, type Flag } from "../ai/flag";
+import { FORMAT, VERSION, parseProject, type Project } from "../project";
 
 const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
@@ -91,6 +92,7 @@ interface State {
   formatOpen: boolean;
   search: Search;
   pendingImports: PendingImport[]; // re-imports awaiting a user decision
+  pendingProject: Project | null;  // a loaded project awaiting the replace confirmation
 
   importFiles: (files: FileList | File[]) => Promise<void>;
   resolveImport: (choice: ImportChoice) => void;
@@ -120,6 +122,12 @@ interface State {
   dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
   logAiCall: (call: AiCall) => void;
   exportAiLog: () => string;
+  exportCodebook: () => string;
+  exportTranscript: (pid: string) => string;
+  exportNotices: () => string;
+  exportProject: () => string;
+  openProject: (p: Project) => void;
+  setPendingProject: (p: Project | null) => void;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
   toggleReject: (sid: number) => void;
@@ -186,10 +194,16 @@ export const useStore = create<State>()(
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
-      pendingImports: [],
+      pendingImports: [], pendingProject: null,
 
       importFiles: async (files) => {
         for (const f of Array.from(files)) {
+          // a project file goes through the same one entry point; the modal confirms
+          // before it replaces the workspace
+          if (/\.json$/i.test(f.name)) {
+            set({ pendingProject: parseProject(await f.text()) });
+            continue;
+          }
           const rows = parseCSV(await f.text());
           if (!rows.length) continue;
           const cols = Object.keys(rows[0]);
@@ -414,6 +428,78 @@ export const useStore = create<State>()(
         ["at", "model", "task", "pid", "lines", "redactions", "inTok", "outTok", "costUsd"]
       ),
 
+      // The other half of the CSV interchange story: importCodebook has always
+      // existed with no exporter, so colors and definitions could only ever be lost.
+      exportCodebook: () => {
+        const cb = get().codebook;
+        const rows = Object.keys(cb).sort().map((code) => ({
+          code, color: cb[code].color, short_def: cb[code].def, status: cb[code].status,
+        }));
+        return toCSV(rows, ["code", "color", "short_def", "status"]);
+      },
+
+      // Re-importable transcript, carrying the CORRECTED text. `original` is the
+      // pre-correction text (informational; the importer ignores unknown columns).
+      exportTranscript: (pid) => {
+        const t = get().transcripts[pid];
+        if (!t) return "";
+        const rows = t.lines.map((l) => ({
+          line_id: String(l.id), timestamp: l.ts, speaker: l.speaker, text: l.text,
+          original: l.orig ?? "",
+        }));
+        return toCSV(rows, ["line_id", "timestamp", "speaker", "text", "original"]);
+      },
+
+      exportNotices: () => {
+        const s = get();
+        const rows: Record<string, string>[] = [];
+        for (const pid of s.tabs) {
+          const t = s.transcripts[pid];
+          if (!t) continue;
+          for (const l of t.lines) {
+            const f = s.aiFlags[`${pid}:${l.id}`];
+            if (!f || f.hash !== hashLine(l.text)) continue;
+            for (const sp of f.spans) {
+              const lens = sp.lens ?? "transcription";
+              if (lens === "transcription") continue;
+              rows.push({ pid, line_id: String(l.id), speaker: l.speaker, lens, quote: sp.quote, note: sp.reason, line: l.text });
+            }
+          }
+        }
+        return toCSV(rows, ["pid", "line_id", "speaker", "lens", "quote", "note", "line"]);
+      },
+
+      exportProject: () => {
+        const s = get();
+        const p: Project = {
+          format: FORMAT, version: VERSION, savedAt: new Date().toISOString(),
+          transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
+          extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
+          hotbar: s.hotbar, video: s.video,
+          ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog,
+          // NB: no API key (not in the store), no UI prefs, no media — see project.ts
+        };
+        return JSON.stringify(p, null, 2);
+      },
+
+      setPendingProject: (p) => set({ pendingProject: p }),
+
+      // Replaces the workspace wholesale. Merging would mean sid collisions and
+      // code-name conflicts for no benefit; the modal confirms before we get here.
+      openProject: (p) => {
+        set({
+          transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
+          extSegRows: p.extSegRows, tabs: p.tabs, active: p.active,
+          hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiLog: p.aiLog,
+          // transient state belongs to the old workspace, not the loaded one
+          selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
+          jump: null, search: { open: false, query: "", scope: "tab", current: null },
+          pendingImports: [], pendingProject: null,
+          nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
+        });
+        set({ hotbarCache: hotbarCodes(get()) });
+      },
+
       exportEdits: () => {
         const s = get();
         const rows: Record<string, string>[] = [];
@@ -601,7 +687,13 @@ function importCodebook(get: Get, set: Set_, rows: Record<string, string>[]) {
     if (!r.code) return;
     const key = ensureCode(get, set, r.code);
     const cb = get().codebook;
-    set({ codebook: { ...cb, [key]: { ...cb[key], def: r.short_def || cb[key].def, status: r.status || cb[key].status } } });
+    set({ codebook: { ...cb, [key]: {
+      ...cb[key],
+      def: r.short_def || cb[key].def,
+      status: r.status || cb[key].status,
+      // colors come from our own codebook.csv export; older files have no column
+      color: /^#[0-9a-f]{6}$/i.test(r.color || "") ? r.color : cb[key].color,
+    } } });
   });
 }
 

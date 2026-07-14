@@ -7,3 +7,6 @@
 .linklike { display:inline-block; margin-top:18px; background:none; border:none; padding:0;
   color:var(--accent); cursor:pointer; font-size:13px; text-decoration:underline; }
 .linklike:hover { filter:brightness(1.12); }
+.welcome-open { margin-top:14px; font-size:13px; color:var(--muted); }
+.welcome-open code { background:var(--panel); border:1px solid var(--line); border-radius:4px;
+  padding:0 4px; font-size:.92em; }

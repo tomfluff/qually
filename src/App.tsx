@@ -10,6 +10,7 @@ import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
 import { ImportModal } from "./components/ImportModal";
+import { ProjectModal } from "./components/ProjectModal";
 import { SearchBar } from "./components/SearchBar";
 import { Welcome } from "./components/Welcome";
 import { Icon } from "./components/Icon";
@@ -61,9 +62,13 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState();
-      // The re-import modal is a decision point: it owns the keyboard until
-      // answered. Checked before the input guard below — the file input still
-      // holds focus right after an import, and Esc has to close the modal anyway.
+      // The re-import / open-project modals are decision points: they own the
+      // keyboard until answered. Checked before the input guard below — the file
+      // input still holds focus right after an import, and Esc has to close them.
+      if (s.pendingProject) {
+        if (e.key === "Escape") s.setPendingProject(null);
+        return;
+      }
       if (s.pendingImports.length) {
         if (e.key === "Escape") s.resolveImport("cancel");
         return;
@@ -160,6 +165,7 @@ export function App() {
       )}
       <CommandPalette />
       <ImportModal />
+      <ProjectModal />
     </div>
   );
 }
