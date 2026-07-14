@@ -50,17 +50,41 @@ export function VideoDock() {
     });
   };
 
+  // Drag on the COMPOSITOR, not through React. This used to setGeom() on every
+  // mousemove: ~60 React renders a second, each one re-running the clamp, writing new
+  // left/bottom, and forcing the browser to re-lay-out and repaint a fixed panel that
+  // carries a 34px blur shadow — with a <video> inside it. That is the whole reason
+  // dragging felt heavy, and it was heavy whether or not media was loaded.
+  //
+  // Now a move only writes `transform`, which the compositor can apply without layout
+  // or paint. React learns the final position exactly once, on mouseup.
   const startDrag = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button,input")) return;
-    const el = (e.currentTarget as HTMLElement).parentElement!;
+    const el = (e.currentTarget as HTMLElement).parentElement as HTMLElement;
     const r = el.getBoundingClientRect();
-    const dx = e.clientX - r.left, dy = e.clientY - r.top, h0 = r.height;
-    // track the BOTTOM edge so collapse/expand keeps the dock's bottom pinned
-    const move = (ev: MouseEvent) => setGeom((g) => ({
-      ...g, x: ev.clientX - dx, bottom: window.innerHeight - (ev.clientY - dy + h0),
-    }));
-    const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
-    document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+    const x0 = e.clientX, y0 = e.clientY, left0 = r.left, top0 = r.top, h0 = r.height;
+    let dx = 0, dy = 0, raf = 0;
+    el.style.willChange = "transform";
+    const move = (ev: MouseEvent) => {
+      dx = ev.clientX - x0; dy = ev.clientY - y0;
+      // coalesce to one write per frame; a mouse can out-pace the display
+      if (!raf) raf = requestAnimationFrame(() => {
+        raf = 0;
+        el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+      });
+    };
+    const up = () => {
+      if (raf) cancelAnimationFrame(raf);
+      el.style.transform = "";
+      el.style.willChange = "";
+      // hand the final position to React — the clamp below keeps it on screen.
+      // track the BOTTOM edge so collapse/expand keeps the dock's bottom pinned
+      setGeom((g) => ({ ...g, x: left0 + dx, bottom: window.innerHeight - (top0 + dy + h0) }));
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
   };
 
   const startResize = (e: React.MouseEvent) => {
