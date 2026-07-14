@@ -66,15 +66,23 @@ export function SettingsButton() {
               ))}
             </div>
           </div>
+          {/* WCAG 1.4.4 expects text to reach 200% without loss of content: from the
+              16px default that is 32px, which the old max of 30 could not even reach.
+              48 gives real headroom for low vision without needing browser zoom (which
+              also grows the chrome and narrows the reading column). */}
           <label className="srow">
             <span>Transcript text</span>
-            <input type="range" min={12} max={30} value={fontSize} onChange={(e) => setFontSize(+e.target.value)} />
+            <input type="range" min={12} max={48} value={fontSize} onChange={(e) => setFontSize(+e.target.value)} />
             <span className="sval">{fontSize}</span>
+            <button className="sreset" onClick={(e) => { e.preventDefault(); setFontSize(16); }}
+              title="Reset to 16px">reset</button>
           </label>
           <label className="srow">
             <span>Sidebar text</span>
-            <input type="range" min={10} max={30} value={sidebarFontSize} onChange={(e) => setSidebarFontSize(+e.target.value)} />
+            <input type="range" min={11} max={36} value={sidebarFontSize} onChange={(e) => setSidebarFontSize(+e.target.value)} />
             <span className="sval">{sidebarFontSize}</span>
+            <button className="sreset" onClick={(e) => { e.preventDefault(); setSidebarFontSize(13); }}
+              title="Reset to 13px">reset</button>
           </label>
 
           <div className="settings-sub">Transcript</div>

@@ -716,6 +716,21 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
 }
 
 // selector helpers
+// A lane bar used to say WHICH code it is by hue alone (the name was hover-only) —
+// unusable at low acuity, and the 12-colour rotation contains near-neighbours.
+// Pattern is a second, independent channel, shown on the lane AND on the sidebar
+// swatch so the mapping is learnable. Derived from the code NAME rather than stored:
+// no schema change, and two codes that happen to share a colour still get different
+// patterns — the very case this fixes. Diagonal stripes are deliberately NOT in the
+// set: those mean "rejected" and must stay unambiguous.
+export const PATTERNS = 6;
+export const patternOf = (code: string): number => {
+  let h = 0x811c9dc5; // FNV-1a, as in ai/flag.ts
+  const s = norm(code);
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0) % PATTERNS;
+};
+
 export const laneAssign = (segs: Segment[]): (Segment & { lane: number })[] => {
   const sorted = [...segs].sort((a, b) => a.start - b.start || b.end - a.end);
   const laneEnd: number[] = [];

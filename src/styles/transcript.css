@@ -17,9 +17,14 @@
 /* vertical spacing lives on the text so the lane strip spans the full row
    height and multiline segment bars connect (no inter-row gap) */
 .lineRow .txt { padding-block:6px; }
-/* gray hover, light-primary select, slightly-deeper primary on select+hover */
+/* gray hover, light-primary select, slightly-deeper primary on select+hover.
+   The tint alone was the ONLY difference between selected and unselected — a small
+   delta against the hover grey, and pure colour. The rail adds a structural cue
+   (present vs absent), so selection survives low acuity and any colour deficiency.
+   Reserved as transparent on every row, so selecting shifts nothing. */
+.lineRow { border-inline-start:4px solid transparent; }
 .lineRow:hover { background:var(--row-hover); }
-.lineRow.selected { background:var(--row-sel); }
+.lineRow.selected { background:var(--row-sel); border-inline-start-color:var(--accent); }
 .lineRow.selected:hover { background:var(--row-sel-hover); }
 .lineRow .lid { width:var(--lid-w, 4ch); text-align:right; color:var(--muted); flex-shrink:0;
   user-select:none; white-space:nowrap; }
@@ -30,10 +35,11 @@
 .lineRow .ts:hover { background:var(--accent); }
 .lineRow .spk { width:var(--spk-w, 2.5ch); text-align:center; font-weight:700;
   flex-shrink:0; color:var(--muted); white-space:nowrap; }
-/* dim researcher rows via the text columns only, so the lane strip and its
-   tooltip keep full-strength colors regardless of speaker */
-.lineRow.rspk .lid, .lineRow.rspk .ts,
-.lineRow.rspk .spk, .lineRow.rspk .txt { opacity:.6; }
+/* Quiet researcher rows with a dimmer COLOUR, not opacity. Opacity composites
+   against whatever is behind it, so .6 dragged the already-muted line number and
+   speaker label to ~2.6:1 — the interviewer's own labels became the least
+   readable text on screen. --fg-dim is 8.86:1 and still visibly quieter. */
+.lineRow.rspk .txt { color:var(--fg-dim); }
 .lineRow .txt { flex:1; line-height:1.45; }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
 .lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;
@@ -41,6 +47,33 @@
 .laneBar { width:var(--lane-w, 18px); flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
+
+/* WCAG 1.4.1: which code a lane bar is must not be carried by HUE ALONE. Each code
+   also gets one of six patterns (patternOf(), derived from the code name), drawn as
+   a --bg overlay so it works on any code colour in either theme. The same classes
+   paint the sidebar swatch — the swatch is what TEACHES the pattern, so both must
+   draw it identically.
+   Repeating fine VERTICAL stripes are deliberately not in this set: that is the
+   "rejected" treatment (see the rejected style below), and the two were genuinely
+   indistinguishable when tried side by side. The three patterns that vary along Y
+   restart at each row boundary within a multi-line segment; the seam is minor next
+   to the alternative, which is no non-colour channel at all. */
+[class*="lp"]::before {
+  content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+}
+.lp0::before { background:none; }                                     /* solid       */
+.lp1::before { background:repeating-linear-gradient(0deg,             /* bands       */
+  color-mix(in srgb, var(--bg) 80%, transparent) 0 4px, transparent 4px 9px); }
+.lp2::before { background:linear-gradient(90deg, transparent 0 34%,   /* centre spine */
+  color-mix(in srgb, var(--bg) 82%, transparent) 34% 66%, transparent 66%); }
+.lp3::before { background:radial-gradient(                            /* dots        */
+  color-mix(in srgb, var(--bg) 84%, transparent) 2px, transparent 2.1px) 50% 0 / 100% 8px repeat-y; }
+.lp4::before { background:conic-gradient(                             /* checker     */
+  color-mix(in srgb, var(--bg) 80%, transparent) 25%, transparent 0 50%,
+  color-mix(in srgb, var(--bg) 80%, transparent) 0 75%, transparent 0) 0 0 / 8px 8px; }
+.lp5::before { background:linear-gradient(90deg,                      /* edge rails  */
+  color-mix(in srgb, var(--bg) 82%, transparent) 0 24%, transparent 24% 76%,
+  color-mix(in srgb, var(--bg) 82%, transparent) 76%); }
 /* close-call flag: exclamation badge on a top corner of the segment block.
    size (xs/sm/md/lg) and corner (left/right) are settings */
 .ccbadge { position:absolute; top:-5px; z-index:3; pointer-events:none;
@@ -106,11 +139,22 @@
 /* AI-flagged likely mis-transcription — hover for what it probably should be */
 .aidoubt { border-bottom:2px dotted #e0a020; background:color-mix(in srgb,#e0a020 15%, transparent);
   border-radius:2px; cursor:help; }
-/* AI noticing highlight (lens color via --lens-c): solid quiet tint, deliberately
-   distinct from the dotted error amber — something to look at, not something wrong */
-.ainote { border-bottom:2px solid var(--lens-c, var(--accent));
+/* AI noticing highlight (lens color via --lens-c): quiet tint, deliberately distinct
+   from the dotted error amber — something to look at, not something wrong.
+   All six lenses used the same mark and differed only in HUE, so which lens had
+   flagged a span was unreadable without colour vision. The underline STYLE now
+   carries the lens too; colour reinforces it rather than carrying it alone.
+   (Dotted stays reserved for .aidoubt — a transcription error is not a noticing.) */
+.ainote { text-decoration:underline var(--lens-c, var(--accent));
+  text-decoration-thickness:2px; text-underline-offset:3px;
   background:color-mix(in srgb, var(--lens-c, var(--accent)) 11%, transparent);
   border-radius:2px; cursor:help; }
+.ainote.lens-emotion    { text-decoration-style:wavy; }
+.ainote.lens-evaluation { text-decoration-style:double; }
+.ainote.lens-desire     { text-decoration-style:dashed; }
+.ainote.lens-workaround { text-decoration-style:solid; }
+.ainote.lens-tension    { text-decoration-style:solid; text-decoration-thickness:4px; }
+.ainote.lens-invivo     { text-decoration:none; box-shadow:inset 0 0 0 2px var(--lens-c, var(--accent)); }
 /* Scroll headroom (height set inline: viewport − one row, at both ends). The hatch
    only marks the 3rem nearest the text — a full screen of stripes is noise, but the
    band still reads as "edge of document". */

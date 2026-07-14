@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
-import { useStore, laneAssign } from "../state/store";
+import { useStore, laneAssign, patternOf } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { Minimap, type MinimapHandle } from "./Minimap";
@@ -52,7 +52,7 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
     const isError = spanLens(h.span) === "transcription";
     nodes.push(isError
       ? <span key={k} className="aidoubt" data-tip={h.span.reason}>{text.slice(h.at, h.at + h.len)}</span>
-      : <span key={k} className="ainote" style={{ "--lens-c": lens?.color } as CSSProperties}
+      : <span key={k} className={`ainote lens-${spanLens(h.span)}`} style={{ "--lens-c": lens?.color } as CSSProperties}
           data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason} · Alt-click to dismiss`}
           onClick={(e) => {
             if (!e.altKey) return; // plain click keeps selecting the line
@@ -69,6 +69,7 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
 const lidLabel = (g: Group) => g.startId === g.endId ? `${g.startId}` : `${g.startId}–${g.endId}`;
 const shortSpeaker = (s: string) => s.trim().slice(0, 3);
 const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
+
 const MIN_PAD = 48;    // headroom floor, before the viewport has been measured
 const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
 
@@ -97,6 +98,8 @@ export function TranscriptView() {
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
+  // a primitive, not an object — a fresh-object selector re-renders forever (see CodeMenu)
+  const headId = useStore((s) => (s.selection.pid === s.active ? s.selection.head : null));
   const fontSize = useStore((s) => s.ui.fontSize);
   const search = useStore((s) => s.search);
   const selectLine = useStore((s) => s.selectLine);
@@ -208,6 +211,28 @@ export function TranscriptView() {
   const toTop = () => vref.current?.scrollToIndex(1, { align: "start" });
   const toBottom = () => vref.current?.scrollToIndex(groups.length, { align: "end" });
 
+  // The ONLY way into a selection used to be onMouseDown on a row: arrow keys are
+  // gated on a selection already existing, so a keyboard user could never make the
+  // first one — and the digit hotkeys, the whole point of the app, stayed forever
+  // out of reach. The list is now a tab stop, and the first arrow press seeds a
+  // selection from the top VISIBLE line (not line 1 — you'd lose your place in a
+  // 3000-line transcript). Once a selection exists, App's global handler drives it.
+  const onListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const s = useStore.getState();
+    if (s.selection.pid === active && s.selection.lines.size) return; // App moves it from here
+    const v = vref.current;
+    if (!v || !groups.length) return;
+    e.preventDefault();
+    // App's window handler also listens for arrows. It runs AFTER this one (window is
+    // above the list in the bubble path) and would see the selection we just made and
+    // immediately advance it — so the first press would silently skip a line. This
+    // keypress seeds; the next one moves.
+    e.stopPropagation();
+    const gi = Math.min(groups.length - 1, Math.max(0, v.findItemIndex(v.scrollOffset) - 1)); // -1: the top vpad is item 0
+    s.startSelection(groups[gi].startId);
+  };
+
   // Browse -> jump: scroll the virtualized list to the unit containing the line.
   // Waits for the measured pad (jump stays pending): on a fresh mount the top pad is
   // still the 48px placeholder, and jumping first means the pad's growth afterwards
@@ -219,6 +244,22 @@ export function TranscriptView() {
     positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
     clearJump();
   }, [jump, active, transcript, groups, clearJump, pad]);
+
+  // Keep the moving end of the selection on screen. Without this, arrowing past the
+  // viewport edge walks the selection off-screen and the keyboard user is coding
+  // blind. Only scrolls when the head is actually outside the visible range, so a
+  // mouse drag inside the viewport doesn't jerk the list around.
+  useEffect(() => {
+    const v = vref.current;
+    if (headId === null || !v || !v.viewportSize) return;
+    const gi = groups.findIndex((g) => headId >= g.startId && headId <= g.endId);
+    if (gi < 0) return;
+    const first = v.findItemIndex(v.scrollOffset);
+    const last = v.findItemIndex(v.scrollOffset + v.viewportSize);
+    const idx = gi + 1; // +1 for the top vpad
+    if (idx <= first) v.scrollToIndex(idx, { align: "start" });
+    else if (idx >= last) v.scrollToIndex(idx, { align: "end" });
+  }, [headId, groups]);
 
   // Tooltips open upward, but the list is a scroller and clips them — and with the
   // headroom, the line you're reading is usually parked at the very top. Flip the tip
@@ -340,6 +381,8 @@ export function TranscriptView() {
     <>
       <div className="tview" ref={tviewRef}>
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
+        tabIndex={0} onKeyDown={onListKeyDown}
+        aria-label={`Transcript ${active}. Press the down arrow to select a line, then 1 to 9 to apply a code.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad }} />, // headroom before the first line
@@ -418,7 +461,8 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const isStart = seg.start >= startId && seg.start <= endId;
     const isEnd = seg.end >= startId && seg.end <= endId;
     const cc = closeCallSids.has(seg.sid);
-    const cls = "laneBar" + (rej ? " rejected" : "") + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
+    const cls = "laneBar" + (rej ? " rejected" : ` lp${patternOf(seg.code)}`)
+      + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
     // rejected: keep the code color, but faded + striped + outlined to read as inactive.
     // draw top/bottom only on the segment's first/last line so a multi-line reject
     // reads as one continuous outline instead of per-line notches.

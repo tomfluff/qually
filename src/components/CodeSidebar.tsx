@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStore } from "../state/store";
+import { useStore, patternOf } from "../state/store";
 import { CodeMenu } from "./CodeMenu";
 import { CodeCombobox } from "./CodeCombobox";
 import { openColorPicker } from "../colorPicker";
@@ -36,7 +36,8 @@ export function CodeSidebar() {
             onClick={() => { if (hasSel) applyCode(code); }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
             title={`${code}  (right-click for options)`}>
-            <span className="codebar" style={{ background: codebook[code].color }} title="recolor"
+            <span className={`codebar lp${patternOf(code)}`}
+              style={{ background: codebook[code].color }} title="recolor"
               onClick={(e) => {
                 e.stopPropagation();
                 openColorPicker(codebook[code].color, (v) => setColor(code, v));

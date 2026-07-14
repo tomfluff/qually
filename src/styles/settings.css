@@ -19,6 +19,10 @@
 .settings-pop .sval { min-width:2.2ch; padding:2px 4px; text-align:center;
   color:var(--fg); font-variant-numeric:tabular-nums; background:var(--panel);
   border:1px solid var(--line); border-radius:5px; }
+/* a range input is a small drag target and has no way back to the default */
+.settings-pop .sreset { border:none; background:none; padding:2px 3px; cursor:pointer;
+  color:var(--muted); font:inherit; font-size:.85em; text-decoration:underline; }
+.settings-pop .sreset:hover { color:var(--accent); }
 .settings-pop .seg { display:flex; width:140px; border:1px solid var(--line);
   border-radius:7px; overflow:hidden; }
 .settings-pop .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
