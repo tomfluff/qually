@@ -5,6 +5,9 @@
   box-shadow:0 10px 34px rgba(0,0,0,.28); padding:14px; display:flex;
   flex-direction:column; gap:9px; font-size:1rem;
   max-height:calc(100vh - 62px); overflow-y:auto; }
+/* the popover scrolls when it overflows — its rows must never be flex-crushed
+   to fit (that renders as rows collapsing onto each other) */
+.settings-pop > * { flex-shrink:0; }
 .settings-title { font-size:15px; font-weight:700; color:var(--fg); margin-bottom:2px; }
 .settings-sub { font-size:10px; text-transform:uppercase; letter-spacing:.07em;
   color:var(--muted); font-weight:700; margin-top:5px; padding-bottom:4px;
