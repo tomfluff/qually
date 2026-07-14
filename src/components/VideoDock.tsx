@@ -51,49 +51,48 @@ export function VideoDock() {
     });
   };
 
-  // Drag on the COMPOSITOR, not through React. This used to setGeom() on every
-  // mousemove: ~60 React renders a second, each one re-running the clamp, writing new
-  // left/bottom, and forcing the browser to re-lay-out and repaint a fixed panel that
-  // carries a 34px blur shadow — with a <video> inside it. That is the whole reason
-  // dragging felt heavy, and it was heavy whether or not media was loaded.
-  //
-  // Now a move only writes `transform`, which the compositor can apply without layout
-  // or paint. React learns the final position exactly once, on mouseup.
+  // The dock is positioned by TRANSFORM, permanently (see `pos` below) — the drag and
+  // the resting state share one rendering path. Two earlier attempts each fixed part
+  // of a drop flicker and left a remainder:
+  //   1. setGeom-per-mousemove: ~60 React renders/sec re-laying-out a fixed panel with
+  //      a 34px blur shadow — the drag was sluggish.
+  //   2. transform during the drag, left/bottom at rest: numerically seamless (the
+  //      committed position matched the last painted one exactly), yet a one-frame
+  //      flash survived on real GPUs, because the drop still SWITCHED RENDERING MODES
+  //      (transform -> layout), which re-rasterizes the panel.
+  // Now the drop writes the same property with the same value the drag just wrote.
+  // There is no handoff left to flicker.
   const startDrag = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button,input")) return;
     const el = (e.currentTarget as HTMLElement).parentElement as HTMLElement;
     const r = el.getBoundingClientRect();
-    const x0 = e.clientX, y0 = e.clientY, left0 = r.left, top0 = r.top, h0 = r.height, w0 = r.width;
-    // Clamp DURING the drag, with the same bounds the committed position uses (keep a
-    // 60px grab handle on screen). The drag used to be unclamped while the drop was
-    // clamped, so releasing near an edge visibly relocated the dock — read as flicker.
-    // Clamped live, the drop can never move anything: it commits where you already are.
-    const clampDx = (d: number) =>
-      Math.max(60 - w0, Math.min(left0 + d, window.innerWidth - 60)) - left0;
-    const clampDy = (d: number) => {
-      const bot = Math.max(0, Math.min(window.innerHeight - (top0 + d + h0), window.innerHeight - 40));
-      return window.innerHeight - bot - h0 - top0;
-    };
-    let dx = 0, dy = 0, raf = 0;
+    // If the dock has never been dragged it sits on the CSS default (right:24/bottom:24)
+    // with no transform. Convert to transform positioning NOW, before any movement —
+    // same place, so nothing visibly changes, and every later write is absolute.
+    if (geom.x === null || geom.bottom === null)
+      flushSync(() => setGeom((g) => ({ ...g, x: r.left, bottom: window.innerHeight - r.bottom })));
+    const x0 = e.clientX, y0 = e.clientY, w0 = r.width;
+    const bx = r.left, bb = window.innerHeight - r.bottom; // where this drag starts from
+    // Clamp DURING the drag, with the same bounds the render uses (keep a 60px grab
+    // handle on screen) — an unclamped drag with a clamped commit relocated the dock
+    // on edge drops.
+    let tx = bx, tb = bb, raf = 0;
     const move = (ev: MouseEvent) => {
-      dx = clampDx(ev.clientX - x0); dy = clampDy(ev.clientY - y0);
+      tx = Math.max(60 - w0, Math.min(bx + (ev.clientX - x0), window.innerWidth - 60));
+      tb = Math.max(0, Math.min(bb - (ev.clientY - y0), window.innerHeight - 40));
       // coalesce to one write per frame; a mouse can out-pace the display
       if (!raf) raf = requestAnimationFrame(() => {
         raf = 0;
-        el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+        el.style.transform = `translate3d(${tx}px, ${-tb}px, 0)`;
       });
     };
     const up = () => {
       if (raf) cancelAnimationFrame(raf);
-      // ORDER MATTERS, and it must all happen in ONE task. setGeom from a native
-      // listener is committed by React in a LATER task, and the browser may paint in
-      // between — so "clear transform, then setGeom" showed the dock back at its
-      // pre-drag spot for one frame on the drops that lost the race. flushSync commits
-      // the new left/bottom NOW (the dock is briefly position+transform, doubly offset,
-      // but nothing can paint mid-task), and only then does the transform come off.
-      // track the BOTTOM edge so collapse/expand keeps the dock's bottom pinned
-      flushSync(() => setGeom((g) => ({ ...g, x: left0 + dx, bottom: window.innerHeight - (top0 + dy + h0) })));
-      el.style.transform = "";
+      // One task, so no paint can interleave: write the final transform imperatively
+      // (a no-op if the last rAF already did), then commit the SAME numbers — React's
+      // render re-writes the identical transform string. The compositor sees no change.
+      el.style.transform = `translate3d(${tx}px, ${-tb}px, 0)`;
+      flushSync(() => setGeom((g) => ({ ...g, x: tx, bottom: tb })));
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
     };
@@ -112,13 +111,16 @@ export function VideoDock() {
   const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? void v.play() : v.pause(); };
   const setRate = (rate: number) => setGeom((g) => ({ ...g, rate }));
 
-  // clamp so a drag (or a persisted position from a larger window) can't
-  // strand the dock offscreen with no way to grab it back
+  // Positioned by transform off a left:0/bottom:0 anchor — the same property the drag
+  // writes, so drag and rest are one rendering path (see startDrag). translateY is
+  // negative-up from the bottom anchor, which keeps the BOTTOM edge pinned when
+  // collapse/expand changes the height. Clamped so a drag (or a position persisted
+  // from a larger window) can't strand the dock offscreen with no way to grab it back.
   const pos = geom.x !== null && geom.bottom !== null
     ? {
-        left: Math.max(60 - geom.w, Math.min(geom.x, window.innerWidth - 60)),
-        bottom: Math.max(0, Math.min(geom.bottom, window.innerHeight - 40)),
-        right: "auto" as const, top: "auto" as const,
+        left: 0, bottom: 0, right: "auto" as const, top: "auto" as const,
+        transform: `translate3d(${Math.max(60 - geom.w, Math.min(geom.x, window.innerWidth - 60))}px, ${
+          -Math.max(0, Math.min(geom.bottom, window.innerHeight - 40))}px, 0)`,
       }
     : { right: 24, bottom: 24 };
 
