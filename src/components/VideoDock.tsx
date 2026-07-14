@@ -111,6 +111,16 @@ export function VideoDock() {
   const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? void v.play() : v.pause(); };
   const setRate = (rate: number) => setGeom((g) => ({ ...g, rate }));
 
+  // The clamp below only runs while rendering, and nothing re-renders on a window
+  // resize — so shrinking the window left the dock at its old transform, stranded
+  // offscreen with no way to grab it back until some unrelated state change happened
+  // to re-render. Nudge state on resize so the clamp actually gets to do its job.
+  useEffect(() => {
+    const onResize = () => setGeom((g) => ({ ...g }));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // Positioned by transform off a left:0/bottom:0 anchor — the same property the drag
   // writes, so drag and rest are one rendering path (see startDrag). translateY is
   // negative-up from the bottom anchor, which keeps the BOTTOM edge pinned when

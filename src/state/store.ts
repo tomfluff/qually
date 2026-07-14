@@ -491,7 +491,10 @@ export const useStore = create<State>()(
           extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
           hotbar: s.hotbar, video: s.video,
           ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog,
-          // NB: no API key (not in the store), no UI prefs, no media — see project.ts
+          // the speaker map rides along even though it lives in `ui`: who the
+          // interviewer is belongs to the study, not to my font size (see project.ts)
+          speakers: { colors: s.ui.speakerColors, weight: s.ui.speakerWeight },
+          // NB: no API key (not in the store), no other UI prefs, no media — see project.ts
         };
         return JSON.stringify(p, null, 2);
       },
@@ -501,7 +504,18 @@ export const useStore = create<State>()(
       // Replaces the workspace wholesale. Merging would mean sid collisions and
       // code-name conflicts for no benefit; the modal confirms before we get here.
       openProject: (p) => {
+        const s = get();
+        // A file written before the speaker map existed carries none — re-guess the
+        // interviewer from its own speakers, so an old project still opens with the
+        // researcher quieted rather than everyone flat.
+        const speakers = p.speakers ?? {
+          colors: {},
+          weight: Object.fromEntries(
+            guessQuiet(speakersOf({ transcripts: p.transcripts, tabs: p.tabs }))
+              .map((sp) => [sp, "quiet" as SpeakerWeight])),
+        };
         set({
+          ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiLog: p.aiLog,
@@ -693,7 +707,7 @@ function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string,
   // a deliberate change to someone's weight survives a re-import instead of being undone.
   const fresh = [...new Set(lines.map((l) => l.speaker.trim()).filter(Boolean))]
     .filter((sp) => !knownBefore.has(sp));
-  const guessed = quietGuess(fresh).filter((sp) => !(sp in get().ui.speakerWeight));
+  const guessed = guessQuiet(fresh).filter((sp) => !(sp in get().ui.speakerWeight));
   if (guessed.length) {
     const w = { ...get().ui.speakerWeight };
     for (const sp of guessed) w[sp] = "quiet";
@@ -774,11 +788,33 @@ export const speakersOf = (s: Pick<State, "transcripts" | "tabs">): string[] => 
 export const weightOf = (ui: Ui, speaker: string): SpeakerWeight =>
   ui.speakerWeight[speaker.trim()] ?? "normal";
 
+// The chip's label used to be hardcoded white, which is fine for the eight defaults
+// (all >= 4.5:1) and a disaster the moment someone picks pale yellow from the colour
+// picker — the speaker's name vanishes. Pick the label colour from the chip's own
+// luminance so ANY colour, including a user's, stays readable.
+export const inkOn = (hex: string): string => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#ffffff";
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  // Pure black, not a soft near-black. Against #14181c a mid-tone chip tops out at
+  // ~4.19:1 with EITHER ink — below AA whichever you pick. Black lifts that worst case
+  // to 4.58:1, so every colour the picker can produce has a readable label.
+  // white: 1.05/(L+.05)   ·   black: (L+.05)/.05
+  return 1.05 / (L + 0.05) >= (L + 0.05) / 0.05 ? "#ffffff" : "#000000";
+};
+
 // A GUESS at who the interviewer is, applied once when a transcript first loads and
-// freely editable afterwards — not a rule enforced on every render. Same "R" heuristic
-// as before, but now it's a default you can correct rather than a law you can't.
-const quietGuess = (speakers: string[]): string[] =>
-  speakers.filter((sp) => /^r\b|^r$|^researcher|^interviewer|^moderator/i.test(sp.trim()));
+// freely editable afterwards — a default you can correct, not a law you can't.
+//
+// Deliberately WHOLE-LABEL matches only. An earlier `^r\b` prefix test also caught
+// "R. Singh", "R (participant)" and "Rae" — quietly dimming participants, which is the
+// exact failure the old startsWith("R") rule was removed for. A bare "R", or the word
+// itself, is the whole label or it isn't a match.
+const RESEARCHER = /^(r|r\d+|researcher|interviewer|moderator|facilitator|int|i)$/i;
+export const guessQuiet = (speakers: string[]): string[] =>
+  speakers.filter((sp) => RESEARCHER.test(sp.trim()));
 
 // A lane bar used to say WHICH code it is by hue alone (the name was hover-only) —
 // unusable at low acuity, and the 12-colour rotation contains near-neighbours.

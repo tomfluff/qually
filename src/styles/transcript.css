@@ -47,9 +47,14 @@
    is the non-colour channel — colour tells speakers apart fast, but someone who can't
    see it still reads "P2". Replaces the old startsWith("R") rule, which mislabelled a
    participant called Rachel and rendered P1/P2/P3 identically.
-   Every speaker colour is dark enough for white text (>= 4.5:1); see SPEAKER_COLORS. */
-.lineRow .spk { min-width:var(--spk-w, 2.5ch); text-align:center; font-weight:700;
-  flex-shrink:0; white-space:nowrap; background:var(--spk-c, var(--muted)); color:#fff;
+   The label's colour is picked from the chip's own luminance (inkOn) rather than
+   hardcoded white — the eight defaults are all dark enough for white, but the colour
+   picker accepts anything, and pale yellow made the speaker's name vanish.
+   Capped and ellipsised: --spk-w is sized to the LONGEST name in the transcript, so a
+   100-character speaker label used to eat the reading column. */
+.lineRow .spk { min-width:var(--spk-w, 2.5ch); max-width:14ch; text-align:center;
+  font-weight:700; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  background:var(--spk-c, var(--muted)); color:var(--spk-ink, #fff);
   border-radius:5px; padding:1px 6px; font-size:.82em; }
 /* Per-speaker weight. "quiet" uses a dimmer COLOUR, never opacity: opacity composites
    against whatever is behind it, and the old opacity:.6 dragged the already-muted line

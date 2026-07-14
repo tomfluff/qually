@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore, speakersOf, speakerColor, weightOf, type SpeakerWeight } from "../state/store";
+import { useStore, speakersOf, speakerColor, weightOf, inkOn, type SpeakerWeight } from "../state/store";
 import { openColorPicker } from "../colorPicker";
 import { PALETTES } from "../palettes";
 import { MODELS } from "../ai/openai";
@@ -196,7 +196,8 @@ function SpeakerRows() {
         const w = weightOf(ui, sp);
         return (
           <div className="srow" key={sp}>
-            <button className="spkswatch" style={{ background: speakerColor(ui, sp) }}
+            <button className="spkswatch"
+              style={{ background: speakerColor(ui, sp), color: inkOn(speakerColor(ui, sp)) }}
               data-tip={`Recolour ${sp}`} aria-label={`Recolour ${sp}`}
               onClick={() => openColorPicker(speakerColor(ui, sp),
                 (v) => setUi({ speakerColors: { ...ui.speakerColors, [sp]: v } }))}>

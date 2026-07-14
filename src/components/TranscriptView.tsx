@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
-import { useStore, laneAssign, patternOf, speakerColor, weightOf } from "../state/store";
+import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { Minimap, type MinimapHandle } from "./Minimap";
@@ -66,7 +66,23 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
 }
 
 const lidLabel = (g: Group) => g.startId === g.endId ? `${g.startId}` : `${g.startId}–${g.endId}`;
-const shortSpeaker = (s: string) => s.trim().slice(0, 3);
+// "Short" mode used to be a blind slice(0,3): Alice, Alicia and Alina all rendered
+// "Ali", which left COLOUR as the only thing telling them apart — the exact failure
+// this branch exists to remove. Grow the abbreviation until it is unique among the
+// speakers actually present.
+export function shortLabels(names: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const raw of names) {
+    const t = raw.trim();
+    let len = Math.min(3, t.length);
+    while (len < t.length && names.some((o) => {
+      const u = o.trim();
+      return u !== t && u.slice(0, len).toLowerCase() === t.slice(0, len).toLowerCase();
+    })) len++;
+    out[t] = t.slice(0, len);
+  }
+  return out;
+}
 const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 
 const MIN_PAD = 48;    // headroom floor, before the viewport has been measured
@@ -374,7 +390,8 @@ export function TranscriptView() {
   }
 
   // uniform column widths sized to the longest displayed label in this transcript
-  const spkLen = (s: string) => (speakerNames === "short" ? shortSpeaker(s) : s.trim()).length;
+  const shorts = shortLabels([...new Set(transcript.lines.map((l) => l.speaker.trim()))]);
+  const spkLen = (s: string) => (speakerNames === "short" ? shorts[s.trim()] ?? s.trim() : s.trim()).length;
   const spkChars = transcript.lines.reduce((m, l) => Math.max(m, spkLen(l.speaker)), 0);
   const spkWidth = `${Math.max(2.5, spkChars)}ch`;
   const lidChars = groups.reduce((m, g) => Math.max(m, lidLabel(g).length), 1);
@@ -415,6 +432,7 @@ export function TranscriptView() {
               weight={weightOf(ui, g.speaker)}
               showLid={showLineNumbers}
               speakerNames={speakerNames}
+              shortName={shorts[g.speaker.trim()] ?? g.speaker.trim()}
               searchQuery={search.query}
               current={search.current}
               editingId={editingId}
@@ -440,7 +458,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -458,6 +476,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   weight: SpeakerWeight;
   showLid: boolean;
   speakerNames: "full" | "short";
+  shortName: string;
   searchQuery: string;
   current: { line: number; occ: number } | null;
   editingId: number | null;
@@ -515,7 +534,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   return (
     <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
-      style={{ "--spk-c": spkColor, ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
+      style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
       {showLid && <span className="lid">{lidLabel(group)}</span>}
       <button className="ts" onClick={(e) => { e.stopPropagation(); seekVideo(group.ts); }}
         title="play from here">
@@ -523,7 +542,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
       </button>
       {/* the NAME is in the chip: colour tells speakers apart at a glance, but never
           alone -- the label is always there for anyone the colour doesn't reach */}
-      <span className="spk" title={group.speaker}>{speakerNames === "short" ? shortSpeaker(group.speaker) : group.speaker}</span>
+      <span className="spk" data-tip={group.speaker}>{speakerNames === "short" ? shortName : group.speaker}</span>
       <span className="txt">
         {group.lines.map((l, k) => (
           <Fragment key={l.id}>

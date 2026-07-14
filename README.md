@@ -25,8 +25,8 @@ install, and no data ever leaving your machine.
   by underline style; rejected segments are striped and outlined. And if similar code colours
   are hard to tell apart, switch on **code patterns** (Settings → Codes) to give every code a
   texture as well as a hue — the sidebar swatch shows the same one, so it stays learnable.
-- **Contrast meets WCAG AA** in both themes, and the app honours your system's *increase
-  contrast* and *reduce motion* settings.
+- **Contrast meets WCAG AA** for text in both themes, on every primary colour, and the app
+  honours your system's *increase contrast* and *reduce motion* settings.
 - **Less to look at when you need it:** zen mode hides every panel; "merge lines" joins
   fragments into fewer, longer reading units.
 

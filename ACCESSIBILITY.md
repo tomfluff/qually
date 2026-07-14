@@ -89,10 +89,10 @@ Listed plainly, worst first. These are real; do not read the README as claiming 
 6. **Chrome ignores OS text-size preferences.** Toolbar, tabs, settings notes and the video
    dock are hard-coded in px, so a browser minimum-font-size or OS text scaling does nothing
    to them. Browser zoom is the only lever, and it grows everything.
-7. **No high-contrast palette.** The five primaries are hue choices, not contrast choices —
-   and white text is hard-coded on accent-filled controls (tabs, the primary button), which
-   does not clear AA for every selectable primary in the light theme. Pick violet or blue and
-   you are fine; teal and green are marginal.
+7. **No high-contrast palette.** The five primaries are hue choices, not contrast choices.
+   (They *do* all clear AA against the text drawn on them — teal and green were failing at
+   3.96 and 4.26 and have been darkened, with a test that now blocks a regression — but
+   none of them is a genuine high-contrast mode.)
 8. **The minimap still encodes codes by hue alone** — it is a canvas, so the CSS patterns
    don't reach it.
 9. **The patterns that vary vertically restart at each row boundary** within a multi-line
