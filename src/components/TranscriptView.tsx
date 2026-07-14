@@ -37,7 +37,13 @@ const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height
 // Per-tab scroll memory. Module scope, NOT component refs: TranscriptView unmounts
 // entirely while the Browse tab is shown, so refs would forget every position on the
 // way through Browse. (Selection memory is the store's savedSelections, same reason.)
-const savedScroll: Record<string, number> = {};
+//
+// The position is an ANCHOR (top item's child index + pixels into it), not a raw
+// scrollTop: row heights above the viewport are virtua estimates, and the same VList
+// instance serves every tab, so after showing another transcript the estimates for
+// this one have changed — a saved pixel offset would land on different text.
+interface ScrollAnchor { index: number; delta: number }
+const savedScroll: Record<string, ScrollAnchor> = {};
 const positioned = new Set<string>(); // tabs whose initial position has been applied
 
 export function TranscriptView() {
@@ -72,7 +78,10 @@ export function TranscriptView() {
     // initial placement (offset 0 is inside the top headroom), and not while we're
     // positioning — during a tab switch the browser clamp-scrolls the old offset
     // against the new content, which would overwrite the new tab's saved position.
-    if (positioned.has(active) && !positioning.current) savedScroll[active] = v.scrollOffset;
+    if (positioned.has(active) && !positioning.current) {
+      const index = v.findItemIndex(v.scrollOffset);
+      savedScroll[active] = { index, delta: v.scrollOffset - v.getItemOffset(index) };
+    }
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
   };
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
@@ -119,22 +128,22 @@ export function TranscriptView() {
   // transcript barely re-renders, so per-render retries would never fire). If the
   // scroll moves in a way we didn't cause, the user grabbed it — their position wins.
   useEffect(() => {
-    if (pad <= MIN_PAD) return;                 // container not laid out yet; the pad is a guess
-    if (useStore.getState().jump) return;       // a Browse -> line jump owns the position
-    const target = savedScroll[active] ?? pad;  // remembered offset, or park on line 1
-    let raf = 0, tries = 0, lastSet = -1;
+    if (pad <= MIN_PAD) return;           // container not laid out yet; the pad is a guess
+    if (useStore.getState().jump) return; // a Browse -> line jump owns the position
     positioning.current = true;
-    const done = () => { positioned.add(active); positioning.current = false; };
-    const attempt = () => {
-      const list = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
-      if (!list) return done();
-      if (lastSet >= 0 && Math.abs(list.scrollTop - lastSet) > 1) return done(); // user scrolled: theirs wins
-      list.scrollTop = target;
-      lastSet = list.scrollTop; // post-clamp
-      if (Math.abs(lastSet - target) <= 1 || ++tries >= 40) return done();
-      raf = requestAnimationFrame(attempt);
-    };
-    raf = requestAnimationFrame(attempt);
+    // One frame so the swapped-in children are committed, then let virtua do the
+    // scrolling: its scrollToIndex re-evaluates the target after every row
+    // measurement until it goes quiet, which is exactly what an anchor needs on a
+    // list whose heights above the anchor are still estimates. (A raw scrollTop
+    // set can't do this — it chases stale estimates and fights the re-measuring.)
+    const raf = requestAnimationFrame(() => {
+      const v = vref.current;
+      const anchor = savedScroll[active];
+      if (v && anchor) v.scrollToIndex(anchor.index, { align: "start", offset: anchor.delta });
+      else if (v) v.scrollToIndex(1, { align: "start" }); // first showing: park on line 1
+      positioned.add(active);
+      positioning.current = false;
+    });
     return () => { cancelAnimationFrame(raf); positioning.current = false; };
   }, [active, pad]);
 
