@@ -1,5 +1,5 @@
 /* hotbar bottom dock */
-.hotbar { position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+.hotbar { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); /* sits on the footer strip */
   z-index:45; display:flex; flex-direction:column; align-items:center;
   padding:7px 9px; min-width:84px; background:var(--panel); border:1px solid var(--line);
   border-bottom:none; border-radius:12px 12px 0 0; box-shadow:0 6px 24px rgba(0,0,0,.28); }

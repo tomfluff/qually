@@ -1,6 +1,13 @@
 /* main layout */
 #main { display:flex; flex:1; min-height:0; }
 
+/* credit footer — self-contained dark strip, mirrors the toolbar's accent line.
+   Height is a contract: .hotbar docks at bottom:26px, so this must be exactly 26px. */
+#footer { flex-shrink:0; height:26px; line-height:26px; text-align:center;
+  overflow:hidden; padding:0 10px; font-size:11.5px;
+  background:color-mix(in srgb, var(--accent) 28%, #101317); color:rgba(255,255,255,.78); }
+#footer b { color:#fff; font-weight:600; }
+
 /* draggable panel divider — lifted above the content so its grab zone wins */
 .resizer { flex:0 0 5px; align-self:stretch; cursor:col-resize; background:var(--line);
   position:relative; z-index:3; }

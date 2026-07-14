@@ -156,6 +156,7 @@ export function App() {
           {!hasData ? <Welcome /> : (active === "browse" ? <BrowseView /> : <TranscriptView />)}
         </div>
       </div>
+      <footer id="footer">Created with love and care by <b>Yotam Sechayk</b> — reach out with any questions.</footer>
       {active !== "browse" && <HotbarDock />}
       <VideoDock />
       {zen && (
