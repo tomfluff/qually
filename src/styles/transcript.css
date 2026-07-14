@@ -4,6 +4,10 @@
 .tview { display:flex; height:100%; min-height:0; }
 .tview > .tviewlist { scrollbar-width:none; }
 .tview > .tviewlist::-webkit-scrollbar { display:none; }
+/* The list fills the pane and #content is overflow:hidden, so the normal focus ring
+   (drawn OUTSIDE the border box) is clipped away entirely — it computed correctly and
+   was invisible. Draw this one inward instead. */
+.tviewlist:focus-visible { outline-offset:-3px; box-shadow:none; }
 .minimap { position:relative; width:var(--mm-w); flex-shrink:0; cursor:pointer;
   border-left:1px solid var(--line); background:var(--panel); overflow:hidden; }
 .minimap canvas { display:block; width:100%; height:100%; }
@@ -58,7 +62,10 @@
    indistinguishable when tried side by side. The three patterns that vary along Y
    restart at each row boundary within a multi-line segment; the seam is minor next
    to the alternative, which is no non-colour channel at all. */
-[class*="lp"]::before {
+/* Explicit list, NOT [class*="lp"] — that substring selector also matched .helpbtn
+   ("he-lp-btn") and injected an absolute overlay into the Help button. */
+.lp0::before, .lp1::before, .lp2::before,
+.lp3::before, .lp4::before, .lp5::before {
   content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
 }
 .lp0::before { background:none; }                                     /* solid       */
@@ -77,7 +84,9 @@
 /* close-call flag: exclamation badge on a top corner of the segment block.
    size (xs/sm/md/lg) and corner (left/right) are settings */
 .ccbadge { position:absolute; top:-5px; z-index:3; pointer-events:none;
-  border-radius:50%; background:#e0a020; color:#fff; font-weight:800;
+  /* dark glyph on the amber, not white: white on #e0a020 is 2.28:1 — the badge that
+     warns you about a mixed excerpt was itself the hardest thing to read. 7.64:1 now. */
+  border-radius:50%; background:#e0a020; color:#1a1a1a; font-weight:800;
   text-align:center; box-shadow:0 0 0 1.5px var(--bg); }
 /* anchor the badge's inner edge to the bar's horizontal center, so it overlaps
    at most half the block width (and grows outward) at any size */

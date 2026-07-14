@@ -92,6 +92,7 @@ export function TranscriptView() {
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnCls = useStore((s) => `cc-${s.ui.warnSize} cc-${s.ui.warnCorner}`);
+  const lanePattern = useStore((s) => s.ui.lanePattern);
   const laneWidth = useStore((s) => s.ui.laneWidth);
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const setUi = useStore((s) => s.setUi);
@@ -219,6 +220,10 @@ export function TranscriptView() {
   // 3000-line transcript). Once a selection exists, App's global handler drives it.
   const onListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    // The inline line editor is a textarea INSIDE this list, so its arrow keys bubble
+    // here. Seeding a selection off them would steal the caret from someone typing.
+    const t = e.target as HTMLElement;
+    if (t.tagName === "TEXTAREA" || t.tagName === "INPUT") return;
     const s = useStore.getState();
     if (s.selection.pid === active && s.selection.lines.size) return; // App moves it from here
     const v = vref.current;
@@ -252,6 +257,10 @@ export function TranscriptView() {
   useEffect(() => {
     const v = vref.current;
     if (headId === null || !v || !v.viewportSize) return;
+    // A pending Browse jump, or a tab whose saved scroll hasn't been restored yet, both
+    // want to own the scroll position. Following the selection head on top of either
+    // would yank the list straight back off the target.
+    if (jump || !positioned.has(active)) return;
     const gi = groups.findIndex((g) => headId >= g.startId && headId <= g.endId);
     if (gi < 0) return;
     const first = v.findItemIndex(v.scrollOffset);
@@ -401,6 +410,7 @@ export function TranscriptView() {
               hl={hl}
               closeCallSids={closeCallSids}
               warnCls={warnCls}
+              lanePattern={lanePattern}
               showLid={showLineNumbers}
               speakerNames={speakerNames}
               searchQuery={search.query}
@@ -428,7 +438,7 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -441,6 +451,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   hl: { start: number; end: number; color: string } | null;
   closeCallSids: Set<number>;
   warnCls: string;
+  lanePattern: boolean;
   showLid: boolean;
   speakerNames: "full" | "short";
   searchQuery: string;
@@ -461,7 +472,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const isStart = seg.start >= startId && seg.start <= endId;
     const isEnd = seg.end >= startId && seg.end <= endId;
     const cc = closeCallSids.has(seg.sid);
-    const cls = "laneBar" + (rej ? " rejected" : ` lp${patternOf(seg.code)}`)
+    const cls = "laneBar" + (rej ? " rejected" : lanePattern ? ` lp${patternOf(seg.code)}` : "")
       + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
     // rejected: keep the code color, but faded + striped + outlined to read as inactive.
     // draw top/bottom only on the segment's first/last line so a multi-line reject

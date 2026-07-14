@@ -14,9 +14,11 @@ export function Welcome() {
     <div className="welcome">
       <div className="welcome-card">
         <span className="welcome-logo"><Logo size={72} /></span>
-        <h1>Code transcripts, offline.</h1>
-        <p>Import a transcript CSV to begin. Everything stays in your browser — no account, and nothing
-          is uploaded unless you add your own OpenAI key and approve a request.</p>
+        <h1>Thematic analysis, made accessible.</h1>
+        <p>Code interview transcripts by hand — built so that low vision doesn't get in the way.
+          Text scales to 48px, coding is entirely keyboard-driven, and nothing is signalled by
+          colour alone. Everything stays in your browser: no account, and nothing is uploaded
+          unless you add your own OpenAI key and approve a request.</p>
         <button className="btn primary welcome-import" onClick={() => fileRef.current?.click()}>
           <Icon name="upload" size={17} /> Import a transcript…
         </button>

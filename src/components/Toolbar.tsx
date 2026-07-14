@@ -37,7 +37,7 @@ export function Toolbar() {
       <span className="brand">
         <Logo size={22} />
         <span className="brandname">QuAlly</span>
-        <span className="brandtag">Qualitative coding, offline</span>
+        <span className="brandtag">Thematic analysis, made accessible</span>
       </span>
       <span className="tbdiv" />
       <button className="btn primary iconlabel" onClick={() => fileRef.current?.click()}

@@ -80,6 +80,10 @@ export function App() {
       }
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+      // A dialog or popover owns the keyboard while it's up. Without this, arrows and
+      // digit hotkeys reached through an open Help modal or segment popover and moved
+      // the selection — or applied a code — on the transcript underneath it.
+      if (t.closest(".about-backdrop, .pop, .settings-pop, .exmenu, .menu")) return;
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
         e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); return;
       }

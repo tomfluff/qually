@@ -5,6 +5,7 @@ import { CodeCombobox } from "./CodeCombobox";
 import { openColorPicker } from "../colorPicker";
 
 export function CodeSidebar() {
+  const lanePattern = useStore((s) => s.ui.lanePattern);
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
   const hotbarCache = useStore((s) => s.hotbarCache);
@@ -36,7 +37,7 @@ export function CodeSidebar() {
             onClick={() => { if (hasSel) applyCode(code); }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
             title={`${code}  (right-click for options)`}>
-            <span className={`codebar lp${patternOf(code)}`}
+            <span className={"codebar" + (lanePattern ? ` lp${patternOf(code)}` : "")}
               style={{ background: codebook[code].color }} title="recolor"
               onClick={(e) => {
                 e.stopPropagation();

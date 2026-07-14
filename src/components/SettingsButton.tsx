@@ -19,6 +19,7 @@ export function SettingsButton() {
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnSize = useStore((s) => s.ui.warnSize);
   const laneWidth = useStore((s) => s.ui.laneWidth);
+  const lanePattern = useStore((s) => s.ui.lanePattern);
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
@@ -136,6 +137,17 @@ export function SettingsButton() {
             </div>
           </div>
           <div className="settings-note">Lane bar width and the near-balanced (⚠) marker size.</div>
+          <div className="srow">
+            <span>Code patterns</span>
+            <div className="seg">
+              <button className={!lanePattern ? "on" : ""} onClick={() => setUi({ lanePattern: false })}>off</button>
+              <button className={lanePattern ? "on" : ""} onClick={() => setUi({ lanePattern: true })}>on</button>
+            </div>
+          </div>
+          <div className="settings-note">
+            Gives each code a texture as well as a colour, so codes stay apart without relying
+            on hue — turn on if similar colours are hard to tell apart.
+          </div>
           <div className="srow">
             <span>Hotbar</span>
             <div className="seg">

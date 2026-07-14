@@ -3,6 +3,7 @@ import { useStore } from "../state/store";
 import { Icon } from "./Icon";
 
 const KEYS: [string, string][] = [
+  ["Tab, then ↓", "Move focus into the transcript and select a line — no mouse needed"],
   ["Click / drag", "Select a line, or drag to select a range"],
   ["Shift-click / Ctrl-click", "Extend the range / toggle individual lines"],
   ["↑ ↓", "Move selection to the next/previous line"],
@@ -42,13 +43,14 @@ export function AboutButton() {
         <div className="about-backdrop" onMouseDown={close}>
           <div className="about" onMouseDown={(e) => e.stopPropagation()}>
             <div className="about-head">
-              <h2>Coding App</h2>
+              <h2>QuAlly — thematic analysis, made accessible</h2>
               <button className="btn iconbtn" onClick={close} title="Close (Esc)"><Icon name="x" size={16} /></button>
             </div>
             <p className="about-lede">
-              Code interview and session transcripts offline. Everything stays in your browser
-              (autosaved locally); export a merged <code>coded-segments.csv</code> when you're done.
-              Nothing is uploaded unless you add your own OpenAI key and approve each request.
+              Code interview and session transcripts offline, built so that low vision doesn't get in
+              the way. Everything stays in your browser (autosaved locally); export a merged
+              <code>coded-segments.csv</code> when you're done. Nothing is uploaded unless you add your
+              own OpenAI key and approve each request.
             </p>
 
             <div className="about-body nicescroll">
@@ -73,6 +75,25 @@ export function AboutButton() {
                   <li><b>Mixed-speaker flag:</b> a small <b>!</b> badge on a segment's corner means its excerpt keeps only the dominant speaker — the other speaker's words may drop out, so double-check it.</li>
                   <li><b>Browse tab:</b> pick codes on the left, read their excerpts on the right; click a ref to jump to it. Turn on <b>Show rejected</b> to include rejected segments. After an AI scan, a <b>Noticings</b> switch appears: the AI's marks side by side across participants, filterable to what you haven't coded yet — <b>code…</b> writes a segment for that line (authored by you), <b>open</b> jumps to it, <b>dismiss</b> removes it.</li>
                   <li><b>Re-importing a transcript:</b> if you fix the CSV and import it again, the app matches the new lines against the old ones and re-anchors your codes, showing you what carries over before it changes anything. You can also keep both copies instead.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3>Reading comfort &amp; low vision</h3>
+                <ul>
+                  <li><b>Make it bigger:</b> Settings scales the transcript to <b>48px</b> and the sidebar
+                    to 36px, independently — so the text grows without the chrome eating the reading column.
+                    Browser zoom (<kbd>Ctrl</kbd> <kbd>+</kbd>) works too, and <kbd>Ctrl</kbd> <kbd>0</kbd> resets it.</li>
+                  <li><b>Code without the mouse:</b> <kbd>Tab</kbd> to the transcript, <kbd>↓</kbd> to select
+                    a line, <kbd>1</kbd>–<kbd>9</kbd> or <kbd>0</kbd> to apply a code. Every control shows a
+                    focus ring, so where you are is never a guess.</li>
+                  <li><b>Nothing rides on colour alone:</b> each code's lane bar carries a <b>pattern</b> as
+                    well as a hue (the sidebar swatch shows the same one), a selected line gets a rail, AI
+                    noticings differ by underline style, and rejected segments are striped and outlined.</li>
+                  <li><b>Contrast:</b> text meets WCAG AA in both themes, and the app follows your system's
+                    "increase contrast" and "reduce motion" settings.</li>
+                  <li><b>Less to look at:</b> zen mode hides every panel; the eye button hides AI highlights;
+                    "merge lines" joins fragments into fewer, longer reading units.</li>
                 </ul>
               </section>
 
