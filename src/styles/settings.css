@@ -1,71 +1,66 @@
-/* settings popover */
-.settings-wrap { position:relative; display:inline-flex; }
-.settings-pop { position:absolute; top:calc(100% + 6px); right:0; z-index:70;
-  width:286px; background:var(--bg); border:1px solid var(--line); border-radius:12px;
-  box-shadow:0 10px 34px rgba(0,0,0,.28); padding:14px; display:flex;
-  flex-direction:column; gap:9px; font-size:1rem;
-  max-height:calc(100vh - 62px); overflow-y:auto; }
-/* the popover scrolls when it overflows — its rows must never be flex-crushed
-   to fit (that renders as rows collapsing onto each other) */
-.settings-pop > * { flex-shrink:0; }
-.settings-title { font-size:15px; font-weight:700; color:var(--fg); margin-bottom:2px; }
-.settings-sub { font-size:10px; text-transform:uppercase; letter-spacing:.07em;
-  color:var(--muted); font-weight:700; margin-top:5px; padding-bottom:4px;
-  border-bottom:1px solid var(--line); }
-.settings-pop .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
-.settings-pop .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
-.settings-pop .srow input[type=range] { width:92px; margin:0; align-self:center;
-  accent-color:var(--accent); }
-.settings-pop .sval { min-width:2.2ch; padding:2px 4px; text-align:center;
-  color:var(--fg); font-variant-numeric:tabular-nums; background:var(--panel);
+/* Settings — a modal (was a 286px popover that scrolled forever). The controls sit in a
+   two-column masonry of category cards, so it reads as a compact grid. Shares the .about
+   dialog shell; only the width and the grid body are settings-specific. */
+.settings-wrap { display:inline-flex; }
+.about.set-modal { width:min(720px, 100%); }
+.set-modal .about-head h2 { flex:1; }
+.set-modal .about-head .zenbtn { flex-shrink:0; }
+
+.set-grid { columns:2; column-gap:16px; }
+@media (max-width:600px) { .set-grid { columns:1; } }
+.set-cat { break-inside:avoid; margin:0 0 16px; padding:12px 14px;
+  border:1px solid var(--line); border-radius:10px; background:var(--panel);
+  display:flex; flex-direction:column; gap:9px; }
+.set-cat > h3 { margin:0 0 1px; font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); font-weight:700; }
+
+/* control rows — rescoped from the old .settings-pop; behaviour unchanged */
+.set-modal .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
+.set-modal .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
+.set-modal .srow input[type=range] { width:92px; margin:0; align-self:center; accent-color:var(--accent); }
+.set-modal .sval { min-width:2.2ch; padding:2px 4px; text-align:center; color:var(--fg);
+  font-variant-numeric:tabular-nums; background:var(--bg);
   border:1px solid var(--line); border-radius:5px; }
 /* a range input is a small drag target and has no way back to the default */
-.settings-pop .sreset { border:none; background:none; padding:2px 3px; cursor:pointer;
+.set-modal .sreset { border:none; background:none; padding:2px 3px; cursor:pointer;
   color:var(--muted); font:inherit; font-size:.85em; text-decoration:underline; }
-.settings-pop .sreset:hover { color:var(--accent); }
-.settings-pop .seg { display:flex; width:140px; border:1px solid var(--line);
-  border-radius:7px; overflow:hidden; }
-.settings-pop .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
-  padding:5px 0; font-weight:500; text-align:center; cursor:pointer;
+.set-modal .sreset:hover { color:var(--accent); }
+.set-modal .seg { display:flex; width:150px; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+.set-modal .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
+  padding:5px 0; font:inherit; font-weight:500; text-align:center; cursor:pointer;
   transition:background .12s, color .12s; }
-.settings-pop .seg button:hover { background:var(--panel); }
-.settings-pop .seg button.on { background:var(--accent); color:#fff; }
-.settings-pop .swatches { display:flex; gap:7px; }
-.settings-pop .swatchbtn { width:22px; height:22px; border-radius:50%; padding:0;
+.set-modal .seg button:hover { background:var(--panel); }
+.set-modal .seg button.on { background:var(--accent); color:#fff; }
+[data-theme=dark] .set-modal .seg button.on { color:#12161a; }
+.set-modal .swatches { display:flex; gap:7px; }
+.set-modal .swatchbtn { width:22px; height:22px; border-radius:50%; padding:0;
   border:2px solid transparent; cursor:pointer; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); }
-.settings-pop .swatchbtn.on { border-color:var(--fg); }
-.settings-div { height:1px; background:var(--line); margin:2px 0; }
-.settings-pop .zenbtn { width:100%; justify-content:center; text-align:center; }
-.settings-sub .opt { font-weight:400; text-transform:none; letter-spacing:0;
-  color:var(--muted); font-size:.9em; }
+.set-modal .swatchbtn.on { border-color:var(--fg); }
+.settings-note { font-size:12px; color:var(--muted); text-align:left; line-height:1.4; }
+.set-cat .opt { font-weight:400; text-transform:none; letter-spacing:0; color:var(--muted); font-size:.9em; }
+
+/* AI settings block */
 .srow.aicol { flex-direction:column; align-items:stretch; gap:5px; }
 .srow.aicheck { gap:7px; justify-content:flex-start; cursor:pointer; }
 .srow.aicheck input { margin:0; }
 .aikey, .airedact { width:100%; box-sizing:border-box; font:inherit; color:var(--fg);
   background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:5px 7px; }
 .airedact { resize:vertical; font-size:.95em; }
-.seg.aimodels { width:100%; }
-.seg.aimodels button { flex:1; }
-.settings-note { font-size:11px; color:var(--muted); text-align:left; margin-top:-3px; line-height:1.35; }
+.set-modal .seg.aimodels { width:100%; }
+.set-modal .seg.aimodels button { flex:1; }
 
-/* per-speaker row: colour swatch (shows the speaker's initials, so the control itself
-   isn't colour-only either) + name + normal/quiet */
-.settings-pop .spkswatch { width:34px; flex-shrink:0; border:none; border-radius:5px;
-  color:#fff; font:inherit; font-size:.8em; font-weight:700; padding:3px 0; cursor:pointer; }
-.settings-pop .spkname { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* weight picker: an "A" set at the weight it applies, so the button IS the preview */
-.settings-pop .wseg { width:auto; flex-shrink:0; }
-.settings-pop .wseg button { width:30px; font-size:1.05em; line-height:1.5; }
-.settings-pop .wseg .wt-quiet { color:var(--muted); font-weight:300; }
-.settings-pop .wseg .wt-normal { font-weight:400; }
-.settings-pop .wseg .wt-bold { font-weight:600; }
-.settings-pop .wseg button.on { color:#fff; }
-[data-theme=dark] .settings-pop .wseg button.on { color:#12161a; }
-/* .seg is overflow:hidden to clip its children to the rounded track — which also ate
-   the tooltips. Let them escape, and round the end buttons directly instead. */
-.settings-pop .wseg { overflow:visible; }
-.settings-pop .wseg button:first-child { border-radius:6px 0 0 6px; }
-.settings-pop .wseg button:last-child { border-radius:0 6px 6px 0; }
-/* the weight buttons sit at the popover's right edge, so a centred tip overflows it
-   and gets clipped — anchor these to the right and let them grow leftward */
-.settings-pop .wseg button[data-tip]:hover::after { left:auto; right:0; transform:none; }
+/* per-speaker row: colour swatch (with initials) + name + quiet/normal/bold weight */
+.set-modal .spkswatch { width:34px; flex-shrink:0; border:none; border-radius:5px;
+  font:inherit; font-size:.8em; font-weight:700; padding:3px 0; cursor:pointer; }
+.set-modal .spkname { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.set-modal .wseg { width:auto; flex-shrink:0; overflow:visible; }
+.set-modal .wseg button { width:30px; font-size:1.05em; line-height:1.5; }
+.set-modal .wseg .wt-quiet { color:var(--muted); font-weight:300; }
+.set-modal .wseg .wt-normal { font-weight:400; }
+.set-modal .wseg .wt-bold { font-weight:600; }
+.set-modal .wseg button.on { color:#fff; }
+[data-theme=dark] .set-modal .wseg button.on { color:#12161a; }
+.set-modal .wseg button:first-child { border-radius:6px 0 0 6px; }
+.set-modal .wseg button:last-child { border-radius:0 6px 6px 0; }
+/* the weight buttons sit at a card's right edge; anchor tips right so they don't clip */
+.set-modal .wseg button[data-tip]:hover::after { left:auto; right:0; transform:none; }

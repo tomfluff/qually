@@ -4,6 +4,7 @@ import { openColorPicker } from "../colorPicker";
 import { PALETTES } from "../palettes";
 import { MODELS } from "../ai/openai";
 import { getKey, setKey, isRemembered } from "../ai/key";
+import { Icon } from "./Icon";
 
 // Settings popover: instant-apply controls (no save button), all persisted via ui autosave.
 export function SettingsButton() {
@@ -29,144 +30,144 @@ export function SettingsButton() {
   const toggleTheme = useStore((s) => s.toggleTheme);
   const setZen = useStore((s) => s.setZen);
 
+  // Modal, not a popover: it holds a lot now (per-speaker rows, AI settings), and a
+  // 286px dropdown made it a long thin scroll. Same shell as the Help/AI dialogs.
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    // stopPropagation so App's global Esc doesn't also clear the line selection
     const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onEsc); };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
   }, [open]);
 
   return (
     <div className="settings-wrap" ref={ref}>
       <button className="btn" onClick={() => setOpen((o) => !o)}>Settings</button>
       {open && (
-        <div className="settings-pop nicescroll">
-          <div className="settings-title">Settings</div>
+        <div className="about-backdrop" onMouseDown={() => setOpen(false)}>
+          <div className="about set-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="about-head">
+              <h2>Settings</h2>
+              <button className="btn iconbtn zenbtn" onClick={() => { setZen(true); setOpen(false); }}
+                title="Zen mode — hide every panel (Esc to exit)"><Icon name="eye-off" size={15} /> Zen</button>
+              <button className="btn iconbtn" onClick={() => setOpen(false)} title="Close (Esc)"><Icon name="x" size={16} /></button>
+            </div>
 
-          <button className="btn zenbtn" onClick={() => { setZen(true); setOpen(false); }}>Enter zen mode</button>
-          <div className="settings-note">Hides the toolbar and panels for distraction-free coding. Press Esc to exit.</div>
-          <div className="settings-div" />
+            <div className="about-body set-grid nicescroll">
+              <section className="set-cat">
+                <h3>Appearance</h3>
+                <div className="srow">
+                  <span>Theme</span>
+                  <div className="seg">
+                    <button className={!dark ? "on" : ""} onClick={() => { if (dark) toggleTheme(); }}>light</button>
+                    <button className={dark ? "on" : ""} onClick={() => { if (!dark) toggleTheme(); }}>dark</button>
+                  </div>
+                </div>
+                <div className="srow">
+                  <span>Primary</span>
+                  <div className="swatches">
+                    {PALETTES.map((p) => (
+                      <button key={p.id} className={"swatchbtn" + (accent === p.id ? " on" : "")}
+                        style={{ background: dark ? p.dark : p.light }}
+                        title={p.name} aria-label={p.name} onClick={() => setUi({ accent: p.id })} />
+                    ))}
+                  </div>
+                </div>
+                {/* WCAG 1.4.4 expects text to reach 200% without loss of content: from the
+                    16px default that is 32px, which the old max of 30 could not even reach. */}
+                <label className="srow">
+                  <span>Transcript text</span>
+                  <input type="range" min={12} max={48} value={fontSize} onChange={(e) => setFontSize(+e.target.value)} />
+                  <span className="sval">{fontSize}</span>
+                  <button className="sreset" onClick={(e) => { e.preventDefault(); setFontSize(16); }} title="Reset to 16px">reset</button>
+                </label>
+                <label className="srow">
+                  <span>Sidebar text</span>
+                  <input type="range" min={11} max={36} value={sidebarFontSize} onChange={(e) => setSidebarFontSize(+e.target.value)} />
+                  <span className="sval">{sidebarFontSize}</span>
+                  <button className="sreset" onClick={(e) => { e.preventDefault(); setSidebarFontSize(13); }} title="Reset to 13px">reset</button>
+                </label>
+              </section>
 
-          <div className="settings-sub">Appearance</div>
-          <div className="srow">
-            <span>Theme</span>
-            <div className="seg">
-              <button className={!dark ? "on" : ""} onClick={() => { if (dark) toggleTheme(); }}>light</button>
-              <button className={dark ? "on" : ""} onClick={() => { if (!dark) toggleTheme(); }}>dark</button>
-            </div>
-          </div>
-          <div className="srow">
-            <span>Primary</span>
-            <div className="swatches">
-              {PALETTES.map((p) => (
-                <button key={p.id} className={"swatchbtn" + (accent === p.id ? " on" : "")}
-                  style={{ background: dark ? p.dark : p.light }}
-                  title={p.name} aria-label={p.name} onClick={() => setUi({ accent: p.id })} />
-              ))}
-            </div>
-          </div>
-          {/* WCAG 1.4.4 expects text to reach 200% without loss of content: from the
-              16px default that is 32px, which the old max of 30 could not even reach.
-              48 gives real headroom for low vision without needing browser zoom (which
-              also grows the chrome and narrows the reading column). */}
-          <label className="srow">
-            <span>Transcript text</span>
-            <input type="range" min={12} max={48} value={fontSize} onChange={(e) => setFontSize(+e.target.value)} />
-            <span className="sval">{fontSize}</span>
-            <button className="sreset" onClick={(e) => { e.preventDefault(); setFontSize(16); }}
-              title="Reset to 16px">reset</button>
-          </label>
-          <label className="srow">
-            <span>Sidebar text</span>
-            <input type="range" min={11} max={36} value={sidebarFontSize} onChange={(e) => setSidebarFontSize(+e.target.value)} />
-            <span className="sval">{sidebarFontSize}</span>
-            <button className="sreset" onClick={(e) => { e.preventDefault(); setSidebarFontSize(13); }}
-              title="Reset to 13px">reset</button>
-          </label>
+              <section className="set-cat">
+                <h3>Transcript</h3>
+                <div className="srow">
+                  <span>Line numbers</span>
+                  <div className="seg">
+                    <button className={!showLineNumbers ? "on" : ""} onClick={() => setUi({ showLineNumbers: false })}>off</button>
+                    <button className={showLineNumbers ? "on" : ""} onClick={() => setUi({ showLineNumbers: true })}>on</button>
+                  </div>
+                </div>
+                <div className="srow">
+                  <span>Speaker names</span>
+                  <div className="seg">
+                    <button className={speakerNames === "full" ? "on" : ""} onClick={() => setUi({ speakerNames: "full" })}>full</button>
+                    <button className={speakerNames === "short" ? "on" : ""} onClick={() => setUi({ speakerNames: "short" })}>short</button>
+                  </div>
+                </div>
+                <div className="settings-note">Short shows a unique abbreviation (hover for the full name).</div>
+                <div className="srow">
+                  <span>Merge lines</span>
+                  <div className="seg">
+                    <button className={!mergeLines ? "on" : ""} onClick={() => setUi({ mergeLines: false })}>off</button>
+                    <button className={mergeLines ? "on" : ""} onClick={() => setUi({ mergeLines: true })}>on</button>
+                  </div>
+                </div>
+                <div className="settings-note">Joins consecutive same-speaker lines that don't end in . ? ! … into one unit.</div>
+                <div className="srow">
+                  <span>Minimap</span>
+                  <div className="seg">
+                    <button className={minimapDetail === "detailed" ? "on" : ""} onClick={() => setUi({ minimapDetail: "detailed" })}>detailed</button>
+                    <button className={minimapDetail === "simplified" ? "on" : ""} onClick={() => setUi({ minimapDetail: "simplified" })}>simple</button>
+                  </div>
+                </div>
+              </section>
 
-          <div className="settings-sub">Transcript</div>
-          <div className="srow">
-            <span>Line numbers</span>
-            <div className="seg">
-              <button className={!showLineNumbers ? "on" : ""} onClick={() => setUi({ showLineNumbers: false })}>off</button>
-              <button className={showLineNumbers ? "on" : ""} onClick={() => setUi({ showLineNumbers: true })}>on</button>
-            </div>
-          </div>
-          <div className="srow">
-            <span>Speakers</span>
-            <div className="seg">
-              <button className={speakerNames === "full" ? "on" : ""} onClick={() => setUi({ speakerNames: "full" })}>full</button>
-              <button className={speakerNames === "short" ? "on" : ""} onClick={() => setUi({ speakerNames: "short" })}>short</button>
-            </div>
-          </div>
-          <div className="settings-note">Short shows the first 3 characters (hover for the full name).</div>
-          <SpeakerRows />
-          <div className="srow">
-            <span>Merge lines</span>
-            <div className="seg">
-              <button className={!mergeLines ? "on" : ""} onClick={() => setUi({ mergeLines: false })}>off</button>
-              <button className={mergeLines ? "on" : ""} onClick={() => setUi({ mergeLines: true })}>on</button>
-            </div>
-          </div>
-          <div className="settings-note">Joins consecutive same-speaker lines that don't end in . ? ! … into one unit.</div>
-          <div className="srow">
-            <span>Minimap</span>
-            <div className="seg">
-              <button className={minimapDetail === "detailed" ? "on" : ""} onClick={() => setUi({ minimapDetail: "detailed" })}>detailed</button>
-              <button className={minimapDetail === "simplified" ? "on" : ""} onClick={() => setUi({ minimapDetail: "simplified" })}>simple</button>
-            </div>
-          </div>
-          <div className="settings-note">Drag the minimap's left edge to resize it.</div>
+              <section className="set-cat">
+                <h3>Codes</h3>
+                <div className="srow">
+                  <span>Lane width</span>
+                  <div className="seg">
+                    {(["xs", "sm", "md", "lg"] as const).map((sz) => (
+                      <button key={sz} className={laneWidth === sz ? "on" : ""} onClick={() => setUi({ laneWidth: sz })}>{sz}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="srow">
+                  <span>Warning size</span>
+                  <div className="seg">
+                    {(["xs", "sm", "md", "lg"] as const).map((sz) => (
+                      <button key={sz} className={warnSize === sz ? "on" : ""} onClick={() => setUi({ warnSize: sz })}>{sz}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="srow">
+                  <span>Code patterns</span>
+                  <div className="seg">
+                    <button className={!lanePattern ? "on" : ""} onClick={() => setUi({ lanePattern: false })}>off</button>
+                    <button className={lanePattern ? "on" : ""} onClick={() => setUi({ lanePattern: true })}>on</button>
+                  </div>
+                </div>
+                <div className="settings-note">A texture as well as a colour, so codes stay apart without relying on hue.</div>
+                <div className="srow">
+                  <span>Hotbar</span>
+                  <div className="seg">
+                    <button className={mode === "auto" ? "on" : ""} onClick={() => setHotbarMode("auto")}>auto</button>
+                    <button className={mode === "pinned" ? "on" : ""} onClick={() => setHotbarMode("pinned")}>pinned</button>
+                  </div>
+                </div>
+                <div className="srow">
+                  <span>Cmd palette</span>
+                  <div className="seg">
+                    <button className={palettePos === "auto" ? "on" : ""} onClick={() => setUi({ palettePos: "auto" })}>near</button>
+                    <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
+                  </div>
+                </div>
+              </section>
 
-          <div className="settings-sub">Codes</div>
-          <div className="srow">
-            <span>Lane width</span>
-            <div className="seg">
-              {(["xs", "sm", "md", "lg"] as const).map((sz) => (
-                <button key={sz} className={laneWidth === sz ? "on" : ""} onClick={() => setUi({ laneWidth: sz })}>{sz}</button>
-              ))}
+              <section className="set-cat"><SpeakerRows /></section>
+              <section className="set-cat"><AiSettings /></section>
             </div>
           </div>
-          <div className="srow">
-            <span>Warning size</span>
-            <div className="seg">
-              {(["xs", "sm", "md", "lg"] as const).map((sz) => (
-                <button key={sz} className={warnSize === sz ? "on" : ""} onClick={() => setUi({ warnSize: sz })}>{sz}</button>
-              ))}
-            </div>
-          </div>
-          <div className="settings-note">Lane bar width and the near-balanced (⚠) marker size.</div>
-          <div className="srow">
-            <span>Code patterns</span>
-            <div className="seg">
-              <button className={!lanePattern ? "on" : ""} onClick={() => setUi({ lanePattern: false })}>off</button>
-              <button className={lanePattern ? "on" : ""} onClick={() => setUi({ lanePattern: true })}>on</button>
-            </div>
-          </div>
-          <div className="settings-note">
-            Gives each code a texture as well as a colour, so codes stay apart without relying
-            on hue — turn on if similar colours are hard to tell apart.
-          </div>
-          <div className="srow">
-            <span>Hotbar</span>
-            <div className="seg">
-              <button className={mode === "auto" ? "on" : ""} onClick={() => setHotbarMode("auto")}>auto</button>
-              <button className={mode === "pinned" ? "on" : ""} onClick={() => setHotbarMode("pinned")}>pinned</button>
-            </div>
-          </div>
-          <div className="srow">
-            <span>Cmd palette</span>
-            <div className="seg">
-              <button className={palettePos === "auto" ? "on" : ""} onClick={() => setUi({ palettePos: "auto" })}>near</button>
-              <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
-            </div>
-          </div>
-
-          <div className="settings-div" />
-          <AiSettings />
         </div>
       )}
     </div>
@@ -191,7 +192,7 @@ function SpeakerRows() {
 
   return (
     <>
-      <div className="settings-sub">Speakers</div>
+      <h3>Speakers</h3>
       {speakers.map((sp) => {
         const w = weightOf(ui, sp);
         return (
@@ -224,7 +225,7 @@ function SpeakerRows() {
         );
       })}
       <div className="settings-note">
-        Click a swatch to recolour. Set how loudly each speaker's words are set: <b>quiet</b>
+        Click a swatch to recolour. Set how loudly each speaker's words are set: <b>quiet</b>{" "}
         for the interviewer, so the participants carry the page — <b>bold</b> for whoever
         you're following. Guessed on import; correct it here.
       </div>
@@ -255,7 +256,7 @@ function AiSettings() {
 
   return (
     <>
-      <div className="settings-sub">AI assistance <span className="opt">optional</span></div>
+      <h3>AI assistance <span className="opt">optional</span></h3>
       <div className="settings-note">
         Off until you add a key. Anything you run sends transcript lines to OpenAI —
         you approve each request and see exactly what's sent.
