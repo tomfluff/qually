@@ -100,9 +100,9 @@ export function SettingsButton() {
                 </label>
                 <div className="srow">
                   <span>Reading font</span>
-                  <div className="seg">
-                    <button className={fontFamily === "system" ? "on" : ""} onClick={() => setUi({ fontFamily: "system" })}>system</button>
-                    <button className={fontFamily === "serif" ? "on" : ""} style={{ fontFamily: "Georgia, serif" }} onClick={() => setUi({ fontFamily: "serif" })}>serif</button>
+                  <div className="seg fontseg">
+                    <button className={fontFamily === "system" ? "on" : ""} onClick={() => setUi({ fontFamily: "system" })}>System</button>
+                    <button className={fontFamily === "serif" ? "on" : ""} style={{ fontFamily: "Georgia, serif" }} onClick={() => setUi({ fontFamily: "serif" })}>Serif</button>
                     <button className={fontFamily === "atkinson" ? "on" : ""} style={{ fontFamily: "'Atkinson Hyperlegible', sans-serif" }} onClick={() => setUi({ fontFamily: "atkinson" })}>Atkinson</button>
                   </div>
                 </div>
