@@ -71,13 +71,10 @@ export function ImportModal() {
 // Shown when an imported coded-segments.csv carries different status/notes for
 // segments that already exist here — e.g. re-importing an old export after
 // reviewing in the app. Applying silently would erase that review work.
-const clip = (s: string) => (s.length > 40 ? s.slice(0, 40) + "…" : s);
-const diffOf = (u: SegUpdate) => {
-  const parts: string[] = [];
-  if (u.from.status !== u.to.status) parts.push(`${u.from.status} → ${u.to.status}`);
-  if (u.from.notes !== u.to.notes) parts.push(u.to.notes ? `note → “${clip(u.to.notes)}”` : "note cleared");
-  return parts.join("  ·  ");
-};
+const clip = (s: string) => (s.length > 60 ? s.slice(0, 60) + "…" : s);
+// both versions, same shape, so the eye can compare line against line
+const sideOf = (v: SegUpdate["from"], withNotes: boolean) =>
+  v.status + (withNotes ? (v.notes ? ` · “${clip(v.notes)}”` : " · no note") : "");
 
 export function SegUpdateModal() {
   const updates = useStore((s) => s.pendingSegUpdates);
@@ -99,9 +96,16 @@ export function SegUpdateModal() {
           have, the file carries a different status or note{n === 1 ? "" : "s"}:
         </p>
         <div className="imp-stats">
-          {updates.slice(0, 5).map((u) => (
-            <div key={u.sid}><b>{u.ref}</b> {u.code} — {diffOf(u)}</div>
-          ))}
+          {updates.slice(0, 5).map((u) => {
+            const withNotes = !!(u.from.notes || u.to.notes);
+            return (
+              <div key={u.sid} className="segdiff">
+                <div><b>{u.ref}</b> {u.code}</div>
+                <div className="segdiff-side"><span className="segdiff-k">yours</span>{sideOf(u.from, withNotes)}</div>
+                <div className="segdiff-side"><span className="segdiff-k">file</span>{sideOf(u.to, withNotes)}</div>
+              </div>
+            );
+          })}
           {n > 5 && <div>…and {n - 5} more</div>}
         </div>
         <div className="imp-actions">
