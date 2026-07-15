@@ -157,6 +157,12 @@
    is the only thing that can measure the space — CSS can't) */
 [data-tip].tipbelow:hover::after { bottom:auto; top:calc(100% + 7px); }
 
+/* virtua wraps each row in a `contain`ed item — its own stacking context — so the
+   tooltip's z-index can't rise above the rows BELOW it (the ones a downward tip
+   overlaps); they'd paint on top. Lift the hovered row's item wrapper past its
+   siblings while the tip is open, so the tip clears them. */
+.tviewlist :has(> .lineRow:hover) { z-index:1; }
+
 /* lane bars: to the LEFT of the bar, one line — reset every base property it changes */
 .laneBar[data-tip]:hover::after {
   bottom:auto; left:auto; right:calc(100% + 8px); top:50%; transform:translateY(-50%);
