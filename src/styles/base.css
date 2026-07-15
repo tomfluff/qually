@@ -7,6 +7,8 @@
   --bg:#ffffff; --fg:#1a1a1a; --fg-dim:#4a4a4a; --muted:#6b6b6b; --line:#e4e4e4;
   --panel:#f6f6f6; --accent:#6d28d9; /* brand purple; App.tsx overwrites from palettes.ts */
   --row-hover:#ebebeb; --mm-w:66px;
+  /* reading font for transcript text + excerpts; App.tsx sets it from ui.fontFamily */
+  --read-font:system-ui, Segoe UI, Roboto, sans-serif;
   /* chromatic tints derive from the chosen primary, adapting to the theme via
      --bg — so one variable (--accent, set per theme in App.tsx) recolors all */
   /* Selection is now signalled by the RAIL as well as the tint (see .lineRow.selected),

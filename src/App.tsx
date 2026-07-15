@@ -39,6 +39,12 @@ function NoticeToggle() {
   );
 }
 
+const READ_FONTS: Record<"system" | "serif" | "atkinson", string> = {
+  system: "system-ui, Segoe UI, Roboto, sans-serif",
+  serif: "Georgia, 'Times New Roman', serif",
+  atkinson: "'Atkinson Hyperlegible', system-ui, sans-serif",
+};
+
 export function App() {
   const active = useStore((s) => s.active);
   const hasData = useStore((s) => s.tabs.length > 0);
@@ -46,6 +52,7 @@ export function App() {
   const accent = useStore((s) => s.ui.accent);
   const minimapWidth = useStore((s) => s.ui.minimapWidth);
   const fontSize = useStore((s) => s.ui.fontSize);
+  const fontFamily = useStore((s) => s.ui.fontFamily);
   const zen = useStore((s) => s.ui.zen);
   const searchOpen = useStore((s) => s.search.open);
 
@@ -67,6 +74,13 @@ export function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--txt-fs", `${fontSize}px`);
   }, [fontSize]);
+
+  // Reading font for the transcript text and Browse excerpts (the chrome stays
+  // system). Atkinson Hyperlegible is embedded (styles/fonts.css); the others map
+  // to platform faces, so only the one the reader picks costs anything.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--read-font", READ_FONTS[fontFamily]);
+  }, [fontFamily]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

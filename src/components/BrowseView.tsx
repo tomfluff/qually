@@ -77,11 +77,14 @@ export function BrowseView() {
     counts[s.code].segs++; counts[s.code].pids.add(s.pid);
   });
 
-  const excerptFor = (s: Segment): string | null => {
+  // The excerpt's dominant speaker is shown as its own field in the ref row (below),
+  // so the display text drops the "[R:] " prefix the export keeps baked in.
+  const excerptFor = (s: Segment): { text: string; speaker: string } | null => {
     const t = transcripts[s.pid];
     if (!t) return null;
-    return excerptOf(t.lines.filter((l) => l.id >= s.start && l.id <= s.end)
-      .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt;
+    const r = excerptOf(t.lines.filter((l) => l.id >= s.start && l.id <= s.end)
+      .map((l) => ({ text: l.text, speaker: l.speaker })));
+    return { text: r.excerpt.replace(/^\[R:\] /, ""), speaker: r.speaker };
   };
 
   const allCodes = Object.keys(codebook).sort();
@@ -193,13 +196,16 @@ export function BrowseView() {
                     const ex = excerptFor(s);
                     const loaded = !!transcripts[s.pid];
                     const rej = s.status === "rejected";
+                    const range = `${s.start}${s.end !== s.start ? `-${s.end}` : ""}`;
                     return (
                       <div key={s.sid} className={"bExcerpt" + (rej ? " rejected" : "")}
                         style={{ borderLeftColor: codebook[code].color || "var(--line)" }}>
-                        <div>{rej && <span className="rejtag">rejected</span>}{ex || "(excerpt in coded-segments.csv)"}</div>
+                        <div>{rej && <span className="rejtag">rejected</span>}{ex?.text || "(excerpt in coded-segments.csv)"}</div>
+                        {s.notes && <div className="bNote">{s.notes}</div>}
                         <div className={"ref" + (loaded ? " open" : "")}
                           onClick={() => loaded && jumpTo(s.pid, s.start)}>
-                          {s.pid}:{s.start}{s.end !== s.start ? `-${s.end}` : ""}{loaded ? "  → open in transcript" : "  (transcript not loaded)"}
+                          {ex?.speaker && <span className="refspk">{ex.speaker}</span>}
+                          {s.pid}:{range}{loaded ? "  → open in transcript" : "  (transcript not loaded)"}
                         </div>
                       </div>
                     );

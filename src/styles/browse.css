@@ -31,15 +31,23 @@
   border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.35);
   transition:left .15s; }
 .switch.on .knob { left:calc(100% - 0.9em - 0.15em); }
-.bExcerpt { border-left:4px solid var(--line); margin:10px 0; padding:6px 12px; line-height:1.45; }
+.bExcerpt { border-left:4px solid var(--line); margin:10px 0; padding:6px 12px; line-height:1.45;
+  font-family:var(--read-font); }
 .bExcerpt.rejected { opacity:.62; }
 .bExcerpt .rejtag { display:inline-block; margin-right:6px; padding:0 6px;
   border:1px solid var(--muted); border-radius:4px; font-size:.7em;
   text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
   vertical-align:middle; }
+/* researcher's note on the segment (SegmentPopover's notes field) */
+.bNote { font-size:.9em; color:var(--fg-dim); margin-top:5px; padding-left:8px;
+  border-left:2px solid var(--line); white-space:pre-wrap; font-family:var(--read-font); }
 .bExcerpt .ref { font-size:.8em; color:var(--muted); margin-top:4px; }
+/* the excerpt's dominant speaker, shown as a field rather than baked in as "[R:]" */
+.bExcerpt .ref .refspk { font-weight:600; color:var(--fg-dim); }
+.bExcerpt .ref .refspk::after { content:" · "; color:var(--muted); font-weight:400; }
 .bExcerpt .ref.open { cursor:pointer; }
 .bExcerpt .ref.open:hover { color:var(--accent); }
+.bExcerpt .ref.open:hover .refspk { color:var(--accent); }
 
 /* ── Noticings mode: the AI's marks side by side, staged to become codes ── */
 .bMode { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden;
@@ -67,7 +75,7 @@
   font-weight:700; margin:16px 0 6px; }
 .nInst { border:1px solid var(--line); border-left:4px solid var(--lens-c, var(--accent));
   border-radius:0 8px 8px 0; padding:8px 12px; margin-bottom:8px; background:var(--bg); }
-.nLine { line-height:1.5; }
+.nLine { line-height:1.5; font-family:var(--read-font); }
 .nHl { background:color-mix(in srgb, var(--lens-c) 14%, transparent);
   border-bottom:2px solid var(--lens-c); border-radius:2px; }
 .nWhy { color:var(--muted); font-size:.85em; margin-top:2px; }

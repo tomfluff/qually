@@ -20,6 +20,7 @@ export function SettingsButton() {
   const palettePos = useStore((s) => s.ui.palettePos);
   const accent = useStore((s) => s.ui.accent);
   const speakerNames = useStore((s) => s.ui.speakerNames);
+  const fontFamily = useStore((s) => s.ui.fontFamily);
   const warnSize = useStore((s) => s.ui.warnSize);
   const laneWidth = useStore((s) => s.ui.laneWidth);
   const lanePattern = useStore((s) => s.ui.lanePattern);
@@ -97,6 +98,15 @@ export function SettingsButton() {
                   <span className="sval">{sidebarFontSize}</span>
                   <button className="sreset" onClick={(e) => { e.preventDefault(); setSidebarFontSize(13); }} title="Reset to 13px">reset</button>
                 </label>
+                <div className="srow">
+                  <span>Reading font</span>
+                  <div className="seg">
+                    <button className={fontFamily === "system" ? "on" : ""} onClick={() => setUi({ fontFamily: "system" })}>system</button>
+                    <button className={fontFamily === "serif" ? "on" : ""} style={{ fontFamily: "Georgia, serif" }} onClick={() => setUi({ fontFamily: "serif" })}>serif</button>
+                    <button className={fontFamily === "atkinson" ? "on" : ""} style={{ fontFamily: "'Atkinson Hyperlegible', sans-serif" }} onClick={() => setUi({ fontFamily: "atkinson" })}>Atkinson</button>
+                  </div>
+                </div>
+                <div className="settings-note">Sets the transcript and excerpt text. <b>Atkinson Hyperlegible</b> is drawn so easily-confused letters (b/d, I/l/1, O/0) stay distinct — designed for low vision.</div>
               </>}
 
               {tab === "Transcript" && <>

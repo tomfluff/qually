@@ -69,7 +69,7 @@
    font's own scale each way — and colour only reinforces the quiet end. */
 .lineRow.spk-quiet .txt { font-weight:300; color:var(--fg-dim); }
 .lineRow.spk-bold .txt { font-weight:600; }
-.lineRow .txt { flex:1; line-height:1.45; }
+.lineRow .txt { flex:1; line-height:1.45; font-family:var(--read-font); }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
 .lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;
   justify-content:flex-start; }

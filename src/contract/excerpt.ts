@@ -14,6 +14,7 @@ export interface ExLine {
 export interface ExcerptResult {
   excerpt: string;
   closeCall: boolean;
+  speaker: string; // the dominant speaker whose lines the excerpt keeps ("" if empty)
 }
 
 const isR = (speaker: string) => speaker.trim().toUpperCase().startsWith("R");
@@ -26,7 +27,7 @@ export function excerptOf(lines: ExLine[]): ExcerptResult {
     if (!chars.has(sp)) { chars.set(sp, 0); order.push(sp); }
     chars.set(sp, chars.get(sp)! + l.text.trim().length);
   }
-  if (!order.length) return { excerpt: "", closeCall: false };
+  if (!order.length) return { excerpt: "", closeCall: false, speaker: "" };
 
   const total = [...chars.values()].reduce((a, b) => a + b, 0);
 
@@ -46,5 +47,5 @@ export function excerptOf(lines: ExLine[]): ExcerptResult {
   for (const sp of order) if (sp !== winner) maxLoser = Math.max(maxLoser, chars.get(sp)!);
   const closeCall = total > 0 && maxLoser / total >= 0.4;
 
-  return { excerpt, closeCall };
+  return { excerpt, closeCall, speaker: winner };
 }

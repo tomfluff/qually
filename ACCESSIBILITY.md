@@ -26,6 +26,14 @@ tested with real low-vision users** — the most important gap on this page.
   native tooltips are stuck at ~12px.
 - The minimap's "simplified" mode enlarges its marks and enforces minimum block sizes.
 
+### Reading font
+- The transcript and Browse excerpts can be set to **Atkinson Hyperlegible** (Braille
+  Institute, SIL OFL), a face drawn so easily-confused letters (b/d, I/l/1, O/0) stay
+  distinct. It ships embedded in the file — no CDN — so it works fully offline. System
+  and serif are the other options; the chrome stays on the system font either way.
+- The segment popover (click a lane bar) now scales with the **sidebar** text size, so
+  its notes and buttons grow with the rest of the panel chrome.
+
 ### Keyboard
 - Coding is fully keyboard-operable: `Tab` into the transcript, `↓`/`↑` to select a line,
   `Shift`+arrows to extend, `1`–`9` for the hotbar, `0` for the searchable palette,

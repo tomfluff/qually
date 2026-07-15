@@ -30,6 +30,7 @@ export interface Ui {
   showLineNumbers: boolean;
   accent: string; // primary-color palette id (see palettes.ts)
   speakerNames: "full" | "short"; // transcript speaker column: full label or first 3 chars
+  fontFamily: "system" | "serif" | "atkinson"; // reading font for transcript + excerpts
   warnCorner: "left" | "right"; // close-call badge corner
   warnSize: "xs" | "sm" | "md" | "lg"; // close-call badge size
   laneWidth: "xs" | "sm" | "md" | "lg"; // width of the code lane bars
@@ -240,7 +241,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false,
         speakerColors: {}, speakerWeight: {} },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
@@ -741,6 +742,7 @@ export const useStore = create<State>()(
         s.ui.lanePattern ??= false;
         s.ui.speakerColors ??= {};
         s.ui.speakerWeight ??= {};
+        s.ui.fontFamily ??= "system";
       },
     }
   )
