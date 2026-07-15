@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore, speakersOf, speakerColor, weightOf, inkOn, type SpeakerWeight } from "../state/store";
 import { openColorPicker } from "../colorPicker";
 import { PALETTES } from "../palettes";
-import { MODELS } from "../ai/openai";
+import { MODELS, modelOf } from "../ai/openai";
 import { getKey, setKey, isRemembered } from "../ai/key";
 import { Icon } from "./Icon";
 
@@ -321,8 +321,10 @@ function AiSettings() {
         </div>
       </div>
       <div className="settings-note">
-        {MODELS.find((m) => m.id === ai.model)!.blurb} · ${MODELS.find((m) => m.id === ai.model)!.in} in /
-        ${MODELS.find((m) => m.id === ai.model)!.out} out per 1M tokens.
+        {/* modelOf, not find()! — a persisted ai.model that has since left MODELS
+            (model list rotates) made this throw and killed the whole AI tab */}
+        {modelOf(ai.model).blurb} · ${modelOf(ai.model).in} in /
+        ${modelOf(ai.model).out} out per 1M tokens.
       </div>
 
       <label className="srow aicol">
