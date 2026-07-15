@@ -539,16 +539,23 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const seg = laned.find((s) => s.lane === i && s.start <= endId && startId <= s.end);
     if (!seg) { lanes.push(<span key={i} className="laneEmpty" />); continue; }
     const rej = seg.status === "rejected";
+    // "candidate" here, "proposed" in the Python-side contract — any unverdicted
+    // status is a suggestion; only an explicit "accepted" earns the solid bar
+    const cand = !rej && seg.status !== "accepted";
     const color = codebook[seg.code]?.color || "#999";
     const isStart = seg.start >= startId && seg.start <= endId;
     const isEnd = seg.end >= startId && seg.end <= endId;
     const cc = closeCallSids.has(seg.sid);
-    const cls = "laneBar" + (rej ? " rejected" : lanePattern ? ` lp${patternOf(seg.code)}` : "")
+    const cls = "laneBar" + (rej ? " rejected" : cand ? " candidate" : lanePattern ? ` lp${patternOf(seg.code)}` : "")
       + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
     // rejected: keep the code color, but faded + striped + outlined to read as inactive.
     // draw top/bottom only on the segment's first/last line so a multi-line reject
     // reads as one continuous outline instead of per-line notches.
     const b = `1.5px solid ${color}`;
+    // candidate (another coder's suggestion awaiting a verdict): pale fill + dashed
+    // outline — "pencilled in", distinct from both solid-accepted and striped-rejected
+    // by outline style alone, so it doesn't rely on hue.
+    const d = `1.5px dashed ${color}`;
     const style: CSSProperties = rej
       ? {
           // vertical (90deg) stripes, 2px on / 2px off — aligns across a multi-line
@@ -559,9 +566,16 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
           borderTop: isStart ? b : undefined,
           borderBottom: isEnd ? b : undefined,
         }
+      : cand
+      ? {
+          background: `${color}38`,
+          borderLeft: d, borderRight: d,
+          borderTop: isStart ? d : undefined,
+          borderBottom: isEnd ? d : undefined,
+        }
       : { background: color };
     lanes.push(
-      <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
+      <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cand ? ` — suggested by ${seg.proposedBy}` : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
         style={style}
         onMouseEnter={() => onLaneHover(seg.sid)} onMouseLeave={() => onLaneHover(null)}
         onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}>

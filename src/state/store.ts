@@ -42,6 +42,7 @@ export interface Ui {
   // How loudly each speaker's words are set. "quiet" is usually the interviewer, so the
   // participants carry the page; "bold" is the one you're following. Unset = normal.
   speakerWeight: Record<string, SpeakerWeight>;
+  coderName: string; // written as proposed_by on segments created in this browser
 }
 export type SpeakerWeight = "quiet" | "normal" | "bold";
 export interface Search {
@@ -140,7 +141,7 @@ interface State {
   setPendingProject: (p: Project | null) => void;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
-  toggleReject: (sid: number) => void;
+  setStatus: (sid: number, status: string) => void;
   setNotes: (sid: number, notes: string) => void;
   setColor: (code: string, color: string) => void;
   togglePin: (code: string) => void;
@@ -242,7 +243,7 @@ export const useStore = create<State>()(
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false,
-        speakerColors: {}, speakerWeight: {} },
+        speakerColors: {}, speakerWeight: {}, coderName: "tom" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -324,10 +325,12 @@ export const useStore = create<State>()(
 
       ensureCode: (code) => ensureCode(get, set, code),
 
-      addSegment: (pid, start, end, code, proposedBy = "tom", status = "accepted", notes = "") => {
+      addSegment: (pid, start, end, code, proposedBy, status = "accepted", notes = "") => {
         const s = get();
-        if (s.segments.some((x) => x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(code))) return;
-        set({ segments: [...s.segments, { sid: s.nextSid, pid, start, end, code, notes, proposedBy, status }], nextSid: s.nextSid + 1 });
+        const by = proposedBy ?? (s.ui.coderName.trim() || "tom");
+        // dedup is per coder: two coders holding the same span+code is agreement data, not a dupe
+        if (s.segments.some((x) => x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(code) && x.proposedBy === by)) return;
+        set({ segments: [...s.segments, { sid: s.nextSid, pid, start, end, code, notes, proposedBy: by, status }], nextSid: s.nextSid + 1 });
       },
 
       applyCode: (code) => {
@@ -594,9 +597,9 @@ export const useStore = create<State>()(
       setSegmentRange: (sid, start, end) =>
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x) }),
       deleteSegment: (sid) => { get().pushUndo(); set({ segments: get().segments.filter((x) => x.sid !== sid) }); },
-      toggleReject: (sid) => {
+      setStatus: (sid, status) => {
         get().pushUndo();
-        set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status: x.status === "rejected" ? "accepted" : "rejected" } : x) });
+        set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status } : x) });
       },
       setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x) }),
       setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } } }),
@@ -743,6 +746,7 @@ export const useStore = create<State>()(
         s.ui.speakerColors ??= {};
         s.ui.speakerWeight ??= {};
         s.ui.fontFamily ??= "system";
+        s.ui.coderName ??= "tom";
       },
     }
   )
@@ -844,7 +848,7 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
     const pid = m[1], start = +m[2], end = +(m[3] || m[2]);
     if (!get().transcripts[pid]) { set({ extSegRows: [...get().extSegRows, r] }); return; }
     const canon = ensureCode(get, set, r.code);
-    get().addSegment(pid, start, end, canon, r.proposed_by || "tom", r.status || "accepted", r.notes || "");
+    get().addSegment(pid, start, end, canon, r.proposed_by || undefined, r.status || "accepted", r.notes || "");
   });
 }
 
