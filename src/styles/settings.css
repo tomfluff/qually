@@ -14,7 +14,10 @@
 .set-nav button:hover { background:var(--panel); }
 .set-nav button.on { background:var(--accent); color:#fff; }
 [data-theme=dark] .set-nav button.on { color:#12161a; }
-.set-panel { flex:1 1 auto; min-width:0; overflow-y:auto; padding-right:6px;
+/* padding-right leaves the full-width controls (key input, model row) the same
+   breathing room on the right as the nav gap gives on the left — 6px sat them
+   almost against the modal edge */
+.set-panel { flex:1 1 auto; min-width:0; overflow-y:auto; padding-right:16px;
   display:flex; flex-direction:column; gap:11px; }
 
 .set-foot { flex-shrink:0; display:flex; align-items:center; gap:14px;
