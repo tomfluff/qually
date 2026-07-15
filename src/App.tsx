@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "./state/store";
 import { Toolbar } from "./components/Toolbar";
 import { Tabs } from "./components/Tabs";
@@ -214,7 +214,11 @@ export function App() {
 // this moment on exists only in memory. This must out-shout everything else.
 function SaveWarning() {
   const saveFailed = useStore((s) => s.saveFailed);
-  if (!saveFailed) return null;
+  // dismissible, but it re-arms: if saves recover and then fail AGAIN, that is a
+  // new emergency, not the one that was already acknowledged
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => { if (!saveFailed) setDismissed(false); }, [saveFailed]);
+  if (!saveFailed || dismissed) return null;
   const exportProject = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([useStore.getState().exportProject()], { type: "application/json" }));
@@ -228,6 +232,8 @@ function SaveWarning() {
       <span><b>Autosave is failing</b> — the browser's storage is full. Nothing saves until space is freed.
         Export your project now, then start a new project or remove a transcript.</span>
       <button className="btn" onClick={exportProject}>Export project</button>
+      <button className="btn iconbtn" onClick={() => setDismissed(true)} title="Dismiss — saving is still broken"
+        aria-label="Dismiss warning"><Icon name="x" size={14} /></button>
     </div>
   );
 }
