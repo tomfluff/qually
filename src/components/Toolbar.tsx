@@ -5,6 +5,7 @@ import { AboutButton } from "./AboutButton";
 import { DataFormatButton } from "./DataFormatButton";
 import { AiCheckModal } from "./AiCheckModal";
 import { ExportMenu } from "./ExportMenu";
+import { NewProjectButton } from "./NewProjectButton";
 import { ProjectError } from "../project";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
@@ -40,6 +41,7 @@ export function Toolbar() {
         <span className="brandtag">Thematic analysis, made accessible</span>
       </span>
       <span className="tbdiv" />
+      <NewProjectButton />
       <button className="btn primary iconlabel" onClick={() => fileRef.current?.click()}
         title="Import transcript/codebook/segment CSVs, or open a .qually.json project">
         <Icon name="upload" size={16} /> Import files…
