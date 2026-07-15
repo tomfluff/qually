@@ -539,7 +539,9 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const seg = laned.find((s) => s.lane === i && s.start <= endId && startId <= s.end);
     if (!seg) { lanes.push(<span key={i} className="laneEmpty" />); continue; }
     const rej = seg.status === "rejected";
-    const cand = seg.status === "candidate";
+    // "candidate" here, "proposed" in the Python-side contract — any unverdicted
+    // status is a suggestion; only an explicit "accepted" earns the solid bar
+    const cand = !rej && seg.status !== "accepted";
     const color = codebook[seg.code]?.color || "#999";
     const isStart = seg.start >= startId && seg.start <= endId;
     const isEnd = seg.end >= startId && seg.end <= endId;

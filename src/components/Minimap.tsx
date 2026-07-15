@@ -153,7 +153,7 @@ export const Minimap = forwardRef<MinimapHandle, {
         const gi1 = m.get(s.end) ?? gi0;
         const y0 = (gi0 / N) * h;
         const y1 = ((gi1 + 1) / N) * h;
-        ctx.globalAlpha = s.status === "rejected" ? 0.3 : s.status === "candidate" ? 0.55 : 0.9;
+        ctx.globalAlpha = s.status === "rejected" ? 0.3 : s.status !== "accepted" ? 0.55 : 0.9;
         ctx.fillStyle = codebook[s.code]?.color || "#999";
         ctx.fillRect(laneX + s.lane * colW, y0, Math.max(1, colW - 1.5), Math.max(codeMinH, y1 - y0));
         if (s.status !== "rejected" && closeCallSids.has(s.sid)) {

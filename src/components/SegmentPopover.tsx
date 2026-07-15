@@ -86,7 +86,7 @@ export function SegmentPopover({ sid, x, y, onClose }: {
       <textarea value={seg.notes} placeholder="notes" onChange={(e) => setNotes(sid, e.target.value)} />
       <div className="row">
         <button className="btn danger" onClick={() => { deleteSegment(sid); onClose(); }}>Delete</button>
-        {seg.status === "candidate" ? (
+        {seg.status !== "accepted" && seg.status !== "rejected" ? (
           // a suggestion under review gets a real verdict pair, not a reject-toggle
           <>
             <button className="btn ok" onClick={() => { setStatus(sid, "accepted"); onClose(); }}>Accept</button>
