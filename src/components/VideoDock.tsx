@@ -121,11 +121,27 @@ export function VideoDock() {
     document.addEventListener("mouseup", up);
   };
 
+  // Resize like the drag: imperative writes during the gesture, ONE commit on release.
+  // The old version setGeom'd on every mousemove — ~60 full re-renders/sec of this whole
+  // dock (video element and all) plus reconciliation, which is what made it sluggish.
+  // Width is a layout property so the panel still reflows per frame, but that is far
+  // cheaper than a React render each frame, and it's rAF-coalesced to one write per frame.
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
+    const el = (e.currentTarget as HTMLElement).closest(".vdock") as HTMLElement;
     const x0 = e.clientX, w0 = geom.w;
-    const move = (ev: MouseEvent) => setGeom((g) => ({ ...g, w: Math.max(220, w0 + (ev.clientX - x0)) }));
-    const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
+    let w = w0, raf = 0;
+    const move = (ev: MouseEvent) => {
+      w = Math.max(220, Math.min(w0 + (ev.clientX - x0), window.innerWidth - 40));
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; el.style.width = `${w}px`; });
+    };
+    const up = () => {
+      if (raf) cancelAnimationFrame(raf);
+      el.style.width = `${w}px`;
+      flushSync(() => setGeom((g) => ({ ...g, w })));
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+    };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   };
 

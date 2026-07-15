@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 // Settings popover: instant-apply controls (no save button), all persisted via ui autosave.
 export function SettingsButton() {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"Appearance"|"Transcript"|"Codes"|"Speakers"|"AI">("Appearance");
   const ref = useRef<HTMLDivElement>(null);
   const fontSize = useStore((s) => s.ui.fontSize);
   const setFontSize = useStore((s) => s.setFontSize);
@@ -39,6 +40,8 @@ export function SettingsButton() {
     return () => document.removeEventListener("keydown", onEsc, true);
   }, [open]);
 
+  const TABS = ["Appearance", "Transcript", "Codes", "Speakers", "AI"] as const;
+
   return (
     <div className="settings-wrap" ref={ref}>
       <button className="btn" onClick={() => setOpen((o) => !o)}>Settings</button>
@@ -47,14 +50,20 @@ export function SettingsButton() {
           <div className="about set-modal" onMouseDown={(e) => e.stopPropagation()}>
             <div className="about-head">
               <h2>Settings</h2>
-              <button className="btn iconbtn zenbtn" onClick={() => { setZen(true); setOpen(false); }}
-                title="Zen mode — hide every panel (Esc to exit)"><Icon name="eye-off" size={15} /> Zen</button>
               <button className="btn iconbtn" onClick={() => setOpen(false)} title="Close (Esc)"><Icon name="x" size={16} /></button>
             </div>
 
-            <div className="about-body set-grid nicescroll">
-              <section className="set-cat">
-                <h3>Appearance</h3>
+            {/* left-nav tabs, not a masonry: CSS multi-column in a height-capped scroll
+                container overflows sideways (fills the height, then starts a new column to
+                the right). One category at a time, each panel scrolls vertically. */}
+            <div className="set-body">
+              <nav className="set-nav">
+                {TABS.map((t) => (
+                  <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{t}</button>
+                ))}
+              </nav>
+              <div className="set-panel nicescroll">
+              {tab === "Appearance" && <>
                 <div className="srow">
                   <span>Theme</span>
                   <div className="seg">
@@ -86,10 +95,9 @@ export function SettingsButton() {
                   <span className="sval">{sidebarFontSize}</span>
                   <button className="sreset" onClick={(e) => { e.preventDefault(); setSidebarFontSize(13); }} title="Reset to 13px">reset</button>
                 </label>
-              </section>
+              </>}
 
-              <section className="set-cat">
-                <h3>Transcript</h3>
+              {tab === "Transcript" && <>
                 <div className="srow">
                   <span>Line numbers</span>
                   <div className="seg">
@@ -120,10 +128,9 @@ export function SettingsButton() {
                     <button className={minimapDetail === "simplified" ? "on" : ""} onClick={() => setUi({ minimapDetail: "simplified" })}>simple</button>
                   </div>
                 </div>
-              </section>
+              </>}
 
-              <section className="set-cat">
-                <h3>Codes</h3>
+              {tab === "Codes" && <>
                 <div className="srow">
                   <span>Lane width</span>
                   <div className="seg">
@@ -162,10 +169,16 @@ export function SettingsButton() {
                     <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
                   </div>
                 </div>
-              </section>
+              </>}
 
-              <section className="set-cat"><SpeakerRows /></section>
-              <section className="set-cat"><AiSettings /></section>
+              {tab === "Speakers" && <SpeakerRows />}
+              {tab === "AI" && <AiSettings />}
+              </div>
+            </div>
+
+            <div className="set-foot">
+              <button className="btn zenbtn" onClick={() => { setZen(true); setOpen(false); }}>Enter zen mode</button>
+              <span className="set-foot-note">Hides the toolbar and every panel for distraction-free reading and coding. Press Esc to exit.</span>
             </div>
           </div>
         </div>
@@ -192,7 +205,6 @@ function SpeakerRows() {
 
   return (
     <>
-      <h3>Speakers</h3>
       {speakers.map((sp) => {
         const w = weightOf(ui, sp);
         return (
@@ -256,7 +268,6 @@ function AiSettings() {
 
   return (
     <>
-      <h3>AI assistance <span className="opt">optional</span></h3>
       <div className="settings-note">
         Off until you add a key. Anything you run sends transcript lines to OpenAI —
         you approve each request and see exactly what's sent.

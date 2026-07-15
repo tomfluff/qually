@@ -1,18 +1,26 @@
-/* Settings — a modal (was a 286px popover that scrolled forever). The controls sit in a
-   two-column masonry of category cards, so it reads as a compact grid. Shares the .about
-   dialog shell; only the width and the grid body are settings-specific. */
+/* Settings — a modal with left-nav tabs. Was a two-column masonry, but CSS multi-column
+   in a height-capped scroll container overflows SIDEWAYS (fills the height, then adds a
+   column to the right). Tabs show one category at a time; each panel scrolls vertically. */
 .settings-wrap { display:inline-flex; }
-.about.set-modal { width:min(720px, 100%); }
+.about.set-modal { width:min(600px, 100%); height:min(560px, 84vh); }
 .set-modal .about-head h2 { flex:1; }
-.set-modal .about-head .zenbtn { flex-shrink:0; }
 
-.set-grid { columns:2; column-gap:16px; }
-@media (max-width:600px) { .set-grid { columns:1; } }
-.set-cat { break-inside:avoid; margin:0 0 16px; padding:12px 14px;
-  border:1px solid var(--line); border-radius:10px; background:var(--panel);
-  display:flex; flex-direction:column; gap:9px; }
-.set-cat > h3 { margin:0 0 1px; font-size:11px; text-transform:uppercase; letter-spacing:.08em;
-  color:var(--muted); font-weight:700; }
+/* head (fixed) · body [nav | scrolling panel] (flex:1) · Zen footer (fixed) */
+.set-body { display:flex; flex:1 1 auto; min-height:0; gap:14px; margin-top:6px; }
+.set-nav { flex:0 0 128px; display:flex; flex-direction:column; gap:2px;
+  border-right:1px solid var(--line); padding-right:12px; }
+.set-nav button { text-align:left; border:none; background:none; color:var(--fg); font:inherit;
+  font-weight:500; padding:8px 11px; border-radius:8px; cursor:pointer; }
+.set-nav button:hover { background:var(--panel); }
+.set-nav button.on { background:var(--accent); color:#fff; }
+[data-theme=dark] .set-nav button.on { color:#12161a; }
+.set-panel { flex:1 1 auto; min-width:0; overflow-y:auto; padding-right:6px;
+  display:flex; flex-direction:column; gap:11px; }
+
+.set-foot { flex-shrink:0; display:flex; align-items:center; gap:14px;
+  margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+.set-foot .zenbtn { flex-shrink:0; white-space:nowrap; }
+.set-foot .set-foot-note { font-size:12px; color:var(--muted); line-height:1.4; }
 
 /* control rows — rescoped from the old .settings-pop; behaviour unchanged */
 .set-modal .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
