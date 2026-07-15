@@ -1,7 +1,11 @@
 /* Settings — a modal with left-nav tabs. Was a two-column masonry, but CSS multi-column
    in a height-capped scroll container overflows SIDEWAYS (fills the height, then adds a
    column to the right). Tabs show one category at a time; each panel scrolls vertically. */
-.settings-wrap { display:inline-flex; }
+/* position:relative anchors the Export dropdown (.exmenu is position:absolute,
+   top:100%). The Settings modal uses a fixed backdrop and doesn't need it, but the
+   Export menu shares this wrapper — without it the menu renders below the viewport
+   and looks like it never opened. */
+.settings-wrap { display:inline-flex; position:relative; }
 .about.set-modal { width:min(600px, 100%); height:min(560px, 84vh); }
 .set-modal .about-head h2 { flex:1; }
 
