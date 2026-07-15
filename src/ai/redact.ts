@@ -36,7 +36,15 @@ export function redactor(terms: string[]): Redaction {
     back.set(p, t);
   });
   const byLength = [...list].sort((a, b) => b.length - a.length);
-  const re = new RegExp(`\\b(${byLength.map(esc).join("|")})\\b`, "gi");
+  // NOT \b: JS \b only knows [A-Za-z0-9_], so a term starting or ending in a
+  // non-ASCII letter (José, Łukasz, 田中) never matched and the real name went to
+  // the API unredacted. Unicode lookarounds are the word boundary instead; terms
+  // in scripts written without spaces (CJK) match bare — there is no boundary to
+  // find, and over-redacting beats leaking.
+  const W = "[\\p{L}\\p{N}_]";
+  const NOSPACE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+  const pat = (t: string) => (NOSPACE.test(t) ? esc(t) : `(?<!${W})${esc(t)}(?!${W})`);
+  const re = new RegExp(`(${byLength.map(pat).join("|")})`, "giu");
   const backRe = new RegExp(`\\[REDACTED_\\d+\\]`, "g");
   return {
     redact: (text) => text.replace(re, (m) => placeholder.get(m.toLowerCase()) ?? m),
