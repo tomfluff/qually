@@ -1,7 +1,7 @@
 {
   "name": "qually",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.0-beta.1",
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "description": "Offline, single-file qualitative coding tool for interview and session transcripts.",
