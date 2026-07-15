@@ -44,7 +44,9 @@ export function SettingsButton() {
 
   return (
     <div className="settings-wrap" ref={ref}>
-      <button className="btn" onClick={() => setOpen((o) => !o)}>Settings</button>
+      <button className="btn iconlabel" onClick={() => setOpen((o) => !o)}>
+        <Icon name="settings" size={16} /> Settings
+      </button>
       {open && (
         <div className="about-backdrop" onMouseDown={() => setOpen(false)}>
           <div className="about set-modal" onMouseDown={(e) => e.stopPropagation()}>

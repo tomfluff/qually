@@ -14,12 +14,7 @@
    help button all sit on the same 28px line (popovers inside the wraps keep 1rem) */
 #toolbar > .btn, #toolbar .settings-wrap > .btn {
   height:28px; display:inline-flex; align-items:center; padding:0 10px; font-size:12.5px; }
-#toolbar .status { color:var(--muted); flex:1; min-width:12px; } /* fills the gap; Settings+Help flush right */
-.helpbtn { flex-shrink:0; width:28px; height:28px; border-radius:50%; border:none;
-  background:var(--accent); color:#fff; cursor:pointer; padding:0;
-  font-size:17px; font-weight:800; line-height:1; font-family:inherit;
-  display:inline-flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.2); }
-.helpbtn:hover { filter:brightness(1.12); }
+#toolbar .status { color:var(--muted); flex:1; min-width:12px; } /* fills the gap; right cluster flush right */
 #toolbar .iconbtn { display:inline-flex; align-items:center; padding:5px 8px; }
 #toolbar .btn:disabled { opacity:.35; cursor:default; }
 #toolbar .btn:disabled:hover { border-color:var(--line); }
