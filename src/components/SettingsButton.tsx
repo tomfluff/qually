@@ -189,7 +189,9 @@ export function SettingsButton() {
             </div>
 
             <div className="set-foot">
-              <button className="btn zenbtn" onClick={() => { setZen(true); setOpen(false); }}>Enter zen mode</button>
+              <button className="btn zenbtn" onClick={() => { setZen(true); setOpen(false); }}>
+                <Icon name="eye-dotted" size={19} /> Enter zen mode
+              </button>
               <span className="set-foot-note">Hides the toolbar and every panel for distraction-free reading and coding. Press Esc to exit.</span>
             </div>
           </div>

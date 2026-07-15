@@ -28,7 +28,16 @@
 
 .set-foot { flex-shrink:0; display:flex; align-items:center; gap:14px;
   margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
-.set-foot .zenbtn { flex-shrink:0; white-space:nowrap; }
+/* the one call-to-action in the footer: accent outline + a faint accent wash,
+   larger and rounder than a plain .btn so it reads as the primary thing here */
+.set-foot .zenbtn { flex-shrink:0; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:8px;
+  padding:9px 16px; border-radius:12px; font-weight:600;
+  border:2px solid var(--accent);
+  background:color-mix(in srgb, var(--accent) 12%, var(--bg));
+  color:var(--fg); }
+.set-foot .zenbtn:hover { border-color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 20%, var(--bg)); }
 .set-foot .set-foot-note { font-size:12px; color:var(--muted); line-height:1.4; }
 
 /* control rows — rescoped from the old .settings-pop; behaviour unchanged */
