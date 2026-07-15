@@ -75,6 +75,19 @@ test("re-importing the exported CSV is idempotent (no dupes, identical re-export
   expect(useStore.getState().exportCSV()).toBe(csv1);        // round-trips exactly
 });
 
+// dedup is per coder: a second coder's identical span+code is agreement data, kept —
+// while re-importing your OWN export stays idempotent (the test above).
+test("a second coder's identical segment imports alongside, not deduped away", async () => {
+  const before = useStore.getState().segments.length;
+  const row = 'segment_ref,pid,excerpt,code,proposed_by,status,notes\nP01:2-3,P01,,magnification,claude,candidate,\n';
+  await useStore.getState().importFiles([new File([row], "coded-segments.csv")]);
+  await useStore.getState().importFiles([new File([row], "coded-segments.csv")]); // their re-import dedups too
+  const segs = useStore.getState().segments;
+  expect(segs.length).toBe(before + 1);
+  expect(segs.some((x) => x.pid === "P01" && x.start === 2 && x.end === 3
+    && x.code === "magnification" && x.proposedBy === "claude" && x.status === "candidate")).toBe(true);
+});
+
 test("selection is undoable, and a whole drag is ONE step", () => {
   const s = useStore.getState();
   s.clearSelection();

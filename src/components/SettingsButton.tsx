@@ -25,6 +25,7 @@ export function SettingsButton() {
   const laneWidth = useStore((s) => s.ui.laneWidth);
   const lanePattern = useStore((s) => s.ui.lanePattern);
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
+  const coderName = useStore((s) => s.ui.coderName);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const setUi = useStore((s) => s.setUi);
@@ -143,6 +144,12 @@ export function SettingsButton() {
               </>}
 
               {tab === "Codes" && <>
+                <label className="srow">
+                  <span>Coder name</span>
+                  <input type="text" className="settext" value={coderName}
+                    onChange={(e) => setUi({ coderName: e.target.value })} />
+                </label>
+                <div className="settings-note">Written as <code>proposed_by</code> on every segment you create — how your coding is told apart from a second coder's in the exported CSV.</div>
                 <div className="srow">
                   <span>Lane width</span>
                   <div className="seg">
