@@ -43,6 +43,16 @@
 
 /* re-import conflict modal */
 .imp { width:min(520px, 100%); }
+
+/* AI scan modal: wider than the import dialog (two-column lens grid + payload preview),
+   and a fixed-head / scrolling-body / pinned-footer layout so the consent buttons never
+   fall below the fold. .about is already a flex column capped at 84vh; .ai-body takes the
+   slack and scrolls (min-height:0 lets a flex child shrink below its content — the classic
+   flex-scroll fix), while head and the actions footer hold their size. */
+.about.ai-check { width:min(680px, 100%); }
+.ai-check .about-head { flex-shrink:0; }
+.ai-check .ai-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding-right:6px; }
+.ai-check .imp-actions { flex-shrink:0; margin-top:12px; }
 .imp-warn { background:color-mix(in srgb, #e0a020 14%, var(--bg)); border:1px solid #e0a020;
   border-radius:8px; padding:10px 12px; margin:6px 0 2px; line-height:1.5; }
 .imp-stats { background:var(--panel); border:1px solid var(--line); border-radius:8px;
