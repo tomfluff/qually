@@ -8,22 +8,39 @@
      happens on the compositor thread, AFTER the drop's JS task, where flushSync can't
      reach. One small always-on layer is the cheaper price. */
   will-change:transform; }
-.vhead { display:flex; align-items:center; gap:4px; padding:6px 10px; cursor:move;
+.vhead { display:flex; align-items:center; gap:6px; padding:6px 8px; cursor:move;
   font-size:12px; color:var(--muted); user-select:none; }
 .vhead .vtitle { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.vhead .btn { padding:4px 8px; display:inline-flex; align-items:center; }
-.vhead .btn.speed.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-.vhead .btn.vcollapse { padding:0; width:28px; height:28px; border-radius:50%;
-  justify-content:center; background:var(--line); }
 .vbody { position:relative; }
-.vctrl { display:flex; gap:8px; padding:8px 10px; align-items:center; font-size:12px; color:var(--muted); }
+
+/* One control family across the dock: every button is 28px tall so the head and the
+   top strip line up. .accent fills (the primary action), .icononly is a 28×28 square,
+   .speed pills sit flush in a segmented group. */
+.vbtn { height:28px; display:inline-flex; align-items:center; gap:5px; padding:0 9px;
+  border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--fg);
+  font:inherit; font-size:12px; line-height:1; cursor:pointer; white-space:nowrap; }
+.vbtn:hover { border-color:var(--accent); }
+.vbtn.icononly { width:28px; padding:0; justify-content:center; }
+.vbtn.accent { background:var(--accent); color:#fff; border-color:var(--accent); }
+[data-theme=dark] .vbtn.accent { color:#12161a; }
+.vbtn.accent:hover { filter:brightness(1.08); }
+/* speed pills: one segmented control, not four separate buttons */
+.vspeeds { display:inline-flex; }
+.vspeeds .vbtn.speed { border-radius:0; padding:0 8px; border-left-width:0; }
+.vspeeds .vbtn.speed:first-child { border-left-width:1px; border-radius:7px 0 0 7px; }
+.vspeeds .vbtn.speed:last-child { border-radius:0 7px 7px 0; }
+.vspeeds .vbtn.speed.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+[data-theme=dark] .vspeeds .vbtn.speed.on { color:#12161a; }
+
+/* top control strip: the Jump-to-line action, offset stepper, change-media */
+.vctrl { display:flex; gap:8px; padding:8px 8px; align-items:center; font-size:12px; color:var(--muted); }
 .vctrl .vlabel { color:var(--fg); font-weight:600; }
 .vctrl .stepper { display:flex; align-items:center; border:1px solid var(--line);
-  border-radius:7px; overflow:hidden; background:var(--bg); }
+  border-radius:7px; overflow:hidden; background:var(--bg); height:28px; }
 .vctrl .stepper button { border:none; background:transparent; color:var(--fg);
-  width:24px; height:26px; cursor:pointer; font-size:15px; line-height:1; padding:0; }
+  width:24px; height:100%; cursor:pointer; font-size:15px; line-height:1; padding:0; }
 .vctrl .stepper button:hover { background:var(--sel); }
-.vctrl .stepper input { width:40px; height:26px; text-align:center; color:var(--fg);
+.vctrl .stepper input { width:34px; height:100%; text-align:center; color:var(--fg);
   background:transparent; border:none; border-left:1px solid var(--line);
   border-right:1px solid var(--line); font-family:inherit; font-size:12px;
   -moz-appearance:textfield; }

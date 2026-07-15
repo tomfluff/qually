@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useStore } from "../state/store";
-import { registerVideo } from "../video/seek";
+import { registerVideo, tsToSec } from "../video/seek";
 import { Icon } from "./Icon";
 
 // bottom-anchored so expanding/collapsing grows and shrinks upward
@@ -26,6 +26,13 @@ export function VideoDock() {
   const [playing, setPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Where each tab's media was last at. One <video> element serves every tab, so switching
+  // tabs swaps its src and resets currentTime to 0 — this remembers each tab's position so
+  // returning to it resumes where you left off. `switching` guards the reset: on a source
+  // change the browser fires a timeupdate at 0, which would otherwise overwrite the very
+  // position we're about to restore.
+  const lastTime = useRef<Record<string, number>>({});
+  const switching = useRef(false);
 
   // Debounced: geom changes on every mousemove of a drag, and localStorage.setItem is
   // SYNCHRONOUS — it takes a lock over the whole origin's storage. Writing it ~60×/sec
@@ -38,6 +45,9 @@ export function VideoDock() {
   const cur = media[pid];
   // keep the seek bridge pointed at the current element + offset
   useEffect(() => { registerVideo(videoRef.current, offset); }, [cur, offset, pid]);
+  // the source is about to change (tab switch / new media): ignore the reset-to-0
+  // timeupdate that follows, so it can't clobber the position we'll restore on load
+  useEffect(() => { switching.current = true; }, [cur?.url]);
   // apply persisted playback rate whenever the source or rate changes
   useEffect(() => { if (videoRef.current) videoRef.current.playbackRate = geom.rate; }, [cur, geom.rate]);
 
@@ -122,6 +132,36 @@ export function VideoDock() {
   const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? void v.play() : v.pause(); };
   const setRate = (rate: number) => setGeom((g) => ({ ...g, rate }));
 
+  // remember this tab's position as it plays; restore it when its source loads
+  const onTimeUpdate = () => { const v = videoRef.current; if (v && !switching.current) lastTime.current[pid] = v.currentTime; };
+  const onLoaded = () => {
+    const v = videoRef.current; if (!v) return;
+    const t = lastTime.current[pid];
+    if (t != null && t > 0.05) v.currentTime = t;
+    switching.current = false;
+  };
+
+  // Feature: jump the transcript to whatever is playing now. The line's position in the
+  // video is tsToSec(line.ts) + offset; the line being spoken is the last one whose video
+  // start is at or before the playhead. Select it (undoable) and scroll it into view.
+  const syncToLine = () => {
+    const v = videoRef.current; if (!v) return;
+    const t = v.currentTime;
+    const lines = useStore.getState().transcripts[pid]?.lines ?? [];
+    let best = -1, bestT = -Infinity;
+    for (const l of lines) {
+      const s = tsToSec(l.ts);
+      if (s === null) continue;
+      const vt = s + offset;
+      if (vt <= t + 0.001 && vt > bestT) { bestT = vt; best = l.id; }
+    }
+    if (best < 0) best = lines[0]?.id ?? -1; // before the first timed line
+    if (best < 0) return;
+    const st = useStore.getState();
+    st.pushSelUndo(); st.startSelection(best); st.endSelGesture();
+    st.scrollToLine(best);
+  };
+
   // Positioned by transform off a left:0/bottom:0 anchor — the same property the drag
   // writes, so drag and rest are one rendering path (see startDrag). translateY is
   // negative-up from the bottom anchor, which keeps the BOTTOM edge pinned when
@@ -142,21 +182,29 @@ export function VideoDock() {
         <div className="vbody">
           {!geom.collapsed && (
             <div className="vctrl">
+              {/* top control: find the current playback position in the transcript */}
+              <button className="vbtn accent" onClick={syncToLine}
+                title="Select the transcript line playing now, and scroll to it">
+                <Icon name="target" size={15} /> Jump to line
+              </button>
+              <span style={{ flex: 1 }} />
               <span className="vlabel">Offset</span>
               <div className="stepper">
                 <button onClick={() => setOffset(offset - 1)} title="−1s">−</button>
                 <input type="number" step={1} value={offset} onChange={(e) => setOffset(+e.target.value || 0)} />
                 <button onClick={() => setOffset(offset + 1)} title="+1s">+</button>
               </div>
-              <span className="unit">sec</span>
-              <span style={{ flex: 1 }} />
-              <button className="btn" onClick={() => fileRef.current?.click()}>Change media</button>
+              <span className="unit">s</span>
+              <button className="vbtn icononly" onClick={() => fileRef.current?.click()} title="Change media">
+                <Icon name="upload" size={15} />
+              </button>
             </div>
           )}
           {/* stays mounted when collapsed (0x0) so audio keeps playing but the
               video's dimensions don't affect the collapsed bar's auto width */}
           <video ref={videoRef} src={cur.url} controls
             onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+            onTimeUpdate={onTimeUpdate} onLoadedMetadata={onLoaded}
             style={{ width: geom.collapsed ? 0 : "100%", height: geom.collapsed ? 0 : "auto", display: "block", background: "#000" }} />
           {!geom.collapsed && <div className="vresize" onMouseDown={startResize} title="resize (keeps aspect)" />}
         </div>
@@ -174,18 +222,20 @@ export function VideoDock() {
         <span style={{ flex: 1 }} />
         {cur && (
           <>
-            <button className="btn" onClick={togglePlay} title="play/pause">
-              <Icon name={playing ? "pause" : "play"} />
+            <button className="vbtn icononly" onClick={togglePlay} title="Play / pause">
+              <Icon name={playing ? "pause" : "play"} size={15} />
             </button>
-            {SPEEDS.map((s) => (
-              <button key={s} className={"btn speed" + (geom.rate === s ? " on" : "")}
-                onClick={() => setRate(s)}>{s}×</button>
-            ))}
+            <div className="vspeeds">
+              {SPEEDS.map((s) => (
+                <button key={s} className={"vbtn speed" + (geom.rate === s ? " on" : "")}
+                  onClick={() => setRate(s)} title={`${s}× speed`}>{s}×</button>
+              ))}
+            </div>
           </>
         )}
-        <button className="btn vcollapse" onClick={() => setGeom((g) => ({ ...g, collapsed: !g.collapsed }))}
-          title={geom.collapsed ? "expand" : "collapse to audio"}>
-          <Icon name={geom.collapsed ? "chevron-up" : "chevron-down"} size={18} />
+        <button className="vbtn icononly" onClick={() => setGeom((g) => ({ ...g, collapsed: !g.collapsed }))}
+          title={geom.collapsed ? "Expand" : "Collapse to audio"}>
+          <Icon name={geom.collapsed ? "chevron-up" : "chevron-down"} size={16} />
         </button>
       </div>
       <input ref={fileRef} type="file" accept="video/*,audio/*" style={{ display: "none" }}
