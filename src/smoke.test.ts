@@ -299,3 +299,18 @@ test("undo can un-select in a tab you have since left", async () => {
   useStore.getState().setActive("TA");                     // go back and look
   expect([...useStore.getState().selection.lines]).toEqual([]); // it must be GONE
 });
+
+// LAST on purpose: it wipes the workspace every earlier test builds on
+test("newProject wipes the workspace but keeps ui/ai preferences", () => {
+  useStore.getState().setUi({ coderName: "keepme" });
+  expect(useStore.getState().segments.length).toBeGreaterThan(0);
+  useStore.getState().newProject();
+  const s = useStore.getState();
+  expect(s.segments).toHaveLength(0);
+  expect(s.transcripts).toEqual({});
+  expect(s.tabs).toHaveLength(0);
+  expect(s.extSegRows).toHaveLength(0);
+  expect(s.undoStack).toHaveLength(0);
+  expect(s.active).toBe("browse");
+  expect(s.ui.coderName).toBe("keepme"); // the person survives the project
+});

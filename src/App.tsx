@@ -205,6 +205,29 @@ export function App() {
       <ImportModal />
       <SegUpdateModal />
       <ProjectModal />
+      <SaveWarning />
+    </div>
+  );
+}
+
+// localStorage is full: every autosave is silently failing, so anything coded from
+// this moment on exists only in memory. This must out-shout everything else.
+function SaveWarning() {
+  const saveFailed = useStore((s) => s.saveFailed);
+  if (!saveFailed) return null;
+  const exportProject = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([useStore.getState().exportProject()], { type: "application/json" }));
+    a.download = "qually-backup.qually.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  return (
+    <div className="savewarn" role="alert">
+      <Icon name="alert-triangle" size={16} />
+      <span><b>Autosave is failing</b> — the browser's storage is full. Nothing saves until space is freed.
+        Export your project now, then start a new project or remove a transcript.</span>
+      <button className="btn" onClick={exportProject}>Export project</button>
     </div>
   );
 }

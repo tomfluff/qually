@@ -18,6 +18,7 @@ const slug = (s: string) => (s.replace(/[^\w.-]+/g, "-").replace(/^-|-$/g, "") |
 //   the CSVs are interchange — a pipeline, a co-author, a paper appendix.
 export function ExportMenu() {
   const [open, setOpen] = useState(false);
+  const [confirmNew, setConfirmNew] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const tabs = useStore((s) => s.tabs);
   const editCount = useStore((s) => Object.values(s.transcripts)
@@ -99,6 +100,33 @@ it round-trips everything, including corrections and AI marks.
             () => { saveText(s().exportNotices(), "ai-noticings.csv"); setOpen(false); })}
           {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost — your methods appendix.",
             () => { saveText(s().exportAiLog(), "ai-provenance.csv"); setOpen(false); })}
+          <div className="exsec">Start over</div>
+          {item("New project…", "Clear this workspace and start fresh. Asks first; offers a snapshot.",
+            () => { setOpen(false); setConfirmNew(true); })}
+        </div>
+      )}
+      {confirmNew && (
+        <div className="about-backdrop" onMouseDown={() => setConfirmNew(false)}>
+          <div className="about imp" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="about-head">
+              <h2>Start a new project?</h2>
+              <button className="btn iconbtn" onClick={() => setConfirmNew(false)} title="Cancel (Esc)"><Icon name="x" size={16} /></button>
+            </div>
+            <p className="about-lede">
+              This erases everything in this browser — {tabs.length} transcript{tabs.length === 1 ? "" : "s"} and
+              all coding. A project file (.qually.json) brings it all back later.
+            </p>
+            <div className="imp-actions">
+              <button className="btn primary" onClick={doProject}>
+                Save the project file first
+              </button>
+              <button className="btn danger" onClick={() => { s().newProject(); setConfirmNew(false); }}>
+                Erase and start new
+              </button>
+              <button className="btn" onClick={() => setConfirmNew(false)}>Cancel</button>
+            </div>
+            <div className="imp-note">Undo can't reach across this — the file is the way back.</div>
+          </div>
         </div>
       )}
     </div>

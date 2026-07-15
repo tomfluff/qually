@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
@@ -113,8 +113,10 @@ interface State {
   pendingImports: PendingImport[]; // re-imports awaiting a user decision
   pendingProject: Project | null;  // a loaded project awaiting the replace confirmation
   pendingSegUpdates: SegUpdate[];  // status/notes overwrites awaiting consent
+  saveFailed: boolean; // localStorage write failed (quota) — autosave is NOT happening
 
   importFiles: (files: FileList | File[]) => Promise<void>;
+  newProject: () => void;
   resolveImport: (choice: ImportChoice) => void;
   resolveSegUpdates: (apply: boolean) => void;
   ensureCode: (code: string) => string;
@@ -257,7 +259,22 @@ export const useStore = create<State>()(
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
-      pendingImports: [], pendingProject: null, pendingSegUpdates: [],
+      pendingImports: [], pendingProject: null, pendingSegUpdates: [], saveFailed: false,
+
+      // wipe the workspace, keep the person: ui prefs (coder name, theme, fonts)
+      // and AI settings survive; everything project-shaped resets
+      newProject: () => {
+        set({
+          transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [],
+          active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
+          video: {}, aiFlags: {}, aiLog: [],
+          selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
+          jump: null, search: { open: false, query: "", scope: "tab", current: null },
+          pendingImports: [], pendingProject: null, pendingSegUpdates: [],
+          nextSid: 1,
+        });
+        forgetScroll();
+      },
 
       importFiles: async (files) => {
         const skipped: string[] = [];
@@ -751,6 +768,22 @@ export const useStore = create<State>()(
     }),
     {
       name: "coding-app-state",
+      // A full localStorage makes setItem THROW; zustand would log it and move on,
+      // and autosave silently stops while the user keeps coding. Surface it instead
+      // (saveFailed drives the App banner). setState is deferred a microtask so the
+      // flag's own persist attempt can't recurse into this handler mid-write.
+      storage: createJSONStorage(() => ({
+        getItem: (k) => localStorage.getItem(k),
+        removeItem: (k) => localStorage.removeItem(k),
+        setItem: (k, v) => {
+          try {
+            localStorage.setItem(k, v);
+            if (useStore.getState().saveFailed) queueMicrotask(() => useStore.setState({ saveFailed: false }));
+          } catch {
+            if (!useStore.getState().saveFailed) queueMicrotask(() => useStore.setState({ saveFailed: true }));
+          }
+        },
+      })),
       partialize: (s) => ({
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
         extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
