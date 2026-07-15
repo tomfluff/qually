@@ -16,6 +16,7 @@ import { Welcome } from "./components/Welcome";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
+import { AUTHOR_AVATAR } from "./assets/avatar";
 import { spanLens } from "./ai/flag";
 import { useMemo } from "react";
 
@@ -185,7 +186,14 @@ export function App() {
           {!hasData ? <Welcome /> : (active === "browse" ? <BrowseView /> : <TranscriptView />)}
         </div>
       </div>
-      <footer id="footer">Created with love and care by <b>Yotam Sechayk</b> — reach out with any questions.</footer>
+      <footer id="footer">
+        <span>Created with love and care by</span>
+        <a className="foot-author" href="https://tomfluff.github.io/" target="_blank" rel="noreferrer">
+          <img className="foot-avatar" src={AUTHOR_AVATAR} alt="Yotam Sechayk" width={20} height={20} />
+          <span>Yotam Sechayk</span>
+        </a>
+        <span>— reach out with any questions.</span>
+      </footer>
       {active !== "browse" && <HotbarDock />}
       <VideoDock />
       {zen && (
