@@ -36,7 +36,7 @@ export function Toolbar() {
     <div id="toolbar">
       <span className="brand">
         <Logo size={22} />
-        <span className="brandname">QuAlly</span>
+        <span className="brandname">Qu<span className="brand-ally">Ally</span></span>
         <span className="brandtag">Thematic analysis, made accessible</span>
       </span>
       <span className="tbdiv" />
