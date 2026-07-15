@@ -170,8 +170,11 @@
 .editrevert:hover { color:var(--accent); }
 .editmark { color:var(--accent); font-size:.6em; vertical-align:super; margin-left:2px;
   cursor:help; }
-/* AI-flagged likely mis-transcription — hover for what it probably should be */
-.aidoubt { border-bottom:2px dotted #e0a020; background:color-mix(in srgb,#e0a020 15%, transparent);
+/* AI-flagged likely mis-transcription — hover for what it probably should be.
+   Dotted on top AND bottom, thicker than the noticings' single underline, so the
+   "something's wrong here" mark reads as strongly as the "worth a look" ones. */
+.aidoubt { border-top:3px dotted #e0a020; border-bottom:3px dotted #e0a020;
+  background:color-mix(in srgb,#e0a020 15%, transparent);
   border-radius:2px; cursor:help; }
 /* AI noticing highlight (lens color via --lens-c): quiet tint, deliberately distinct
    from the dotted error amber — something to look at, not something wrong.
