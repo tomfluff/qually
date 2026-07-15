@@ -19,6 +19,9 @@ install, and no data ever leaving your machine.
 - **Scale the text, not the app.** The transcript scales to **48px** and the sidebar to 36px,
   independently — so the words grow without the chrome eating your reading column. Browser
   zoom works as well, and `Ctrl+0` still resets it.
+- **Choose a clearer typeface.** Set the transcript in **Atkinson Hyperlegible** — letterforms
+  drawn so easily-confused characters (b/d, I/l/1, O/0) stay distinct — from Settings →
+  Appearance, alongside system and serif. It ships inside the app, so it works offline.
 - **Code without a mouse.** `Tab` into the transcript, `↓` to select a line, `1`–`9` to apply
   a code, `0` for the searchable palette. Every control has a visible focus ring.
 - **Don't depend on colour.** A selected line gets a rail, not just a tint; AI noticings differ
