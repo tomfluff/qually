@@ -1,5 +1,6 @@
 /* Split per component/area — see styles/. Import order = cascade order.
    Build inlines it all into the single-file artifact (vite-plugin-singlefile). */
+@import "./styles/fonts.css";      /* embedded Atkinson Hyperlegible reading font */
 @import "./styles/base.css";       /* theme vars, reset, html/#app */
 @import "./styles/buttons.css";    /* shared .btn base + color variants */
 @import "./styles/welcome.css";    /* first-run get-started screen */

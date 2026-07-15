@@ -109,7 +109,12 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="about-backdrop" onMouseDown={() => !busy && onClose()}>
-      <div className="about imp" onMouseDown={(e) => e.stopPropagation()}>
+      {/* ai-check: wider than the import/project dialogs (two-column lens grid) and a
+          THREE-region layout — fixed head, scrolling body, pinned footer — so the
+          consent buttons are always reachable no matter how tall the payload preview
+          and lens/speaker lists get. Without the scroll region the footer clipped
+          below 84vh and "Cancel" fell off the bottom. */}
+      <div className="about imp ai-check" onMouseDown={(e) => e.stopPropagation()}>
         <div className="about-head">
           <h2>Scan “{pid}” with AI</h2>
           <button className="btn iconbtn" onClick={onClose} disabled={busy} title="Close">
@@ -119,81 +124,90 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
 
         {done ? (
           <>
-            <p className="about-lede">{doneMsg()}</p>
-            <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
+            <div className="ai-body">
+              <p className="about-lede">{doneMsg()}</p>
+              <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
+            </div>
             <div className="imp-actions"><button className="btn primary" onClick={onClose}>Done</button></div>
           </>
         ) : (
           <>
-            <div className="ai-sec">Look for <span className="ai-sec-hint">marks instances only — coding stays yours</span></div>
-            <div className="ai-lenses">
-              {LENSES.map((l) => (
-                <label key={l.id} className="ai-lens">
-                  <input type="checkbox" checked={lenses.includes(l.id)} onChange={() => toggleLens(l.id)} />
-                  <span className="ai-lens-dot" style={{ background: l.color }} />
-                  <span>{l.label} <em>{l.method}</em></span>
-                </label>
-              ))}
-            </div>
+            <div className="ai-body nicescroll">
+              <div className="ai-sec">Look for <span className="ai-sec-hint">marks instances only — coding stays yours</span></div>
+              <div className="ai-lenses">
+                {LENSES.map((l) => (
+                  <label key={l.id} className="ai-lens">
+                    <input type="checkbox" checked={lenses.includes(l.id)} onChange={() => toggleLens(l.id)} />
+                    <span className="ai-lens-dot" style={{ background: l.color }} />
+                    <span>{l.label} <em>{l.method}</em></span>
+                  </label>
+                ))}
+              </div>
 
-            <div className="ai-sec">Whose speech</div>
-            <div className="ai-spks">
-              {speakers.map(([sp, n]) => (
-                <label key={sp} className="ai-spk">
-                  <input type="checkbox" checked={!excluded.has(sp)} onChange={() => toggleSpeaker(sp)} />
-                  <span>{sp} <em>{n}</em></span>
-                </label>
-              ))}
-            </div>
+              <div className="ai-sec">Whose speech</div>
+              <div className="ai-spks">
+                {speakers.map(([sp, n]) => (
+                  <label key={sp} className="ai-spk">
+                    <input type="checkbox" checked={!excluded.has(sp)} onChange={() => toggleSpeaker(sp)} />
+                    <span>{sp} <em>{n}</em></span>
+                  </label>
+                ))}
+              </div>
 
-            {todo.length === 0 ? (
-              <>
+              {todo.length === 0 ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   {lenses.length === 0
                     ? "Tick at least one scan."
                     : "Every included line has already been scanned with these lenses at its current text. Edit a line, add a lens, or include another speaker to scan more."}
                 </p>
-                <div className="imp-actions"><button className="btn" onClick={onClose}>Close</button></div>
-              </>
+              ) : (
+                <>
+                  <div className="ai-warn">
+                    <b>This sends {todo.length} line{todo.length === 1 ? "" : "s"} of “{pid}” to OpenAI.</b> Interview
+                    transcripts are participant data — make sure this is allowed by your consent form and ethics approval.
+                  </div>
+
+                  <div className="ai-payload">
+                    <div className="ai-payload-head">
+                      <span className="eyebrow">Exactly what leaves your device</span>
+                      <span className="ai-model">{model.id}</span>
+                    </div>
+                    <pre className="nicescroll">{preview}{chunks[0].length > 6 ? "\n…" : ""}</pre>
+                  </div>
+
+                  <div className="ai-facts">
+                    <span>lines <b>{todo.length}</b></span>
+                    <span>requests <b>{chunks.length}</b></span>
+                    <span>redacted <b>{redactions}</b></span>
+                    <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
+                    <span>≈ <b>${estCost.toFixed(4)}</b></span>
+                  </div>
+                  {redactions === 0 && ai.redactTerms.length === 0 && (
+                    <div className="settings-note" style={{ marginTop: 6 }}>
+                      No redaction terms set. Add participant names, places, and organisations in
+                      Settings → AI so they're replaced before sending.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Pinned above the footer, outside the scrolling body — a run error
+                (e.g. no API key) must be visible right where the Send button is,
+                not parked at the bottom of a scrolled-away payload preview. */}
+            {err && <div className="ai-err">{err}</div>}
+
+            {todo.length === 0 ? (
+              <div className="imp-actions"><button className="btn" onClick={onClose}>Close</button></div>
             ) : (
-              <>
-                <div className="ai-warn">
-                  <b>This sends {todo.length} line{todo.length === 1 ? "" : "s"} of “{pid}” to OpenAI.</b> Interview
-                  transcripts are participant data — make sure this is allowed by your consent form and ethics approval.
-                </div>
-
-                <div className="ai-payload">
-                  <div className="ai-payload-head">
-                    <span className="eyebrow">Exactly what leaves your device</span>
-                    <span className="ai-model">{model.id}</span>
-                  </div>
-                  <pre className="nicescroll">{preview}{chunks[0].length > 6 ? "\n…" : ""}</pre>
-                </div>
-
-                <div className="ai-facts">
-                  <span>lines <b>{todo.length}</b></span>
-                  <span>requests <b>{chunks.length}</b></span>
-                  <span>redacted <b>{redactions}</b></span>
-                  <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
-                  <span>≈ <b>${estCost.toFixed(4)}</b></span>
-                </div>
-                {redactions === 0 && ai.redactTerms.length === 0 && (
-                  <div className="settings-note" style={{ marginTop: 6 }}>
-                    No redaction terms set. Add participant names, places, and organisations in
-                    Settings → AI so they're replaced before sending.
-                  </div>
-                )}
-
-                <div className="imp-actions">
-                  <button className="btn primary" onClick={run} disabled={busy}>
-                    {busy ? `Scanning… ${progress}/${chunks.length}` : `Send ${chunks.length} request${chunks.length === 1 ? "" : "s"} to OpenAI`}
-                  </button>
-                  <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
-                    {busy ? "Stop" : "Cancel — send nothing"}
-                  </button>
-                </div>
-                {err && <div className="ai-err">{err}</div>}
-              </>
+              <div className="imp-actions">
+                <button className="btn primary" onClick={run} disabled={busy}>
+                  {busy ? `Scanning… ${progress}/${chunks.length}` : `Send ${chunks.length} request${chunks.length === 1 ? "" : "s"} to OpenAI`}
+                </button>
+                <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
+                  {busy ? "Stop" : "Cancel — send nothing"}
+                </button>
+              </div>
             )}
           </>
         )}

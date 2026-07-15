@@ -39,12 +39,20 @@ function NoticeToggle() {
   );
 }
 
+const READ_FONTS: Record<"system" | "serif" | "atkinson", string> = {
+  system: "system-ui, Segoe UI, Roboto, sans-serif",
+  serif: "Georgia, 'Times New Roman', serif",
+  atkinson: "'Atkinson Hyperlegible', system-ui, sans-serif",
+};
+
 export function App() {
   const active = useStore((s) => s.active);
   const hasData = useStore((s) => s.tabs.length > 0);
   const dark = useStore((s) => s.ui.dark);
   const accent = useStore((s) => s.ui.accent);
   const minimapWidth = useStore((s) => s.ui.minimapWidth);
+  const fontSize = useStore((s) => s.ui.fontSize);
+  const fontFamily = useStore((s) => s.ui.fontFamily);
   const zen = useStore((s) => s.ui.zen);
   const searchOpen = useStore((s) => s.search.open);
 
@@ -58,6 +66,21 @@ export function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--mm-w", `${minimapWidth}px`);
   }, [minimapWidth]);
+
+  // Tooltips size themselves from --txt-fs. It was only ever set on the transcript list,
+  // so every tip OUTSIDE the transcript silently fell back to 16px * .8 = 12.8px — the
+  // unreadably-small tooltip we replaced native `title` to escape. Set it at the root so
+  // the whole app's tips follow the text size the reader actually chose.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--txt-fs", `${fontSize}px`);
+  }, [fontSize]);
+
+  // Reading font for the transcript text and Browse excerpts (the chrome stays
+  // system). Atkinson Hyperlegible is embedded (styles/fonts.css); the others map
+  // to platform faces, so only the one the reader picks costs anything.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--read-font", READ_FONTS[fontFamily]);
+  }, [fontFamily]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -80,6 +103,12 @@ export function App() {
       }
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+      // A dialog or popover owns the keyboard while it's up. Without this, arrows and
+      // digit hotkeys reached through an open Help modal or segment popover and moved
+      // the selection — or applied a code — on the transcript underneath it.
+      // Optional-call: a keydown whose target isn't an Element (window/document) would
+      // otherwise throw here and take every hotkey down with it.
+      if (t?.closest?.(".about-backdrop, .pop, .settings-pop, .exmenu, .menu")) return;
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
         e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); return;
       }

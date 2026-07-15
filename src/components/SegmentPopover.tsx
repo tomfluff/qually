@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useStore } from "../state/store";
 import { speakerGroupedText } from "../format";
 import { excerptOf } from "../contract/excerpt";
@@ -9,6 +9,7 @@ export function SegmentPopover({ sid, x, y, onClose }: {
 }) {
   const seg = useStore((s) => s.segments.find((z) => z.sid === sid));
   const codebook = useStore((s) => s.codebook);
+  const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const deleteSegment = useStore((s) => s.deleteSegment);
   const toggleReject = useStore((s) => s.toggleReject);
   const setNotes = useStore((s) => s.setNotes);
@@ -23,6 +24,19 @@ export function SegmentPopover({ sid, x, y, onClose }: {
     return speakerGroupedText(tr.lines.filter((l) => l.id >= sg.start && l.id <= sg.end)
       .map((l) => ({ speaker: l.speaker, text: l.text })));
   };
+
+  // The popover grows with the sidebar text size, so a fixed clamp can't keep it
+  // on screen — measure the real box and pull it back inside the viewport.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const pad = 8;
+    if (r.right > window.innerWidth - pad)
+      el.style.left = Math.max(pad, window.innerWidth - r.width - pad) + "px";
+    if (r.bottom > window.innerHeight - pad)
+      el.style.top = Math.max(pad, window.innerHeight - r.height - pad) + "px";
+  }, [sidebarFontSize]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -60,7 +74,7 @@ export function SegmentPopover({ sid, x, y, onClose }: {
 
   return (
     <div className="pop" ref={ref}
-      style={{ left: Math.min(x, window.innerWidth - 300), top: Math.min(y, window.innerHeight - 220) }}>
+      style={{ left: Math.min(x, window.innerWidth - 300), top: Math.min(y, window.innerHeight - 220), fontSize: sidebarFontSize }}>
       <div>
         <span className="swatch" style={{ display: "inline-block", width: 11, height: 11, borderRadius: 3, background: codebook[seg.code]?.color || "#999", marginRight: 6 }} />
         <strong>{seg.code}</strong>

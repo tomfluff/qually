@@ -1,45 +1,107 @@
-/* settings popover */
-.settings-wrap { position:relative; display:inline-flex; }
-.settings-pop { position:absolute; top:calc(100% + 6px); right:0; z-index:70;
-  width:286px; background:var(--bg); border:1px solid var(--line); border-radius:12px;
-  box-shadow:0 10px 34px rgba(0,0,0,.28); padding:14px; display:flex;
-  flex-direction:column; gap:9px; font-size:1rem;
-  max-height:calc(100vh - 62px); overflow-y:auto; }
-/* the popover scrolls when it overflows — its rows must never be flex-crushed
-   to fit (that renders as rows collapsing onto each other) */
-.settings-pop > * { flex-shrink:0; }
-.settings-title { font-size:15px; font-weight:700; color:var(--fg); margin-bottom:2px; }
-.settings-sub { font-size:10px; text-transform:uppercase; letter-spacing:.07em;
-  color:var(--muted); font-weight:700; margin-top:5px; padding-bottom:4px;
-  border-bottom:1px solid var(--line); }
-.settings-pop .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
-.settings-pop .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
-.settings-pop .srow input[type=range] { width:92px; margin:0; align-self:center;
-  accent-color:var(--accent); }
-.settings-pop .sval { min-width:2.2ch; padding:2px 4px; text-align:center;
-  color:var(--fg); font-variant-numeric:tabular-nums; background:var(--panel);
+/* Settings — a modal with left-nav tabs. Was a two-column masonry, but CSS multi-column
+   in a height-capped scroll container overflows SIDEWAYS (fills the height, then adds a
+   column to the right). Tabs show one category at a time; each panel scrolls vertically. */
+/* position:relative anchors the Export dropdown (.exmenu is position:absolute,
+   top:100%). The Settings modal uses a fixed backdrop and doesn't need it, but the
+   Export menu shares this wrapper — without it the menu renders below the viewport
+   and looks like it never opened. */
+.settings-wrap { display:inline-flex; position:relative; }
+.about.set-modal { width:min(600px, 100%); height:min(560px, 84vh); }
+.set-modal .about-head h2 { flex:1; }
+
+/* head (fixed) · body [nav | scrolling panel] (flex:1) · Zen footer (fixed) */
+.set-body { display:flex; flex:1 1 auto; min-height:0; gap:14px; margin-top:6px; }
+.set-nav { flex:0 0 128px; display:flex; flex-direction:column; gap:2px;
+  border-right:1px solid var(--line); padding-right:12px; }
+.set-nav button { text-align:left; border:none; background:none; color:var(--fg); font:inherit;
+  font-weight:500; padding:8px 11px; border-radius:8px; cursor:pointer; }
+.set-nav button:hover { background:var(--panel); }
+.set-nav button.on { background:var(--accent); color:#fff; }
+[data-theme=dark] .set-nav button.on { color:#12161a; }
+/* padding-right leaves the full-width controls (key input, model row) the same
+   breathing room on the right as the nav gap gives on the left — 6px sat them
+   almost against the modal edge */
+.set-panel { flex:1 1 auto; min-width:0; overflow-y:auto; padding: 8px 16px 8px 8px;
+  display:flex; flex-direction:column; gap:11px; }
+/* Keep every row at its natural height. A flex column with overflow-y:auto still
+   shrinks its children to fit the box (flex-shrink defaults to 1), so once the
+   content is taller than the panel — which zoom triggers — the rows compress and
+   overlap instead of the panel scrolling. flex-shrink:0 makes them overflow, which
+   is what actually hands the scroll to the panel. */
+.set-panel > * { flex-shrink:0; }
+
+.set-foot { flex-shrink:0; display:flex; align-items:center; gap:14px;
+  margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+/* the one call-to-action in the footer: accent outline + a faint accent wash,
+   larger and rounder than a plain .btn so it reads as the primary thing here */
+.set-foot .zenbtn { flex-shrink:0; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:8px;
+  padding:9px 16px; border-radius:12px; font-weight:600;
+  border:2px solid var(--accent);
+  background:color-mix(in srgb, var(--accent) 12%, var(--bg));
+  color:var(--fg); }
+.set-foot .zenbtn:hover { border-color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 20%, var(--bg)); }
+.set-foot .set-foot-note { font-size:12px; color:var(--muted); line-height:1.4; }
+
+/* control rows — rescoped from the old .settings-pop; behaviour unchanged */
+.set-modal .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
+.set-modal .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
+.set-modal .srow input[type=range] { width:92px; margin:0; align-self:center; accent-color:var(--accent); }
+.set-modal .sval { min-width:2.2ch; padding:2px 4px; text-align:center; color:var(--fg);
+  font-variant-numeric:tabular-nums; background:var(--bg);
   border:1px solid var(--line); border-radius:5px; }
-.settings-pop .seg { display:flex; width:140px; border:1px solid var(--line);
-  border-radius:7px; overflow:hidden; }
-.settings-pop .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
-  padding:5px 0; font-weight:500; text-align:center; cursor:pointer;
+/* a range input is a small drag target and has no way back to the default */
+.set-modal .sreset { border:none; background:none; padding:2px 3px; cursor:pointer;
+  color:var(--muted); font:inherit; font-size:.85em; text-decoration:underline; }
+.set-modal .sreset:hover { color:var(--accent); }
+.set-modal .seg { display:flex; width:150px; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+.set-modal .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
+  padding:5px 0; font:inherit; font-weight:500; text-align:center; cursor:pointer;
   transition:background .12s, color .12s; }
-.settings-pop .seg button:hover { background:var(--panel); }
-.settings-pop .seg button.on { background:var(--accent); color:#fff; }
-.settings-pop .swatches { display:flex; gap:7px; }
-.settings-pop .swatchbtn { width:22px; height:22px; border-radius:50%; padding:0;
+.set-modal .seg button:hover { background:var(--panel); }
+.set-modal .seg button.on { background:var(--accent); color:#fff; }
+[data-theme=dark] .set-modal .seg button.on { color:#12161a; }
+/* the reading-font control has three uneven labels (one is "Atkinson"), so it
+   sizes to its content and shows dividers rather than cramming into a 150px third */
+.set-modal .seg.fontseg { width:auto; }
+.set-modal .seg.fontseg button { flex:0 0 auto; padding:5px 11px; }
+.set-modal .seg.fontseg button + button { border-left:1px solid var(--line); }
+.set-modal .swatches { display:flex; gap:7px; }
+.set-modal .swatchbtn { width:22px; height:22px; border-radius:50%; padding:0;
   border:2px solid transparent; cursor:pointer; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); }
-.settings-pop .swatchbtn.on { border-color:var(--fg); }
-.settings-div { height:1px; background:var(--line); margin:2px 0; }
-.settings-pop .zenbtn { width:100%; justify-content:center; text-align:center; }
-.settings-sub .opt { font-weight:400; text-transform:none; letter-spacing:0;
-  color:var(--muted); font-size:.9em; }
+.set-modal .swatchbtn.on { border-color:var(--fg); }
+.settings-note { font-size:12px; color:var(--muted); text-align:left; line-height:1.4; }
+.set-cat .opt { font-weight:400; text-transform:none; letter-spacing:0; color:var(--muted); font-size:.9em; }
+
+/* AI settings block */
 .srow.aicol { flex-direction:column; align-items:stretch; gap:5px; }
 .srow.aicheck { gap:7px; justify-content:flex-start; cursor:pointer; }
 .srow.aicheck input { margin:0; }
 .aikey, .airedact { width:100%; box-sizing:border-box; font:inherit; color:var(--fg);
   background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:5px 7px; }
 .airedact { resize:vertical; font-size:.95em; }
-.seg.aimodels { width:100%; }
-.seg.aimodels button { flex:1; }
-.settings-note { font-size:11px; color:var(--muted); text-align:left; margin-top:-3px; line-height:1.35; }
+.set-modal .seg.aimodels { width:100%; }
+.set-modal .seg.aimodels button { flex:1; }
+
+/* per-speaker row: colour swatch (with initials) + name + quiet/normal/bold weight */
+.set-modal .spkswatch { width:34px; flex-shrink:0; border:none; border-radius:5px;
+  font:inherit; font-size:.8em; font-weight:700; padding:3px 0; cursor:pointer; }
+.set-modal .spkname { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.set-modal .wseg { width:auto; flex-shrink:0; overflow:visible; }
+.set-modal .wseg button { width:30px; font-size:1.05em; line-height:1.5; }
+.set-modal .wseg .wt-quiet { color:var(--muted); font-weight:300; }
+.set-modal .wseg .wt-normal { font-weight:400; }
+.set-modal .wseg .wt-bold { font-weight:600; }
+.set-modal .wseg button.on { color:#fff; }
+[data-theme=dark] .set-modal .wseg button.on { color:#12161a; }
+.set-modal .wseg button:first-child { border-radius:6px 0 0 6px; }
+.set-modal .wseg button:last-child { border-radius:0 6px 6px 0; }
+/* Tooltips inside the settings panel: it scrolls (overflow-y:auto, which per CSS
+   forces overflow-x:auto too), so any tip that spills past an edge is clipped —
+   the base tip sits ABOVE and CENTRED, which cut the first row's tips at the panel
+   top and the leftmost swatch's tip at the left. Drop them below the control and
+   anchor them inward: the swatch to its left edge, the weight buttons to their right. */
+.set-modal .set-panel [data-tip]:hover::after { bottom:auto; top:calc(100% + 7px); }
+.set-modal .spkswatch[data-tip]:hover::after { left:0; transform:none; }
+.set-modal .wseg button[data-tip]:hover::after { left:auto; right:0; transform:none; }

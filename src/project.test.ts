@@ -110,3 +110,38 @@ test("the transcript CSV exports the CORRECTED text, so a bundle isn't stale", (
   expect(csv).toContain("I kept losing the tick marks.");   // corrected
   expect(csv).toContain("I kept losing the ticket marks."); // original, in its own column
 });
+
+// Who the interviewer is, and any speaker recolouring, is a property of the STUDY,
+// not a display preference like font size — so it has to survive a project round trip.
+// It didn't: speakerColors/speakerWeight live in ui, and exportProject excludes ui.
+test("speaker colours and weights survive a project round trip", () => {
+  const s = useStore.getState();
+  s.setUi({ speakerColors: { R: "#abcdef" }, speakerWeight: { R: "quiet", P: "bold" } });
+
+  const json = useStore.getState().exportProject();
+  useStore.setState({ ui: { ...useStore.getState().ui, speakerColors: {}, speakerWeight: {} } });
+
+  useStore.getState().openProject(parseProject(json));
+  const ui = useStore.getState().ui;
+  expect(ui.speakerColors.R).toBe("#abcdef");
+  expect(ui.speakerWeight).toMatchObject({ R: "quiet", P: "bold" });
+});
+
+// A project written before the speaker map existed carries none. It must still open
+// with the interviewer quieted rather than everyone flat.
+test("a pre-speakers project file re-guesses the interviewer", () => {
+  const j = JSON.parse(useStore.getState().exportProject());
+  delete j.speakers;                                    // as an older QuAlly wrote it
+  j.transcripts = { FG: { lines: [
+    { id: 1, ts: "00:00:01", speaker: "Interviewer", text: "how do you read it" },
+    { id: 2, ts: "00:00:05", speaker: "Rachel", text: "I squint" },
+  ] } };
+  j.tabs = ["FG"];
+
+  useStore.setState({ ui: { ...useStore.getState().ui, speakerColors: {}, speakerWeight: {} } });
+  useStore.getState().openProject(parseProject(JSON.stringify(j)));
+
+  const w = useStore.getState().ui.speakerWeight;
+  expect(w.Interviewer).toBe("quiet");
+  expect(w.Rachel).toBeUndefined(); // a participant is never quieted by the guess
+});

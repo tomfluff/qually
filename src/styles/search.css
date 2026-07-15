@@ -46,4 +46,6 @@
 .txt mark, .searchtext mark { background:#ffe58a; color:inherit; border-radius:2px; padding:0 1px; }
 [data-theme=dark] .txt mark, [data-theme=dark] .searchtext mark { background:#7a6320; color:#fff; }
 .txt mark.cur { background:#ff9d3b; color:#1a1a1a; }
-[data-theme=dark] .txt mark.cur { background:#c9741a; color:#fff; }
+/* white on #c9741a was 3.50:1 — under AA for the ONE match you're being pointed at.
+   Keep the bright amber in both themes and put dark text on it: 9.15:1. */
+[data-theme=dark] .txt mark.cur { background:#ff9d3b; color:#14100a; }

@@ -74,3 +74,154 @@ test("re-importing the exported CSV is idempotent (no dupes, identical re-export
   expect(useStore.getState().segments.length).toBe(before); // dedup held
   expect(useStore.getState().exportCSV()).toBe(csv1);        // round-trips exactly
 });
+
+test("selection is undoable, and a whole drag is ONE step", () => {
+  const s = useStore.getState();
+  s.clearSelection();
+
+  s.pushSelUndo(); s.selectLine(2); s.endSelGesture();      // click line 2
+  expect([...useStore.getState().selection.lines]).toEqual([2]);
+
+  // a drag: one gesture, many selectLine calls (the fixture is 5 lines long)
+  s.pushSelUndo();
+  useStore.getState().selectLine(3);
+  useStore.getState().selectLine(4, { extend: true });
+  useStore.getState().selectLine(5, { extend: true });
+  useStore.getState().endSelGesture();
+  expect([...useStore.getState().selection.lines].sort()).toEqual([3, 4, 5]);
+
+  useStore.getState().undo();                                     // ONE undo, not three
+  expect([...useStore.getState().selection.lines]).toEqual([2]);  // back to the click
+  useStore.getState().redo();
+  expect([...useStore.getState().selection.lines].sort()).toEqual([3, 4, 5]);
+});
+
+test("undoing a code also puts back the lines it was applied to", () => {
+  const s = useStore.getState();
+  s.pushSelUndo(); s.selectLine(2); s.selectLine(3, { extend: true }); s.endSelGesture();
+  const before = useStore.getState().segments.length;
+
+  useStore.getState().applyCode("undo probe");
+  expect(useStore.getState().segments.length).toBe(before + 1);
+
+  useStore.getState().undo();
+  expect(useStore.getState().segments.length).toBe(before);
+  // the selection that the code was applied to comes back with it
+  expect([...useStore.getState().selection.lines].sort()).toEqual([2, 3]);
+});
+
+// restore() decided whether to follow an undone selection by checking transcripts[pid] —
+// but closeTab only drops the pid from `tabs`, leaving the transcript in place. So
+// undoing after closing a tab made `active` a tab that isn't in the tab bar.
+test("undo never activates a closed tab", () => {
+  const s = useStore.getState();
+  s.pushSelUndo(); s.selectLine(2); s.endSelGesture();  // a selection in P01
+  useStore.setState({ tabs: ["P01", "P02"], transcripts: {
+    ...useStore.getState().transcripts, P02: { lines: [{ id: 1, ts: "", speaker: "P", text: "hi" }] },
+  } });
+  useStore.getState().setActive("P02");
+  useStore.getState().closeTab("P01");                          // P01 leaves the tab bar
+  expect(useStore.getState().tabs).not.toContain("P01");
+
+  useStore.getState().undo();
+  expect(useStore.getState().tabs).toContain(useStore.getState().active); // active must exist
+});
+
+// The gesture name was `key:${undoStack.length}` to be unique per keypress — but the
+// stack is CAPPED at 80, so once full the length stops changing, every arrow press
+// produced the same name, and pushSelUndo swallowed them all as "the same gesture".
+// Arrow-key selection silently stopped being undoable after 80 edits.
+test("a run of arrow presses is ONE undo step, and cannot evict coding history", () => {
+  useStore.setState({ active: "P01", tabs: ["P01"] });
+  const s = useStore.getState();
+
+  s.pushSelUndo(); s.selectLine(1); s.endSelGesture();
+  useStore.getState().applyCode("history");                  // a real edit to protect
+  const stackAfterEdit = useStore.getState().undoStack.length;
+
+  // hold ArrowDown: key-repeat. This used to push an entry PER PRESS, evicting the real
+  // edits from the 80-entry stack in about a second.
+  for (let i = 0; i < 60; i++) useStore.getState().moveSelection(1, false);
+  expect(useStore.getState().undoStack.length).toBe(stackAfterEdit + 1); // ONE entry, not 60
+
+  // and one undo steps back over the whole run
+  useStore.getState().undo();
+  expect([...useStore.getState().selection.lines]).toEqual([1]);
+  // the coding edit is still undoable — it was never evicted
+  useStore.getState().undo();
+  expect(useStore.getState().segments.some((x) => x.code === "history")).toBe(false);
+});
+
+
+// Undo after closing a tab left the SELECTION pointing at the closed pid — only `active`
+// was guarded. applyCode codes selection.pid without checking it's open, and the digit
+// hotkeys only check selection.lines.size, so pressing "1" wrote segments onto a
+// transcript that wasn't even on screen.
+test("undo never leaves a live selection on a closed tab", () => {
+  useStore.setState({ active: "P01", tabs: ["P01"], selection: { pid: null, anchor: null, head: null, lines: new Set() } });
+  const s = useStore.getState();
+  s.pushSelUndo(); s.selectLine(2); s.endSelGesture();   // selection in P01
+  // a further undoable edit WHILE that selection is live, so the top snapshot carries it
+  useStore.getState().applyCode("marker");
+  useStore.setState({ tabs: ["P01", "P02"], transcripts: {
+    ...useStore.getState().transcripts, P02: { lines: [{ id: 1, ts: "", speaker: "P", text: "hi" }] },
+  } });
+  useStore.getState().setActive("P02");
+  useStore.getState().closeTab("P01");
+
+  useStore.getState().undo();  // restores the snapshot whose selection lives in CLOSED P01
+  const after = useStore.getState().segments.length;
+
+  useStore.getState().applyCode("ghost");   // a code applied to a closed tab must not land
+  expect(useStore.getState().segments.some((x) => x.code === "ghost")).toBe(false);
+  expect(useStore.getState().segments.length).toBe(after);
+  // and the selection must not be left pointing at the closed tab
+  expect(useStore.getState().selection.pid).not.toBe("P01");
+});
+
+// Re-importing over an UNCODED transcript skipped the consent modal (which is what
+// normally clears the stacks), so undo could restore a selection pointing at line ids
+// the new file no longer has — and coding from it wrote segments onto lines that
+// don't exist.
+test("re-importing an uncoded transcript clears stale undo/selection state", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,codes\n1,00:00:01,P,one,\n2,00:00:02,P,two,\n3,00:00:03,P,three,\n",
+  ], "FRESH.csv")]);
+  useStore.setState({ active: "FRESH" });
+  const s = useStore.getState();
+  s.pushSelUndo(); s.selectLine(3); s.endSelGesture();   // select a line that will vanish
+  expect(useStore.getState().undoStack.length).toBeGreaterThan(0);
+
+  // the corrected file is SHORTER — line 3 is gone
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,codes\n1,00:00:01,P,one,\n2,00:00:02,P,two,\n",
+  ], "FRESH.csv")]);
+
+  expect(useStore.getState().undoStack).toHaveLength(0);       // stale stack dropped
+  expect(useStore.getState().selection.lines.size).toBe(0);    // stale selection dropped
+  expect(useStore.getState().transcripts.FRESH.lines).toHaveLength(2);
+});
+
+// snapshot() recorded the selection but NOT the active tab, and tab identity was inferred
+// from selection.pid — which is null for an EMPTY selection. So restore() could follow a
+// selection INTO a tab but never restore "no selection" BACK to one: the undo entry got
+// consumed, nothing changed on screen, and savedSelections still held the selection it
+// was meant to remove. Revisiting the tab resurrected it, with an empty undo stack.
+test("undo can un-select in a tab you have since left", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,codes\n1,00:00:01,P,a,\n2,00:00:02,P,b,\n",
+  ], "TA.csv")]);
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,codes\n1,00:00:01,P,c,\n2,00:00:02,P,d,\n",
+  ], "TB.csv")]);
+
+  useStore.getState().setActive("TA");
+  const s = useStore.getState();
+  s.pushSelUndo(); s.selectLine(2); s.endSelGesture();     // select line 2 in TA
+  useStore.getState().setActive("TB");                     // park it
+  expect(useStore.getState().savedSelections.TA?.lines.has(2)).toBe(true);
+
+  useStore.getState().undo();                              // undo the selection made in TA
+  useStore.getState().setActive("TA");                     // go back and look
+  expect([...useStore.getState().selection.lines]).toEqual([]); // it must be GONE
+});

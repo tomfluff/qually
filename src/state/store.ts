@@ -9,6 +9,7 @@ import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, type Flag } from "../ai/flag";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { DEFAULT_ACCENT } from "../palettes";
+import { forgetScroll } from "../scrollMemory";
 
 const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
@@ -29,13 +30,20 @@ export interface Ui {
   showLineNumbers: boolean;
   accent: string; // primary-color palette id (see palettes.ts)
   speakerNames: "full" | "short"; // transcript speaker column: full label or first 3 chars
+  fontFamily: "system" | "serif" | "atkinson"; // reading font for transcript + excerpts
   warnCorner: "left" | "right"; // close-call badge corner
   warnSize: "xs" | "sm" | "md" | "lg"; // close-call badge size
   laneWidth: "xs" | "sm" | "md" | "lg"; // width of the code lane bars
   minimapWidth: number; // transcript minimap width (px)
   minimapDetail: "detailed" | "simplified"; // minimap abstraction level
   showNotices: boolean; // AI noticing highlights visible (hide to read/code blind)
+  lanePattern: boolean; // give each code a pattern as well as a colour (see patternOf)
+  speakerColors: Record<string, string>; // per-speaker overrides; unset = speakerColor()
+  // How loudly each speaker's words are set. "quiet" is usually the interviewer, so the
+  // participants carry the page; "bold" is the one you're following. Unset = normal.
+  speakerWeight: Record<string, SpeakerWeight>;
 }
+export type SpeakerWeight = "quiet" | "normal" | "bold";
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
   current: { line: number; occ: number } | null; // the emphasized occurrence
@@ -87,6 +95,7 @@ interface State {
   savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
   undoStack: string[];
   redoStack: string[];
+  selRun: boolean; // top undo entry already captures the state before this run of selection-only changes
   nextSid: number;
   jump: { pid: string; line: number } | null;
   paletteOpen: boolean;
@@ -137,6 +146,8 @@ interface State {
   togglePin: (code: string) => void;
   refreshHotbar: () => void;
   pushUndo: () => void;
+  pushSelUndo: () => void;
+  endSelGesture: () => void;
   undo: () => void;
   redo: () => void;
   renameCode: (code: string, newName: string) => void;
@@ -169,13 +180,52 @@ function idsBetween(gs: Group[], i: number, j: number): number[] {
   return out;
 }
 
+// The selection rides in the snapshot too: undoing a code also puts back the lines it was
+// applied to, and a selection change is itself undoable. `active` rides along as well --
+// WITHOUT it, tab identity had to be inferred from selection.pid, which is null for an
+// EMPTY selection. Undo could then follow a selection INTO a tab but never restore "no
+// selection" BACK to one: the entry was consumed, nothing changed on screen, and
+// savedSelections still held the selection it was supposed to remove -- which then
+// resurrected itself the next time you opened that tab, with no undo left to kill it.
+// Set isn't JSON, so the line ids go as an array.
 function snapshot(s: State): string {
-  return JSON.stringify({ segments: s.segments, codebook: s.codebook, hotbar: s.hotbar });
+  return JSON.stringify({
+    segments: s.segments, codebook: s.codebook, hotbar: s.hotbar, active: s.active,
+    sel: { ...s.selection, lines: [...s.selection.lines] },
+  });
 }
 function restore(get: () => State, set: (p: Partial<State>) => void, json: string) {
   const o = JSON.parse(json);
-  const next = { ...get(), segments: o.segments, codebook: o.codebook, hotbar: o.hotbar };
-  set({ segments: o.segments, codebook: o.codebook, hotbar: o.hotbar, hotbarCache: hotbarCodes(next) });
+  const cur = get();
+  const next = { ...cur, segments: o.segments, codebook: o.codebook, hotbar: o.hotbar };
+  let sel: Selection = o.sel
+    ? { pid: o.sel.pid, anchor: o.sel.anchor, head: o.sel.head, lines: new Set<number>(o.sel.lines) }
+    : cur.selection; // a snapshot from before selections were tracked
+
+  // The tab may have been CLOSED since the snapshot. Drop a selection that points into it:
+  // applyCode trusts selection.pid and the digit hotkeys only check lines.size, so a live
+  // selection on a closed tab writes segments onto a transcript that isn't on screen.
+  if (sel.pid && !cur.tabs.includes(sel.pid)) sel = emptySel();
+  const active = o.active && (o.active === "browse" || cur.tabs.includes(o.active))
+    ? o.active : cur.active;
+
+  // Crossing tabs here bypasses setActive(), which is what stashes the outgoing tab's
+  // selection and parks the incoming one. Do its bookkeeping by hand, or the parked copy
+  // goes stale and reappears next time you visit that tab.
+  const saved = { ...cur.savedSelections };
+  if (active !== cur.active) saved[cur.active] = cur.selection; // park what we leave
+  if (active !== "browse") saved[active] = sel;                 // and what we restore, EMPTY OR NOT
+
+  set({
+    segments: o.segments, codebook: o.codebook, hotbar: o.hotbar,
+    hotbarCache: hotbarCodes(next), selection: sel, active, savedSelections: saved,
+    // One cache must own the scroll after a tab change, or the tab's remembered anchor
+    // (restored in a rAF) races the selection-follow (synchronous) and wins -- landing you
+    // nowhere near what you just undid. `jump` is that ownership token; the positioning
+    // effect defers to it.
+    jump: active !== cur.active && sel.pid && sel.head !== null
+      ? { pid: sel.pid, line: sel.head } : cur.jump,
+  });
 }
 
 function hotbarCodes(s: State): string[] {
@@ -191,9 +241,10 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true },
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false,
+        speakerColors: {}, speakerWeight: {} },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
-      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
+      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [], pendingProject: null,
 
@@ -318,6 +369,7 @@ export const useStore = create<State>()(
         const s = get();
         const gs = groupsOf(s);
         if (!gs.length || s.selection.pid !== s.active || !s.selection.lines.size) return;
+        s.pushSelUndo(); // a run of arrow presses collapses into one entry
         if (extend) {
           const anchorGi = s.selection.anchor !== null ? groupIdxOf(gs, s.selection.anchor) : -1;
           const headGi = s.selection.head !== null ? groupIdxOf(gs, s.selection.head) : anchorGi;
@@ -343,7 +395,12 @@ export const useStore = create<State>()(
         const g = gs[gi];
         set({ selection: { pid: s.active, anchor: g.startId, head: g.startId, lines: new Set(g.ids) } });
       },
-      clearSelection: () => set({ selection: emptySel() }),
+      clearSelection: () => {
+        const s = get();
+        if (!s.selection.lines.size) return; // nothing to clear, nothing to undo
+        s.pushSelUndo();
+        set({ selection: emptySel() });
+      },
       // Tab switches stash the outgoing tab's selection and restore the incoming
       // tab's, so returning to a tab finds the lines still selected. Every consumer
       // already guards on selection.pid === active, so a restored selection only
@@ -371,7 +428,9 @@ export const useStore = create<State>()(
         const s = get();
         const tabs = s.tabs.filter((p) => p !== pid);
         const saved = { ...s.savedSelections };
-        delete saved[pid]; // a closed tab's selection dies with it
+        delete saved[pid]; // a closed tab's selection dies with it...
+        forgetScroll(pid); // ...and so does its scroll anchor. The two caches had different
+                           // lifetimes at one call site -- the shape of the bug already fixed.
         if (s.active !== pid) { set({ tabs, savedSelections: saved }); return; }
         const next = tabs[0] || "browse";
         set({ tabs, active: next, selection: saved[next] ?? emptySel(), savedSelections: saved });
@@ -484,7 +543,10 @@ export const useStore = create<State>()(
           extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
           hotbar: s.hotbar, video: s.video,
           ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog,
-          // NB: no API key (not in the store), no UI prefs, no media — see project.ts
+          // the speaker map rides along even though it lives in `ui`: who the
+          // interviewer is belongs to the study, not to my font size (see project.ts)
+          speakers: { colors: s.ui.speakerColors, weight: s.ui.speakerWeight },
+          // NB: no API key (not in the store), no other UI prefs, no media — see project.ts
         };
         return JSON.stringify(p, null, 2);
       },
@@ -494,7 +556,18 @@ export const useStore = create<State>()(
       // Replaces the workspace wholesale. Merging would mean sid collisions and
       // code-name conflicts for no benefit; the modal confirms before we get here.
       openProject: (p) => {
+        const s = get();
+        // A file written before the speaker map existed carries none — re-guess the
+        // interviewer from its own speakers, so an old project still opens with the
+        // researcher quieted rather than everyone flat.
+        const speakers = p.speakers ?? {
+          colors: {},
+          weight: Object.fromEntries(
+            guessQuiet(speakersOf({ transcripts: p.transcripts, tabs: p.tabs }))
+              .map((sp) => [sp, "quiet" as SpeakerWeight])),
+        };
         set({
+          ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiLog: p.aiLog,
@@ -505,6 +578,7 @@ export const useStore = create<State>()(
           nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
         });
         set({ hotbarCache: hotbarCodes(get()) });
+        forgetScroll(); // every pid in the new project is a different transcript
       },
 
       exportEdits: () => {
@@ -587,8 +661,35 @@ export const useStore = create<State>()(
         const s = get();
         const stack = [...s.undoStack, snapshot(s)];
         if (stack.length > 80) stack.shift();
-        set({ undoStack: stack, redoStack: [] }); // new action invalidates redo
+        // clears the selection gesture too: any real edit ends it, so the NEXT click is
+        // its own undo step rather than being swallowed as "the same gesture"
+        set({ undoStack: stack, redoStack: [], selRun: false }); // new action invalidates redo
       },
+      // Selection changes are undoable, but they must not DROWN the real edits: a drag
+      // fires selectLine on every mousemove, and holding an arrow key on key-repeat used to
+      // push an entry per press -- enough to evict every actual coding edit from the
+      // 80-entry stack in about a second. So a RUN of consecutive selection-only changes
+      // collapses into the single entry taken before the run; the next real edit (or a
+      // mouseup) ends the run. Undo steps back over a whole drag, or a whole burst of
+      // arrowing, in one go -- and your coding history survives.
+      //
+      // (This used to key off a gesture NAME, with the keyboard passing
+      // `key:${undoStack.length}` to be unique per press. The stack is capped at 80, so once
+      // full that number stops changing, every press produced the same name, and the
+      // coalescer swallowed them all: arrow-key selection silently stopped being undoable.
+      // A boolean cannot have that bug.)
+      pushSelUndo: () => {
+        const s = get();
+        if (s.selRun) {
+          // still inside the run: no new entry, but this IS a new action, so a stale redo
+          // branch must not survive it (pushUndo would normally do this)
+          if (s.redoStack.length) set({ redoStack: [] });
+          return;
+        }
+        s.pushUndo();           // clears selRun...
+        set({ selRun: true });  // ...so claim it after
+      },
+      endSelGesture: () => set({ selRun: false }),
       undo: () => {
         const s = get();
         if (!s.undoStack.length) return;
@@ -638,6 +739,10 @@ export const useStore = create<State>()(
         // fields added after a persisted state was written (persist merges shallowly)
         s.ai.lenses ??= ["transcription"];
         s.ui.showNotices ??= true;
+        s.ui.lanePattern ??= false;
+        s.ui.speakerColors ??= {};
+        s.ui.speakerWeight ??= {};
+        s.ui.fontFamily ??= "system";
       },
     }
   )
@@ -673,11 +778,39 @@ function uniquePid(s: State, pid: string): string {
 function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string, string>[]) {
   const lines = rowsToLines(rows);
   const s = get();
+  const knownBefore = new Set(speakersOf(s)); // must be read BEFORE the import lands
+  // REPLACING an existing transcript, not adding one. The consent modal path already
+  // clears this state, but it only runs when the transcript has SEGMENTS — re-importing
+  // an uncoded transcript came straight here, leaving an undo stack full of selections
+  // (and a parked selection, and a scroll anchor) that point at line ids the new file may
+  // not have. Coding from a restored one of those writes segments onto lines that no
+  // longer exist.
+  const replacing = !!s.transcripts[pid];
+  if (replacing) {
+    const saved = { ...s.savedSelections };
+    delete saved[pid];
+    forgetScroll(pid);
+    set({
+      undoStack: [], redoStack: [], selRun: false,
+      selection: s.selection.pid === pid ? emptySel() : s.selection,
+      savedSelections: saved,
+    });
+  }
   set({
-    transcripts: { ...s.transcripts, [pid]: { lines } },
+    transcripts: { ...get().transcripts, [pid]: { lines } },
     tabs: s.tabs.includes(pid) ? s.tabs : [...s.tabs, pid],
     active: s.active === "browse" && !s.tabs.length ? pid : s.active,
   });
+  // Guess the interviewer for speakers we've never seen before. Only for new ones, so
+  // a deliberate change to someone's weight survives a re-import instead of being undone.
+  const fresh = [...new Set(lines.map((l) => l.speaker.trim()).filter(Boolean))]
+    .filter((sp) => !knownBefore.has(sp));
+  const guessed = guessQuiet(fresh).filter((sp) => !(sp in get().ui.speakerWeight));
+  if (guessed.length) {
+    const w = { ...get().ui.speakerWeight };
+    for (const sp of guessed) w[sp] = "quiet";
+    set({ ui: { ...get().ui, speakerWeight: w } });
+  }
   // inline codes column -> segments (contract run-collapse, same as sync_coding.py)
   const coded: CodedLine[] = rows.map((r) => ({
     n: +r.line_id,
@@ -716,6 +849,86 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
 }
 
 // selector helpers
+// ── speakers ────────────────────────────────────────────────────────────────────
+// Speaker identity used to be a single hardcoded rule: speaker.startsWith("R") means
+// "researcher, dim it". That silently mislabels a participant called Rachel, renders
+// every member of a focus group (P1/P2/P3) identically, and does nothing at all if the
+// interviewer is called "Interviewer". Speakers are now first-class: each gets a colour
+// and can be quieted, whatever they're called.
+//
+// All chips are dark enough for white text (>= 4.5:1), so the label inside them stays
+// legible without a per-colour contrast dance.
+const SPEAKER_COLORS = ["#6d28d9", "#0f766e", "#b45309", "#b91c1c",
+  "#1d4ed8", "#4d7c0f", "#a21caf", "#0369a1"];
+
+// stable default: the same speaker gets the same colour across sessions and transcripts
+export const speakerColor = (ui: Ui, speaker: string): string => {
+  const key = speaker.trim();
+  const own = ui.speakerColors[key];
+  if (own) return own;
+  let h = 0x811c9dc5; // FNV-1a
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return SPEAKER_COLORS[(h >>> 0) % SPEAKER_COLORS.length];
+};
+
+// every speaker across every loaded transcript, in first-appearance order
+export const speakersOf = (s: Pick<State, "transcripts" | "tabs">): string[] => {
+  const seen: string[] = [];
+  for (const pid of s.tabs) {
+    for (const l of s.transcripts[pid]?.lines ?? []) {
+      const sp = l.speaker.trim();
+      if (sp && !seen.includes(sp)) seen.push(sp);
+    }
+  }
+  return seen;
+};
+
+export const weightOf = (ui: Ui, speaker: string): SpeakerWeight =>
+  ui.speakerWeight[speaker.trim()] ?? "normal";
+
+// The chip's label used to be hardcoded white, which is fine for the eight defaults
+// (all >= 4.5:1) and a disaster the moment someone picks pale yellow from the colour
+// picker — the speaker's name vanishes. Pick the label colour from the chip's own
+// luminance so ANY colour, including a user's, stays readable.
+export const inkOn = (hex: string): string => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#ffffff";
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  // Pure black, not a soft near-black. Against #14181c a mid-tone chip tops out at
+  // ~4.19:1 with EITHER ink — below AA whichever you pick. Black lifts that worst case
+  // to 4.58:1, so every colour the picker can produce has a readable label.
+  // white: 1.05/(L+.05)   ·   black: (L+.05)/.05
+  return 1.05 / (L + 0.05) >= (L + 0.05) / 0.05 ? "#ffffff" : "#000000";
+};
+
+// A GUESS at who the interviewer is, applied once when a transcript first loads and
+// freely editable afterwards — a default you can correct, not a law you can't.
+//
+// Deliberately WHOLE-LABEL matches only. An earlier `^r\b` prefix test also caught
+// "R. Singh", "R (participant)" and "Rae" — quietly dimming participants, which is the
+// exact failure the old startsWith("R") rule was removed for. A bare "R", or the word
+// itself, is the whole label or it isn't a match.
+const RESEARCHER = /^(r|r\d+|researcher|interviewer|moderator|facilitator|int|i)$/i;
+export const guessQuiet = (speakers: string[]): string[] =>
+  speakers.filter((sp) => RESEARCHER.test(sp.trim()));
+
+// A lane bar used to say WHICH code it is by hue alone (the name was hover-only) —
+// unusable at low acuity, and the 12-colour rotation contains near-neighbours.
+// Pattern is a second, independent channel, shown on the lane AND on the sidebar
+// swatch so the mapping is learnable. Derived from the code NAME rather than stored:
+// no schema change, and two codes that happen to share a colour still get different
+// patterns — the very case this fixes. Diagonal stripes are deliberately NOT in the
+// set: those mean "rejected" and must stay unambiguous.
+export const PATTERNS = 6;
+export const patternOf = (code: string): number => {
+  let h = 0x811c9dc5; // FNV-1a, as in ai/flag.ts
+  const s = norm(code);
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0) % PATTERNS;
+};
+
 export const laneAssign = (segs: Segment[]): (Segment & { lane: number })[] => {
   const sorted = [...segs].sort((a, b) => a.start - b.start || b.end - a.end);
   const laneEnd: number[] = [];

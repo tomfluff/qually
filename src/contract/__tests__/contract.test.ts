@@ -80,6 +80,12 @@ test("excerpt 3/5: P-dominant with R backchannels drops R, no warn", () => {
   expect(r.closeCall).toBe(false);
 });
 
+test("excerpt reports its dominant speaker (Browse shows it as a field)", () => {
+  expect(excerptOf([R("mm"), P("i lean in close and trace each bar")]).speaker).toBe("P");
+  expect(excerptOf([R("so you prefer magnification")]).speaker).toBe("R");
+  expect(excerptOf([]).speaker).toBe("");
+});
+
 test("excerpt 4/5: R-dominant member-check gets [R:], P assent drops", () => {
   const r = excerptOf([
     R("so what i'm hearing is that magnification helps but loses context"),

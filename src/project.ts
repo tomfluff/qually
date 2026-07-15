@@ -12,7 +12,12 @@
 //     project's — a colleague opening your file shouldn't inherit your font size.
 //   - the media file. Can't embed a 2GB video (and it isn't persisted today
 //     anyway); the offset and filename come along so the dock can ask for it back.
-import type { Ai, AiCall, Line, LineFlags, Segment } from "./state/store";
+//
+// IN, despite living in `ui`: the speaker map. WHICH speaker is the interviewer, and
+// what colour each one is, is a fact about the STUDY, not a display preference — a
+// colleague opening the file should see the same people marked the same way. Optional,
+// so a v1 file written before this existed still loads (openProject re-guesses).
+import type { Ai, AiCall, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
 
 export const FORMAT = "qually-project";
 export const VERSION = 1;
@@ -32,6 +37,10 @@ export interface Project {
   ai: Ai;
   aiFlags: Record<string, LineFlags>;
   aiLog: AiCall[];
+  speakers?: { // optional: absent in files written before this existed
+    colors: Record<string, string>;
+    weight: Record<string, SpeakerWeight>;
+  };
 }
 
 export interface ProjectStats {
@@ -81,5 +90,6 @@ export function parseProject(text: string): Project {
     ai: p.ai ?? { model: "gpt-5.6-luna", redactTerms: [], lenses: ["transcription"] },
     aiFlags: p.aiFlags ?? {},
     aiLog: p.aiLog ?? [],
+    speakers: p.speakers, // may be absent — openProject re-guesses the interviewer
   };
 }

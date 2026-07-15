@@ -1,21 +1,61 @@
 :root {
-  --bg:#ffffff; --fg:#1a1a1a; --muted:#8a8a8a; --line:#e4e4e4;
+  /* --muted carries CONTENT (line numbers, speaker labels, timecodes, code
+     definitions), not just decoration, so it must clear WCAG AA 4.5:1 for normal
+     text. #6b6b6b on white = 5.33:1. The old #8a8a8a was 3.45:1 — a fail.
+     --fg-dim quiets researcher rows WITHOUT opacity: opacity stacks on whatever
+     colour is underneath, and .6 dropped --muted to ~2.6:1. 8.86:1 here. */
+  --bg:#ffffff; --fg:#1a1a1a; --fg-dim:#4a4a4a; --muted:#6b6b6b; --line:#e4e4e4;
   --panel:#f6f6f6; --accent:#6d28d9; /* brand purple; App.tsx overwrites from palettes.ts */
   --row-hover:#ebebeb; --mm-w:66px;
+  /* reading font for transcript text + excerpts; App.tsx sets it from ui.fontFamily */
+  --read-font:system-ui, Segoe UI, Roboto, sans-serif;
   /* chromatic tints derive from the chosen primary, adapting to the theme via
      --bg — so one variable (--accent, set per theme in App.tsx) recolors all */
+  /* Selection is now signalled by the RAIL as well as the tint (see .lineRow.selected),
+     so the tint no longer has to shout — a saturated wash sat under the words and made
+     them harder to read, which is the opposite of the point. Lightened; the rail keeps
+     it unmistakable. */
   --sel:color-mix(in srgb, var(--accent) 18%, var(--bg));
-  --row-sel:color-mix(in srgb, var(--accent) 26%, var(--bg));
-  --row-sel-hover:color-mix(in srgb, var(--accent) 36%, var(--bg));
+  --row-sel:color-mix(in srgb, var(--accent) 15%, var(--bg));
+  --row-sel-hover:color-mix(in srgb, var(--accent) 24%, var(--bg));
 }
 [data-theme=dark] {
-  --bg:#161a1e; --fg:#e6e6e6; --muted:#7f8a94; --line:#2c333a;
+  --bg:#161a1e; --fg:#e6e6e6; --fg-dim:#a8b0b8; --muted:#97a3ad; --line:#2c333a;
   --panel:#1e242a; --accent:#a78bfa;
   --row-hover:#23282e;
+}
+/* Honour the OS "increase contrast" setting rather than making users hunt for it. */
+@media (prefers-contrast: more) {
+  :root { --fg:#000; --fg-dim:#333; --muted:#595959; --line:#767676; }
+  [data-theme=dark] { --fg:#fff; --fg-dim:#d5d5d5; --muted:#c3ccd4; --line:#8a959e; }
 }
 * { box-sizing:border-box; }
 html,body,#root { margin:0; height:100%; background:var(--bg); color:var(--fg);
   font-family:system-ui,Segoe UI,Roboto,sans-serif; }
 #app { display:flex; flex-direction:column; height:100%; }
 button { font-family:inherit; }
+
+/* Focus: the app is keyboard-first, so where focus IS must never be a guess.
+   The default UA ring is a hairline that vanishes against --panel. Two rings —
+   accent outline plus a --bg gap — so it stays visible on ANY background,
+   including a coloured lane bar or a selected row. :focus-visible, not :focus,
+   so a mouse click doesn't leave a ring behind. */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline:3px solid var(--accent);
+  outline-offset:2px;
+  box-shadow:0 0 0 2px var(--bg);
+  border-radius:4px;
+}
+@media (prefers-contrast: more) {
+  :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline-width:4px;
+  }
+}
+/* Respect a stated preference for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:.01ms !important; scroll-behavior:auto !important;
+  }
+}
 

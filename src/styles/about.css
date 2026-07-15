@@ -1,9 +1,14 @@
 /* about / help modal */
 .about-backdrop { position:fixed; inset:0; z-index:95; background:rgba(0,0,0,.34);
   display:flex; justify-content:center; align-items:flex-start; padding:8vh 16px; }
+/* font-size:1rem is a floor, not decoration: these dialogs open from BUTTONS INSIDE
+   #toolbar (font-size:12px), so without this they inherit 12px and every unstyled or
+   em-relative line renders tiny. 1rem re-bases them to a readable 16px regardless of
+   the chrome that launched them. (rem, not em — anchored to the root, immune to the
+   toolbar's 12px.) */
 .about { width:min(600px, 100%); max-height:84vh; display:flex; flex-direction:column;
   background:var(--bg); border:1px solid var(--line); border-radius:14px;
-  box-shadow:0 20px 60px rgba(0,0,0,.45); padding:18px 20px; }
+  box-shadow:0 20px 60px rgba(0,0,0,.45); padding:18px 20px; font-size:1rem; }
 .about-head { display:flex; align-items:center; }
 .about-head h2 { margin:0; flex:1; font-size:19px; }
 .about-lede { color:var(--muted); line-height:1.5; margin:6px 0 12px; }
@@ -38,6 +43,16 @@
 
 /* re-import conflict modal */
 .imp { width:min(520px, 100%); }
+
+/* AI scan modal: wider than the import dialog (two-column lens grid + payload preview),
+   and a fixed-head / scrolling-body / pinned-footer layout so the consent buttons never
+   fall below the fold. .about is already a flex column capped at 84vh; .ai-body takes the
+   slack and scrolls (min-height:0 lets a flex child shrink below its content — the classic
+   flex-scroll fix), while head and the actions footer hold their size. */
+.about.ai-check { width:min(680px, 100%); }
+.ai-check .about-head { flex-shrink:0; }
+.ai-check .ai-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding-right:6px; }
+.ai-check .imp-actions { flex-shrink:0; margin-top:12px; }
 .imp-warn { background:color-mix(in srgb, #e0a020 14%, var(--bg)); border:1px solid #e0a020;
   border-radius:8px; padding:10px 12px; margin:6px 0 2px; line-height:1.5; }
 .imp-stats { background:var(--panel); border:1px solid var(--line); border-radius:8px;

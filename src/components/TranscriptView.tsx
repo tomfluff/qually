@@ -1,19 +1,19 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type CSSProperties } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
-import { useStore, laneAssign } from "../state/store";
+import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine } from "../video/seek";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
-import type { Line } from "../state/store";
+import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
+import { savedScroll, positioned } from "../scrollMemory";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
-const isR = (sp: string) => sp.trim().toUpperCase().startsWith("R");
 
 // text with search matches wrapped in <mark>; the occ == curOcc match is emphasized
 function renderText(text: string, query: string, curOcc: number): ReactNode {
@@ -52,7 +52,7 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
     const isError = spanLens(h.span) === "transcription";
     nodes.push(isError
       ? <span key={k} className="aidoubt" data-tip={h.span.reason}>{text.slice(h.at, h.at + h.len)}</span>
-      : <span key={k} className="ainote" style={{ "--lens-c": lens?.color } as CSSProperties}
+      : <span key={k} className={`ainote lens-${spanLens(h.span)}`} style={{ "--lens-c": lens?.color } as CSSProperties}
           data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason} · Alt-click to dismiss`}
           onClick={(e) => {
             if (!e.altKey) return; // plain click keeps selecting the line
@@ -67,22 +67,30 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
 }
 
 const lidLabel = (g: Group) => g.startId === g.endId ? `${g.startId}` : `${g.startId}–${g.endId}`;
-const shortSpeaker = (s: string) => s.trim().slice(0, 3);
+// "Short" mode used to be a blind slice(0,3): Alice, Alicia and Alina all rendered
+// "Ali", which left COLOUR as the only thing telling them apart — the exact failure
+// this branch exists to remove. Grow the abbreviation until it is unique among the
+// speakers actually present.
+export function shortLabels(names: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const raw of names) {
+    const t = raw.trim();
+    let len = Math.min(3, t.length);
+    while (len < t.length && names.some((o) => {
+      const u = o.trim();
+      return u !== t && u.slice(0, len).toLowerCase() === t.slice(0, len).toLowerCase();
+    })) len++;
+    out[t] = t.slice(0, len);
+  }
+  return out;
+}
 const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
+
 const MIN_PAD = 48;    // headroom floor, before the viewport has been measured
 const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
 
-// Per-tab scroll memory. Module scope, NOT component refs: TranscriptView unmounts
-// entirely while the Browse tab is shown, so refs would forget every position on the
-// way through Browse. (Selection memory is the store's savedSelections, same reason.)
-//
-// The position is an ANCHOR (top item's child index + pixels into it), not a raw
-// scrollTop: row heights above the viewport are virtua estimates, and the same VList
-// instance serves every tab, so after showing another transcript the estimates for
-// this one have changed — a saved pixel offset would land on different text.
-interface ScrollAnchor { index: number; delta: number }
-const savedScroll: Record<string, ScrollAnchor> = {};
-const positioned = new Set<string>(); // tabs whose initial position has been applied
+// per-tab scroll anchors — shared with the store, which must forget them on a
+// re-import or project swap (a pid is not stable identity). See scrollMemory.ts.
 
 export function TranscriptView() {
   const active = useStore((s) => s.active);
@@ -91,12 +99,16 @@ export function TranscriptView() {
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnCls = useStore((s) => `cc-${s.ui.warnSize} cc-${s.ui.warnCorner}`);
+  const lanePattern = useStore((s) => s.ui.lanePattern);
+  const ui = useStore((s) => s.ui);
   const laneWidth = useStore((s) => s.ui.laneWidth);
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const setUi = useStore((s) => s.setUi);
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
+  // a primitive, not an object — a fresh-object selector re-renders forever (see CodeMenu)
+  const headId = useStore((s) => (s.selection.pid === s.active ? s.selection.head : null));
   const fontSize = useStore((s) => s.ui.fontSize);
   const search = useStore((s) => s.search);
   const selectLine = useStore((s) => s.selectLine);
@@ -121,7 +133,29 @@ export function TranscriptView() {
       savedScroll[active] = { index, delta: v.scrollOffset - v.getItemOffset(index) };
     }
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
+    // Home/End (and any scroll) leave the selection behind. Rather than silently move
+    // it — the selection is your place in the argument, not your place on screen — note
+    // when it has gone off-screen and offer a way back.
+    setSelOff(offscreenDir(v));
   };
+  // Which way the selection lies, if it isn't visible. Runs on EVERY scroll event, so it
+  // may not walk the selection: `Math.min(...set)` spreads it, which is O(n) per frame
+  // and throws RangeError (call-stack) once a selection gets big enough. The bounds are
+  // memoised off the selection instead, and this only reads them.
+  const offscreenDir = (v: VListHandle): "up" | "down" | null => {
+    const b = selBounds.current;
+    if (!b || !v.viewportSize) return null;
+    const gi = groupsRef.current.findIndex((g) => g.endId >= b.first);
+    const gj = groupsRef.current.findIndex((g) => g.endId >= b.last);
+    if (gi < 0) return null;
+    const top = v.findItemIndex(v.scrollOffset), bot = v.findItemIndex(v.scrollOffset + v.viewportSize);
+    if (gj + 1 < top) return "up";
+    if (gi + 1 > bot) return "down";
+    return null;
+  };
+  const [selOff, setSelOff] = useState<"up" | "down" | null>(null);
+  const groupsRef = useRef<Group[]>([]);
+  const selBounds = useRef<{ first: number; last: number } | null>(null);
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
   useEffect(() => { setEditingId(null); }, [active]);
@@ -136,6 +170,27 @@ export function TranscriptView() {
 
   // merged display units (singletons when the toggle is off)
   const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
+  groupsRef.current = groups; // syncMinimap runs outside render and needs the current groups
+
+  // min/max of the selection, walked ONCE when it changes rather than on every scroll
+  useEffect(() => {
+    if (!selLines?.size) { selBounds.current = null; setSelOff(null); return; }
+    let first = Infinity, last = -Infinity;
+    for (const id of selLines) { if (id < first) first = id; if (id > last) last = id; }
+    selBounds.current = { first, last };
+    const v = vref.current;
+    if (v) setSelOff(offscreenDir(v)); // the selection may already be off-screen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selLines, groups, active]);
+
+  // scroll the selection back into view — the way home after Home/End
+  const backToSelection = () => {
+    const st = useStore.getState();
+    if (st.selection.pid !== active || !st.selection.lines.size) return;
+    const first = Math.min(...st.selection.lines);
+    const gi = groups.findIndex((g) => g.endId >= first);
+    if (gi >= 0) vref.current?.scrollToIndex(gi + 1, { align: "center" }); // +1 for the top vpad
+  };
 
   // AI marks for this transcript, but only where the line still reads as it did when
   // it was scanned — a correction invalidates its own marks, for free. With notices
@@ -208,6 +263,33 @@ export function TranscriptView() {
   const toTop = () => vref.current?.scrollToIndex(1, { align: "start" });
   const toBottom = () => vref.current?.scrollToIndex(groups.length, { align: "end" });
 
+  // The ONLY way into a selection used to be onMouseDown on a row: arrow keys are
+  // gated on a selection already existing, so a keyboard user could never make the
+  // first one — and the digit hotkeys, the whole point of the app, stayed forever
+  // out of reach. The list is now a tab stop, and the first arrow press seeds a
+  // selection from the top VISIBLE line (not line 1 — you'd lose your place in a
+  // 3000-line transcript). Once a selection exists, App's global handler drives it.
+  const onListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    // The inline line editor is a textarea INSIDE this list, so its arrow keys bubble
+    // here. Seeding a selection off them would steal the caret from someone typing.
+    const t = e.target as HTMLElement;
+    if (t.tagName === "TEXTAREA" || t.tagName === "INPUT") return;
+    const s = useStore.getState();
+    if (s.selection.pid === active && s.selection.lines.size) return; // App moves it from here
+    const v = vref.current;
+    if (!v || !groups.length) return;
+    e.preventDefault();
+    // App's window handler also listens for arrows. It runs AFTER this one (window is
+    // above the list in the bubble path) and would see the selection we just made and
+    // immediately advance it — so the first press would silently skip a line. This
+    // keypress seeds; the next one moves.
+    e.stopPropagation();
+    const gi = Math.min(groups.length - 1, Math.max(0, v.findItemIndex(v.scrollOffset) - 1)); // -1: the top vpad is item 0
+    s.pushSelUndo(); // coalesces with a run of arrow presses
+    s.startSelection(groups[gi].startId);
+  };
+
   // Browse -> jump: scroll the virtualized list to the unit containing the line.
   // Waits for the measured pad (jump stays pending): on a fresh mount the top pad is
   // still the 48px placeholder, and jumping first means the pad's growth afterwards
@@ -219,6 +301,26 @@ export function TranscriptView() {
     positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
     clearJump();
   }, [jump, active, transcript, groups, clearJump, pad]);
+
+  // Keep the moving end of the selection on screen. Without this, arrowing past the
+  // viewport edge walks the selection off-screen and the keyboard user is coding
+  // blind. Only scrolls when the head is actually outside the visible range, so a
+  // mouse drag inside the viewport doesn't jerk the list around.
+  useEffect(() => {
+    const v = vref.current;
+    if (headId === null || !v || !v.viewportSize) return;
+    // A pending Browse jump, or a tab whose saved scroll hasn't been restored yet, both
+    // want to own the scroll position. Following the selection head on top of either
+    // would yank the list straight back off the target.
+    if (jump || !positioned.has(active)) return;
+    const gi = groups.findIndex((g) => headId >= g.startId && headId <= g.endId);
+    if (gi < 0) return;
+    const first = v.findItemIndex(v.scrollOffset);
+    const last = v.findItemIndex(v.scrollOffset + v.viewportSize);
+    const idx = gi + 1; // +1 for the top vpad
+    if (idx <= first) v.scrollToIndex(idx, { align: "start" });
+    else if (idx >= last) v.scrollToIndex(idx, { align: "end" });
+  }, [headId, groups]);
 
   // Tooltips open upward, but the list is a scroller and clips them — and with the
   // headroom, the line you're reading is usually parked at the very top. Flip the tip
@@ -300,8 +402,11 @@ export function TranscriptView() {
   const onRowDown = (e: MouseEvent, id: number) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts,.lineEdit")) return;
     if (e.detail > 1) return; // second press of a double-click: that's an edit, not a re-select
-    if (e.shiftKey) { selectLine(id, { extend: true }); return; }
-    if (e.ctrlKey || e.metaKey) { selectLine(id, { toggle: true }); return; }
+    const st = useStore.getState();
+    // open the gesture BEFORE any mutation — a click and a whole drag are one undo step
+    st.pushSelUndo();
+    if (e.shiftKey) { selectLine(id, { extend: true }); st.endSelGesture(); return; }
+    if (e.ctrlKey || e.metaKey) { selectLine(id, { toggle: true }); st.endSelGesture(); return; }
     let moved = false;
     const sx = e.clientX, sy = e.clientY;
     const move = (ev: globalThis.MouseEvent) => {
@@ -314,6 +419,9 @@ export function TranscriptView() {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
       if (!moved) selectLine(id); // plain click (toggles off if already the sole selection)
+      // close the undo gesture: a whole click-or-drag is ONE step, and the next one
+      // starts a new entry rather than coalescing into this one
+      useStore.getState().endSelGesture();
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
@@ -324,7 +432,8 @@ export function TranscriptView() {
   }
 
   // uniform column widths sized to the longest displayed label in this transcript
-  const spkLen = (s: string) => (speakerNames === "short" ? shortSpeaker(s) : s.trim()).length;
+  const shorts = shortLabels([...new Set(transcript.lines.map((l) => l.speaker.trim()))]);
+  const spkLen = (s: string) => (speakerNames === "short" ? shorts[s.trim()] ?? s.trim() : s.trim()).length;
   const spkChars = transcript.lines.reduce((m, l) => Math.max(m, spkLen(l.speaker)), 0);
   const spkWidth = `${Math.max(2.5, spkChars)}ch`;
   const lidChars = groups.reduce((m, g) => Math.max(m, lidLabel(g).length), 1);
@@ -340,6 +449,8 @@ export function TranscriptView() {
     <>
       <div className="tview" ref={tviewRef}>
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
+        tabIndex={0} onKeyDown={onListKeyDown}
+        aria-label={`Transcript ${active}. Press the down arrow to select a line, then 1 to 9 to apply a code.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad }} />, // headroom before the first line
@@ -358,8 +469,12 @@ export function TranscriptView() {
               hl={hl}
               closeCallSids={closeCallSids}
               warnCls={warnCls}
+              lanePattern={lanePattern}
+              spkColor={speakerColor(ui, g.speaker)}
+              weight={weightOf(ui, g.speaker)}
               showLid={showLineNumbers}
               speakerNames={speakerNames}
+              shortName={shorts[g.speaker.trim()] ?? g.speaker.trim()}
               searchQuery={search.query}
               current={search.current}
               editingId={editingId}
@@ -378,14 +493,20 @@ export function TranscriptView() {
       </VList>
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
       <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
-        closeCallSids={closeCallSids} detail={minimapDetail} vref={vref} />
+        closeCallSids={closeCallSids} detail={minimapDetail} ui={ui} vref={vref} />
+        {selOff && (
+          <button className={`backtosel ${selOff}`} onClick={backToSelection}
+            data-tip="Scroll back to your selected line(s)">
+            {selOff === "up" ? "↑" : "↓"} back to selection
+          </button>
+        )}
       </div>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
     </>
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, showLid, speakerNames, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
   cols: number;
@@ -398,8 +519,12 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   hl: { start: number; end: number; color: string } | null;
   closeCallSids: Set<number>;
   warnCls: string;
+  lanePattern: boolean;
+  spkColor: string;
+  weight: SpeakerWeight;
   showLid: boolean;
   speakerNames: "full" | "short";
+  shortName: string;
   searchQuery: string;
   current: { line: number; occ: number } | null;
   editingId: number | null;
@@ -418,7 +543,8 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const isStart = seg.start >= startId && seg.start <= endId;
     const isEnd = seg.end >= startId && seg.end <= endId;
     const cc = closeCallSids.has(seg.sid);
-    const cls = "laneBar" + (rej ? " rejected" : "") + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
+    const cls = "laneBar" + (rej ? " rejected" : lanePattern ? ` lp${patternOf(seg.code)}` : "")
+      + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
     // rejected: keep the code color, but faded + striped + outlined to read as inactive.
     // draw top/bottom only on the segment's first/last line so a multi-line reject
     // reads as one continuous outline instead of per-line notches.
@@ -454,15 +580,17 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   const merged = startId !== endId;
 
   return (
-    <div className={"lineRow" + (isR(group.speaker) ? " rspk" : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
+    <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
-      style={shadow.length ? { boxShadow: shadow.join(",") } : undefined}>
+      style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
       {showLid && <span className="lid">{lidLabel(group)}</span>}
       <button className="ts" onClick={(e) => { e.stopPropagation(); seekVideo(group.ts); }}
         title="play from here">
         {group.ts.split(".")[0]}
       </button>
-      <span className="spk" title={group.speaker}>{speakerNames === "short" ? shortSpeaker(group.speaker) : group.speaker}</span>
+      {/* the NAME is in the chip: colour tells speakers apart at a glance, but never
+          alone -- the label is always there for anyone the colour doesn't reach */}
+      <span className="spk" data-tip={group.speaker}>{speakerNames === "short" ? shortName : group.speaker}</span>
       <span className="txt">
         {group.lines.map((l, k) => (
           <Fragment key={l.id}>

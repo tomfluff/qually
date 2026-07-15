@@ -37,7 +37,7 @@ export function Toolbar() {
       <span className="brand">
         <Logo size={22} />
         <span className="brandname">QuAlly</span>
-        <span className="brandtag">Qualitative coding, offline</span>
+        <span className="brandtag">Thematic analysis, made accessible</span>
       </span>
       <span className="tbdiv" />
       <button className="btn primary iconlabel" onClick={() => fileRef.current?.click()}
@@ -45,7 +45,6 @@ export function Toolbar() {
         <Icon name="upload" size={16} /> Import files…
       </button>
       <ExportMenu />
-      <DataFormatButton />
       <span className="tbdiv" />
       {onTranscript && (
         <>
@@ -63,12 +62,14 @@ export function Toolbar() {
         <Icon name="redo" size={16} />
       </button>
       <span className="status">{status}</span>
-      <a className="btn iconbtn ghlink" href="https://github.com/tomfluff/qually" target="_blank"
+      {/* right-edge cluster, left→right: GitHub · File format · Help · Settings */}
+      <a className="btn iconlabel ghlink" href="https://github.com/tomfluff/qually" target="_blank"
         rel="noreferrer" title="Code on GitHub" aria-label="View QuAlly on GitHub">
-        <Icon name="github" size={16} />
+        <Icon name="github" size={16} /> GitHub
       </a>
-      <SettingsButton />
+      <DataFormatButton />
       <AboutButton />
+      <SettingsButton />
       <input ref={fileRef} type="file" multiple accept=".csv,.json" style={{ display: "none" }}
         onChange={(e) => { doImport(e.target.files); e.target.value = ""; }} />
       {aiOpen && <AiCheckModal onClose={() => setAiOpen(false)} />}
