@@ -188,10 +188,14 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
                       Settings → AI so they're replaced before sending.
                     </div>
                   )}
-                  {err && <div className="ai-err">{err}</div>}
                 </>
               )}
             </div>
+
+            {/* Pinned above the footer, outside the scrolling body — a run error
+                (e.g. no API key) must be visible right where the Send button is,
+                not parked at the bottom of a scrolled-away payload preview. */}
+            {err && <div className="ai-err">{err}</div>}
 
             {todo.length === 0 ? (
               <div className="imp-actions"><button className="btn" onClick={onClose}>Close</button></div>
