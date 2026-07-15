@@ -8,8 +8,10 @@ This file is the honest ledger: what the app actually does, and what it does not
 yet. It is kept current rather than aspirational, so that the claim in the README can
 be checked rather than trusted.
 
-**Audited 2026-07-14.** Target: WCAG 2.2 AA. Not independently verified, and **not yet
-tested with real low-vision users** — the most important gap on this page.
+**Audited 2026-07-14.** Target: WCAG 2.2 AA. Built and used by a low-vision researcher
+(the author) for real qualitative coding — but not independently audited, and **broader
+testing across more low-vision users and assistive technologies** is still the most
+valuable next step.
 
 ---
 
