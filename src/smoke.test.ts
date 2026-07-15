@@ -88,6 +88,48 @@ test("a second coder's identical segment imports alongside, not deduped away", a
     && x.code === "magnification" && x.proposedBy === "claude" && x.status === "candidate")).toBe(true);
 });
 
+test("re-importing a row whose status/notes changed updates the segment", async () => {
+  const row = 'segment_ref,pid,excerpt,code,proposed_by,status,notes\nP01:2-3,P01,,magnification,claude,rejected,too broad\n';
+  await useStore.getState().importFiles([new File([row], "coded-segments.csv")]);
+  const seg = useStore.getState().segments.find((x) => x.proposedBy === "claude")!;
+  expect(seg.status).toBe("rejected");
+  expect(seg.notes).toBe("too broad");
+});
+
+test("segments parked for an unloaded transcript dedup, then become real on transcript import", async () => {
+  const row = 'segment_ref,pid,excerpt,code,proposed_by,status,notes\nLATER:1-2,LATER,,magnification,claude,accepted,\n';
+  await useStore.getState().importFiles([new File([row], "coded-segments.csv")]);
+  await useStore.getState().importFiles([new File([row], "coded-segments.csv")]); // twice
+  expect(useStore.getState().extSegRows.length).toBe(1); // deduped
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,codes\n1,00:00:01,P,aa,\n2,00:00:02,P,bb,\n",
+  ], "LATER.csv")]);
+  expect(useStore.getState().extSegRows.length).toBe(0); // reconciled
+  expect(useStore.getState().segments.some((x) => x.pid === "LATER" && x.start === 1 && x.end === 2)).toBe(true);
+});
+
+test("a corrupt huge segment_ref range is refused (it would hang remap)", async () => {
+  const before = useStore.getState().segments.length;
+  const row = 'segment_ref,pid,excerpt,code,proposed_by,status,notes\nP01:1-999999999,P01,,magnification,claude,accepted,\n';
+  await useStore.getState().importFiles([new File([row], "coded-segments.csv")]);
+  expect(useStore.getState().segments.length).toBe(before);
+  expect(useStore.getState().extSegRows.some((x) => x.segment_ref === "P01:1-999999999")).toBe(false);
+});
+
+test("editing notes after an undo invalidates redo instead of resurrecting undone coding", () => {
+  const s = useStore.getState();
+  s.clearSelection();
+  s.pushSelUndo(); s.selectLine(2); s.endSelGesture();
+  useStore.getState().applyCode("redo probe");
+  useStore.getState().undo();                                   // "redo probe" gone, redoable
+  expect(useStore.getState().redoStack.length).toBeGreaterThan(0);
+  const any = useStore.getState().segments[0];
+  useStore.getState().setNotes(any.sid, "edited");              // mutate snapshotted state
+  useStore.getState().redo();                                   // must be a no-op now
+  expect(useStore.getState().segments.some((x) => x.code === "redo probe")).toBe(false);
+  expect(useStore.getState().segments.find((x) => x.sid === any.sid)!.notes).toBe("edited");
+});
+
 test("accepting a candidate keeps its proposer and exports as accepted", () => {
   const cand = useStore.getState().segments.find((x) => x.proposedBy === "claude")!;
   useStore.getState().setStatus(cand.sid, "accepted");

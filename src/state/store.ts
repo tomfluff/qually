@@ -594,16 +594,19 @@ export const useStore = create<State>()(
         return toCSV(rows, ["pid", "line_id", "timestamp", "speaker", "original", "corrected"]);
       },
 
+      // These three mutate snapshotted state without an undo entry (notes are per-
+      // keystroke; colors/defs are minor), but they MUST invalidate redo: a stale
+      // redo snapshot would otherwise overwrite the edit and resurrect undone coding.
       setSegmentRange: (sid, start, end) =>
-        set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x) }),
+        set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x), redoStack: [] }),
       deleteSegment: (sid) => { get().pushUndo(); set({ segments: get().segments.filter((x) => x.sid !== sid) }); },
       setStatus: (sid, status) => {
         get().pushUndo();
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status } : x) });
       },
-      setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x) }),
-      setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } } }),
-      setDef: (code, def) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], def } } }),
+      setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x), redoStack: [] }),
+      setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } }, redoStack: [] }),
+      setDef: (code, def) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], def } }, redoStack: [] }),
       renameCode: (code, newName) => {
         const name = newName.trim();
         if (!name || name === code) return;
@@ -824,6 +827,14 @@ function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string,
     const canon = ensureCode(get, set, code);
     for (const [start, end] of spans) get().addSegment(pid, start, end, canon);
   }
+  // segments that arrived BEFORE their transcript were parked in extSegRows as
+  // passthrough; now that the transcript exists they become real (visible, editable)
+  // segments — otherwise export would emit both the parked row and any re-coding
+  const parked = get().extSegRows.filter((x) => /^(.+?):\d/.exec(x.segment_ref || "")?.[1] === pid);
+  if (parked.length) {
+    set({ extSegRows: get().extSegRows.filter((x) => !parked.includes(x)) });
+    importSegments(get, set, parked);
+  }
 }
 
 function importCodebook(get: Get, set: Set_, rows: Record<string, string>[]) {
@@ -846,9 +857,30 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
     const m = /^(.+?):(\d+)(?:-(\d+))?$/.exec(r.segment_ref || "");
     if (!m) return;
     const pid = m[1], start = +m[2], end = +(m[3] || m[2]);
-    if (!get().transcripts[pid]) { set({ extSegRows: [...get().extSegRows, r] }); return; }
+    // a corrupt/hand-edited ref like p1:1-999999999 would hang remapSegment on the
+    // next re-import (it walks every line in the range); no real segment spans 10k
+    if (end < start || end - start > 9999) return;
+    if (!get().transcripts[pid]) {
+      // parked, not imported — dedup here, or re-importing the same file grows the
+      // passthrough rows without bound and export re-emits the duplicates
+      const key = (x: Record<string, string>) =>
+        `${x.segment_ref}|${norm(x.code || "")}|${(x.proposed_by || "").trim()}`;
+      if (!get().extSegRows.some((x) => key(x) === key(r))) set({ extSegRows: [...get().extSegRows, r] });
+      return;
+    }
     const canon = ensureCode(get, set, r.code);
-    get().addSegment(pid, start, end, canon, r.proposed_by || undefined, r.status || "accepted", r.notes || "");
+    const coder = (r.proposed_by || "").trim() || get().ui.coderName.trim() || "tom";
+    const status = r.status || "accepted", notes = r.notes || "";
+    const existing = get().segments.find((x) =>
+      x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(canon) && x.proposedBy === coder);
+    if (existing) {
+      // the file is authoritative for its own row: a re-import that only changed
+      // status or notes must land, not vanish into addSegment's dedup
+      if (existing.status !== status || existing.notes !== notes)
+        set({ segments: get().segments.map((x) => x.sid === existing.sid ? { ...x, status, notes } : x) });
+    } else {
+      get().addSegment(pid, start, end, canon, coder, status, notes);
+    }
   });
 }
 
