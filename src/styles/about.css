@@ -60,9 +60,11 @@
 .imp-drop { color:var(--muted); }
 /* one conflicting segment in the overwrite-consent modal: header + yours/file pair */
 .segdiff + .segdiff { margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
-.segdiff-side { display:flex; gap:8px; line-height:1.5; }
-.segdiff-k { flex:0 0 3.2em; text-align:right; font-size:.82em; font-weight:700;
-  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); align-self:baseline; }
+/* baseline on the ROW: the label is smaller text, so stretch/top alignment left it
+   floating high relative to the value — baseline puts both on the same text line */
+.segdiff-side { display:flex; gap:8px; line-height:1.5; align-items:baseline; }
+.segdiff-k { flex:0 0 3.9em; text-align:right; font-size:.82em; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
 .imp-actions { display:flex; flex-direction:column; gap:6px; margin-top:14px; }
 .imp-actions .btn { width:100%; justify-content:center; }
 .imp-note { color:var(--muted); font-size:.86em; text-align:center; margin-top:10px; }
