@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 import { describe, expect, it } from "vitest";
 import { alignLines, remapSegment, previewImport } from "./align";
 import type { Line, Segment } from "./state/store";

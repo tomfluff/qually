@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Primary-color options. Each has a light- and dark-theme accent so the app
 // swaps to the matching one on theme switch. Everything chromatic in the UI
 // (--sel, --row-sel*, buttons, tabs, highlights) derives from --accent, so

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 import { useLayoutEffect, useState, type CSSProperties } from "react";
 import { useStore } from "../state/store";
 import { CodeCombobox } from "./CodeCombobox";

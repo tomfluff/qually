@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 import { useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { Icon } from "./Icon";

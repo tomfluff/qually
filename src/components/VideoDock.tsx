@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useStore } from "../state/store";

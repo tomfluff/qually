@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 /* transcript rows — order: line# · timecode · speaker · text · lanes (right).
    Uniform typography: everything at the transcript font-size; muting via color only. */
 /* transcript + minimap layout; minimap replaces the native scrollbar */

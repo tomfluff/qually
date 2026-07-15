@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Smoke test: drive the REAL store through import -> code -> export -> re-import,
 // verifying the data pipeline that writes coded-segments.csv. Node env; a tiny
 // localStorage shim lets zustand's persist middleware load.

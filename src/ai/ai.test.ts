@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // The parts of the AI path that must not be wrong: redaction (data leaves the
 // device), the content hash (stale flags), and the guard against a hallucinated
 // quote being rendered over text that doesn't exist.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Inlined Tabler icon paths (MIT) — kept offline, no CDN (constraint #1).
 const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   "chevron-up": { d: ["M6 15l6 -6l6 6"] },
