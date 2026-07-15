@@ -6,7 +6,7 @@
      colour is underneath, and .6 dropped --muted to ~2.6:1. 8.86:1 here. */
   --bg:#ffffff; --fg:#1a1a1a; --fg-dim:#4a4a4a; --muted:#6b6b6b; --line:#e4e4e4;
   --panel:#f6f6f6; --accent:#6d28d9; /* brand purple; App.tsx overwrites from palettes.ts */
-  --row-hover:#ebebeb; --mm-w:66px;
+  --row-hover:#ebebeb; --mm-w:66px; --footer-h:32px; /* footer strip; .hotbar docks at this height */
   /* reading font for transcript text + excerpts; App.tsx sets it from ui.fontFamily */
   --read-font:system-ui, Segoe UI, Roboto, sans-serif;
   /* chromatic tints derive from the chosen primary, adapting to the theme via
