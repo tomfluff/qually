@@ -17,8 +17,14 @@
 /* padding-right leaves the full-width controls (key input, model row) the same
    breathing room on the right as the nav gap gives on the left — 6px sat them
    almost against the modal edge */
-.set-panel { flex:1 1 auto; min-width:0; overflow-y:auto; padding-right:16px;
+.set-panel { flex:1 1 auto; min-width:0; overflow-y:auto; padding: 8px 16px 8px 8px;
   display:flex; flex-direction:column; gap:11px; }
+/* Keep every row at its natural height. A flex column with overflow-y:auto still
+   shrinks its children to fit the box (flex-shrink defaults to 1), so once the
+   content is taller than the panel — which zoom triggers — the rows compress and
+   overlap instead of the panel scrolling. flex-shrink:0 makes them overflow, which
+   is what actually hands the scroll to the panel. */
+.set-panel > * { flex-shrink:0; }
 
 .set-foot { flex-shrink:0; display:flex; align-items:center; gap:14px;
   margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
