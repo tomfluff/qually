@@ -101,8 +101,8 @@ export function SegUpdateModal() {
             return (
               <div key={u.sid} className="segdiff">
                 <div><b>{u.ref}</b> {u.code}</div>
-                <div className="segdiff-side"><span className="segdiff-k">yours</span>{sideOf(u.from, withNotes)}</div>
-                <div className="segdiff-side"><span className="segdiff-k">file</span>{sideOf(u.to, withNotes)}</div>
+                <div className="segdiff-side segdiff-yours"><span className="segdiff-k">yours</span>{sideOf(u.from, withNotes)}</div>
+                <div className="segdiff-side segdiff-file"><span className="segdiff-k">file</span>{sideOf(u.to, withNotes)}</div>
               </div>
             );
           })}
