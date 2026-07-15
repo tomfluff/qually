@@ -16,6 +16,16 @@ Shipped items get moved to the "Done" list with the commit.
 
 ## Done
 
+- **(2) Multi-coder foundation — SHIPPED 2026-07-15** (branch `feat/multi-coder`).
+  The coder name is a setting (Settings → Codes, `ui.coderName`, default `tom`)
+  instead of a hardcoded `proposedBy`; segment dedup is per coder, so importing a
+  second coder's `coded-segments.csv` keeps their agreeing rows as agreement data;
+  any unverdicted status (`candidate`/`proposed`) renders pencilled-in (dashed
+  outline + pale fill, proposer in the tooltip) with a real Accept/Reject pair in
+  the popover. The Python side matches (`sync_coding.py --coder`, per-coder dedup,
+  unique-segment theme counts). This is the "half an IRR workflow" half of the
+  inter-rater item below; the agreement view / κ / Compare panel remains future.
+
 - **(1) In-app close-call warnings — SHIPPED 2026-07-04.** The excerpt rule's
   `closeCall` flag (losing speaker held ≥40% of chars, i.e. a mixed-substance
   segment) is now surfaced while coding, not just at export: a thick amber outline
@@ -34,10 +44,9 @@ Shipped items get moved to the "Done" list with the commit.
   dominant-speaker rule itself survives Tom's trial. The `excerptOf` /
   `excerpt_for` function boundary exists precisely so the rule is swappable — no
   new work until the trial verdict.
-- **Inter-rater / second coder.** The schema already carries `proposedBy` +
-  `status` (accepted/rejected/candidate) and the lanes already render rejected
-  segments distinctly — that's half an IRR workflow. Import a second coder's
-  `coded-segments.csv`, show agreement/disagreement visually, maybe a crude κ.
+- **Inter-rater / second coder.** ~~The import/review half~~ — shipped 2026-07-15
+  (Done above). What remains: a Compare panel (Browse-like tab: load another
+  coder's file, see agreement/disagreement visually, maybe a crude κ).
   High analytical payoff *if the paper needs reliability numbers*; real scope.
 
 ### Coding speed & ergonomics — cheap, compounding
