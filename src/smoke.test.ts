@@ -88,6 +88,14 @@ test("a second coder's identical segment imports alongside, not deduped away", a
     && x.code === "magnification" && x.proposedBy === "claude" && x.status === "candidate")).toBe(true);
 });
 
+test("accepting a candidate keeps its proposer and exports as accepted", () => {
+  const cand = useStore.getState().segments.find((x) => x.proposedBy === "claude")!;
+  useStore.getState().setStatus(cand.sid, "accepted");
+  const csv = useStore.getState().exportCSV();
+  const row = parseCSV(csv).find((r) => r.proposed_by === "claude")!;
+  expect(row.status).toBe("accepted");
+});
+
 test("selection is undoable, and a whole drag is ONE step", () => {
   const s = useStore.getState();
   s.clearSelection();

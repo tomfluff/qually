@@ -141,7 +141,7 @@ interface State {
   setPendingProject: (p: Project | null) => void;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
-  toggleReject: (sid: number) => void;
+  setStatus: (sid: number, status: string) => void;
   setNotes: (sid: number, notes: string) => void;
   setColor: (code: string, color: string) => void;
   togglePin: (code: string) => void;
@@ -597,9 +597,9 @@ export const useStore = create<State>()(
       setSegmentRange: (sid, start, end) =>
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x) }),
       deleteSegment: (sid) => { get().pushUndo(); set({ segments: get().segments.filter((x) => x.sid !== sid) }); },
-      toggleReject: (sid) => {
+      setStatus: (sid, status) => {
         get().pushUndo();
-        set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status: x.status === "rejected" ? "accepted" : "rejected" } : x) });
+        set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status } : x) });
       },
       setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x) }),
       setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } } }),

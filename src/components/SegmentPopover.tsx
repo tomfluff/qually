@@ -11,7 +11,7 @@ export function SegmentPopover({ sid, x, y, onClose }: {
   const codebook = useStore((s) => s.codebook);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const deleteSegment = useStore((s) => s.deleteSegment);
-  const toggleReject = useStore((s) => s.toggleReject);
+  const setStatus = useStore((s) => s.setStatus);
   const setNotes = useStore((s) => s.setNotes);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -86,10 +86,18 @@ export function SegmentPopover({ sid, x, y, onClose }: {
       <textarea value={seg.notes} placeholder="notes" onChange={(e) => setNotes(sid, e.target.value)} />
       <div className="row">
         <button className="btn danger" onClick={() => { deleteSegment(sid); onClose(); }}>Delete</button>
-        <button className={"btn " + (seg.status === "rejected" ? "ok" : "warn")}
-          onClick={() => { toggleReject(sid); onClose(); }}>
-          {seg.status === "rejected" ? "Accept" : "Reject"}
-        </button>
+        {seg.status === "candidate" ? (
+          // a suggestion under review gets a real verdict pair, not a reject-toggle
+          <>
+            <button className="btn ok" onClick={() => { setStatus(sid, "accepted"); onClose(); }}>Accept</button>
+            <button className="btn warn" onClick={() => { setStatus(sid, "rejected"); onClose(); }}>Reject</button>
+          </>
+        ) : (
+          <button className={"btn " + (seg.status === "rejected" ? "ok" : "warn")}
+            onClick={() => { setStatus(sid, seg.status === "rejected" ? "accepted" : "rejected"); onClose(); }}>
+            {seg.status === "rejected" ? "Accept" : "Reject"}
+          </button>
+        )}
         <button className="btn copy" onClick={() => { const t = segText(); if (t) navigator.clipboard.writeText(t); }}
           title="copy the segment (Ctrl+C)"><Icon name="copy" size={16} /></button>
         <button className="btn iconclose" onClick={onClose} title="close"><Icon name="x" size={16} /></button>
