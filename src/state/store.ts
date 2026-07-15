@@ -58,6 +58,14 @@ export interface PendingImport {
 }
 export type ImportChoice = "update" | "replace" | "new" | "cancel";
 
+// A re-imported segment row that would OVERWRITE an existing segment's status or
+// notes — held for consent (the transcript re-import modal is the same idea).
+export interface SegUpdate {
+  sid: number; ref: string; code: string;
+  from: { status: string; notes: string };
+  to: { status: string; notes: string };
+}
+
 // AI settings. The API key is NOT here — the store is persisted wholesale, so the
 // key lives in ai/key.ts (session-only by default). See docs in that file.
 export interface Ai {
@@ -104,9 +112,11 @@ interface State {
   search: Search;
   pendingImports: PendingImport[]; // re-imports awaiting a user decision
   pendingProject: Project | null;  // a loaded project awaiting the replace confirmation
+  pendingSegUpdates: SegUpdate[];  // status/notes overwrites awaiting consent
 
   importFiles: (files: FileList | File[]) => Promise<void>;
   resolveImport: (choice: ImportChoice) => void;
+  resolveSegUpdates: (apply: boolean) => void;
   ensureCode: (code: string) => string;
   addSegment: (pid: string, start: number, end: number, code: string,
     proposedBy?: string, status?: string, notes?: string) => void;
@@ -247,7 +257,7 @@ export const useStore = create<State>()(
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
-      pendingImports: [], pendingProject: null,
+      pendingImports: [], pendingProject: null, pendingSegUpdates: [],
 
       importFiles: async (files) => {
         const skipped: string[] = [];
@@ -286,6 +296,15 @@ export const useStore = create<State>()(
         }
         set({ hotbarCache: hotbarCodes(get()) });
         if (skipped.length) throw new Error(skipped.join("; "));
+      },
+
+      resolveSegUpdates: (apply) => {
+        const updates = get().pendingSegUpdates;
+        set({ pendingSegUpdates: [] });
+        if (!apply || !updates.length) return;
+        const by = new Map(updates.map((u) => [u.sid, u.to]));
+        get().pushUndo();
+        set({ segments: get().segments.map((x) => by.has(x.sid) ? { ...x, ...by.get(x.sid)! } : x) });
       },
 
       resolveImport: (choice) => {
@@ -577,7 +596,7 @@ export const useStore = create<State>()(
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
-          pendingImports: [], pendingProject: null,
+          pendingImports: [], pendingProject: null, pendingSegUpdates: [],
           nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
         });
         set({ hotbarCache: hotbarCodes(get()) });
@@ -874,10 +893,16 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
     const existing = get().segments.find((x) =>
       x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(canon) && x.proposedBy === coder);
     if (existing) {
-      // the file is authoritative for its own row: a re-import that only changed
-      // status or notes must land, not vanish into addSegment's dedup
-      if (existing.status !== status || existing.notes !== notes)
-        set({ segments: get().segments.map((x) => x.sid === existing.sid ? { ...x, status, notes } : x) });
+      // a re-imported row that only changed status/notes must not vanish into
+      // addSegment's dedup — but it would OVERWRITE in-app review work, so it's
+      // parked for consent (SegUpdateModal) instead of applied silently
+      if ((existing.status !== status || existing.notes !== notes)
+          && !get().pendingSegUpdates.some((u) => u.sid === existing.sid))
+        set({ pendingSegUpdates: [...get().pendingSegUpdates, {
+          sid: existing.sid, ref: formatSegRef(pid, start, end), code: canon,
+          from: { status: existing.status, notes: existing.notes },
+          to: { status, notes },
+        }] });
     } else {
       get().addSegment(pid, start, end, canon, coder, status, notes);
     }

@@ -1,4 +1,4 @@
-import { useStore } from "../state/store";
+import { useStore, type SegUpdate } from "../state/store";
 import { Icon } from "./Icon";
 
 // Shown when a re-imported CSV would land on a transcript that already has coding.
@@ -63,6 +63,56 @@ export function ImportModal() {
           <button className="btn" onClick={() => resolve("cancel")}>Cancel</button>
         </div>
         <div className="imp-note">Undo can't reach across an import — this preview is your last check.</div>
+      </div>
+    </div>
+  );
+}
+
+// Shown when an imported coded-segments.csv carries different status/notes for
+// segments that already exist here — e.g. re-importing an old export after
+// reviewing in the app. Applying silently would erase that review work.
+const clip = (s: string) => (s.length > 40 ? s.slice(0, 40) + "…" : s);
+const diffOf = (u: SegUpdate) => {
+  const parts: string[] = [];
+  if (u.from.status !== u.to.status) parts.push(`${u.from.status} → ${u.to.status}`);
+  if (u.from.notes !== u.to.notes) parts.push(u.to.notes ? `note → “${clip(u.to.notes)}”` : "note cleared");
+  return parts.join("  ·  ");
+};
+
+export function SegUpdateModal() {
+  const updates = useStore((s) => s.pendingSegUpdates);
+  const resolve = useStore((s) => s.resolveSegUpdates);
+  if (!updates.length) return null;
+  const n = updates.length;
+
+  return (
+    <div className="about-backdrop" onMouseDown={() => resolve(false)}>
+      <div className="about imp" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="about-head">
+          <h2>The file disagrees with {n} segment{n === 1 ? "" : "s"} here</h2>
+          <button className="btn iconbtn" onClick={() => resolve(false)} title="Keep mine (Esc)">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <p className="about-lede">
+          New segments were imported. But for {n === 1 ? "one segment" : `${n} segments`} you already
+          have, the file carries a different status or note{n === 1 ? "" : "s"}:
+        </p>
+        <div className="imp-stats">
+          {updates.slice(0, 5).map((u) => (
+            <div key={u.sid}><b>{u.ref}</b> {u.code} — {diffOf(u)}</div>
+          ))}
+          {n > 5 && <div>…and {n - 5} more</div>}
+        </div>
+        <div className="imp-actions">
+          <button className="btn" onClick={() => resolve(true)}>
+            Overwrite with the file's version
+          </button>
+          <button className="btn primary" onClick={() => resolve(false)}>
+            Keep mine — import only the new rows
+          </button>
+        </div>
+        <div className="imp-note">Overwriting is one undo step, so it can be taken back.</div>
       </div>
     </div>
   );

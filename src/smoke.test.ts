@@ -88,12 +88,23 @@ test("a second coder's identical segment imports alongside, not deduped away", a
     && x.code === "magnification" && x.proposedBy === "claude" && x.status === "candidate")).toBe(true);
 });
 
-test("re-importing a row whose status/notes changed updates the segment", async () => {
+test("re-importing a row whose status/notes changed asks first; consent applies it", async () => {
   const row = 'segment_ref,pid,excerpt,code,proposed_by,status,notes\nP01:2-3,P01,,magnification,claude,rejected,too broad\n';
+  const claude = () => useStore.getState().segments.find((x) => x.proposedBy === "claude")!;
+
   await useStore.getState().importFiles([new File([row], "coded-segments.csv")]);
-  const seg = useStore.getState().segments.find((x) => x.proposedBy === "claude")!;
-  expect(seg.status).toBe("rejected");
-  expect(seg.notes).toBe("too broad");
+  expect(claude().status).toBe("candidate");                     // parked, not applied
+  expect(useStore.getState().pendingSegUpdates).toHaveLength(1);
+
+  useStore.getState().resolveSegUpdates(false);                  // keep mine
+  expect(claude().status).toBe("candidate");
+  expect(useStore.getState().pendingSegUpdates).toHaveLength(0);
+
+  await useStore.getState().importFiles([new File([row], "coded-segments.csv")]);
+  useStore.getState().resolveSegUpdates(true);                   // overwrite with the file
+  expect(claude().status).toBe("rejected");
+  expect(claude().notes).toBe("too broad");
+  expect(useStore.getState().pendingSegUpdates).toHaveLength(0);
 });
 
 test("segments parked for an unloaded transcript dedup, then become real on transcript import", async () => {
