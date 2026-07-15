@@ -16,7 +16,9 @@
   border-top:1px solid var(--accent); border-bottom:1px solid var(--accent);
   pointer-events:none; }
 
-.lineRow { display:flex; align-items:center; gap:8px; padding:0 16px;
+/* no right padding: the lane strip runs flush to the minimap (its own left edge is
+   the divider + 1rem), rather than floating in a gap short of it */
+.lineRow { display:flex; align-items:center; gap:8px; padding:0 0 0 16px;
   cursor:pointer; user-select:none; }
 /* vertical spacing lives on the text so the lane strip spans the full row
    height and multiline segment bars connect (no inter-row gap) */
@@ -72,7 +74,17 @@
 .lineRow .txt { flex:1; line-height:1.45; font-family:var(--read-font); }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
 .lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;
-  justify-content:flex-start; }
+  justify-content:flex-start;
+  /* a persistent divider marks the lane strip as a zone apart from the readable line
+     — the lanes aren't click-to-select. 1rem of air on each side: the row's own 8px
+     flex gap covers part of the left half, so the margin only adds the remainder. */
+  border-inline-start:1px solid var(--line);
+  margin-inline-start:calc(1rem - 8px); padding-inline-start:1rem; }
+/* and its highlight reads QUIETER than the line's — wash whatever the row is showing
+   (hover OR selection) back toward the page colour behind the (transparent) bars, so
+   the strip never looks as clickable/selectable as the readable line */
+.lineRow:hover .lanes,
+.lineRow.selected .lanes { background:color-mix(in srgb, var(--bg) 50%, transparent); }
 .laneBar { width:var(--lane-w, 18px); flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
