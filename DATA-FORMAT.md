@@ -2,7 +2,7 @@
 
 This mirrors the in-app **Transcript format & import** modal (the file-text button
 next to *Import files…*). Keep the two in sync — the prompt below is duplicated in
-`coding-app-src/src/components/DataFormatButton.tsx`.
+`src/components/DataFormatButton.tsx`.
 
 ## The CSV format
 
@@ -12,7 +12,7 @@ Transcripts import as CSV, one row per line. A header row is required.
 |---|---|
 | `line_id` | Sequential integers starting at 1. **Required** (import needs `line_id` + `text`). |
 | `timestamp` | Line start time, `H:MM:SS` or `MM:SS` (milliseconds after a `.` are ignored). Powers the play-from-here chip. Optional. |
-| `speaker` | Short label, reused per speaker (`P`, `R`, or a name). Labels starting with `R` render as the researcher (dimmed, `[R:]` excerpt prefix). Optional (defaults to `P`). |
+| `speaker` | Any consistent label, reused per speaker — a full name is fine, it needn't be short. Optional (defaults to `P`). The interviewer is auto-dimmed (and prefixed `[R:]` in excerpts) when the label is exactly `R`, `I`, `Interviewer`, `Moderator`, `Facilitator` (or `R1`, `R2`…) — a first guess, editable per speaker in Settings → Speakers. A participant named "Rachel" stays a participant. |
 | `text` | The spoken text for that line. **Required.** |
 | `codes` | Pre-existing codes, `;`-separated, or empty. Loaded as coded segments. Optional. |
 
@@ -57,7 +57,7 @@ The script must:
 - Write one row per spoken line / utterance.
 - line_id: sequential integers starting at 1.
 - timestamp: the line's start time as H:MM:SS or MM:SS (drop any milliseconds). Leave empty if a line has no time.
-- speaker: a short, consistent label per speaker (e.g. "P" for participant, "R" for researcher, or a name). Reuse the same label for the same speaker. Labels starting with "R" are treated as the researcher.
+- speaker: a consistent label per speaker — a name is fine, it need not be short. Reuse the exact same label for the same speaker. To have the interviewer's lines auto-dimmed in the app, label them exactly "R" or "Interviewer"; participant names (e.g. "Rachel") are left as participants.
 - text: the spoken text for that line, whitespace-trimmed.
 - codes: always empty.
 - Use Python's csv.writer so any field containing a comma, quote, or newline is correctly quoted (RFC 4180). Write the header row first.

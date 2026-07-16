@@ -4,7 +4,7 @@ import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 // The prompt a user pastes into an AI (ChatGPT / Claude) to turn any transcript
-// into the CSV this app imports. Kept in sync with tools/CODING-APP-DATA-FORMAT.md.
+// into the CSV this app imports. Kept in sync with DATA-FORMAT.md.
 const AI_PROMPT = `You are a data-formatting assistant. Convert my interview/session transcript into a CSV for a qualitative-coding app. Write a small Python 3 script (standard library only, using the csv module) that reads my transcript from a file named input.txt in the same folder and writes transcript.csv with EXACTLY these columns, in this order:
 
 line_id,timestamp,speaker,text,codes
@@ -13,7 +13,7 @@ The script must:
 - Write one row per spoken line / utterance.
 - line_id: sequential integers starting at 1.
 - timestamp: the line's start time as H:MM:SS or MM:SS (drop any milliseconds). Leave empty if a line has no time.
-- speaker: a short, consistent label per speaker (e.g. "P" for participant, "R" for researcher, or a name). Reuse the same label for the same speaker. Labels starting with "R" are treated as the researcher.
+- speaker: a consistent label per speaker — a name is fine, it need not be short. Reuse the exact same label for the same speaker. To have the interviewer's lines auto-dimmed in the app, label them exactly "R" or "Interviewer"; participant names (e.g. "Rachel") are left as participants.
 - text: the spoken text for that line, whitespace-trimmed.
 - codes: always empty.
 - Use Python's csv.writer so any field containing a comma, quote, or newline is correctly quoted (RFC 4180). Write the header row first.
@@ -79,12 +79,13 @@ export function DataFormatButton() {
                   <tbody>
                     <tr><td><code>line_id</code></td><td>Sequential integers, starting at 1. <b>Required.</b></td></tr>
                     <tr><td><code>timestamp</code></td><td>Line start time, <code>H:MM:SS</code> or <code>MM:SS</code> (milliseconds ignored). Powers the play-from-here chip. Optional.</td></tr>
-                    <tr><td><code>speaker</code></td><td>Short label, reused per speaker (e.g. <code>P</code>, <code>R</code>, or a name). Labels starting with <code>R</code> render as the researcher. Optional (defaults to <code>P</code>).</td></tr>
+                    <tr><td><code>speaker</code></td><td>Any consistent label, reused per speaker — a full name is fine, it needn't be short. Optional (defaults to <code>P</code>).</td></tr>
                     <tr><td><code>text</code></td><td>The spoken text for that line. <b>Required.</b></td></tr>
                     <tr><td><code>codes</code></td><td>Pre-existing codes, <code>;</code>-separated, or empty. Loaded as segments. Optional.</td></tr>
                   </tbody>
                 </table>
                 <p className="fmt-note">It's real CSV: any <code>text</code> with a comma, quote, or newline must be double-quoted. Don't hand-write it — let the prompt below do it.</p>
+                <p className="fmt-note">The interviewer's rows are dimmed automatically when the label is exactly <code>R</code>, <code>I</code>, <code>Interviewer</code>, <code>Moderator</code>, <code>Facilitator</code> (or <code>R1</code>, <code>R2</code>…) — a first guess you can change for any speaker in <b>Settings → Speakers</b>. A participant named “Rachel” stays a participant.</p>
                 <button className="btn" onClick={downloadExample}>Download example-transcript.csv</button>
               </section>
 
