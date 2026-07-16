@@ -86,7 +86,7 @@ export function shortLabels(names: string[]): Record<string, string> {
 }
 const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 
-const MIN_PAD = 48;    // headroom floor, before the viewport has been measured
+const MIN_PAD = 48;    // headroom floor (also the spacer height until the viewport is measured)
 const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
 
 // per-tab scroll anchors — shared with the store, which must forget them on a
@@ -213,7 +213,9 @@ export function TranscriptView() {
   // screen, so the first and last lines get coded under the same conditions as the
   // middle — same room for the anchored command palette, same reading position.
   // Measured, not a constant: it has to track the viewport and the row height.
-  const [pad, setPad] = useState(MIN_PAD);
+  // null = not measured yet — a genuinely short viewport also measures to exactly
+  // MIN_PAD, so the value alone can't tell "small" from "not laid out".
+  const [pad, setPad] = useState<number | null>(null);
   useLayoutEffect(() => {
     const el = tviewRef.current;
     if (!el) return;
@@ -239,7 +241,7 @@ export function TranscriptView() {
   // transcript barely re-renders, so per-render retries would never fire). If the
   // scroll moves in a way we didn't cause, the user grabbed it — their position wins.
   useEffect(() => {
-    if (pad <= MIN_PAD) return;           // container not laid out yet; the pad is a guess
+    if (pad === null) return;             // container not laid out yet; the pad is a guess
     if (useStore.getState().jump) return; // a Browse -> line jump owns the position
     positioning.current = true;
     // One frame so the swapped-in children are committed, then let virtua do the
@@ -261,7 +263,13 @@ export function TranscriptView() {
   // With a viewport-sized top pad, offset 0 is a blank screen: "the top" now means
   // the first line parked at the top of the viewport, which is index 1 (0 = the pad).
   const toTop = () => vref.current?.scrollToIndex(1, { align: "start" });
-  const toBottom = () => vref.current?.scrollToIndex(groups.length, { align: "end" });
+  // align "end" alone parks the last line exactly at the viewport bottom — which is
+  // where the floating hotbar dock sits, so End left it occluded. Overshoot by the
+  // dock's current height (collapsed docks measure small, which is right) plus a gap.
+  const toBottom = () => {
+    const dock = document.querySelector(".hotbar")?.getBoundingClientRect().height ?? 64;
+    vref.current?.scrollToIndex(groups.length, { align: "end", offset: dock + 8 });
+  };
 
   // The ONLY way into a selection used to be onMouseDown on a row: arrow keys are
   // gated on a selection already existing, so a keyboard user could never make the
@@ -295,7 +303,7 @@ export function TranscriptView() {
   // still the 48px placeholder, and jumping first means the pad's growth afterwards
   // shoves the content down under an unchanged scrollTop.
   useEffect(() => {
-    if (pad <= MIN_PAD || !jump || jump.pid !== active || !transcript) return;
+    if (pad === null || !jump || jump.pid !== active || !transcript) return;
     const idx = groups.findIndex((g) => jump.line >= g.startId && jump.line <= g.endId);
     if (idx >= 0) vref.current?.scrollToIndex(idx + 1, { align: "center" }); // +1 for the top vpad
     positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
@@ -410,6 +418,9 @@ export function TranscriptView() {
   // click selects; click+drag selects a range (Shift extends, Ctrl toggles — no drag)
   const onRowDown = (e: MouseEvent, id: number) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts,.lineEdit")) return;
+    // Alt-click on an AI notice is its dismiss gesture (handled on click) — selecting
+    // here too would clear/collapse the very selection the notice sits on
+    if (e.altKey && (e.target as HTMLElement).closest(".ainote")) return;
     if (e.detail > 1) return; // second press of a double-click: that's an edit, not a re-select
     const st = useStore.getState();
     // open the gesture BEFORE any mutation — a click and a whole drag are one undo step
@@ -462,7 +473,7 @@ export function TranscriptView() {
         aria-label={`Transcript ${active}. Press the down arrow to select a line, then 1 to 9 to apply a code.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
-          <div className="vpad vpad-top" key="vpad-top" style={{ height: pad }} />, // headroom before the first line
+          <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line
           ...groups.map((g) => (
             <Row
               key={g.startId}
@@ -497,7 +508,7 @@ export function TranscriptView() {
               }}
             />
           )),
-          <div className="vpad vpad-bot" key="vpad-bot" style={{ height: pad }} />, // headroom after the last line
+          <div className="vpad vpad-bot" key="vpad-bot" style={{ height: pad ?? MIN_PAD }} />, // headroom after the last line
         ]}
       </VList>
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />

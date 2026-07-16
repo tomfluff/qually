@@ -17,7 +17,12 @@ export interface ExcerptResult {
   speaker: string; // the dominant speaker whose lines the excerpt keeps ("" if empty)
 }
 
-const isR = (speaker: string) => speaker.trim().toUpperCase().startsWith("R");
+// Whole-label matches only, same set as the interviewer guess (store.ts guessQuiet
+// imports this). The old startsWith("R") rule exported a participant named "Rachel"
+// with the researcher prefix — the exact mislabeling the speaker-identity rework
+// removed from display logic.
+export const RESEARCHER = /^(r|r\d+|researcher|interviewer|moderator|facilitator|int|i)$/i;
+const isR = (speaker: string) => RESEARCHER.test(speaker.trim());
 
 export function excerptOf(lines: ExLine[]): ExcerptResult {
   const chars = new Map<string, number>();

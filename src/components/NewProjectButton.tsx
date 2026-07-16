@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import { saveText } from "./ExportMenu";
 import { Icon } from "./Icon";
@@ -11,6 +11,14 @@ export function NewProjectButton() {
   const [confirm, setConfirm] = useState(false);
   const tabs = useStore((s) => s.tabs);
   const s = () => useStore.getState();
+
+  // Esc cancels, as the close button's tooltip promises (the AboutButton pattern)
+  useEffect(() => {
+    if (!confirm) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setConfirm(false); } };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
+  }, [confirm]);
 
   return (
     <>

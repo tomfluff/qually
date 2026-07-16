@@ -70,6 +70,9 @@ export function SearchBar() {
 
   if (!open) return null;
   const step = (d: number) => { if (tabMatches.length) setIdx((i) => (i + d + tabMatches.length) % tabMatches.length); };
+  // closing unmounts the focused input and focus falls to <body> — hand it back to
+  // the transcript list so the arrow-key flow it advertises still works
+  const close = () => { closeSearch(); document.querySelector<HTMLElement>(".tviewlist")?.focus(); };
 
   return (
     <div className="searchbar">
@@ -79,7 +82,7 @@ export function SearchBar() {
             onChange={(e) => setSearch({ query: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
-              else if (e.key === "Escape") { e.preventDefault(); closeSearch(); }
+              else if (e.key === "Escape") { e.preventDefault(); close(); }
             }} />
           <span className="searchcount">
             {scope === "tab"
@@ -99,7 +102,7 @@ export function SearchBar() {
             <button className={scope === "all" ? "on" : ""} onClick={() => setSearch({ scope: "all", current: null })}>All</button>
           </div>
         </div>
-        <button className="searchclose" onClick={closeSearch} title="Close (Esc)"><Icon name="x" size={16} /></button>
+        <button className="searchclose" onClick={close} title="Close (Esc)"><Icon name="x" size={16} /></button>
       </div>
 
       {scope === "all" && query && (

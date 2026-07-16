@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
-import { excerptOf } from "../contract/excerpt";
+import { excerptOf, RESEARCHER } from "../contract/excerpt";
 import { mergeGroups, type Group } from "../merge";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
@@ -262,12 +262,15 @@ export const useStore = create<State>()(
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], saveFailed: false,
 
       // wipe the workspace, keep the person: ui prefs (coder name, theme, fonts)
-      // and AI settings survive; everything project-shaped resets
+      // and AI settings survive; everything project-shaped resets — including the
+      // speaker map, which belongs to the study (see exportProject): a lingering
+      // "P is quiet" from study A would silently apply to study B's "P"
       newProject: () => {
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
           video: {}, aiFlags: {}, aiLog: [],
+          ui: { ...get().ui, speakerColors: {}, speakerWeight: {} },
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
           pendingImports: [], pendingProject: null, pendingSegUpdates: [],
@@ -278,37 +281,53 @@ export const useStore = create<State>()(
 
       importFiles: async (files) => {
         const skipped: string[] = [];
+        // Imports mutate snapshotted state (segments/codebook), so they must go on the
+        // undo stack like any other edit: one entry for the whole batch, pushed before
+        // the first mutation. pushUndo also clears redoStack — a stale redo snapshot
+        // would otherwise overwrite the import and silently delete the imported data.
+        let marked = false;
+        const mark = () => { if (!marked) { marked = true; get().pushUndo(); } };
         for (const f of Array.from(files)) {
-          // a project file goes through the same one entry point; the modal confirms
-          // before it replaces the workspace
-          if (/\.json$/i.test(f.name)) {
-            set({ pendingProject: parseProject(await f.text()) });
-            continue;
-          }
-          const rows = parseCSV(await f.text());
-          const cols = rows.length ? Object.keys(rows[0]) : [];
-          if (cols.includes("segment_ref")) importSegments(get, set, rows);
-          else if (cols.includes("short_def") || (cols.includes("code") && cols.includes("status")))
-            importCodebook(get, set, rows);
-          else if (cols.includes("line_id") && cols.includes("text")) {
-            const pid = f.name.replace(/\.csv$/i, "");
-            const s = get();
-            const old = s.transcripts[pid];
-            const segs = s.segments.filter((x) => x.pid === pid);
-            // Re-importing over existing coding would silently move every segment
-            // onto whatever line now holds that number: ask first (see ImportModal).
-            if (old && segs.length) {
-              const lines = rowsToLines(rows);
-              const { map: _m, ...preview } = previewImport(segs, old.lines, lines);
-              set({ pendingImports: [...get().pendingImports, { pid, lines, rows, preview }] });
-            } else {
-              importTranscript(get, set, pid, rows);
+          try {
+            // a project file goes through the same one entry point; the modal confirms
+            // before it replaces the workspace
+            if (/\.json$/i.test(f.name)) {
+              set({ pendingProject: parseProject(await f.text()) });
+              continue;
             }
-          } else {
-            // an unrecognized file must say so, not vanish without a trace
-            skipped.push(rows.length
-              ? `${f.name} doesn't match any QuAlly format — a transcript CSV needs "line_id" and "text" columns (see File format)`
-              : `${f.name} is empty`);
+            const rows = parseCSV(await f.text());
+            const cols = rows.length ? Object.keys(rows[0]) : [];
+            if (cols.includes("segment_ref")) { mark(); importSegments(get, set, rows); }
+            else if (cols.includes("short_def") || (cols.includes("code") && cols.includes("status"))) {
+              mark(); importCodebook(get, set, rows);
+            } else if (cols.includes("line_id") && cols.includes("text")) {
+              // Blank line_id coerces to 0 and non-numeric ones vanish row-by-row —
+              // a hand-edited CSV must be rejected loudly, not imported corrupted.
+              const bad = badLineIds(rows);
+              if (bad) { skipped.push(`${f.name} ${bad}`); continue; }
+              const pid = f.name.replace(/\.csv$/i, "");
+              const s = get();
+              const old = s.transcripts[pid];
+              const segs = s.segments.filter((x) => x.pid === pid);
+              // Re-importing over existing work would silently move every segment onto
+              // whatever line now holds that number — and wipe in-app transcription
+              // corrections (`orig`), which undo cannot bring back: ask first.
+              if (old && (segs.length || old.lines.some((l) => l.orig !== undefined))) {
+                const lines = rowsToLines(rows);
+                const { map: _m, ...preview } = previewImport(segs, old.lines, lines);
+                set({ pendingImports: [...get().pendingImports, { pid, lines, rows, preview }] });
+              } else {
+                mark(); importTranscript(get, set, pid, rows);
+              }
+            } else {
+              // an unrecognized file must say so, not vanish without a trace
+              skipped.push(rows.length
+                ? `${f.name} doesn't match any QuAlly format — a transcript CSV needs "line_id" and "text" columns (see File format)`
+                : `${f.name} is empty`);
+            }
+          } catch (err) {
+            // one malformed file must not abort the rest of the batch
+            skipped.push(`${f.name}: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
         set({ hotbarCache: hotbarCodes(get()) });
@@ -331,6 +350,7 @@ export const useStore = create<State>()(
         if (choice === "cancel") return;
 
         if (choice === "new") {
+          get().pushUndo(); // an import is an edit: undoable, and it invalidates redo
           importTranscript(get, set, uniquePid(get(), p.pid), p.rows);
         } else {
           const s = get();
@@ -408,12 +428,14 @@ export const useStore = create<State>()(
         const s = get();
         const gs = groupsOf(s);
         if (!gs.length || s.selection.pid !== s.active || !s.selection.lines.size) return;
-        s.pushSelUndo(); // a run of arrow presses collapses into one entry
+        // the undo entry goes in only once the move is known to happen: an arrow press
+        // against the transcript's edge must not eat the redo stack for a no-op
         if (extend) {
           const anchorGi = s.selection.anchor !== null ? groupIdxOf(gs, s.selection.anchor) : -1;
           const headGi = s.selection.head !== null ? groupIdxOf(gs, s.selection.head) : anchorGi;
           const ni = Math.max(0, Math.min(gs.length - 1, (headGi < 0 ? anchorGi : headGi) + dir));
           if (ni === headGi) return;
+          s.pushSelUndo(); // a run of arrow presses collapses into one entry
           const base = anchorGi < 0 ? ni : anchorGi;
           set({ selection: { pid: s.active, anchor: gs[base].startId, head: gs[ni].startId, lines: new Set(idsBetween(gs, base, ni)) } });
         } else {
@@ -421,6 +443,7 @@ export const useStore = create<State>()(
           const edgeGi = groupIdxOf(gs, dir > 0 ? Math.max(...ids) : Math.min(...ids));
           const ni = edgeGi + dir;
           if (ni < 0 || ni >= gs.length) return;
+          s.pushSelUndo();
           const g = gs[ni];
           set({ selection: { pid: s.active, anchor: g.startId, head: g.startId, lines: new Set(g.ids) } });
         }
@@ -454,7 +477,12 @@ export const useStore = create<State>()(
         const s = get();
         if (pid === s.active) { set({ jump: { pid, line } }); return; } // same-tab jump: don't touch selection
         const saved = { ...s.savedSelections, [s.active]: s.selection };
-        set({ active: pid, selection: saved[pid] ?? emptySel(), savedSelections: saved, jump: { pid, line } });
+        // Browse and all-transcripts search offer every LOADED transcript, tab or no
+        // tab. Landing on a closed one must reopen its tab: active∉tabs is otherwise a
+        // ghost state — no tab highlighted, no ×, and undo refuses to restore it.
+        const tabs = pid !== "browse" && !s.tabs.includes(pid) && s.transcripts[pid]
+          ? [...s.tabs, pid] : s.tabs;
+        set({ active: pid, tabs, selection: saved[pid] ?? emptySel(), savedSelections: saved, jump: { pid, line } });
       },
       clearJump: () => set({ jump: null }),
       scrollToLine: (line) => set({ jump: { pid: get().active, line } }), // same-tab scroll, no selection change
@@ -558,7 +586,10 @@ export const useStore = create<State>()(
       exportNotices: () => {
         const s = get();
         const rows: Record<string, string>[] = [];
-        for (const pid of s.tabs) {
+        // every loaded transcript, not just open tabs — a closed tab's noticings are
+        // still project data; tabs first to keep the familiar row order
+        const pids = [...s.tabs, ...Object.keys(s.transcripts).filter((p) => !s.tabs.includes(p))];
+        for (const pid of pids) {
           const t = s.transcripts[pid];
           if (!t) continue;
           for (const l of t.lines) {
@@ -821,6 +852,23 @@ function ensureCode(get: Get, set: Set_, code: string): string {
   return code;
 }
 
+// Import gate for transcript CSVs: every row needs a unique, numeric line_id.
+// Returns a message naming the offending rows (header = row 1), or null when clean.
+export function badLineIds(rows: Record<string, string>[]): string | null {
+  const bad: number[] = [], dup: number[] = [];
+  const seen = new Set<string>();
+  rows.forEach((r, i) => {
+    const id = (r.line_id || "").trim();
+    if (!/^\d+$/.test(id)) bad.push(i + 2);
+    else if (seen.has(id)) dup.push(i + 2);
+    else seen.add(id);
+  });
+  const list = (ns: number[]) => ns.slice(0, 5).join(", ") + (ns.length > 5 ? ", …" : "");
+  if (bad.length) return `has a blank or non-numeric line_id on row${bad.length > 1 ? "s" : ""} ${list(bad)}`;
+  if (dup.length) return `has a duplicate line_id on row${dup.length > 1 ? "s" : ""} ${list(dup)}`;
+  return null;
+}
+
 export function rowsToLines(rows: Record<string, string>[]): Line[] {
   return rows
     .map((r) => ({ id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" }))
@@ -1003,8 +1051,8 @@ export const inkOn = (hex: string): string => {
 // Deliberately WHOLE-LABEL matches only. An earlier `^r\b` prefix test also caught
 // "R. Singh", "R (participant)" and "Rae" — quietly dimming participants, which is the
 // exact failure the old startsWith("R") rule was removed for. A bare "R", or the word
-// itself, is the whole label or it isn't a match.
-const RESEARCHER = /^(r|r\d+|researcher|interviewer|moderator|facilitator|int|i)$/i;
+// itself, is the whole label or it isn't a match. The regex itself lives in the
+// contract (excerpt.ts) so the export prefix and this guess can't drift apart.
 export const guessQuiet = (speakers: string[]): string[] =>
   speakers.filter((sp) => RESEARCHER.test(sp.trim()));
 

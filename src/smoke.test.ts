@@ -300,9 +300,73 @@ test("undo can un-select in a tab you have since left", async () => {
   expect([...useStore.getState().selection.lines]).toEqual([]); // it must be GONE
 });
 
+// Imports mutate snapshotted state (segments/codebook) — the store's redo invariant
+// applies to them like any edit: a stale redo snapshot must never overwrite an import.
+test("importing a segments CSV invalidates redo and is itself undoable", async () => {
+  useStore.setState({ active: "TA", tabs: ["TA", "TB"] });
+  const s = useStore.getState();
+  s.pushSelUndo(); s.selectLine(1); s.endSelGesture();
+  useStore.getState().applyCode("pre-import");
+  useStore.getState().undo();                                    // redoable
+  expect(useStore.getState().redoStack.length).toBeGreaterThan(0);
+
+  const row = 'segment_ref,pid,excerpt,code,proposed_by,status,notes\nTA:1-2,TA,,imported code,colleague,accepted,\n';
+  await useStore.getState().importFiles([new File([row], "coded-segments.csv")]);
+
+  useStore.getState().redo();                                    // must be a no-op now
+  expect(useStore.getState().segments.some((x) => x.code === "imported code")).toBe(true);
+  expect(useStore.getState().segments.some((x) => x.code === "pre-import")).toBe(false);
+
+  useStore.getState().undo();                                    // and the import is ONE undo step
+  expect(useStore.getState().segments.some((x) => x.code === "imported code")).toBe(false);
+});
+
+test("a transcript CSV with blank, non-numeric, or duplicate line_id is refused by name", async () => {
+  const s = useStore.getState();
+  await expect(s.importFiles([new File([
+    "line_id,timestamp,speaker,text\n1,00:00:01,P,ok\n,00:00:02,P,blank id\n", // row 3 blank
+  ], "BADID.csv")])).rejects.toThrow(/BADID\.csv has a blank or non-numeric line_id on row 3/);
+  await expect(s.importFiles([new File([
+    "line_id,timestamp,speaker,text\n1,00:00:01,P,a\n1,00:00:02,P,again\n",
+  ], "DUPID.csv")])).rejects.toThrow(/DUPID\.csv has a duplicate line_id on row 3/);
+  expect(useStore.getState().transcripts.BADID).toBeUndefined(); // nothing half-imported
+  expect(useStore.getState().transcripts.DUPID).toBeUndefined();
+});
+
+test("one malformed file doesn't abort the rest of the import batch", async () => {
+  await expect(useStore.getState().importFiles([
+    new File(["{ not json"], "broken.qually.json"),
+    new File(["line_id,timestamp,speaker,text\n1,00:00:01,P,made it\n"], "SURVIVOR.csv"),
+  ])).rejects.toThrow(/broken\.qually\.json/);
+  expect(useStore.getState().transcripts.SURVIVOR).toBeTruthy(); // the good file landed
+});
+
+// Browse's "open in transcript" and search-All offer every LOADED transcript. Landing
+// on a closed one must reopen its tab, not create the active∉tabs ghost state that
+// undo refuses to restore and exports disagree about.
+test("jumpTo a closed-but-loaded transcript reopens its tab", () => {
+  useStore.getState().setActive("SURVIVOR");
+  useStore.getState().closeTab("SURVIVOR");
+  expect(useStore.getState().tabs).not.toContain("SURVIVOR");
+  useStore.getState().jumpTo("SURVIVOR", 1);
+  expect(useStore.getState().tabs).toContain("SURVIVOR");        // tab is back
+  expect(useStore.getState().active).toBe("SURVIVOR");
+});
+
+// Re-importing a transcript with in-app corrections but NO segments used to skip the
+// consent modal and silently revert every correction (orig isn't undoable).
+test("re-importing over transcription corrections asks first, even with no segments", async () => {
+  useStore.getState().editLine("SURVIVOR", 1, "corrected against the audio");
+  const file = new File(["line_id,timestamp,speaker,text\n1,00:00:01,P,made it\n"], "SURVIVOR.csv");
+  await useStore.getState().importFiles([file]);
+  expect(useStore.getState().pendingImports.some((p) => p.pid === "SURVIVOR")).toBe(true); // parked
+  expect(useStore.getState().transcripts.SURVIVOR.lines[0].text).toBe("corrected against the audio");
+  useStore.getState().resolveImport("cancel");
+});
+
 // LAST on purpose: it wipes the workspace every earlier test builds on
 test("newProject wipes the workspace but keeps ui/ai preferences", () => {
-  useStore.getState().setUi({ coderName: "keepme" });
+  useStore.getState().setUi({ coderName: "keepme", speakerWeight: { P: "bold" }, speakerColors: { P: "#123456" } });
   expect(useStore.getState().segments.length).toBeGreaterThan(0);
   useStore.getState().newProject();
   const s = useStore.getState();
@@ -313,4 +377,6 @@ test("newProject wipes the workspace but keeps ui/ai preferences", () => {
   expect(s.undoStack).toHaveLength(0);
   expect(s.active).toBe("browse");
   expect(s.ui.coderName).toBe("keepme"); // the person survives the project
+  expect(s.ui.speakerWeight).toEqual({}); // the speaker map does NOT: it belongs to the study
+  expect(s.ui.speakerColors).toEqual({});
 });

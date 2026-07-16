@@ -48,7 +48,10 @@ const READ_FONTS: Record<"system" | "serif" | "atkinson", string> = {
 
 export function App() {
   const active = useStore((s) => s.active);
-  const hasData = useStore((s) => s.tabs.length > 0);
+  // Tabs are a VIEW: closing the last one must not fake a wiped project. As long as
+  // any transcript is loaded, keep the Browse pill and the coded work on screen —
+  // Welcome is only for a genuinely empty workspace.
+  const hasData = useStore((s) => s.tabs.length > 0 || Object.keys(s.transcripts).length > 0);
   const dark = useStore((s) => s.ui.dark);
   const accent = useStore((s) => s.ui.accent);
   const minimapWidth = useStore((s) => s.ui.minimapWidth);
@@ -97,6 +100,10 @@ export function App() {
         if (e.key === "Escape") s.resolveImport("cancel");
         return;
       }
+      if (s.pendingSegUpdates.length) {
+        if (e.key === "Escape") s.resolveSegUpdates(false); // Esc = "Keep mine", per its tooltip
+        return;
+      }
       // Ctrl+F opens transcript search (works from anywhere, incl. inputs)
       if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
         if (s.active !== "browse") { e.preventDefault(); s.openSearch(); }
@@ -106,10 +113,18 @@ export function App() {
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
       // A dialog or popover owns the keyboard while it's up. Without this, arrows and
       // digit hotkeys reached through an open Help modal or segment popover and moved
-      // the selection — or applied a code — on the transcript underneath it.
-      // Optional-call: a keydown whose target isn't an Element (window/document) would
-      // otherwise throw here and take every hotkey down with it.
-      if (t?.closest?.(".about-backdrop, .pop, .settings-pop, .exmenu, .menu")) return;
+      // the selection — or applied a code — on the transcript underneath it. Checked
+      // by PRESENCE in the DOM, not the event target's ancestry: the segment popover
+      // and code menu open without taking focus, so keydowns still target the list
+      // under them. Each of these closes itself on Escape; the palette additionally
+      // needs the hand below for when focus has left its input.
+      if (document.querySelector(".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop")) {
+        if (e.key === "Escape" && s.paletteOpen) {
+          s.setPalette(false); // and back to the list, same as the palette's own close
+          document.querySelector<HTMLElement>(".tviewlist")?.focus();
+        }
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
         e.preventDefault(); e.shiftKey ? s.redo() : s.undo(); return;
       }
