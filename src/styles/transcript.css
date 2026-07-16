@@ -144,7 +144,9 @@
    would inherit that shrink and come out tiny — the very bug this replaces.
    Base: above the element, wrapping. The lane bars override it to sit alongside. */
 [data-tip] { position:relative; }
-[data-tip]:hover::after {
+/* :focus-visible alongside :hover — the app is keyboard-first (see base.css), so a
+   tip a mouse can summon must open on keyboard focus too */
+[data-tip]:hover::after, [data-tip]:focus-visible::after {
   content: attr(data-tip);
   position:absolute; bottom:calc(100% + 7px); left:50%; transform:translateX(-50%);
   background:var(--fg); color:var(--bg); padding:5px 10px; border-radius:7px;
@@ -155,16 +157,18 @@
 
 /* too close to the top of the scroller to open upward: flip below (set in JS, which
    is the only thing that can measure the space — CSS can't) */
-[data-tip].tipbelow:hover::after { bottom:auto; top:calc(100% + 7px); }
+[data-tip].tipbelow:hover::after,
+[data-tip].tipbelow:focus-visible::after { bottom:auto; top:calc(100% + 7px); }
 
 /* virtua wraps each row in a `contain`ed item — its own stacking context — so the
    tooltip's z-index can't rise above the rows BELOW it (the ones a downward tip
    overlaps); they'd paint on top. Lift the hovered row's item wrapper past its
    siblings while the tip is open, so the tip clears them. */
-.tviewlist :has(> .lineRow:hover) { z-index:1; }
+.tviewlist :has(> .lineRow:hover),
+.tviewlist :has(> .lineRow:focus-within) { z-index:1; }
 
 /* lane bars: to the LEFT of the bar, one line — reset every base property it changes */
-.laneBar[data-tip]:hover::after {
+.laneBar[data-tip]:hover::after, .laneBar[data-tip]:focus-visible::after {
   bottom:auto; left:auto; right:calc(100% + 8px); top:50%; transform:translateY(-50%);
   display:flex; align-items:center; line-height:1;
   padding:4px 9px; border-radius:6px; font-size:var(--txt-fs, 16px);
@@ -191,9 +195,14 @@
 /* AI-flagged likely mis-transcription — hover for what it probably should be.
    Dotted on top AND bottom, thicker than the noticings' single underline, so the
    "something's wrong here" mark reads as strongly as the "worth a look" ones. */
-.aidoubt { border-top:3px dotted #e0a020; border-bottom:3px dotted #e0a020;
-  background:color-mix(in srgb,#e0a020 15%, transparent);
+.aidoubt { border-top:3px dotted #b07800; border-bottom:3px dotted #b07800;
+  /* #b07800 (the savewarn amber): the old #e0a020 was 2.28:1 on the white rows —
+     the project's own ccbadge arithmetic — under the 3:1 non-text minimum. 3.80:1
+     now; the brighter #e0a020 stays for dark theme, where it's 7.68:1. */
+  background:color-mix(in srgb,#b07800 15%, transparent);
   border-radius:2px; cursor:help; }
+[data-theme=dark] .aidoubt { border-color:#e0a020;
+  background:color-mix(in srgb,#e0a020 15%, transparent); }
 /* AI noticing highlight (lens color via --lens-c): quiet tint, deliberately distinct
    from the dotted error amber — something to look at, not something wrong.
    All six lenses used the same mark and differed only in HUE, so which lens had

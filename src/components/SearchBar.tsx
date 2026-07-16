@@ -113,7 +113,12 @@ export function SearchBar() {
               <div key={g.pid} className="searchgroup">
                 <div className="searchgrouphead">{g.pid} <span className="cnt">{g.total}</span></div>
                 {g.hits.map((h) => (
-                  <div key={h.line} className="searchhit" onClick={() => jumpTo(g.pid, h.line)}>
+                  // focusable like the Browse rows: Tab reaches a hit, Enter/Space jumps
+                  <div key={h.line} className="searchhit" role="button" tabIndex={0}
+                    onClick={() => jumpTo(g.pid, h.line)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpTo(g.pid, h.line); }
+                    }}>
                     <span className="searchlid">{h.line}</span>
                     <span className="searchtext">{highlight(h.text, query)}</span>
                   </div>

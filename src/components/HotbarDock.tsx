@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStore } from "../state/store";
+import { useStore, inkOn } from "../state/store";
 import { Icon } from "./Icon";
 
 // up to 2 initials from the code's first two significant words (skip stopwords)
@@ -43,7 +43,9 @@ export function HotbarDock() {
       <div className="tiles">
         {tiles.map((code, i) => (
           <div key={code} className="hbslot">
-            <button className="tile" style={{ background: codebook[code].color }}
+            {/* ink from the tile's own luminance (inkOn), not hardcoded white —
+                code colours are user-picked, same fix as the speaker chip */}
+            <button className="tile" style={{ background: codebook[code].color, color: inkOn(codebook[code].color) }}
               onClick={() => apply(code)}>
               <span className="tinit">{initials(code)}</span>
               <span className="tname" style={{ fontSize }}>{code}</span>

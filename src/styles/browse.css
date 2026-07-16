@@ -33,7 +33,11 @@
 .switch.on .knob { left:calc(100% - 0.9em - 0.15em); }
 .bExcerpt { border-left:4px solid var(--line); margin:10px 0; padding:6px 12px; line-height:1.45;
   font-family:var(--read-font); }
-.bExcerpt.rejected { opacity:.62; }
+/* quiet by COLOUR, never opacity (see base.css): opacity stacked on the --muted
+   REJECTED tag and .ref dropped them to ~2.5:1 — the label saying WHY the excerpt
+   is dimmed was the least readable thing in the pane. --fg-dim quiets the body;
+   the tag and ref keep their own full-strength --muted. */
+.bExcerpt.rejected { color:var(--fg-dim); }
 .bExcerpt .rejtag { display:inline-block; margin-right:6px; padding:0 6px;
   border:1px solid var(--muted); border-radius:4px; font-size:.7em;
   text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
@@ -55,11 +59,12 @@
 .bMode button { flex:1; border:0; padding:6px 0; background:var(--bg); color:var(--muted);
   font:inherit; font-weight:500; cursor:pointer; }
 .bMode button.on { background:var(--accent); color:#fff; font-weight:650; }
+[data-theme=dark] .bMode button.on { color:#12161a; } /* dark text on the lighter dark accent */
 .nLens { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
   cursor:pointer; }
 .nLens:hover { background:var(--panel); }
 .nLens.sel { background:color-mix(in srgb, var(--accent) 14%, transparent); }
-.nLens.none { opacity:.5; }
+.nLens.none { color:var(--muted); } /* quiet empty lenses by colour, not opacity */
 .nDot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
 .nName { flex:1; font-weight:500; }
 .nLens .cnt { font-variant-numeric:tabular-nums; color:var(--muted); font-size:.85em; }
@@ -69,6 +74,7 @@
 .nPill { border:0; background:var(--bg); color:var(--muted); font:inherit; font-size:.78em;
   padding:3px 12px; cursor:pointer; }
 .nPill.on { background:var(--accent); color:#fff; font-weight:600; }
+[data-theme=dark] .nPill.on { color:#12161a; }
 .nCount { color:var(--muted); font-size:.8em; }
 
 .nGrp { font-size:.72em; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
@@ -89,4 +95,5 @@
   color:var(--muted); border-radius:6px; padding:2px 9px; cursor:pointer; }
 .nBtn:hover { color:var(--fg); border-color:var(--accent); }
 .nBtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+[data-theme=dark] .nBtn.pri { color:#12161a; }
 .nCode { margin-top:6px; max-width:340px; }

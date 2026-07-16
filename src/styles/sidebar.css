@@ -1,16 +1,20 @@
 #sidebar h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
   color:var(--muted); margin:14px 0 6px; }
-.codeItem { display:flex; align-items:center; gap:8px; padding:4px 6px;
+/* wrap, don't clip: when the name + badges outgrow the row (large sidebar text,
+   long code name), the key/count/⋯ drop to their own right-aligned line and the
+   name keeps every letter — the name is what a low-vision reader came to read */
+.codeItem { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:4px 6px;
   border-radius:6px; cursor:pointer; }
 .codeItem:hover { background:var(--sel); }
 /* color pill indicator (shared with the Browse code list) */
 .codebar { width:10px; align-self:stretch; border-radius:3px; flex-shrink:0; cursor:pointer;
   position:relative; } /* anchors the .lp* pattern overlay — same one the lane bars use */
-.codeItem .cnt { margin-left:auto; color:var(--muted); font-size:.8em; }
+.codeItem .cname { flex:1 1 10ch; min-width:0; overflow-wrap:break-word; }
+.codeItem .cnt { margin-left:auto; color:var(--muted); font-size:.8em; flex-shrink:0; }
 /* when a key is present it takes the gap; the count sits right next to it */
 .codeItem .key ~ .cnt { margin-left:0; }
 /* shortcut number: keycap style, flushed all the way right next to the count */
-.codeItem .key { margin-left:auto; font-size:.72em; font-weight:700;
+.codeItem .key { margin-left:auto; flex-shrink:0; font-size:.72em; font-weight:700;
   font-family:ui-monospace, SFMono-Regular, Menlo, monospace; min-width:1.5em; text-align:center;
   border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 3px;
   color:var(--muted); background:var(--panel); line-height:1.5; }
@@ -29,4 +33,13 @@
 .acItem .cnt { margin-left:auto; color:var(--muted); font-size:.8em; }
 .acItem .acCreate { color:var(--accent); font-weight:500; }
 
-.codeItem .pindot { align-self:center; color:var(--accent); font-size:.7em; }
+.codeItem .pindot { align-self:center; color:var(--accent); font-size:.7em; flex-shrink:0; }
+
+/* per-row ⋯ button: the visible + keyboard door to the right-click CodeMenu
+   (shared with the Browse code list). Hidden until the mouse or keyboard focus
+   reaches the row, but always in the Tab order. */
+.rowMenu { flex-shrink:0; border:none; background:none; color:var(--muted); font:inherit;
+  font-weight:700; padding:0 5px; border-radius:5px; cursor:pointer; opacity:0; }
+.codeItem:hover .rowMenu, .codeItem:focus-within .rowMenu,
+.bCode:hover .rowMenu, .bCode:focus-within .rowMenu { opacity:1; }
+.rowMenu:hover { color:var(--fg); background:var(--row-hover); }

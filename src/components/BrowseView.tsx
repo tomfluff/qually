@@ -107,6 +107,12 @@ export function BrowseView() {
     setSelected(new Set([c])); setAnchor(c);
   };
 
+  // keyboard/visible route to the same menu right-click opens (mirrors CodeSidebar)
+  const openMenuAt = (code: string, el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    setMenu({ code, x: r.left, y: r.bottom + 2 });
+  };
+
   const noticeLenses = LENSES.filter((l) => l.id !== "transcription");
   const lensStats = (id: string) => {
     const of = notices.filter((n) => n.lens === id);
@@ -129,7 +135,9 @@ export function BrowseView() {
             const st = lensStats(l.id);
             return (
               <div key={l.id} className={"nLens" + (curLens === l.id ? " sel" : "") + (st.n === 0 ? " none" : "")}
-                onClick={() => setLens(l.id)}>
+                tabIndex={0} role="button" aria-pressed={curLens === l.id}
+                onClick={() => setLens(l.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLens(l.id); } }}>
                 <span className="nDot" style={{ background: l.color }} />
                 <span className="nName">{l.label}</span>
                 <span className="cnt">{st.n}·{st.pids}</span>
@@ -141,7 +149,15 @@ export function BrowseView() {
         <input type="search" placeholder="filter codes…" value={filter}
           onChange={(e) => setFilter(e.target.value)} />
         {listed.map((c) => (
-          <div key={c} className={"bCode" + (selected.has(c) ? " sel" : "")} onClick={(e) => select(c, e)}
+          <div key={c} className={"bCode" + (selected.has(c) ? " sel" : "")} tabIndex={0} role="button"
+            aria-pressed={selected.has(c)} onClick={(e) => select(c, e)}
+            onKeyDown={(e) => {
+              if (e.target !== e.currentTarget) return; // let the ⋯ button's keys be its own
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(c, e); }
+              if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+                e.preventDefault(); openMenuAt(c, e.currentTarget);
+              }
+            }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code: c, x: e.clientX, y: e.clientY }); }}
             title={`${c}  (right-click for options)`}>
             <div className="bCodeMain">
@@ -152,6 +168,8 @@ export function BrowseView() {
                 }} />
               <span className="bCodeName">{c}</span>
               <span className="cnt">{counts[c]?.segs || 0}·{counts[c]?.pids.size || 0}</span>
+              <button className="rowMenu" aria-label={`Options for ${c}`}
+                onClick={(e) => { e.stopPropagation(); openMenuAt(c, e.currentTarget); }}>⋯</button>
             </div>
             {codebook[c].def && <div className="bCodeDef">{codebook[c].def}</div>}
           </div>
@@ -203,7 +221,11 @@ export function BrowseView() {
                         <div>{rej && <span className="rejtag">rejected</span>}{ex?.text || "(excerpt in coded-segments.csv)"}</div>
                         {s.notes && <div className="bNote">{s.notes}</div>}
                         <div className={"ref" + (loaded ? " open" : "")}
-                          onClick={() => loaded && jumpTo(s.pid, s.start)}>
+                          tabIndex={loaded ? 0 : undefined} role={loaded ? "button" : undefined}
+                          onClick={() => loaded && jumpTo(s.pid, s.start)}
+                          onKeyDown={(e) => {
+                            if (loaded && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); jumpTo(s.pid, s.start); }
+                          }}>
                           {ex?.speaker && <span className="refspk">{ex.speaker}</span>}
                           {s.pid}:{range}{loaded ? "  → open in transcript" : "  (transcript not loaded)"}
                         </div>

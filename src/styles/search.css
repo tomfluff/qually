@@ -33,6 +33,7 @@
 .seg.searchscope button { border:none; background:var(--bg); color:var(--muted);
   padding:4px 8px; font-size:12px; cursor:pointer; }
 .seg.searchscope button.on { background:var(--accent); color:#fff; }
+[data-theme=dark] .seg.searchscope button.on { color:#12161a; } /* dark text on the lighter dark accent */
 .searchresults { max-height:min(50vh, 420px); overflow-y:auto; border-top:1px solid var(--line);
   padding:6px; }
 .searchgroup { margin-bottom:6px; }
