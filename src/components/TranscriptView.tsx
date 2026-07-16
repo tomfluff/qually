@@ -278,11 +278,22 @@ export function TranscriptView() {
   // selection from the top VISIBLE line (not line 1 — you'd lose your place in a
   // 3000-line transcript). Once a selection exists, App's global handler drives it.
   const onListKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    // The inline line editor is a textarea INSIDE this list, so its arrow keys bubble
+    // The inline line editor is a textarea INSIDE this list, so its keys bubble
     // here. Seeding a selection off them would steal the caret from someone typing.
     const t = e.target as HTMLElement;
     if (t.tagName === "TEXTAREA" || t.tagName === "INPUT") return;
+    // Enter = play from the selected line. The per-row timecode buttons are out of
+    // the Tab order (tabbing through every rendered row was a wall of stops), so
+    // the selected line carries the keyboard path to "play from here".
+    if (e.key === "Enter" && e.target === e.currentTarget) {
+      const sel = useStore.getState().selection;
+      if (sel.pid === active && sel.head !== null) {
+        const g = groups.find((x) => sel.head! >= x.startId && sel.head! <= x.endId);
+        if (g) { e.preventDefault(); seekVideo(g.ts); }
+      }
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const s = useStore.getState();
     if (s.selection.pid === active && s.selection.lines.size) return; // App moves it from here
     const v = vref.current;
@@ -468,17 +479,25 @@ export function TranscriptView() {
   return (
     <>
       <div className="tview" ref={tviewRef}>
+      {/* A virtualized listbox is an honest compromise: rows scrolled away don't
+          exist in the DOM, but aria-setsize/posinset keep the counts truthful and
+          the active descendant (the selection head) is always rendered while it's
+          being driven. Announcements (announce.ts) carry what this can't. */}
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
         tabIndex={0} onKeyDown={onListKeyDown}
-        aria-label={`Transcript ${active}. Press the down arrow to select a line, then 1 to 9 to apply a code.`}
+        role="listbox" aria-multiselectable={true}
+        aria-activedescendant={headId !== null ? `trow-${headId}` : undefined}
+        aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line
-          ...groups.map((g) => (
+          ...groups.map((g, gi) => (
             <Row
               key={g.startId}
               group={g}
               selected={g.ids.some((id) => selLines?.has(id))}
+              posinset={gi + 1}
+              setsize={groups.length}
               cols={cols}
               laned={laned}
               codebook={codebook}
@@ -526,14 +545,16 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, posinset, setsize, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
+  posinset: number;
+  setsize: number;
   cols: number;
   laned: LanedSeg[];
   codebook: Record<string, { color: string }>;
   onRowDown: (e: MouseEvent) => void;
-  onLaneClick: (seg: LanedSeg, e: MouseEvent) => void;
+  onLaneClick: (seg: LanedSeg, at: { clientX: number; clientY: number }) => void;
   onGripDown: (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => void;
   onLaneHover: (sid: number | null) => void;
   hl: { start: number; end: number; color: string } | null;
@@ -595,8 +616,20 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
         }
       : { background: color };
     lanes.push(
+      // a real (keyboard-reachable) control on the segment's FIRST line only: one Tab
+      // stop per segment opens its popover; the continuation bars stay decorative
       <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cand ? ` — suggested by ${seg.proposedBy}` : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
         style={style}
+        {...(isStart ? {
+          role: "button" as const, tabIndex: 0,
+          "aria-label": `Segment ${seg.code}, lines ${seg.start} to ${seg.end}${rej ? ", rejected" : cand ? `, suggested by ${seg.proposedBy}` : ""}`,
+          onKeyDown: (e: ReactKeyboardEvent) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault(); e.stopPropagation();
+            const r = e.currentTarget.getBoundingClientRect();
+            onLaneClick(seg, { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
+          },
+        } : {})}
         onMouseEnter={() => onLaneHover(seg.sid)} onMouseLeave={() => onLaneHover(null)}
         onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}>
         {/* close-call (near-balanced excerpt): corner warning badge (side/size configurable) */}
@@ -615,16 +648,26 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
 
   return (
     <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
+      id={`trow-${startId}`} role="option" aria-selected={selected}
+      aria-setsize={setsize} aria-posinset={posinset}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
       style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
       {showLid && <span className="lid">{lidLabel(group)}</span>}
-      <button className="ts" onClick={(e) => { e.stopPropagation(); seekVideo(group.ts); }}
+      {/* out of the Tab order: tabbing walked every rendered timecode. Mouse users
+          click it; keyboard users press Enter on the selected line (see the list). */}
+      <button className="ts" tabIndex={-1} onClick={(e) => { e.stopPropagation(); seekVideo(group.ts); }}
         title="play from here">
         {group.ts.split(".")[0]}
       </button>
       {/* the NAME is in the chip: colour tells speakers apart at a glance, but never
-          alone -- the label is always there for anyone the colour doesn't reach */}
-      <span className="spk" data-tip={group.speaker}>{speakerNames === "short" ? shortName : group.speaker}</span>
+          alone -- the label is always there for anyone the colour doesn't reach.
+          In short mode the full name rides along visually hidden, so a screen
+          reader is never stuck with the three-letter abbreviation. */}
+      <span className="spk" data-tip={group.speaker}>
+        {speakerNames === "short" ? shortName : group.speaker}
+        {speakerNames === "short" && shortName !== group.speaker.trim() &&
+          <span className="sr-only"> ({group.speaker.trim()})</span>}
+      </span>
       <span className="txt">
         {group.lines.map((l, k) => (
           <Fragment key={l.id}>
@@ -682,7 +725,7 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
 
   return (
     <span className="lineEdit">
-      <textarea ref={taRef} rows={1} value={value}
+      <textarea ref={taRef} rows={1} value={value} aria-label={`Correct line ${line.id}. Enter saves, Escape cancels.`}
         onChange={(e) => { setValue(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight}px`; }}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); save(value); }

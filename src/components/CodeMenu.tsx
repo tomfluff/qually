@@ -56,7 +56,9 @@ export function CodeMenu({ code, x, y, onClose }: {
   };
 
   return (
+    // dialog, not menu: two of its modes are text-input forms
     <div className="ctxmenu" ref={ref} onKeyDown={onArrows}
+      role="dialog" aria-label={`Options for code ${code}`}
       style={{ left: Math.min(x, window.innerWidth - 230), top: Math.min(y, window.innerHeight - 280), fontSize: sidebarFontSize }}>
       {mode === "menu" && (
         <>
@@ -112,11 +114,11 @@ function CodeForm({ label, initial, placeholder, multiline, onSubmit, onCancel }
     <div className="ctxform">
       <div className="ctxhead">{label}</div>
       {multiline ? (
-        <textarea ref={taRef} autoFocus value={v} placeholder={placeholder} rows={1}
+        <textarea ref={taRef} autoFocus value={v} placeholder={placeholder} rows={1} aria-label={label}
           onChange={(e) => { setV(e.target.value); resize(); }}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) onSubmit(v); if (e.key === "Escape") onCancel(); }} />
       ) : (
-        <input autoFocus value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)}
+        <input autoFocus value={v} placeholder={placeholder} aria-label={label} onChange={(e) => setV(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") onSubmit(v); if (e.key === "Escape") onCancel(); }} />
       )}
       <div className="ctxrow">

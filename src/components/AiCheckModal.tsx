@@ -4,6 +4,8 @@ import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine } from "../ai/flag";
+import { announce } from "../announce";
+import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 // The consent gate. Choose what to look for (lenses) and whose speech to scan
@@ -21,6 +23,7 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const abort = useRef<AbortController | null>(null);
+  const dialogRef = useDialogFocus();
   useEffect(() => () => abort.current?.abort(), []);
 
   const lenses = ai.lenses; // persisted: the ticked scans are remembered across runs
@@ -89,9 +92,14 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
         setProgress(i + 1);
       }
       setDone({ errors, notices, cost });
+      announce(errors + notices === 0
+        ? "AI scan complete. Nothing marked."
+        : `AI scan complete: ${errors} possible transcription error${errors === 1 ? "" : "s"}, ${notices} noticing${notices === 1 ? "" : "s"}.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
-      setErr(e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`);
+      const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
+      setErr(msg);
+      announce(`AI scan failed: ${msg}`);
     } finally {
       setBusy(false);
     }
@@ -114,9 +122,10 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
           consent buttons are always reachable no matter how tall the payload preview
           and lens/speaker lists get. Without the scroll region the footer clipped
           below 84vh and "Cancel" fell off the bottom. */}
-      <div className="about imp ai-check" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="about imp ai-check" ref={dialogRef} role="dialog" aria-modal="true"
+        aria-labelledby="ai-check-title" onMouseDown={(e) => e.stopPropagation()}>
         <div className="about-head">
-          <h2>Scan “{pid}” with AI</h2>
+          <h2 id="ai-check-title">Scan “{pid}” with AI</h2>
           <button className="btn iconbtn" onClick={onClose} disabled={busy} title="Close">
             <Icon name="x" size={16} />
           </button>

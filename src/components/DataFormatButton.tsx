@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
+import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 // The prompt a user pastes into an AI (ChatGPT / Claude) to turn any transcript
@@ -31,6 +32,7 @@ export function DataFormatButton() {
   const open = useStore((s) => s.formatOpen);
   const setOpen = useStore((s) => s.setFormatOpen);
   const [copied, setCopied] = useState(false);
+  const dialogRef = useDialogFocus();
 
   useEffect(() => {
     if (!open) return;
@@ -58,9 +60,10 @@ export function DataFormatButton() {
       </button>
       {open && (
         <div className="about-backdrop" onMouseDown={() => setOpen(false)}>
-          <div className="about" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="about" ref={dialogRef} role="dialog" aria-modal="true"
+            aria-labelledby="data-format-title" onMouseDown={(e) => e.stopPropagation()}>
             <div className="about-head">
-              <h2>Transcript format &amp; import</h2>
+              <h2 id="data-format-title">Transcript format &amp; import</h2>
               <button className="btn iconbtn" onClick={() => setOpen(false)} title="Close (Esc)"><Icon name="x" size={16} /></button>
             </div>
             <p className="about-lede">

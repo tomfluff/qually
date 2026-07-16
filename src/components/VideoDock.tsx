@@ -206,9 +206,10 @@ export function VideoDock() {
               <span style={{ flex: 1 }} />
               <span className="vlabel">Offset</span>
               <div className="stepper">
-                <button onClick={() => setOffset(offset - 1)} title="−1s">−</button>
-                <input type="number" step={1} value={offset} onChange={(e) => setOffset(+e.target.value || 0)} />
-                <button onClick={() => setOffset(offset + 1)} title="+1s">+</button>
+                <button onClick={() => setOffset(offset - 1)} title="−1s" aria-label="Decrease offset by 1 second">−</button>
+                <input type="number" step={1} value={offset} aria-label="Offset in seconds"
+                  onChange={(e) => setOffset(+e.target.value || 0)} />
+                <button onClick={() => setOffset(offset + 1)} title="+1s" aria-label="Increase offset by 1 second">+</button>
               </div>
               <span className="unit">s</span>
               <button className="vbtn icononly" onClick={() => fileRef.current?.click()} title="Change media">
@@ -218,7 +219,7 @@ export function VideoDock() {
           )}
           {/* stays mounted when collapsed (0x0) so audio keeps playing but the
               video's dimensions don't affect the collapsed bar's auto width */}
-          <video ref={videoRef} src={cur.url} controls
+          <video ref={videoRef} src={cur.url} controls aria-label={cur.name}
             onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
             onTimeUpdate={onTimeUpdate} onLoadedMetadata={onLoaded}
             style={{ width: geom.collapsed ? 0 : "100%", height: geom.collapsed ? 0 : "auto", display: "block", background: "#000" }} />
@@ -238,7 +239,8 @@ export function VideoDock() {
         <span style={{ flex: 1 }} />
         {cur && (
           <>
-            <button className="vbtn icononly" onClick={togglePlay} title="Play / pause">
+            <button className="vbtn icononly" onClick={togglePlay} title="Play / pause"
+              aria-label={playing ? "Pause" : "Play"}>
               <Icon name={playing ? "pause" : "play"} size={15} />
             </button>
             <div className="vspeeds">

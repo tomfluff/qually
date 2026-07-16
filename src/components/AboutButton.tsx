@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
+import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 const KEYS: [string, string][] = [
@@ -12,6 +13,7 @@ const KEYS: [string, string][] = [
   ["Home / End", "Jump to the first / last line of the transcript"],
   ["1 – 9", "Apply the matching hotbar code to the selection"],
   ["0", "Open the code palette (fuzzy search or create a code)"],
+  ["Enter", "Play the loaded media from the selected line"],
   ["Double-click a line", "Fix its transcription in place; Enter saves, Esc cancels"],
   ["Ctrl + C", "Copy the selected lines (speaker-grouped)"],
   ["Ctrl + Z  /  Ctrl + Shift + Z", "Undo / redo"],
@@ -23,6 +25,7 @@ export function AboutButton() {
   const helpSeen = useStore((s) => s.ui.helpSeen);
   const setUi = useStore((s) => s.setUi);
   const [open, setOpen] = useState(false);
+  const dialogRef = useDialogFocus();
 
   // auto-open once, on the first ever launch
   useEffect(() => { if (!helpSeen) setOpen(true); }, [helpSeen]);
@@ -43,9 +46,10 @@ export function AboutButton() {
       </button>
       {open && (
         <div className="about-backdrop" onMouseDown={close}>
-          <div className="about" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="about" ref={dialogRef} role="dialog" aria-modal="true"
+            aria-labelledby="about-title" onMouseDown={(e) => e.stopPropagation()}>
             <div className="about-head">
-              <h2>QuAlly — thematic analysis, made accessible</h2>
+              <h2 id="about-title">QuAlly — thematic analysis, made accessible</h2>
               <button className="btn iconbtn" onClick={close} title="Close (Esc)"><Icon name="x" size={16} /></button>
             </div>
             <p className="about-lede">

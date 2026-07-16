@@ -99,7 +99,8 @@ it round-trips everything, including corrections and AI marks.
 
   return (
     <div className="settings-wrap" ref={ref}>
-      <button className="btn iconlabel" onClick={() => setOpen((o) => !o)} title="Export">
+      <button className="btn iconlabel" aria-expanded={open} aria-haspopup="true"
+        onClick={() => setOpen((o) => !o)} title="Export">
         <Icon name="download" size={16} /> Export
         <Icon name="chevron-down" size={13} />
       </button>

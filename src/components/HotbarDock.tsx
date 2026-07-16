@@ -40,17 +40,20 @@ export function HotbarDock() {
           <polygon points={collapsed ? "8,9 38,9 23,3" : "8,3 38,3 23,9"} fill="currentColor" />
         </svg>
       </button>
-      <div className="tiles">
+      <div className="tiles" role="toolbar" aria-label="Code hotbar">
         {tiles.map((code, i) => (
           <div key={code} className="hbslot">
             {/* ink from the tile's own luminance (inkOn), not hardcoded white —
                 code colours are user-picked, same fix as the speaker chip */}
-            <button className="tile" style={{ background: codebook[code].color, color: inkOn(codebook[code].color) }}
+            {/* the initials are visual shorthand — the accessible name carries the
+                full code and its number key */}
+            <button className="tile" aria-label={`Apply code ${code} (key ${i + 1})`}
+              style={{ background: codebook[code].color, color: inkOn(codebook[code].color) }}
               onClick={() => apply(code)}>
               <span className="tinit">{initials(code)}</span>
               <span className="tname" style={{ fontSize }}>{code}</span>
             </button>
-            <span className="tnum">{i + 1}</span>
+            <span className="tnum" aria-hidden="true">{i + 1}</span>
           </div>
         ))}
         <div className="hbslot">
@@ -59,11 +62,12 @@ export function HotbarDock() {
             <Icon name="library-plus" size={20} />
             <span className="tname" style={{ fontSize }}>new / find code…</span>
           </button>
-          <span className="tnum">0</span>
+          <span className="tnum" aria-hidden="true">0</span>
         </div>
         {mode === "auto"
           ? (
-            <button className="tile refresh" onClick={refreshHotbar} title="recompute by usage">
+            <button className="tile refresh" onClick={refreshHotbar} title="recompute by usage"
+              aria-label="Refresh hotbar (recompute by usage)">
               <Icon name="refresh" size={20} />
             </button>
           )

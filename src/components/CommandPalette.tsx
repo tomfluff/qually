@@ -48,6 +48,7 @@ export function CommandPalette() {
   return (
     <div className={"palette-backdrop" + (anchored ? " anchored" : "")} onMouseDown={close}>
       <div className={"palette" + (anchored ? " palette-anchored" : "")}
+        role="dialog" aria-label="Code palette"
         style={anchored ? {
           position: "fixed", left: pos!.left, top: pos!.top, bottom: pos!.bottom, width: W,
           "--ac-max": `${pos!.listMax}px`,

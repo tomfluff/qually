@@ -34,6 +34,7 @@ function NoticeToggle() {
   if (!hasNotices) return null;
   return (
     <button className="noticetoggle" onClick={() => useStore.getState().setUi({ showNotices: !show })}
+      aria-label={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}
       title={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}>
       <Icon name={show ? "eye" : "eye-off"} size={17} />
     </button>
@@ -191,7 +192,7 @@ export function App() {
         )}
         <div id="content">
           {hasData && active !== "browse" && !searchOpen && (
-            <button className="searchtoggle" title="Search (Ctrl+F)"
+            <button className="searchtoggle" title="Search (Ctrl+F)" aria-label="Search (Ctrl+F)"
               onClick={() => useStore.getState().openSearch()}>
               <Icon name="search" size={17} />
             </button>

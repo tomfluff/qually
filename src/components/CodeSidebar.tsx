@@ -40,6 +40,9 @@ export function CodeSidebar() {
         const c = counts[code];
         return (
           <div key={code} className="codeItem" tabIndex={0} role="button"
+            aria-label={`Apply code ${code}`
+              + (slot >= 0 && slot < 9 ? `, hotkey ${slot + 1}` : "")
+              + `, ${c?.segs ?? 0} segment${c?.segs === 1 ? "" : "s"}`}
             onClick={() => { if (hasSel) applyCode(code); }}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return; // let the ⋯ button's keys be its own
@@ -51,6 +54,7 @@ export function CodeSidebar() {
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
             data-tip={code}>
             <span className={"codebar" + (lanePattern ? ` lp${patternOf(code)}` : "")}
+              role="button" aria-label={`Recolor ${code}`}
               style={{ background: codebook[code].color }} title="recolor"
               onClick={(e) => {
                 e.stopPropagation();
@@ -58,8 +62,10 @@ export function CodeSidebar() {
               }} />
             <span className="cname">{code}</span>
             {pinned.includes(code) && <span className="pindot" title="pinned">●</span>}
-            {slot >= 0 && slot < 9 && <span className="key">{slot + 1}</span>}
-            <span className="cnt">{c ? `${c.segs}·${c.pids.size}` : "0"}</span>
+            {/* hotkey + count are already in the row's aria-label — hide the visual
+                badges so they don't double-speak */}
+            {slot >= 0 && slot < 9 && <span className="key" aria-hidden="true">{slot + 1}</span>}
+            <span className="cnt" aria-hidden="true">{c ? `${c.segs}·${c.pids.size}` : "0"}</span>
             <button className="rowMenu" aria-label={`Options for ${code}`}
               onClick={(e) => { e.stopPropagation(); openMenuAt(code, e.currentTarget); }}>⋯</button>
           </div>

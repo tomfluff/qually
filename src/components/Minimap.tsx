@@ -189,8 +189,10 @@ export const Minimap = forwardRef<MinimapHandle, {
 
   return (
     <div className="minimap" ref={wrapRef} onMouseDown={onDown} title="Click or drag to navigate">
-      <canvas ref={canvasRef} />
-      <div className="minimap-box" ref={boxRef} />
+      {/* pure visual duplicate of the transcript — hidden from screen readers
+          (the wrapper stays exposed: it's the mouse scrub target) */}
+      <canvas ref={canvasRef} aria-hidden="true" />
+      <div className="minimap-box" ref={boxRef} aria-hidden="true" />
     </div>
   );
 });

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
+import { useDialogFocus } from "../useDialogFocus";
 import { saveText } from "./ExportMenu";
 import { Icon } from "./Icon";
 
@@ -9,6 +10,7 @@ import { Icon } from "./Icon";
 // isn't an export. The confirm modal still offers the snapshot as the way back.
 export function NewProjectButton() {
   const [confirm, setConfirm] = useState(false);
+  const dialogRef = useDialogFocus();
   const tabs = useStore((s) => s.tabs);
   const s = () => useStore.getState();
 
@@ -28,9 +30,10 @@ export function NewProjectButton() {
       </button>
       {confirm && (
         <div className="about-backdrop" onMouseDown={() => setConfirm(false)}>
-          <div className="about imp" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="about imp" ref={dialogRef} role="dialog" aria-modal="true"
+            aria-labelledby="new-project-title" onMouseDown={(e) => e.stopPropagation()}>
             <div className="about-head">
-              <h2>Start a new project?</h2>
+              <h2 id="new-project-title">Start a new project?</h2>
               <button className="btn iconbtn" onClick={() => setConfirm(false)} title="Cancel (Esc)"><Icon name="x" size={16} /></button>
             </div>
             <p className="about-lede">

@@ -10,6 +10,7 @@ import { hashLine, type Flag } from "../ai/flag";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll } from "../scrollMemory";
+import { announce } from "../announce";
 
 const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
@@ -399,6 +400,8 @@ export const useStore = create<State>()(
           if (i === ids.length || ids[i] !== prev + 1) { get().addSegment(s.selection.pid, start, prev, code); start = ids[i]; }
           prev = ids[i];
         }
+        // the visual confirmation is a lane bar appearing; this is its audible twin
+        announce(ids.length === 1 ? `Coded line ${ids[0]} as ${code}` : `Coded lines ${ids[0]} to ${ids[ids.length - 1]} as ${code}`);
       },
 
       // clicking a line selects its whole merged unit (a singleton when merge is off)
@@ -666,10 +669,15 @@ export const useStore = create<State>()(
       // redo snapshot would otherwise overwrite the edit and resurrect undone coding.
       setSegmentRange: (sid, start, end) =>
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x), redoStack: [] }),
-      deleteSegment: (sid) => { get().pushUndo(); set({ segments: get().segments.filter((x) => x.sid !== sid) }); },
+      deleteSegment: (sid) => {
+        get().pushUndo();
+        set({ segments: get().segments.filter((x) => x.sid !== sid) });
+        announce("Segment deleted");
+      },
       setStatus: (sid, status) => {
         get().pushUndo();
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status } : x) });
+        announce(`Segment ${status}`);
       },
       setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x), redoStack: [] }),
       setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } }, redoStack: [] }),
@@ -768,12 +776,14 @@ export const useStore = create<State>()(
         if (!s.undoStack.length) return;
         set({ redoStack: [...s.redoStack, snapshot(s)], undoStack: s.undoStack.slice(0, -1) });
         restore(get, set, s.undoStack[s.undoStack.length - 1]);
+        announce("Undone");
       },
       redo: () => {
         const s = get();
         if (!s.redoStack.length) return;
         set({ undoStack: [...s.undoStack, snapshot(s)], redoStack: s.redoStack.slice(0, -1) });
         restore(get, set, s.redoStack[s.redoStack.length - 1]);
+        announce("Redone");
       },
 
       setFontSize: (n) => set({ ui: { ...get().ui, fontSize: n } }),

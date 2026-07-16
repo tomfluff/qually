@@ -150,6 +150,7 @@ export function BrowseView() {
           onChange={(e) => setFilter(e.target.value)} />
         {listed.map((c) => (
           <div key={c} className={"bCode" + (selected.has(c) ? " sel" : "")} tabIndex={0} role="button"
+            aria-label={`Show excerpts for ${c}, ${counts[c]?.segs || 0} segment${counts[c]?.segs === 1 ? "" : "s"}`}
             aria-pressed={selected.has(c)} onClick={(e) => select(c, e)}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return; // let the ⋯ button's keys be its own
@@ -161,13 +162,15 @@ export function BrowseView() {
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code: c, x: e.clientX, y: e.clientY }); }}
             title={`${c}  (right-click for options)`}>
             <div className="bCodeMain">
-              <span className="codebar" style={{ background: codebook[c].color }} title="recolor"
+              <span className="codebar" role="button" aria-label={`Recolor ${c}`}
+                style={{ background: codebook[c].color }} title="recolor"
                 onClick={(e) => {
                   e.stopPropagation();
                   openColorPicker(codebook[c].color, (v) => setColor(c, v));
                 }} />
               <span className="bCodeName">{c}</span>
-              <span className="cnt">{counts[c]?.segs || 0}·{counts[c]?.pids.size || 0}</span>
+              {/* the count is already in the row's aria-label — don't double-speak */}
+              <span className="cnt" aria-hidden="true">{counts[c]?.segs || 0}·{counts[c]?.pids.size || 0}</span>
               <button className="rowMenu" aria-label={`Options for ${c}`}
                 onClick={(e) => { e.stopPropagation(); openMenuAt(c, e.currentTarget); }}>⋯</button>
             </div>
@@ -222,6 +225,7 @@ export function BrowseView() {
                         {s.notes && <div className="bNote">{s.notes}</div>}
                         <div className={"ref" + (loaded ? " open" : "")}
                           tabIndex={loaded ? 0 : undefined} role={loaded ? "button" : undefined}
+                          aria-label={loaded ? `Open in transcript: ${s.pid} line${s.end !== s.start ? "s" : ""} ${range}` : undefined}
                           onClick={() => loaded && jumpTo(s.pid, s.start)}
                           onKeyDown={(e) => {
                             if (loaded && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); jumpTo(s.pid, s.start); }

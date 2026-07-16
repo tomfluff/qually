@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { norm } from "../contract/segments";
 
@@ -28,6 +28,7 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose, o
   const [hl, setHl] = useState(0);
   const ref = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const listId = useId(); // two instances coexist (sidebar + palette); ids must not collide
   const lastPt = useRef({ x: -1, y: -1 });
   const wantScroll = useRef(false); // only keyboard nav scrolls the list, not hover
   useEffect(() => { if (autoFocus) ref.current?.focus(); }, [autoFocus]);
@@ -75,14 +76,17 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose, o
   return (
     <div className="newCodeWrap">
       <input ref={ref} className="newCode" value={draft} placeholder={placeholder} autoComplete="off"
+        role="combobox" aria-expanded={showList} aria-controls={listId} aria-autocomplete="list"
+        aria-label={placeholder} aria-activedescendant={showList ? `${listId}-${hl}` : undefined}
         onChange={(e) => { setDraft(e.target.value); setOpen(true); setHl(0); wantScroll.current = true; }}
         onFocus={() => setOpen(true)}
         onBlur={() => { if (!onClose) setOpen(false); }}
         onKeyDown={onKey} />
       {showList && (
-        <div className="acList nicescroll" ref={listRef}>
+        <div className="acList nicescroll" ref={listRef} role="listbox" id={listId}>
           {entries.map((en, i) => (
             <div key={en.type + en.name} className={"acItem" + (i === hl ? " hl" : "")}
+              role="option" id={`${listId}-${i}`} aria-selected={i === hl}
               onMouseDown={(e) => { e.preventDefault(); choose(en); }}
               onMouseMove={(e) => {
                 // only real cursor movement changes the highlight (scroll fires enter/move at same coords)

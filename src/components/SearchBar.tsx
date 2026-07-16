@@ -79,12 +79,14 @@ export function SearchBar() {
       <div className="searchrow">
         <div className="searchmain">
           <input ref={inputRef} className="searchinput" value={query} placeholder="Find in transcript…"
+            aria-label="Find in transcript"
             onChange={(e) => setSearch({ query: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
               else if (e.key === "Escape") { e.preventDefault(); close(); }
             }} />
-          <span className="searchcount">
+          {/* role=status: the match position announces as you type/step */}
+          <span className="searchcount" role="status">
             {scope === "tab"
               ? (query ? `${tabMatches.length ? idx + 1 : 0}/${tabMatches.length}` : "")
               : (query ? `${allTotal}` : "")}
@@ -98,8 +100,10 @@ export function SearchBar() {
             </button>
           </>}
           <div className="seg searchscope">
-            <button className={scope === "tab" ? "on" : ""} onClick={() => setSearch({ scope: "tab", current: null })}>This tab</button>
-            <button className={scope === "all" ? "on" : ""} onClick={() => setSearch({ scope: "all", current: null })}>All</button>
+            <button className={scope === "tab" ? "on" : ""} aria-pressed={scope === "tab"}
+              onClick={() => setSearch({ scope: "tab", current: null })}>This tab</button>
+            <button className={scope === "all" ? "on" : ""} aria-pressed={scope === "all"}
+              onClick={() => setSearch({ scope: "all", current: null })}>All</button>
           </div>
         </div>
         <button className="searchclose" onClick={close} title="Close (Esc)"><Icon name="x" size={16} /></button>

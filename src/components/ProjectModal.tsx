@@ -1,5 +1,6 @@
 import { useStore } from "../state/store";
 import { statsOf } from "../project";
+import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 // Opening a project REPLACES the workspace. Same lesson as the re-import modal:
@@ -10,6 +11,7 @@ export function ProjectModal() {
   // primitives only — a selector returning a fresh object re-renders forever
   const curTranscripts = useStore((s) => Object.keys(s.transcripts).length);
   const curSegments = useStore((s) => s.segments.length);
+  const dialogRef = useDialogFocus();
   if (!p) return null;
   const cur = { transcripts: curTranscripts, segments: curSegments };
 
@@ -20,9 +22,10 @@ export function ProjectModal() {
 
   return (
     <div className="about-backdrop" onMouseDown={close}>
-      <div className="about imp" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="about imp" ref={dialogRef} role="dialog" aria-modal="true"
+        aria-labelledby="project-title" onMouseDown={(e) => e.stopPropagation()}>
         <div className="about-head">
-          <h2>Open project</h2>
+          <h2 id="project-title">Open project</h2>
           <button className="btn iconbtn" onClick={close} title="Cancel (Esc)"><Icon name="x" size={16} /></button>
         </div>
 

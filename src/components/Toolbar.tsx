@@ -70,6 +70,7 @@ export function Toolbar() {
       {onTranscript && (
         <>
           <button className="btn iconlabel aibtn" onClick={() => setAiOpen(true)}
+            aria-haspopup="dialog" aria-expanded={aiOpen}
             title="Scan this transcript with AI: transcription errors, plus noticing lenses you choose (emotions, likes/dislikes, desires…)">
             <Icon name="sparkle" size={15} /> AI scan
           </button>
@@ -82,7 +83,8 @@ export function Toolbar() {
       <button className="btn iconbtn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
         <Icon name="redo" size={16} />
       </button>
-      <span className="status">{status}</span>
+      {/* role=status: import results (and failures) announce to screen readers */}
+      <span className="status" role="status">{status}</span>
       {/* right-edge cluster, left→right: GitHub · File format · Help · Settings */}
       <a className="btn iconlabel ghlink" href="https://github.com/tomfluff/qually" target="_blank"
         rel="noreferrer" title="Code on GitHub" aria-label="View QuAlly on GitHub">
