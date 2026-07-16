@@ -116,12 +116,14 @@ export const Minimap = forwardRef<MinimapHandle, {
           if (!b.n || !b.chars) continue;
           let top = "", best = -1;
           for (const [sp, c] of b.by) if (c > best) { best = c; top = sp; }
-          const quiet = weightOf(ui, top) === "quiet";
-          ctx.globalAlpha = quiet ? 0.45 : 0.95;
+          const w = weightOf(ui, top);
+          ctx.globalAlpha = w === "quiet" ? 0.45 : 0.95;
           ctx.fillStyle = speakerColor(ui, top);
           ctx.fillRect(railX, k * bh, railW, bh - 1);
           if (showText) {
-            ctx.globalAlpha = quiet ? 0.3 : 0.55;
+            // the bar's WIDTH is how much was said; its ALPHA now carries the
+            // speaker's weight, so bold reads darker than normal (both were 0.55)
+            ctx.globalAlpha = w === "bold" ? 0.85 : w === "quiet" ? 0.3 : 0.55;
             ctx.fillStyle = muted;
             ctx.fillRect(textX, k * bh, Math.max(3, Math.min(1, b.chars / (b.n * CAP)) * textW), bh - 1);
           }
@@ -133,14 +135,15 @@ export const Minimap = forwardRef<MinimapHandle, {
         const CAP = 80;
         for (let i = 0; i < N; i++) {
           const g = groups[i];
-          const quiet = weightOf(ui, g.speaker) === "quiet";
+          const w = weightOf(ui, g.speaker);
           const y = (i / N) * h, bh = Math.max(0.6, (h / N) * 0.7);
-          ctx.globalAlpha = quiet ? 0.45 : 0.95;
+          ctx.globalAlpha = w === "quiet" ? 0.45 : 0.95;
           ctx.fillStyle = speakerColor(ui, g.speaker);
           ctx.fillRect(railX, y, railW, Math.max(0.8, bh));
           if (showText) {
             const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
-            ctx.globalAlpha = quiet ? 0.28 : 0.5;
+            // alpha carries speaker weight (quiet < normal < bold); width = amount said
+            ctx.globalAlpha = w === "bold" ? 0.8 : w === "quiet" ? 0.28 : 0.5;
             ctx.fillStyle = muted;
             ctx.fillRect(textX, y, Math.max(2, Math.min(1, len / CAP) * textW), bh);
           }
@@ -169,7 +172,8 @@ export const Minimap = forwardRef<MinimapHandle, {
     ro.observe(wrap);
     return () => ro.disconnect();
   }, [groups, laned, cols, codebook, closeCallSids, detail, N,
-      ui.speakerColors, ui.speakerWeight]); // recolour the rail when the speaker map changes
+      ui.speakerColors, ui.speakerWeight, // recolour the rail when the speaker map changes
+      ui.dark]); // repaint on theme flip so the muted amount-bars pick up the new --muted
 
   const scrubTo = (clientY: number) => {
     const wrap = wrapRef.current, v = vref.current;
