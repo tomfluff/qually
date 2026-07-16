@@ -117,32 +117,33 @@ export const Minimap = forwardRef<MinimapHandle, {
           let top = "", best = -1;
           for (const [sp, c] of b.by) if (c > best) { best = c; top = sp; }
           const w = weightOf(ui, top);
-          ctx.globalAlpha = w === "quiet" ? 0.45 : 0.95;
+          ctx.globalAlpha = 0.95; // rail = pure speaker identity; weight lives in the bar
           ctx.fillStyle = speakerColor(ui, top);
           ctx.fillRect(railX, k * bh, railW, bh - 1);
           if (showText) {
-            // the bar's WIDTH is how much was said; its ALPHA now carries the
-            // speaker's weight, so bold reads darker than normal (both were 0.55)
+            // the bar's WIDTH is how much was said; its ALPHA is the speaker's
+            // weight (quiet < normal < bold) — the one channel that carries weight
             ctx.globalAlpha = w === "bold" ? 0.85 : w === "quiet" ? 0.3 : 0.55;
             ctx.fillStyle = muted;
             ctx.fillRect(textX, k * bh, Math.max(3, Math.min(1, b.chars / (b.n * CAP)) * textW), bh - 1);
           }
         }
       } else {
-        // detailed: a speaker rail beside one faint text bar per group (width ∝ length).
-        // Quiet speakers fade in BOTH channels — driven by the weight you actually set,
-        // not by whether the label happens to start with "R".
+        // detailed: a speaker rail (pure identity — WHO) beside one text bar per
+        // group. The bar's WIDTH is how much was said; its ALPHA is the speaker's
+        // weight (quiet < normal < bold). Weight rides one channel — the bar — not
+        // the rail, so "who" and "how emphasised" never share a mark. (The rail no
+        // longer dims for the interviewer; the bar carries that now.)
         const CAP = 80;
         for (let i = 0; i < N; i++) {
           const g = groups[i];
           const w = weightOf(ui, g.speaker);
           const y = (i / N) * h, bh = Math.max(0.6, (h / N) * 0.7);
-          ctx.globalAlpha = w === "quiet" ? 0.45 : 0.95;
+          ctx.globalAlpha = 0.95; // rail = pure speaker identity
           ctx.fillStyle = speakerColor(ui, g.speaker);
           ctx.fillRect(railX, y, railW, Math.max(0.8, bh));
           if (showText) {
             const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
-            // alpha carries speaker weight (quiet < normal < bold); width = amount said
             ctx.globalAlpha = w === "bold" ? 0.8 : w === "quiet" ? 0.28 : 0.5;
             ctx.fillStyle = muted;
             ctx.fillRect(textX, y, Math.max(2, Math.min(1, len / CAP) * textW), bh);
