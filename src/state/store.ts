@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { parseCSV, toCSV } from "../contract/csv";

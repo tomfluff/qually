@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // The project file: everything that IS the research work, in one lossless file you
 // can back up, continue on another machine, or hand to a colleague.
 //

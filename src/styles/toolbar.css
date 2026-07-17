@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 /* toolbar (above tabs, W1 item 4) — the accent strip on top is the brand line */
 #toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:6px 10px;
   /* wrap, don't clip: at high browser zoom (200-400%) the row is wider than the

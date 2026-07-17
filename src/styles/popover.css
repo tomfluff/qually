@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 /* segment popover */
 /* font-size is set inline from the sidebar text size; inner sizes are em so the
    whole popover scales with it (width too, capped so it can't leave the viewport). */

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 import { describe, it, expect } from "vitest";
 import { mergeGroups } from "./merge";
 import type { Line } from "./state/store";

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Excerpt rule v2 (dominant speaker) — CODING-APP-DEV.md W7 item 18, PROVISIONAL.
 // MUST stay identical to excerpt_for() in sync_coding.py (mirror in same change).
 //

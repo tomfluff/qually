@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Transcription repair: editLine provenance (orig kept, revert clears it),
 // segments untouched, corrected text flowing into both exports.
 import { beforeAll, test, expect } from "vitest";

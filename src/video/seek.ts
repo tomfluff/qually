@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Bridge between the timecode chip (in TranscriptView) and whatever <video>
 // the VideoDock currently has loaded. Kept module-local so the chip doesn't
 // need a ref or context.

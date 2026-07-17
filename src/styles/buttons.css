@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 .btn { background:var(--bg); color:var(--fg); border:1px solid var(--line);
   border-radius:6px; padding:5px 10px; font-size:1rem; cursor:pointer; }
 .btn:hover { border-color:var(--accent); }

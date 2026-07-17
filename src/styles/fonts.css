@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 /* Atkinson Hyperlegible (Braille Institute, SIL OFL 1.1) — embedded as data-URIs
    so it ships inside the single-file build with no CDN (offline constraint #1).
    Latin subset (U+0000–00FF) only, regular + bold; italics fall back to the

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 /* code context menu — font-size comes inline from ui.sidebarFontSize (like
    SegmentPopover), so everything below is inherit/em and scales with it */
 .ctxmenu { position:fixed; z-index:75; min-width:214px; max-width:min(340px, 92vw);

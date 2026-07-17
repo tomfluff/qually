@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 /* Settings — a modal with left-nav tabs. Was a two-column masonry, but CSS multi-column
    in a height-capped scroll container overflows SIDEWAYS (fills the height, then adds a
    column to the right). Tabs show one category at a time; each panel scrolls vertically. */

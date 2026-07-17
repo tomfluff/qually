@@ -72,4 +72,4 @@ Stack: React 19 + TypeScript + zustand, bundled by Vite into one inlined HTML vi
 
 ## License
 
-GNU AGPL v3 — see [`LICENSE`](LICENSE).
+Copyright (C) 2026 Yotam Sechayk. GNU AGPL v3 — see [`LICENSE`](LICENSE).

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // The project file is the save file: if it loses anything, work is gone. These tests
 // exercise the full round trip through the REAL store, and prove the hand-rolled ZIP
 // is an archive a real unzipper accepts (it's written to disk and read back with

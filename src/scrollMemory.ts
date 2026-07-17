@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Per-tab scroll positions. Module scope, NOT component state: TranscriptView unmounts
 // entirely while the Browse tab is shown, so a ref would forget every position on the
 // way through Browse.
