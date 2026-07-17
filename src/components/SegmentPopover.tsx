@@ -15,7 +15,10 @@ export function SegmentPopover({ sid, x, y, onClose }: {
   const setStatus = useStore((s) => s.setStatus);
   const setNotes = useStore((s) => s.setNotes);
   const ref = useRef<HTMLDivElement>(null);
-  const dialogRef = useDialogFocus();
+  // focus parks on the popover itself, not the notes field: with the field focused,
+  // Ctrl+C would type-copy instead of copying the segment (the reflex this popover
+  // advertises). Tab reaches the notes field as the first stop.
+  const dialogRef = useDialogFocus({ initialFocus: "container" });
   // one element, two refs: the object ref for layout + outside-click, the focus trap's callback ref
   const setRef = useCallback((el: HTMLDivElement | null) => { ref.current = el; return dialogRef(el); }, [dialogRef]);
 
@@ -77,7 +80,7 @@ export function SegmentPopover({ sid, x, y, onClose }: {
     : false;
 
   return (
-    <div className="pop" ref={setRef} role="dialog"
+    <div className="pop" ref={setRef} role="dialog" tabIndex={-1}
       aria-label={`Segment ${seg.code}, line${seg.start === seg.end ? ` ${seg.start}` : `s ${seg.start}–${seg.end}`}`}
       style={{ left: Math.min(x, window.innerWidth - 300), top: Math.min(y, window.innerHeight - 220), fontSize: sidebarFontSize }}>
       <div>
