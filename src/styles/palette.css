@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 /* command palette (0) */
 .palette-backdrop { position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.28);
   display:flex; justify-content:center; align-items:flex-start; padding-top:16vh; }

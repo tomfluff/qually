@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 import { useState } from "react";
 import { useStore, patternOf } from "../state/store";
 import { CodeMenu } from "./CodeMenu";

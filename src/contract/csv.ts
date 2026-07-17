@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // RFC4180-ish CSV parse/serialize. Parity with Python's csv module and the
 // v1 vanilla app. parse(serialize(x)) round-trips hostile content
 // (commas, quotes, newlines). Header cells are trimmed; data cells are not.

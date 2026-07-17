@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 /* Split per component/area — see styles/. Import order = cascade order.
    Build inlines it all into the single-file artifact (vite-plugin-singlefile). */
 @import "./styles/fonts.css";      /* embedded Atkinson Hyperlegible reading font */

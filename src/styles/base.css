@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 :root {
   /* --muted carries CONTENT (line numbers, speaker labels, timecodes, code
      definitions), not just decoration, so it must clear WCAG AA 4.5:1 for normal

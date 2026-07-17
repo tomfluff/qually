@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Author avatar for the footer credit, embedded as a data-URI so the app stays a
 // single offline file (no CDN — constraint #1). Source: tomfluff.github.io profile
 // photo, downscaled to 64px webp (displays at 20px). Update: re-run the resize and

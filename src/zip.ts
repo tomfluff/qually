@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Minimal ZIP writer — "stored" (no compression), which is the whole trick: a ZIP
 // with method 0 is just the file bytes wrapped in headers, so it needs no deflate
 // implementation and no dependency. Every unzipper reads it (Explorer, Finder,

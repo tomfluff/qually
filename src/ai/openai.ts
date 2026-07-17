@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // OpenAI client — raw fetch, no SDK. Keeps the single-file offline artifact and
 // the no-new-deps rule intact; the whole API surface we need is one POST.
 //

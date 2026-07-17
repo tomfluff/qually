@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 import type { Line } from "./state/store";
 
 // A display unit: one or more consecutive same-speaker lines where each but the

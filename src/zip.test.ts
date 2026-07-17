@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // A hand-rolled ZIP is only worth anything if a REAL unzipper opens it, so this
 // writes one to disk and extracts it with independent tooling. A structural
 // self-check would happily pass on an archive nobody else can read.

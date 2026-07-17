@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Draggable vertical gutter between two panels. Reports the target width for an
 // adjacent panel: the one to its left (default) or right (side="right"), so the
 // bar stays under the cursor and re-aligns correctly at the clamp edges.

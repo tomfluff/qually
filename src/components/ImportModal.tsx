@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 import { useStore, type SegUpdate } from "../state/store";
 import { Icon } from "./Icon";
 

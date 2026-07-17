@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Guards for the low-vision work. The claim these defend: nothing that carries
 // meaning may be carried by COLOUR ALONE (WCAG 1.4.1), and text that carries
 // content must clear AA contrast (1.4.3).

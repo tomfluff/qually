@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Pseudonymize before anything leaves the device.
 //
 // No NER heuristic: guessing at names from capitalization is both noisy and

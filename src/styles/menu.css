@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
 /* code context menu */
 .ctxmenu { position:fixed; z-index:75; width:214px; background:var(--bg);
   border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 34px rgba(0,0,0,.3);

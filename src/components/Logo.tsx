@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // The QuAlly mark: a Q whose tail is a highlighter stroke mid-way through
 // coding a line — magnifier, letterform and marker in one gesture.
 //

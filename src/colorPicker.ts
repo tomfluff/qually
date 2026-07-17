@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
 // Opens the native color picker for an existing swatch. The input must be in
 // the document for click() to open the dialog in Firefox/Safari, so it is
 // appended hidden and removed once the picker commits.
