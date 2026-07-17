@@ -12,8 +12,16 @@ const save = (blob: Blob, name: string) => {
   a.click();
   URL.revokeObjectURL(a.href);
 };
-export const saveText = (text: string, name: string, type = "text/csv") => save(new Blob([text], { type }), name);
+// CSVs get a UTF-8 BOM: without it Excel decodes as the ANSI code page
+// (Shift-JIS on Japanese Windows) and every non-ASCII excerpt is mojibake.
+// Re-import is safe — File.text() and the header trim both strip it.
+export const saveText = (text: string, name: string, type = "text/csv") =>
+  save(new Blob([type === "text/csv" ? "\uFEFF" + text : text], { type }), name);
 const slug = (s: string) => (s.replace(/[^\w.-]+/g, "-").replace(/^-|-$/g, "") || "qually");
+// ZIP entry names keep the transcript name as-is (the ZIP declares UTF-8 names);
+// only characters illegal in filenames are replaced.
+const zipName = (s: string) =>
+  (s.replace(/[/\\:*?"<>|]+/g, "-").replace(/^\.+|[.\s]+$/g, "") || "transcript");
 
 // Two different jobs, deliberately not conflated:
 //   the PROJECT file is lossless and machine-only — save, back up, continue later;
@@ -65,12 +73,22 @@ it round-trips everything, including corrections and AI marks.
 ` },
       { name: "coded-segments.csv", text: st.exportCSV() },
       { name: "codebook.csv", text: st.exportCodebook() },
-      ...st.tabs.map((pid) => ({ name: `transcripts/${slug(pid)}.csv`, text: st.exportTranscript(pid) })),
+      // every LOADED transcript, not just open tabs — coded-segments.csv already
+      // includes a closed tab's segments, so the bundle must carry its transcript too
+      ...Object.keys(st.transcripts).map((pid) => ({ name: `transcripts/${zipName(pid)}.csv`, text: st.exportTranscript(pid) })),
     ];
+    // distinct pids can still sanitize to the same entry name — suffix like uniquePid
+    // does on import, or extraction silently overwrites one transcript with another
+    const seen = new Set<string>();
+    for (const f of files) {
+      for (let n = 2; seen.has(f.name); n++) f.name = f.name.replace(/( \(\d+\))?\.csv$/, ` (${n}).csv`);
+      seen.add(f.name);
+    }
     if (editCount) files.push({ name: "transcript-edits.csv", text: st.exportEdits() });
     if (noticeCount) files.push({ name: "ai-noticings.csv", text: st.exportNotices() });
     if (aiCalls) files.push({ name: "ai-provenance.csv", text: st.exportAiLog() });
-    save(zipTextFiles(files, new Date()), `${base}-csv.zip`);
+    save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
+      new Date()), `${base}-csv.zip`);
     setOpen(false);
   };
 
@@ -83,7 +101,8 @@ it round-trips everything, including corrections and AI marks.
 
   return (
     <div className="settings-wrap" ref={ref}>
-      <button className="btn iconlabel" onClick={() => setOpen((o) => !o)} title="Export">
+      <button className="btn iconlabel" aria-expanded={open} aria-haspopup="true"
+        onClick={() => setOpen((o) => !o)} title="Export">
         <Icon name="download" size={16} /> Export
         <Icon name="chevron-down" size={13} />
       </button>

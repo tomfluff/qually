@@ -15,21 +15,24 @@
   font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
 .hbhint { display:flex; align-items:center; height:36px; padding:0 10px;
   color:var(--muted); font-size:12px; white-space:nowrap; }
+/* no hardcoded white ink or shadow: the code colour is the user's to pick, so
+   HotbarDock sets the initials' colour per tile via inkOn() — same fix as the
+   speaker chip, where pale yellow made a white label vanish */
 .tile { position:relative; width:36px; height:36px; padding:0; flex:0 0 auto;
   box-sizing:border-box; border:1px solid rgba(0,0,0,.18); border-radius:7px;
-  cursor:pointer; color:#fff; font-weight:700; font-size:13px; display:flex;
-  align-items:center; justify-content:center; text-shadow:0 1px 2px rgba(0,0,0,.55); }
+  cursor:pointer; font-weight:700; font-size:13px; display:flex;
+  align-items:center; justify-content:center; }
 .tile .tinit { letter-spacing:.5px; font-size:15px; font-weight:800; }
 .tile:hover { filter:brightness(1.08); }
-.tile.refresh { background:#fff; color:#333; text-shadow:none;
+.tile.refresh { background:#fff; color:#333;
   border-color:rgba(0,0,0,.32); }
-.tile.newcode { background:var(--panel); color:var(--accent); text-shadow:none;
+.tile.newcode { background:var(--panel); color:var(--accent);
   border:1px dashed var(--muted); }
 .tile .tname { position:absolute; bottom:calc(100% + 8px); left:50%;
   transform:translateX(-50%); background:var(--fg); color:var(--bg);
   padding:3px 9px; border-radius:6px; white-space:nowrap; display:none;
   pointer-events:none; z-index:80; }
-.tile:hover .tname { display:block; }
+.tile:hover .tname, .tile:focus-visible .tname { display:block; } /* keyboard focus reveals the name too */
 /* extruding tab on the top-center edge of the dock (always visible) */
 .hbhandle { position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
   padding:2px 16px 3px; border:1px solid var(--line); border-bottom:none;

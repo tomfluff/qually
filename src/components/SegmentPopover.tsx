@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useStore } from "../state/store";
 import { speakerGroupedText } from "../format";
 import { excerptOf } from "../contract/excerpt";
+import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 export function SegmentPopover({ sid, x, y, onClose }: {
@@ -16,6 +17,12 @@ export function SegmentPopover({ sid, x, y, onClose }: {
   const setStatus = useStore((s) => s.setStatus);
   const setNotes = useStore((s) => s.setNotes);
   const ref = useRef<HTMLDivElement>(null);
+  // focus parks on the popover itself, not the notes field: with the field focused,
+  // Ctrl+C would type-copy instead of copying the segment (the reflex this popover
+  // advertises). Tab reaches the notes field as the first stop.
+  const dialogRef = useDialogFocus({ initialFocus: "container" });
+  // one element, two refs: the object ref for layout + outside-click, the focus trap's callback ref
+  const setRef = useCallback((el: HTMLDivElement | null) => { ref.current = el; return dialogRef(el); }, [dialogRef]);
 
   // the segment's lines as speaker-grouped text (fresh from the store)
   const segText = (): string => {
@@ -75,7 +82,8 @@ export function SegmentPopover({ sid, x, y, onClose }: {
     : false;
 
   return (
-    <div className="pop" ref={ref}
+    <div className="pop" ref={setRef} role="dialog" tabIndex={-1}
+      aria-label={`Segment ${seg.code}, line${seg.start === seg.end ? ` ${seg.start}` : `s ${seg.start}–${seg.end}`}`}
       style={{ left: Math.min(x, window.innerWidth - 300), top: Math.min(y, window.innerHeight - 220), fontSize: sidebarFontSize }}>
       <div>
         <span className="swatch" style={{ display: "inline-block", width: 11, height: 11, borderRadius: 3, background: codebook[seg.code]?.color || "#999", marginRight: 6 }} />

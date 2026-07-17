@@ -3,17 +3,23 @@
 /* tabs (directly above content) */
 #tabs { display:flex; align-items:center; gap:2px; padding:6px 8px 0;
   border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
-.tab { padding:6px 14px; border:1px solid var(--line); border-bottom:none;
+.tab { display:inline-flex; align-items:stretch; border:1px solid var(--line); border-bottom:none;
   border-radius:8px 8px 0 0; cursor:pointer; background:var(--bg);
   color:var(--muted); font-weight:600; user-select:none; }
 .tab.active { color:var(--fg); border-color:var(--accent); }
-.tab .x { margin-left:8px; opacity:.5; }
-.tab .x:hover { opacity:1; }
+/* the label and × inside are real buttons (focusable, base focus ring) — strip the
+   UA chrome so they read as one tab; the old 6px 14px padding is split between them */
+.tab .tabname, .tab .x { background:none; border:none; color:inherit; font:inherit;
+  cursor:pointer; }
+.tab .tabname { padding:6px 2px 6px 14px; }
+/* × gets its own full-height padded target instead of a bare glyph */
+.tab .x { padding:6px 12px 6px 8px; opacity:.5; }
+.tab .x:hover, .tab .x:focus-visible { opacity:1; }
 /* Browse is a different kind of view (cross-transcript code browser): same tab
    shape but filled with the primary color + contrasting text, set apart from the
    participant transcript tabs */
 .tab.browsetab { display:inline-flex; align-items:center; gap:5px; margin-left:8px;
-  padding:6px 12px 6px 10px;
+  padding:6px 12px 6px 10px; font-size:inherit; /* it's a <button> now: UA size loses */
   background:var(--accent); color:#fff; border-color:var(--accent); }
 .tab.browsetab svg { opacity:.9; width:1.15em; height:1.15em; }
 /* the lighter dark-theme accent needs dark text to stay legible */

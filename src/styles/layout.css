@@ -4,12 +4,17 @@
 #main { display:flex; flex:1; min-height:0; }
 
 /* credit footer — self-contained dark strip, mirrors the toolbar's accent line.
-   min-height is a contract: .hotbar docks at var(--footer-h), so they stay in sync. */
+   The height is a contract: .hotbar docks at var(--footer-h). Wrapping used to
+   break it — at high zoom the credit line wrapped to 2-3 rows, the footer grew,
+   and the fixed-bottom hotbar sat on top of the text. Single line, ellipsised:
+   the filler spans give way first, the author link never shrinks. */
 #footer { flex-shrink:0; min-height:var(--footer-h); padding:6px 16px;
   font-size:.75rem; line-height:1.4;
-  display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:0 8px;
+  display:flex; align-items:center; justify-content:center; flex-wrap:nowrap; gap:0 8px;
+  overflow:hidden;
   background:color-mix(in srgb, var(--accent) 28%, #101317); color:rgba(255,255,255,.78); }
-.foot-author { display:inline-flex; align-items:center; gap:6px;
+#footer > span { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.foot-author { display:inline-flex; align-items:center; gap:6px; flex-shrink:0;
   color:#fff; font-weight:500; text-decoration:none; }
 .foot-author:hover { text-decoration:underline; }
 .foot-avatar { width:20px; height:20px; border-radius:50%; object-fit:cover; display:block;

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
+import { useDialogFocus } from "../useDialogFocus";
 import { saveText } from "./ExportMenu";
 import { Icon } from "./Icon";
 
@@ -9,8 +10,17 @@ import { Icon } from "./Icon";
 // isn't an export. The confirm modal still offers the snapshot as the way back.
 export function NewProjectButton() {
   const [confirm, setConfirm] = useState(false);
+  const dialogRef = useDialogFocus();
   const tabs = useStore((s) => s.tabs);
   const s = () => useStore.getState();
+
+  // Esc cancels, as the close button's tooltip promises (the AboutButton pattern)
+  useEffect(() => {
+    if (!confirm) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setConfirm(false); } };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
+  }, [confirm]);
 
   return (
     <>
@@ -20,9 +30,10 @@ export function NewProjectButton() {
       </button>
       {confirm && (
         <div className="about-backdrop" onMouseDown={() => setConfirm(false)}>
-          <div className="about imp" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="about imp" ref={dialogRef} role="dialog" aria-modal="true"
+            aria-labelledby="new-project-title" onMouseDown={(e) => e.stopPropagation()}>
             <div className="about-head">
-              <h2>Start a new project?</h2>
+              <h2 id="new-project-title">Start a new project?</h2>
               <button className="btn iconbtn" onClick={() => setConfirm(false)} title="Cancel (Esc)"><Icon name="x" size={16} /></button>
             </div>
             <p className="about-lede">

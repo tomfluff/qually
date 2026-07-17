@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useStore, type SegUpdate } from "../state/store";
+import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 // Shown when a re-imported CSV would land on a transcript that already has coding.
@@ -8,6 +9,7 @@ import { Icon } from "./Icon";
 export function ImportModal() {
   const pending = useStore((s) => s.pendingImports[0]);
   const resolve = useStore((s) => s.resolveImport);
+  const dialogRef = useDialogFocus();
   if (!pending) return null;
 
   const { pid, preview: p } = pending;
@@ -15,9 +17,10 @@ export function ImportModal() {
 
   return (
     <div className="about-backdrop" onMouseDown={() => resolve("cancel")}>
-      <div className="about imp" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="about imp" ref={dialogRef} role="dialog" aria-modal="true"
+        aria-labelledby="import-title" onMouseDown={(e) => e.stopPropagation()}>
         <div className="about-head">
-          <h2>“{pid}” is already imported</h2>
+          <h2 id="import-title">“{pid}” is already imported</h2>
           <button className="btn iconbtn" onClick={() => resolve("cancel")} title="Cancel (Esc)">
             <Icon name="x" size={16} />
           </button>
@@ -81,14 +84,16 @@ const sideOf = (v: SegUpdate["from"], withNotes: boolean) =>
 export function SegUpdateModal() {
   const updates = useStore((s) => s.pendingSegUpdates);
   const resolve = useStore((s) => s.resolveSegUpdates);
+  const dialogRef = useDialogFocus();
   if (!updates.length) return null;
   const n = updates.length;
 
   return (
     <div className="about-backdrop" onMouseDown={() => resolve(false)}>
-      <div className="about imp" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="about imp" ref={dialogRef} role="dialog" aria-modal="true"
+        aria-labelledby="seg-update-title" onMouseDown={(e) => e.stopPropagation()}>
         <div className="about-head">
-          <h2>The file disagrees with {n} segment{n === 1 ? "" : "s"} here</h2>
+          <h2 id="seg-update-title">The file disagrees with {n} segment{n === 1 ? "" : "s"} here</h2>
           <button className="btn iconbtn" onClick={() => resolve(false)} title="Keep mine (Esc)">
             <Icon name="x" size={16} />
           </button>

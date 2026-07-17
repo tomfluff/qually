@@ -8,7 +8,8 @@ This file is the honest ledger: what the app actually does, and what it does not
 yet. It is kept current rather than aspirational, so that the claim in the README can
 be checked rather than trusted.
 
-**Audited 2026-07-14.** Target: WCAG 2.2 AA. Built and used by a low-vision researcher
+**Audited 2026-07-14; keyboard + screen-reader pass 2026-07-17.** Target: WCAG 2.2 AA.
+Built and used by a low-vision researcher
 (the author) for real qualitative coding — but not independently audited, and **broader
 testing across more low-vision users and assistive technologies** is still the most
 valuable next step.
@@ -39,10 +40,39 @@ valuable next step.
 ### Keyboard
 - Coding is fully keyboard-operable: `Tab` into the transcript, `↓`/`↑` to select a line,
   `Shift`+arrows to extend, `1`–`9` for the hotbar, `0` for the searchable palette,
-  `Ctrl+Z`/`Ctrl+Shift+Z`, `Ctrl+F`, `PageUp`/`PageDown`/`Home`/`End`, `Esc` to back out.
+  `Ctrl+Z`/`Ctrl+Shift+Z`, `Ctrl+F`, `PageUp`/`PageDown`/`Home`/`End`, `Esc` to back out,
+  `Enter` to play the loaded media from the selected line.
+- So is everything around the coding: tabs switch and close from the keyboard; sidebar
+  and Browse code rows apply on `Enter`; every code-management action (rename, recolor,
+  merge, pin, delete) is reachable through a per-row `⋯` button (or `Shift+F10`), not
+  right-click alone; a segment's lane bar is a real button — `Enter` opens its popover
+  (notes, reject, delete, copy); panel dividers resize with arrow keys; search results
+  are focusable and `Enter` jumps.
 - The selection follows the keyboard: arrowing past the viewport edge scrolls it into view.
 - Every focusable control has a visible focus ring (accent + a background gap, so it
   stays visible on any ground, including a coloured lane bar).
+
+### Screen readers (new, and honestly provisional)
+Wired in this pass; **not yet tested with real screen-reader users**, which is the next
+most valuable thing anyone could do for this project:
+- The transcript is a `listbox` with `option` rows (`aria-selected`,
+  `aria-setsize`/`aria-posinset`, `aria-activedescendant` following the selection head).
+  The list is virtualized, so rows scrolled far away genuinely do not exist in the DOM;
+  set-size/position keep the counts truthful and the active row is always rendered while
+  you drive it, but a screen reader's own document-cursor walk will only see the
+  rendered window. This is the compromise, stated plainly.
+- A polite live region announces the things the eye gets for free: a code applied
+  ("Coded lines 8 to 10 as workarounds"), undo/redo, segment status changes and
+  deletions, import results, search-match position, AI-scan completion.
+- Every modal is a labelled `role="dialog"` with `aria-modal`, a focus trap, and focus
+  restoration to the opener. Popovers (segment editor, code menu, settings) are labelled
+  dialogs too, and `Esc` always closes and hands focus back.
+- Every icon-only control carries an accessible name; the tab strip is a `tablist`;
+  the hotbar a labelled `toolbar`; code rows announce as "Apply code …, hotkey n,
+  k segments" instead of a soup of child text; the code inputs are proper comboboxes;
+  the minimap (a visual duplicate of the list) is hidden from the tree.
+- In "short" speaker mode the full name rides along visually hidden, so a screen
+  reader never gets stuck with the three-letter label.
 
 ### Not by colour alone (WCAG 1.4.1)
 | Meaning | Colour channel | Non-colour channel |
@@ -81,35 +111,34 @@ workaround is ever forced through someone else's server.
 
 Listed plainly, worst first. These are real; do not read the README as claiming otherwise.
 
-1. **Screen readers are not supported.** The transcript is a virtualized list — rows that
-   are scrolled away do not exist in the DOM — and it has no `listbox`/`option` semantics,
-   no `aria-selected`, and no `aria-activedescendant`. There is no `aria-live` region, so
-   applying a code, undoing, or an AI scan finishing is announced to nobody. Modals have no
-   `role="dialog"`, no `aria-modal`, and no focus trap. **This is the single biggest gap,
-   and it is a genuinely hard one** — virtualization and screen readers are in tension.
-2. **Icon-only buttons carry their names in `title` alone.** Search, undo, redo, the eye
-   toggle, the video dock, the hotbar. Native tooltips are ~12px, unstyleable, and
-   keyboard-inaccessible. They need real labels.
-3. **In "short" speaker mode, the full name exists only in a hover tooltip.**
-4. **Mouse-only interactions with no keyboard equivalent:** resizing panels and the minimap,
-   dragging a segment's edge to resize it, and `Alt`-click to dismiss an AI noticing.
-5. **Lane bars and the close-call badge do not scale with the transcript font size.** Set the
+1. **Screen-reader support is wired but unproven.** The semantics, names, live
+   announcements, and focus management described above are new and have been verified
+   only against the accessibility tree and by keyboard simulation — not by an actual
+   NVDA/JAWS/VoiceOver user doing real coding. Virtualization remains a structural
+   tension: rows scrolled far away do not exist in the DOM, so document-cursor browsing
+   sees a window, not the whole transcript. Treat "supported" as unearned until someone
+   who relies on a screen reader has coded a real transcript with it.
+2. **Mouse-only interactions with no keyboard equivalent:** dragging a segment's edge to
+   resize it (the popover has no range editor yet), the minimap (navigation duplicate;
+   keyboard has Home/End/PageUp and back-to-selection), and `Alt`-click to dismiss an AI
+   noticing in the transcript (Browse → Noticings has keyboard-reachable dismiss buttons).
+3. **Lane bars and the close-call badge do not scale with the transcript font size.** Set the
    text to 48px and the code lanes stay where they were, unless you separately raise the
    lane-width setting.
-6. **Chrome ignores OS text-size preferences.** Toolbar, tabs, settings notes and the video
+4. **Chrome ignores OS text-size preferences.** Toolbar, tabs, settings notes and the video
    dock are hard-coded in px, so a browser minimum-font-size or OS text scaling does nothing
-   to them. Browser zoom is the only lever, and it grows everything.
-7. **No high-contrast palette.** The five primaries are hue choices, not contrast choices.
+   to them. Browser zoom is the only lever (the toolbar now wraps instead of clipping at
+   high zoom), and it grows everything.
+5. **No high-contrast palette.** The five primaries are hue choices, not contrast choices.
    (They *do* all clear AA against the text drawn on them — teal and green were failing at
    3.96 and 4.26 and have been darkened, with a test that now blocks a regression — but
    none of them is a genuine high-contrast mode.)
-8. **The minimap still encodes codes by hue alone** — it is a canvas, so the CSS patterns
+6. **The minimap still encodes codes by hue alone** — it is a canvas, so the CSS patterns
    don't reach it. (Speakers *are* now on their own rail there, and it follows the
-   quiet/normal/bold weight you set rather than a hardcoded "R".)
-9. **The patterns that vary vertically restart at each row boundary** within a multi-line
+   quiet/normal/bold weight you set rather than a hardcoded "R". It is now hidden from
+   screen readers as a duplicate view.)
+7. **The patterns that vary vertically restart at each row boundary** within a multi-line
    segment. A minor seam, but visible.
-10. **Tabbing through the transcript walks every rendered timecode button.** Focusable
-    timecodes are useful (play from here, no mouse), but there is no skip-past.
 
 ## If you use QuAlly with low vision
 

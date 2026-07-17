@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
+import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 const KEYS: [string, string][] = [
@@ -14,6 +15,7 @@ const KEYS: [string, string][] = [
   ["Home / End", "Jump to the first / last line of the transcript"],
   ["1 – 9", "Apply the matching hotbar code to the selection"],
   ["0", "Open the code palette (fuzzy search or create a code)"],
+  ["Enter", "Play the loaded media from the selected line"],
   ["Double-click a line", "Fix its transcription in place; Enter saves, Esc cancels"],
   ["Ctrl + C", "Copy the selected lines (speaker-grouped)"],
   ["Ctrl + Z  /  Ctrl + Shift + Z", "Undo / redo"],
@@ -25,6 +27,7 @@ export function AboutButton() {
   const helpSeen = useStore((s) => s.ui.helpSeen);
   const setUi = useStore((s) => s.setUi);
   const [open, setOpen] = useState(false);
+  const dialogRef = useDialogFocus();
 
   // auto-open once, on the first ever launch
   useEffect(() => { if (!helpSeen) setOpen(true); }, [helpSeen]);
@@ -45,9 +48,10 @@ export function AboutButton() {
       </button>
       {open && (
         <div className="about-backdrop" onMouseDown={close}>
-          <div className="about" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="about" ref={dialogRef} role="dialog" aria-modal="true"
+            aria-labelledby="about-title" onMouseDown={(e) => e.stopPropagation()}>
             <div className="about-head">
-              <h2>QuAlly — thematic analysis, made accessible</h2>
+              <h2 id="about-title">QuAlly — thematic analysis, made accessible</h2>
               <button className="btn iconbtn" onClick={close} title="Close (Esc)"><Icon name="x" size={16} /></button>
             </div>
             <p className="about-lede">
@@ -74,7 +78,7 @@ export function AboutButton() {
                   <li><b>Apply a code:</b> press <b>1–9</b> for the hotbar, <b>0</b> for the fuzzy code palette, or click a code in the sidebar.</li>
                   <li><b>Edit a segment:</b> click its colored lane bar (notes, reject, delete, copy) or drag its top/bottom edge to resize. Hover a bar to see its line range.</li>
                   <li><b>Manage codes:</b> right-click a code (sidebar or Browse) to rename, edit its definition, recolor, merge, pin, or delete.</li>
-                  <li><b>Fix transcription:</b> double-click a line to correct it in place — with media loaded, the utterance loops at 0.75× while you type. The original is kept (✱ marks edited lines, hover to see it) and every correction exports via the toolbar's <b>Edit log</b> button.</li>
+                  <li><b>Fix transcription:</b> double-click a line to correct it in place — with media loaded, the utterance loops at 0.75× while you type. The original is kept (✱ marks edited lines, hover to see it) and every correction exports via <b>Export → Transcript edits (.csv)</b> (the item appears once you've edited a line).</li>
                   <li><b>AI (optional, off by default):</b> add your own OpenAI key in Settings and <b>AI scan</b> can flag likely mis-transcriptions (amber, dotted — double-click to fix) and, if you tick them, highlight instances for your review: emotional expressions, likes/dislikes, desires, workarounds, tensions, quotable phrasing — each mapped to a first-cycle coding method. It marks instances only; coding stays yours. Choose which speakers to include, see the exact lines before they're sent (listed names redacted first), Alt-click a highlight to dismiss it, hide them all with the eye button to read blind, and every request is logged for your methods appendix.</li>
                   <li><b>Mixed-speaker flag:</b> a small <b>!</b> badge on a segment's corner means its excerpt keeps only the dominant speaker — the other speaker's words may drop out, so double-check it.</li>
                   <li><b>Browse tab:</b> pick codes on the left, read their excerpts on the right; click a ref to jump to it. Turn on <b>Show rejected</b> to include rejected segments. After an AI scan, a <b>Noticings</b> switch appears: the AI's marks side by side across participants, filterable to what you haven't coded yet — <b>code…</b> writes a segment for that line (authored by you), <b>open</b> jumps to it, <b>dismiss</b> removes it.</li>

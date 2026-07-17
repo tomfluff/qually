@@ -21,5 +21,17 @@ export function Resizer({ onWidth, side = "left" }: { onWidth: (w: number) => vo
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
   };
-  return <div className="resizer" onMouseDown={down} />;
+  // Keyboard route: a focusable separator, arrows nudge the panel by a fixed step.
+  // Reads the live width off the panel element (same as drag) — the call sites clamp.
+  const keys = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    const panel = (side === "right" ? el.nextElementSibling : el.previousElementSibling) as HTMLElement | null;
+    if (!panel) return;
+    const grow = e.key === (side === "right" ? "ArrowLeft" : "ArrowRight"); // arrows move the bar like a drag
+    onWidth(panel.getBoundingClientRect().width + (grow ? 16 : -16));
+  };
+  return <div className="resizer" role="separator" aria-orientation="vertical"
+    aria-label="Resize panel" tabIndex={0} onMouseDown={down} onKeyDown={keys} />;
 }

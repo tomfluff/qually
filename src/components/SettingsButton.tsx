@@ -6,6 +6,7 @@ import { openColorPicker } from "../colorPicker";
 import { PALETTES } from "../palettes";
 import { MODELS, modelOf } from "../ai/openai";
 import { getKey, setKey, isRemembered } from "../ai/key";
+import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 // Settings popover: instant-apply controls (no save button), all persisted via ui autosave.
@@ -13,6 +14,7 @@ export function SettingsButton() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"Appearance"|"Transcript"|"Codes"|"Speakers"|"AI">("Appearance");
   const ref = useRef<HTMLDivElement>(null);
+  const dialogRef = useDialogFocus();
   const fontSize = useStore((s) => s.ui.fontSize);
   const setFontSize = useStore((s) => s.setFontSize);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
@@ -48,14 +50,16 @@ export function SettingsButton() {
 
   return (
     <div className="settings-wrap" ref={ref}>
-      <button className="btn iconlabel" onClick={() => setOpen((o) => !o)}>
+      <button className="btn iconlabel" aria-expanded={open} aria-haspopup="dialog"
+        onClick={() => setOpen((o) => !o)}>
         <Icon name="settings" size={16} /> Settings
       </button>
       {open && (
         <div className="about-backdrop" onMouseDown={() => setOpen(false)}>
-          <div className="about set-modal" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="about set-modal" ref={dialogRef} role="dialog" aria-modal="true"
+            aria-labelledby="settings-title" onMouseDown={(e) => e.stopPropagation()}>
             <div className="about-head">
-              <h2>Settings</h2>
+              <h2 id="settings-title">Settings</h2>
               <button className="btn iconbtn" onClick={() => setOpen(false)} title="Close (Esc)"><Icon name="x" size={16} /></button>
             </div>
 

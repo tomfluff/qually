@@ -4,12 +4,15 @@
   border-radius:6px; padding:5px 10px; font-size:1rem; cursor:pointer; }
 .btn:hover { border-color:var(--accent); }
 
-.btn.danger { background:#e0554f; color:#fff; border-color:#e0554f; }
-.btn.danger:hover { background:#c8443e; border-color:#c8443e; }
-.btn.ok { background:#3fa860; color:#fff; border-color:#3fa860; }
-.btn.ok:hover { background:#369152; border-color:#369152; }
-.btn.warn { background:#c98a2a; color:#fff; border-color:#c98a2a; }
-.btn.warn:hover { background:#b17722; border-color:#b17722; }
+/* verdict/destructive fills darkened so the white label clears AA 4.5:1 —
+   the old #e0554f/#3fa860/#c98a2a put white at 3.76/3.01/2.94, under AA for
+   the small Accept/Reject/Delete labels. Now 4.83/5.07/4.74 (hovers darker). */
+.btn.danger { background:#c8443e; color:#fff; border-color:#c8443e; }
+.btn.danger:hover { background:#b53c36; border-color:#b53c36; }
+.btn.ok { background:#2e7d46; color:#fff; border-color:#2e7d46; }
+.btn.ok:hover { background:#266b3b; border-color:#266b3b; }
+.btn.warn { background:#996a1c; color:#fff; border-color:#996a1c; }
+.btn.warn:hover { background:#8a5f19; border-color:#8a5f19; }
 /* primary (accent-filled) button — for the one main action, e.g. Import */
 .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
 .btn.primary:hover { filter:brightness(1.08); border-color:var(--accent); }

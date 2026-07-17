@@ -21,8 +21,17 @@ export function CodeMenu({ code, x, y, onClose }: {
   const setDef = useStore((s) => s.setDef);
   const setColor = useStore((s) => s.setColor);
   const togglePin = useStore((s) => s.togglePin);
+  // menu text follows the sidebar text-size setting, like SegmentPopover
+  const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const ref = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<"menu" | "rename" | "def" | "merge">("menu");
+
+  // keyboard route: focus lands on the first item on open, returns to the opener on close
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    ref.current?.querySelector("button")?.focus();
+    return () => opener?.focus();
+  }, []);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
@@ -38,9 +47,21 @@ export function CodeMenu({ code, x, y, onClose }: {
     onClose();
   };
 
+  // ArrowUp/Down walk the visible items (Enter is the buttons' own click); text fields keep their arrows
+  const onArrows = (e: React.KeyboardEvent) => {
+    if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || (e.target as HTMLElement).matches("input, textarea")) return;
+    e.preventDefault();
+    const items = Array.from(ref.current?.querySelectorAll("button") ?? []);
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length].focus();
+  };
+
   return (
-    <div className="ctxmenu" ref={ref}
-      style={{ left: Math.min(x, window.innerWidth - 230), top: Math.min(y, window.innerHeight - 280) }}>
+    // dialog, not menu: two of its modes are text-input forms
+    <div className="ctxmenu" ref={ref} onKeyDown={onArrows}
+      role="dialog" aria-label={`Options for code ${code}`}
+      style={{ left: Math.min(x, window.innerWidth - 230), top: Math.min(y, window.innerHeight - 280), fontSize: sidebarFontSize }}>
       {mode === "menu" && (
         <>
           <div className="ctxhead">{code}</div>
@@ -95,11 +116,11 @@ function CodeForm({ label, initial, placeholder, multiline, onSubmit, onCancel }
     <div className="ctxform">
       <div className="ctxhead">{label}</div>
       {multiline ? (
-        <textarea ref={taRef} autoFocus value={v} placeholder={placeholder} rows={1}
+        <textarea ref={taRef} autoFocus value={v} placeholder={placeholder} rows={1} aria-label={label}
           onChange={(e) => { setV(e.target.value); resize(); }}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) onSubmit(v); if (e.key === "Escape") onCancel(); }} />
       ) : (
-        <input autoFocus value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)}
+        <input autoFocus value={v} placeholder={placeholder} aria-label={label} onChange={(e) => setV(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") onSubmit(v); if (e.key === "Escape") onCancel(); }} />
       )}
       <div className="ctxrow">

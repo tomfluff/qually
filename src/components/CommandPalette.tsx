@@ -44,9 +44,13 @@ export function CommandPalette() {
 
   if (!open) return null;
   const anchored = pos !== null;
+  // the combobox autofocused on open; on close hand focus back to the transcript
+  // list (it would fall to <body>), so the arrow-key selection flow keeps working
+  const close = () => { setPalette(false); document.querySelector<HTMLElement>(".tviewlist")?.focus(); };
   return (
-    <div className={"palette-backdrop" + (anchored ? " anchored" : "")} onMouseDown={() => setPalette(false)}>
+    <div className={"palette-backdrop" + (anchored ? " anchored" : "")} onMouseDown={close}>
       <div className={"palette" + (anchored ? " palette-anchored" : "")}
+        role="dialog" aria-label="Code palette"
         style={anchored ? {
           position: "fixed", left: pos!.left, top: pos!.top, bottom: pos!.bottom, width: W,
           "--ac-max": `${pos!.listMax}px`,
@@ -57,7 +61,7 @@ export function CommandPalette() {
             ? `Code ${selCount} selected line${selCount > 1 ? "s" : ""}`
             : "No lines selected — this will just create the code"}
         </div>
-        <CodeCombobox autoFocus placeholder="Search or create a code…" onClose={() => setPalette(false)} />
+        <CodeCombobox autoFocus placeholder="Search or create a code…" onClose={close} />
       </div>
     </div>
   );

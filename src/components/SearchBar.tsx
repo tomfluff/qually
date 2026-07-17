@@ -72,18 +72,23 @@ export function SearchBar() {
 
   if (!open) return null;
   const step = (d: number) => { if (tabMatches.length) setIdx((i) => (i + d + tabMatches.length) % tabMatches.length); };
+  // closing unmounts the focused input and focus falls to <body> — hand it back to
+  // the transcript list so the arrow-key flow it advertises still works
+  const close = () => { closeSearch(); document.querySelector<HTMLElement>(".tviewlist")?.focus(); };
 
   return (
     <div className="searchbar">
       <div className="searchrow">
         <div className="searchmain">
           <input ref={inputRef} className="searchinput" value={query} placeholder="Find in transcript…"
+            aria-label="Find in transcript"
             onChange={(e) => setSearch({ query: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
-              else if (e.key === "Escape") { e.preventDefault(); closeSearch(); }
+              else if (e.key === "Escape") { e.preventDefault(); close(); }
             }} />
-          <span className="searchcount">
+          {/* role=status: the match position announces as you type/step */}
+          <span className="searchcount" role="status">
             {scope === "tab"
               ? (query ? `${tabMatches.length ? idx + 1 : 0}/${tabMatches.length}` : "")
               : (query ? `${allTotal}` : "")}
@@ -97,11 +102,13 @@ export function SearchBar() {
             </button>
           </>}
           <div className="seg searchscope">
-            <button className={scope === "tab" ? "on" : ""} onClick={() => setSearch({ scope: "tab", current: null })}>This tab</button>
-            <button className={scope === "all" ? "on" : ""} onClick={() => setSearch({ scope: "all", current: null })}>All</button>
+            <button className={scope === "tab" ? "on" : ""} aria-pressed={scope === "tab"}
+              onClick={() => setSearch({ scope: "tab", current: null })}>This tab</button>
+            <button className={scope === "all" ? "on" : ""} aria-pressed={scope === "all"}
+              onClick={() => setSearch({ scope: "all", current: null })}>All</button>
           </div>
         </div>
-        <button className="searchclose" onClick={closeSearch} title="Close (Esc)"><Icon name="x" size={16} /></button>
+        <button className="searchclose" onClick={close} title="Close (Esc)"><Icon name="x" size={16} /></button>
       </div>
 
       {scope === "all" && query && (
@@ -112,7 +119,12 @@ export function SearchBar() {
               <div key={g.pid} className="searchgroup">
                 <div className="searchgrouphead">{g.pid} <span className="cnt">{g.total}</span></div>
                 {g.hits.map((h) => (
-                  <div key={h.line} className="searchhit" onClick={() => jumpTo(g.pid, h.line)}>
+                  // focusable like the Browse rows: Tab reaches a hit, Enter/Space jumps
+                  <div key={h.line} className="searchhit" role="button" tabIndex={0}
+                    onClick={() => jumpTo(g.pid, h.line)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpTo(g.pid, h.line); }
+                    }}>
                     <span className="searchlid">{h.line}</span>
                     <span className="searchtext">{highlight(h.text, query)}</span>
                   </div>
