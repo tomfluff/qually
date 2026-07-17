@@ -12,7 +12,7 @@ const save = (blob: Blob, name: string) => {
   a.click();
   URL.revokeObjectURL(a.href);
 };
-const saveText = (text: string, name: string, type = "text/csv") => save(new Blob([text], { type }), name);
+export const saveText = (text: string, name: string, type = "text/csv") => save(new Blob([text], { type }), name);
 const slug = (s: string) => (s.replace(/[^\w.-]+/g, "-").replace(/^-|-$/g, "") || "qually");
 
 // Two different jobs, deliberately not conflated:

@@ -27,8 +27,9 @@ export function HotbarDock() {
   const refreshHotbar = useStore((s) => s.refreshHotbar);
   const [collapsed, setCollapsed] = useState(false);
 
+  // no early return on an empty codebook: before the first code exists the dock
+  // still shows the "0" palette tile (the way to CREATE that first code) + refresh
   const tiles = codes.filter((c) => codebook[c]).slice(0, 9);
-  if (!Object.keys(codebook).length) return null;
 
   const apply = (code: string) => { if (hasSel) applyCode(code); };
 

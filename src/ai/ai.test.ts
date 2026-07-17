@@ -47,6 +47,16 @@ describe("redaction", () => {
     expect(none.redact("Ann Lee")).toBe("Ann Lee");
     expect(none.count("Ann Lee")).toBe(0);
   });
+
+  // JS \b is ASCII-only: these names used to pass through UNREDACTED (PII leak)
+  it("redacts names that start or end in non-ASCII letters", () => {
+    const u = redactor(["José", "Łukasz", "田中"]);
+    expect(u.redact("José said so.")).toBe("[REDACTED_1] said so.");
+    expect(u.redact("and Łukasz agreed")).toBe("and [REDACTED_2] agreed");
+    expect(u.redact("田中さんの意見")).toBe("[REDACTED_3]さんの意見"); // no spaces in CJK: bare match
+    expect(u.redact("Josée is someone else")).toBe("Josée is someone else"); // still whole-word
+    expect(u.count("José and 田中")).toBe(2);
+  });
 });
 
 describe("content hash", () => {

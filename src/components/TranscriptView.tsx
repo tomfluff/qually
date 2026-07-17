@@ -387,13 +387,22 @@ export function TranscriptView() {
   // drag a segment edge to another unit (elementFromPoint -> that unit's boundary line id)
   const dragEdge = (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => {
     e.preventDefault(); e.stopPropagation();
-    pushUndo();
+    // snapshot lazily, on the first REAL change: the grips overlap the bar's edge, so
+    // a plain click (open the popover) lands here too — an unconditional pushUndo
+    // killed the redo stack and pushed a no-op undo entry for every such click
+    let snapped = false;
+    const apply = (start: number, end: number) => {
+      if (!snapped) { snapped = true; pushUndo(); }
+      setSegmentRange(seg.sid, start, end);
+    };
     const move = (ev: globalThis.MouseEvent) => {
       const row = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest(".lineRow") as HTMLElement | null;
       if (!row?.dataset.lid) return;
       const gs = +row.dataset.lid, ge = +(row.dataset.end ?? row.dataset.lid);
-      if (which === "start" && gs <= seg.end) setSegmentRange(seg.sid, gs, seg.end);
-      if (which === "end" && ge >= seg.start) setSegmentRange(seg.sid, seg.start, ge);
+      // (snapped ||) — once a drag began, coming back to the original line must
+      // still apply, to restore the original bounds
+      if (which === "start" && gs <= seg.end && (snapped || gs !== seg.start)) apply(gs, seg.end);
+      if (which === "end" && ge >= seg.start && (snapped || ge !== seg.end)) apply(seg.start, ge);
     };
     const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
     document.addEventListener("mousemove", move);

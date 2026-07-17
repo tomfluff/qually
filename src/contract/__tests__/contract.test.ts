@@ -19,6 +19,11 @@ test("CSV round-trips commas, quotes, newlines", () => {
   expect(back).toEqual(rows);
 });
 
+test("a single-column empty value round-trips; blank lines still drop", () => {
+  expect(parseCSV(toCSV([{ a: "" }, { a: "x" }], ["a"]))).toEqual([{ a: "" }, { a: "x" }]);
+  expect(parseCSV('a\r\n""\r\n\r\nx\r\n')).toEqual([{ a: "" }, { a: "x" }]); // quoted "" kept, blank skipped
+});
+
 test("parseCSV drops fully-empty lines, keeps header trimming", () => {
   const rows = parseCSV(" a , b \r\n1,2\r\n\r\n3,4\r\n");
   expect(rows).toEqual([{ a: "1", b: "2" }, { a: "3", b: "4" }]);

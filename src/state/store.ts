@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
@@ -60,6 +60,14 @@ export interface PendingImport {
 }
 export type ImportChoice = "update" | "replace" | "new" | "cancel";
 
+// A re-imported segment row that would OVERWRITE an existing segment's status or
+// notes — held for consent (the transcript re-import modal is the same idea).
+export interface SegUpdate {
+  sid: number; ref: string; code: string;
+  from: { status: string; notes: string };
+  to: { status: string; notes: string };
+}
+
 // AI settings. The API key is NOT here — the store is persisted wholesale, so the
 // key lives in ai/key.ts (session-only by default). See docs in that file.
 export interface Ai {
@@ -106,9 +114,13 @@ interface State {
   search: Search;
   pendingImports: PendingImport[]; // re-imports awaiting a user decision
   pendingProject: Project | null;  // a loaded project awaiting the replace confirmation
+  pendingSegUpdates: SegUpdate[];  // status/notes overwrites awaiting consent
+  saveFailed: boolean; // localStorage write failed (quota) — autosave is NOT happening
 
   importFiles: (files: FileList | File[]) => Promise<void>;
+  newProject: () => void;
   resolveImport: (choice: ImportChoice) => void;
+  resolveSegUpdates: (apply: boolean) => void;
   ensureCode: (code: string) => string;
   addSegment: (pid: string, start: number, end: number, code: string,
     proposedBy?: string, status?: string, notes?: string) => void;
@@ -249,7 +261,22 @@ export const useStore = create<State>()(
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
-      pendingImports: [], pendingProject: null,
+      pendingImports: [], pendingProject: null, pendingSegUpdates: [], saveFailed: false,
+
+      // wipe the workspace, keep the person: ui prefs (coder name, theme, fonts)
+      // and AI settings survive; everything project-shaped resets
+      newProject: () => {
+        set({
+          transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [],
+          active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
+          video: {}, aiFlags: {}, aiLog: [],
+          selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
+          jump: null, search: { open: false, query: "", scope: "tab", current: null },
+          pendingImports: [], pendingProject: null, pendingSegUpdates: [],
+          nextSid: 1,
+        });
+        forgetScroll();
+      },
 
       importFiles: async (files) => {
         const skipped: string[] = [];
@@ -288,6 +315,15 @@ export const useStore = create<State>()(
         }
         set({ hotbarCache: hotbarCodes(get()) });
         if (skipped.length) throw new Error(skipped.join("; "));
+      },
+
+      resolveSegUpdates: (apply) => {
+        const updates = get().pendingSegUpdates;
+        set({ pendingSegUpdates: [] });
+        if (!apply || !updates.length) return;
+        const by = new Map(updates.map((u) => [u.sid, u.to]));
+        get().pushUndo();
+        set({ segments: get().segments.map((x) => by.has(x.sid) ? { ...x, ...by.get(x.sid)! } : x) });
       },
 
       resolveImport: (choice) => {
@@ -579,7 +615,7 @@ export const useStore = create<State>()(
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
-          pendingImports: [], pendingProject: null,
+          pendingImports: [], pendingProject: null, pendingSegUpdates: [],
           nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
         });
         set({ hotbarCache: hotbarCodes(get()) });
@@ -596,16 +632,19 @@ export const useStore = create<State>()(
         return toCSV(rows, ["pid", "line_id", "timestamp", "speaker", "original", "corrected"]);
       },
 
+      // These three mutate snapshotted state without an undo entry (notes are per-
+      // keystroke; colors/defs are minor), but they MUST invalidate redo: a stale
+      // redo snapshot would otherwise overwrite the edit and resurrect undone coding.
       setSegmentRange: (sid, start, end) =>
-        set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x) }),
+        set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x), redoStack: [] }),
       deleteSegment: (sid) => { get().pushUndo(); set({ segments: get().segments.filter((x) => x.sid !== sid) }); },
       setStatus: (sid, status) => {
         get().pushUndo();
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status } : x) });
       },
-      setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x) }),
-      setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } } }),
-      setDef: (code, def) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], def } } }),
+      setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x), redoStack: [] }),
+      setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } }, redoStack: [] }),
+      setDef: (code, def) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], def } }, redoStack: [] }),
       renameCode: (code, newName) => {
         const name = newName.trim();
         if (!name || name === code) return;
@@ -731,6 +770,22 @@ export const useStore = create<State>()(
     }),
     {
       name: "coding-app-state",
+      // A full localStorage makes setItem THROW; zustand would log it and move on,
+      // and autosave silently stops while the user keeps coding. Surface it instead
+      // (saveFailed drives the App banner). setState is deferred a microtask so the
+      // flag's own persist attempt can't recurse into this handler mid-write.
+      storage: createJSONStorage(() => ({
+        getItem: (k) => localStorage.getItem(k),
+        removeItem: (k) => localStorage.removeItem(k),
+        setItem: (k, v) => {
+          try {
+            localStorage.setItem(k, v);
+            if (useStore.getState().saveFailed) queueMicrotask(() => useStore.setState({ saveFailed: false }));
+          } catch {
+            if (!useStore.getState().saveFailed) queueMicrotask(() => useStore.setState({ saveFailed: true }));
+          }
+        },
+      })),
       partialize: (s) => ({
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
         extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
@@ -826,6 +881,14 @@ function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string,
     const canon = ensureCode(get, set, code);
     for (const [start, end] of spans) get().addSegment(pid, start, end, canon);
   }
+  // segments that arrived BEFORE their transcript were parked in extSegRows as
+  // passthrough; now that the transcript exists they become real (visible, editable)
+  // segments — otherwise export would emit both the parked row and any re-coding
+  const parked = get().extSegRows.filter((x) => /^(.+?):\d/.exec(x.segment_ref || "")?.[1] === pid);
+  if (parked.length) {
+    set({ extSegRows: get().extSegRows.filter((x) => !parked.includes(x)) });
+    importSegments(get, set, parked);
+  }
 }
 
 function importCodebook(get: Get, set: Set_, rows: Record<string, string>[]) {
@@ -848,9 +911,36 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
     const m = /^(.+?):(\d+)(?:-(\d+))?$/.exec(r.segment_ref || "");
     if (!m) return;
     const pid = m[1], start = +m[2], end = +(m[3] || m[2]);
-    if (!get().transcripts[pid]) { set({ extSegRows: [...get().extSegRows, r] }); return; }
+    // a corrupt/hand-edited ref like p1:1-999999999 would hang remapSegment on the
+    // next re-import (it walks every line in the range); no real segment spans 10k
+    if (end < start || end - start > 9999) return;
+    if (!get().transcripts[pid]) {
+      // parked, not imported — dedup here, or re-importing the same file grows the
+      // passthrough rows without bound and export re-emits the duplicates
+      const key = (x: Record<string, string>) =>
+        `${x.segment_ref}|${norm(x.code || "")}|${(x.proposed_by || "").trim()}`;
+      if (!get().extSegRows.some((x) => key(x) === key(r))) set({ extSegRows: [...get().extSegRows, r] });
+      return;
+    }
     const canon = ensureCode(get, set, r.code);
-    get().addSegment(pid, start, end, canon, r.proposed_by || undefined, r.status || "accepted", r.notes || "");
+    const coder = (r.proposed_by || "").trim() || get().ui.coderName.trim() || "tom";
+    const status = r.status || "accepted", notes = r.notes || "";
+    const existing = get().segments.find((x) =>
+      x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(canon) && x.proposedBy === coder);
+    if (existing) {
+      // a re-imported row that only changed status/notes must not vanish into
+      // addSegment's dedup — but it would OVERWRITE in-app review work, so it's
+      // parked for consent (SegUpdateModal) instead of applied silently
+      if ((existing.status !== status || existing.notes !== notes)
+          && !get().pendingSegUpdates.some((u) => u.sid === existing.sid))
+        set({ pendingSegUpdates: [...get().pendingSegUpdates, {
+          sid: existing.sid, ref: formatSegRef(pid, start, end), code: canon,
+          from: { status: existing.status, notes: existing.notes },
+          to: { status, notes },
+        }] });
+    } else {
+      get().addSegment(pid, start, end, canon, coder, status, notes);
+    }
   });
 }
 
