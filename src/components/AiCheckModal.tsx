@@ -72,8 +72,12 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
 
   const run = async () => {
     const key = getKey();
-    if (!key) { setErr("No API key set. Add one in Settings → AI assistance."); return; }
+    if (!key) {
+      const m = "No API key set. Add one in Settings → AI assistance.";
+      setErr(m); announce(m, { assertive: true }); return;
+    }
     setBusy(true); setErr(null);
+    announce(`Scanning “${pid}” with AI, ${chunks.length} chunk${chunks.length === 1 ? "" : "s"}…`);
     abort.current = new AbortController();
     const st = useStore.getState();
     let errors = 0, notices = 0, cost = 0;
@@ -101,7 +105,7 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
-      announce(`AI scan failed: ${msg}`);
+      announce(`AI scan failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);
     }

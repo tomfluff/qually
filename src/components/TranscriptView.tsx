@@ -13,6 +13,7 @@ import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
 import { savedScroll, positioned } from "../scrollMemory";
+import { announce } from "../announce";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
@@ -90,6 +91,9 @@ const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 
 const MIN_PAD = 48;    // headroom floor (also the spacer height until the viewport is measured)
 const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
+const GLIDE_MS = 260; // smooth-scroll duration; long enough to read as motion, short enough to not wait on
+const WHEEL_TAU = 90; // ms; how hard the wheel glide chases its target (~3x this to settle)
+const WHEEL_MIN = 40; // px; below this a wheel event is really a trackpad, which is smooth already
 
 // per-tab scroll anchors — shared with the store, which must forget them on a
 // re-import or project swap (a pid is not stable identity). See scrollMemory.ts.
@@ -137,8 +141,9 @@ export function TranscriptView() {
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
     // Home/End (and any scroll) leave the selection behind. Rather than silently move
     // it — the selection is your place in the argument, not your place on screen — note
-    // when it has gone off-screen and offer a way back.
-    setSelOff(offscreenDir(v));
+    // when it has gone off-screen and offer a way back. Not mid-glide: a follow drives
+    // 'scroll' every frame with the head still catching up, which would flash the button.
+    if (!gliding.current) setSelOff(offscreenDir(v));
   };
   // Which way the selection lies, if it isn't visible. Runs on EVERY scroll event, so it
   // may not walk the selection: `Math.min(...set)` spreads it, which is O(n) per frame
@@ -181,9 +186,89 @@ export function TranscriptView() {
     for (const id of selLines) { if (id < first) first = id; if (id > last) last = id; }
     selBounds.current = { first, last };
     const v = vref.current;
-    if (v) setSelOff(offscreenDir(v)); // the selection may already be off-screen
+    // the selection may already be off-screen (e.g. a tab switch restored an offset that
+    // doesn't include it). But when keep-in-view owns the head — positioned, no pending
+    // jump — it's about to pull the head back, so don't flash the button on the way there.
+    if (v) setSelOff(positioned.has(active) && !jump ? null : offscreenDir(v));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selLines, groups, active]);
+
+  // Animate the jumps, opt-in (Settings -> Transcript). Read straight from the store,
+  // not a subscription: the keydown effect below captures its closures once. Deliberately
+  // does NOT defer to prefers-reduced-motion: it defaults off, so switching it on is an
+  // explicit per-app choice, and it should beat the OS-wide default it contradicts.
+  const smooth = () => useStore.getState().ui.smoothScroll;
+  const tween = useRef(0);
+  // true only while a glide is animating: the scroll it drives fires 'scroll' every
+  // frame, and the selection reads as off-screen until the glide catches up — gate the
+  // "back to selection" button off this so a follow doesn't flash it. (Instant/smooth-off
+  // glides never set it: they land in one go, before any 'scroll' fires.)
+  const gliding = useRef(false);
+  // virtua's own `smooth` option delegates to scrollTo({behavior:"smooth"}), which the
+  // browser silently downgrades to a jump when the OS asks for reduced motion — so the
+  // app toggle could never win on a machine that asks for it. Animate scrollTop on a rAF
+  // loop instead, which nothing downgrades.
+  //
+  // `targetOf` computes the destination up front (scrollToIndex can't tell us: it lands
+  // asynchronously, over several frames, as rows measure). That makes the target only as
+  // good as virtua's height estimates above it, so `land` runs at the end and puts us
+  // exactly where the instant path would have — by then the rows we crossed are measured.
+  const glide = (targetOf: (v: VListHandle, from: number) => number, land: () => void) => {
+    const v = vref.current;
+    const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
+    cancelAnimationFrame(tween.current);
+    gliding.current = false;
+    if (!v || !el || !smooth()) return land();
+    const from = el.scrollTop;
+    const to = Math.max(0, Math.min(targetOf(v, from), el.scrollHeight - el.clientHeight));
+    if (Math.abs(to - from) < 2) return land(); // already there; don't stage a 0px glide
+    gliding.current = true;
+    const t0 = performance.now();
+    const step = (t: number) => {
+      const p = Math.min(1, (t - t0) / GLIDE_MS);
+      el.scrollTop = from + (to - from) * (1 - (1 - p) ** 3); // easeOutCubic
+      if (p < 1) tween.current = requestAnimationFrame(step);
+      else { gliding.current = false; land(); }
+    };
+    tween.current = requestAnimationFrame(step);
+  };
+  useEffect(() => () => cancelAnimationFrame(tween.current), []);
+  // virtua's "center" alignment, computed rather than requested
+  const centerOn = (i: number) => (v: VListHandle) => v.getItemOffset(i) - (v.viewportSize - v.getItemSize(i)) / 2;
+
+  // The wheel. Chrome animates its own ~100px-per-click jumps, but only while the OS
+  // isn't asking for reduced motion — ask for it and every click lands in one frame.
+  // So chase the wheel ourselves: accumulate clicks into a target and ease scrollTop
+  // toward it. Deliberately eased by TIME, not per-frame: a fixed fraction per frame
+  // would scroll twice as fast on a 120Hz screen.
+  useEffect(() => {
+    const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
+    if (!el) return;
+    let target = 0, raf = 0, last = 0, running = false;
+    const step = (t: number) => {
+      const dt = Math.min(64, t - last); // a backgrounded tab resumes with a huge dt
+      last = t;
+      const d = target - el.scrollTop;
+      if (Math.abs(d) < 0.5) { el.scrollTop = target; running = false; return; }
+      el.scrollTop += d * (1 - Math.exp(-dt / WHEEL_TAU));
+      raf = requestAnimationFrame(step);
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!smooth() || e.ctrlKey) return; // ctrl+wheel is browser zoom, not ours to take
+      // ponytail: |delta| is the only cheap tell between a wheel click and a trackpad
+      // swipe. Trackpads already scroll pixel-by-pixel — smoothing them just adds lag —
+      // so only the chunky events get chased. If a device lands wrong, this is the knob.
+      const px = e.deltaMode === 1 ? e.deltaY * fontSize * ROW_RATIO : e.deltaY;
+      if (Math.abs(px) < WHEEL_MIN) return;
+      e.preventDefault();
+      cancelAnimationFrame(tween.current); gliding.current = false; // a keyboard glide loses to the hand on the wheel
+      const max = el.scrollHeight - el.clientHeight;
+      target = Math.max(0, Math.min((running ? target : el.scrollTop) + px, max));
+      if (!running) { running = true; last = performance.now(); raf = requestAnimationFrame(step); }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => { el.removeEventListener("wheel", onWheel); cancelAnimationFrame(raf); };
+  }, [transcript, fontSize]);
 
   // scroll the selection back into view — the way home after Home/End
   const backToSelection = () => {
@@ -191,7 +276,7 @@ export function TranscriptView() {
     if (st.selection.pid !== active || !st.selection.lines.size) return;
     const first = Math.min(...st.selection.lines);
     const gi = groups.findIndex((g) => g.endId >= first);
-    if (gi >= 0) vref.current?.scrollToIndex(gi + 1, { align: "center" }); // +1 for the top vpad
+    if (gi >= 0) glide(centerOn(gi + 1), () => vref.current?.scrollToIndex(gi + 1, { align: "center" })); // +1 for the top vpad
   };
 
   // AI marks for this transcript, but only where the line still reads as it did when
@@ -264,13 +349,15 @@ export function TranscriptView() {
 
   // With a viewport-sized top pad, offset 0 is a blank screen: "the top" now means
   // the first line parked at the top of the viewport, which is index 1 (0 = the pad).
-  const toTop = () => vref.current?.scrollToIndex(1, { align: "start" });
+  const toTop = () => glide((v) => v.getItemOffset(1), () => vref.current?.scrollToIndex(1, { align: "start" }));
   // align "end" alone parks the last line exactly at the viewport bottom — which is
   // where the floating hotbar dock sits, so End left it occluded. Overshoot by the
   // dock's current height (collapsed docks measure small, which is right) plus a gap.
   const toBottom = () => {
     const dock = document.querySelector(".hotbar")?.getBoundingClientRect().height ?? 64;
-    vref.current?.scrollToIndex(groups.length, { align: "end", offset: dock + 8 });
+    const n = groups.length;
+    glide((v) => v.getItemOffset(n) + v.getItemSize(n) - v.viewportSize + dock + 8,
+      () => vref.current?.scrollToIndex(n, { align: "end", offset: dock + 8 }));
   };
 
   // The ONLY way into a selection used to be onMouseDown on a row: arrow keys are
@@ -318,7 +405,7 @@ export function TranscriptView() {
   useEffect(() => {
     if (pad === null || !jump || jump.pid !== active || !transcript) return;
     const idx = groups.findIndex((g) => jump.line >= g.startId && jump.line <= g.endId);
-    if (idx >= 0) vref.current?.scrollToIndex(idx + 1, { align: "center" }); // +1 for the top vpad
+    if (idx >= 0) glide(centerOn(idx + 1), () => vref.current?.scrollToIndex(idx + 1, { align: "center" })); // +1 for the top vpad
     positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
     clearJump();
   }, [jump, active, transcript, groups, clearJump, pad]);
@@ -336,12 +423,57 @@ export function TranscriptView() {
     if (jump || !positioned.has(active)) return;
     const gi = groups.findIndex((g) => headId >= g.startId && headId <= g.endId);
     if (gi < 0) return;
+    const idx = gi + 1; // +1 for the top vpad
     const first = v.findItemIndex(v.scrollOffset);
     const last = v.findItemIndex(v.scrollOffset + v.viewportSize);
-    const idx = gi + 1; // +1 for the top vpad
-    if (idx <= first) v.scrollToIndex(idx, { align: "start" });
-    else if (idx >= last) v.scrollToIndex(idx, { align: "end" });
+    // glide, not raw scrollToIndex: it lands on an explicitly-computed target, where
+    // scrollToIndex estimates the height above and visibly overshoots-then-corrects
+    // mid-list (a scroll-back bounce). When smooth is off, glide lands instantly.
+    // Bottom edge is treated symmetrically with the top — no hotbar offset: the dock
+    // resizes (collapsed->expanded) the moment a selection exists, and keying the scroll
+    // to its height fights that change.
+    if (idx <= first) glide((vh) => vh.getItemOffset(idx), () => v.scrollToIndex(idx, { align: "start" }));
+    else if (idx >= last) glide((vh) => vh.getItemOffset(idx) + vh.getItemSize(idx) - vh.viewportSize,
+      () => v.scrollToIndex(idx, { align: "end" }));
   }, [headId, groups]);
+
+  // Speak the selection as it moves. The listbox exposes the head via
+  // aria-activedescendant (line 590), which NVDA/JAWS read — but Narrator's support for
+  // activedescendant is unreliable and often silent, so pipe it through the live region
+  // too. Cost: NVDA/JAWS then hear it twice; acceptable until they're tested.
+  // One line: "selected|not selected, speaker, text, time". Many: "N selected" then
+  // speaker + text for every selected line (no time). Full speaker label always — short
+  // mode is a visual abbreviation, no use to a listener. (line.speaker is the full label.)
+  useEffect(() => {
+    const lines = transcript?.lines;
+    if (headId === null || !lines) return;
+    const at = (id: number) => lines.find((l) => l.id === id);
+    // AI marks on a line, spoken after it: non-transcription notices as their type
+    // (the lens label), transcription errors as "possible transcript errors:" plus the
+    // note the tooltip shows. flagsByLine already honours the notices-hidden toggle.
+    const marks = (id: number) => {
+      const fs = flagsByLine.get(id);
+      if (!fs?.length) return "";
+      const notices = [...new Set(fs.filter((f) => spanLens(f) !== "transcription")
+        .map((f) => lensOf(spanLens(f))?.label ?? spanLens(f)))];
+      const errs = fs.filter((f) => spanLens(f) === "transcription").map((f) => f.reason);
+      const out: string[] = [];
+      if (notices.length) out.push(notices.join(", "));
+      if (errs.length) out.push(`possible transcript errors: ${errs.join(", ")}`);
+      return out.length ? `, ${out.join(", ")}` : "";
+    };
+    const count = selLines?.size ?? 0;
+    if (count > 1 && selLines) {
+      const parts = [...selLines].sort((a, b) => a - b)
+        .map((id) => { const l = at(id); return l ? `${l.speaker.trim()}, ${l.text}${marks(id)}` : null; })
+        .filter(Boolean);
+      announce(`${count} selected, ${parts.join(", ")}`);
+    } else {
+      const l = at(headId);
+      if (l) announce(`${selLines?.has(headId) ? "selected" : "not selected"}, ${l.speaker.trim()}, ${l.text}, ${l.ts}${marks(headId)}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headId, selLines]);
 
   // Tooltips open upward, but the list is a scroller and clips them — and with the
   // headroom, the line you're reading is usually parked at the very top. Flip the tip
@@ -370,8 +502,16 @@ export function TranscriptView() {
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
       const v = vref.current;
       if (!v) return;
-      if (e.key === "PageDown") { e.preventDefault(); v.scrollBy(v.viewportSize * 0.9); }
-      else if (e.key === "PageUp") { e.preventDefault(); v.scrollBy(-v.viewportSize * 0.9); }
+      if (e.key === "PageDown" || e.key === "PageUp") {
+        e.preventDefault();
+        const d = (e.key === "PageDown" ? 0.9 : -0.9) * v.viewportSize;
+        // Measure the page off the live scrollTop, not v.scrollOffset — virtua's copy
+        // lags a frame behind after a re-measure, which paged short. No `land` step: a
+        // page is an exact pixel target, and scrollBy is relative, so re-running it at
+        // the end would page twice.
+        if (smooth()) glide((_, from) => from + d, () => {});
+        else v.scrollBy(d);
+      }
       // Home/End mean first/last LINE, not the ends of the scrollable area — those
       // are now a screen of empty headroom.
       else if (e.key === "Home") { e.preventDefault(); toTop(); }
@@ -481,25 +621,24 @@ export function TranscriptView() {
   return (
     <>
       <div className="tview" ref={tviewRef}>
-      {/* A virtualized listbox is an honest compromise: rows scrolled away don't
-          exist in the DOM, but aria-setsize/posinset keep the counts truthful and
-          the active descendant (the selection head) is always rendered while it's
-          being driven. Announcements (announce.ts) carry what this can't. */}
+      {/* A plain focusable region, deliberately NOT an ARIA listbox. A focused listbox
+          narrates its own selected option (in DOM order, AI-highlight markup and all) on
+          every move — which double-spoke over, and fought the order of, our own live
+          region. The widget contract and a custom narration can't coexist, and only the
+          live region can express our order + the AI marks + a whole multi-line selection.
+          So the selection-announce effect above is the single, consistent voice; the rows
+          drop role=option/aria-selected for the same reason. */}
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
         tabIndex={0} onKeyDown={onListKeyDown}
-        role="listbox" aria-multiselectable={true}
-        aria-activedescendant={headId !== null ? `trow-${headId}` : undefined}
         aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line
-          ...groups.map((g, gi) => (
+          ...groups.map((g) => (
             <Row
               key={g.startId}
               group={g}
               selected={g.ids.some((id) => selLines?.has(id))}
-              posinset={gi + 1}
-              setsize={groups.length}
               cols={cols}
               laned={laned}
               codebook={codebook}
@@ -547,11 +686,9 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, posinset, setsize, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
-  posinset: number;
-  setsize: number;
   cols: number;
   laned: LanedSeg[];
   codebook: Record<string, { color: string }>;
@@ -650,8 +787,7 @@ function Row({ group, selected, posinset, setsize, cols, laned, codebook, onRowD
 
   return (
     <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
-      id={`trow-${startId}`} role="option" aria-selected={selected}
-      aria-setsize={setsize} aria-posinset={posinset}
+      id={`trow-${startId}`}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
       style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
       {showLid && <span className="lid">{lidLabel(group)}</span>}
@@ -727,7 +863,7 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
 
   return (
     <span className="lineEdit">
-      <textarea ref={taRef} rows={1} value={value} aria-label={`Correct line ${line.id}. Enter saves, Escape cancels.`}
+      <textarea ref={taRef} rows={1} value={value} aria-label={`Correct line ${line.id}`}
         onChange={(e) => { setValue(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight}px`; }}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); save(value); }

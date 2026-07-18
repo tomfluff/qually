@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
+import { announce } from "../announce";
 
 // First-run get-started screen, shown when no transcript is loaded.
 export function Welcome() {
@@ -27,10 +28,14 @@ export function Welcome() {
         <input ref={fileRef} type="file" multiple accept=".csv,.json" style={{ display: "none" }}
           onChange={(e) => {
             const f = e.target.files;
-            if (f?.length) importFiles(f).then(() => setErr("")).catch((x) => setErr((x as Error).message));
+            if (f?.length) importFiles(f).then(() => setErr("")).catch((x) => {
+              const m = (x as Error).message; setErr(m); announce(m, { assertive: true });
+            });
             e.target.value = "";
           }} />
-        {err && <div className="ai-warn" role="alert">{err}</div>}
+        {/* visual only — announced imperatively (assertive) in the catch above, so it
+            isn't spoken twice by a role=alert live region */}
+        {err && <div className="ai-warn">{err}</div>}
         <p className="welcome-open">Already have a <code>.qually.json</code> project? Import it here to pick up where you left off.</p>
         <button className="linklike" onClick={() => setFormatOpen(true)}>See the expected file format &amp; get a converter prompt</button>
       </div>

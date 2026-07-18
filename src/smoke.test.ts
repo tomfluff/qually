@@ -366,6 +366,69 @@ test("re-importing over transcription corrections asks first, even with no segme
   useStore.getState().resolveImport("cancel");
 });
 
+test("unnamed coding stamps (default), never empty; a committed name sweeps it up", () => {
+  useStore.getState().setUi({ coderName: "" });
+  useStore.getState().addSegment("CLAIM", 1, 2, "unsigned");
+  const mine = () => useStore.getState().segments.find((s) => s.code === "unsigned")!;
+  expect(mine().proposedBy).toBe("(default)"); // the invariant: a visible marker, not a blank
+  // an imported segment already has a coder and must survive the sweep untouched
+  useStore.getState().addSegment("CLAIM", 3, 4, "theirs", "colleague");
+
+  // typing "jo" one letter at a time must not strand the segment as "j"
+  useStore.getState().setUi({ coderName: "j" });
+  useStore.getState().setUi({ coderName: "jo" });
+  expect(mine().proposedBy).toBe("(default)"); // keystrokes don't commit
+  useStore.getState().claimUnattributed();
+  expect(mine().proposedBy).toBe("jo"); // committed name relabels (default)
+  expect(useStore.getState().segments.find((s) => s.code === "theirs")!.proposedBy).toBe("colleague");
+
+  // a later rename leaves already-signed work alone (only (default)/blank is swept)
+  useStore.getState().setUi({ coderName: "sam" });
+  useStore.getState().claimUnattributed();
+  expect(mine().proposedBy).toBe("jo");
+});
+
+test("exported proposed_by is never empty", () => {
+  useStore.getState().setUi({ coderName: "" });
+  useStore.getState().addSegment("INV", 1, 1, "invx");
+  // the row ships as (default), not an empty field between two commas
+  expect(useStore.getState().exportCSV()).toContain(",(default),accepted,");
+});
+
+test("importing the FIRST transcript while unnamed raises the who's-coding ask", async () => {
+  useStore.getState().newProject();          // nothing imported yet
+  useStore.getState().setUi({ coderName: "" });
+  useStore.setState({ pendingCoderAsk: false });
+  await useStore.getState().importFiles([new File(["line_id,timestamp,speaker,text\n1,0,P,hi\n"], "FIRST.csv")]);
+  expect(useStore.getState().pendingCoderAsk).toBe(true); // first transcript into an empty workspace
+
+  // a SECOND transcript must NOT re-ask
+  useStore.setState({ pendingCoderAsk: false });
+  await useStore.getState().importFiles([new File(["line_id,timestamp,speaker,text\n1,0,P,yo\n"], "SECOND.csv")]);
+  expect(useStore.getState().pendingCoderAsk).toBe(false); // not the first transcript anymore
+
+  useStore.getState().resolveCoderAsk("robin");
+  expect(useStore.getState().ui.coderName).toBe("robin");
+});
+
+test("importing unsigned codes offers to attribute only the imported rows", async () => {
+  useStore.getState().setUi({ coderName: "" });
+  useStore.getState().addSegment("SIGN", 1, 2, "sign_mine"); // my own (default) row, must be spared
+  // a colleague's coded-segments.csv with a blank proposed_by, on a loaded transcript
+  const t = new File(["line_id,timestamp,speaker,text\n1,0,P,a\n2,0,P,b\n"], "SIGN.csv");
+  await useStore.getState().importFiles([t]);
+  const seg = new File(["segment_ref,pid,excerpt,code,proposed_by,status,notes\nSIGN:1-2,SIGN,,sign_theirs,,accepted,\n"], "coded-segments.csv");
+  await useStore.getState().importFiles([seg]);
+
+  const pend = useStore.getState().pendingImportSign;
+  expect(pend?.sids).toHaveLength(1); // only the imported row, not my "sign_mine" row
+  useStore.getState().resolveImportSign("alex");
+  const by = (code: string) => useStore.getState().segments.find((s) => s.code === code)!.proposedBy;
+  expect(by("sign_theirs")).toBe("alex");    // the imported row got signed
+  expect(by("sign_mine")).toBe("(default)"); // my own default row was left alone
+  expect(useStore.getState().pendingImportSign).toBe(null);
+});
+
 // LAST on purpose: it wipes the workspace every earlier test builds on
 test("newProject wipes the workspace but keeps ui/ai preferences", () => {
   useStore.getState().setUi({ coderName: "keepme", speakerWeight: { P: "bold" }, speakerColors: { P: "#123456" } });

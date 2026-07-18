@@ -32,6 +32,8 @@ export function SettingsButton() {
   const coderName = useStore((s) => s.ui.coderName);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
+  const smoothScroll = useStore((s) => s.ui.smoothScroll);
+  const claimUnattributed = useStore((s) => s.claimUnattributed);
   const setUi = useStore((s) => s.setUi);
   const dark = useStore((s) => s.ui.dark);
   const toggleTheme = useStore((s) => s.toggleTheme);
@@ -87,7 +89,7 @@ export function SettingsButton() {
                     {PALETTES.map((p) => (
                       <button key={p.id} className={"swatchbtn" + (accent === p.id ? " on" : "")}
                         style={{ background: dark ? p.dark : p.light }}
-                        title={p.name} aria-label={p.name} onClick={() => setUi({ accent: p.id })} />
+                        title={p.name} onClick={() => setUi({ accent: p.id })} />
                     ))}
                   </div>
                 </div>
@@ -141,6 +143,14 @@ export function SettingsButton() {
                 </div>
                 <div className="settings-note">Joins consecutive same-speaker lines that don't end in . ? ! … into one unit.</div>
                 <div className="srow">
+                  <span>Smooth scrolling</span>
+                  <div className="seg">
+                    <button className={!smoothScroll ? "on" : ""} onClick={() => setUi({ smoothScroll: false })}>off</button>
+                    <button className={smoothScroll ? "on" : ""} onClick={() => setUi({ smoothScroll: true })}>on</button>
+                  </div>
+                </div>
+                <div className="settings-note">Eases the mouse wheel, and animates Home/End, PageUp/PageDown and jumps to a line — so you can see where you moved to rather than arriving there. Overrides your system's reduced-motion setting, which otherwise turns all of it off.</div>
+                <div className="srow">
                   <span>Minimap</span>
                   <div className="seg">
                     <button className={minimapDetail === "detailed" ? "on" : ""} onClick={() => setUi({ minimapDetail: "detailed" })}>detailed</button>
@@ -152,10 +162,11 @@ export function SettingsButton() {
               {tab === "Codes" && <>
                 <label className="srow">
                   <span>Coder name</span>
-                  <input type="text" className="settext" value={coderName}
-                    onChange={(e) => setUi({ coderName: e.target.value })} />
+                  <input type="text" className="settext" value={coderName} placeholder="your name"
+                    onChange={(e) => setUi({ coderName: e.target.value })}
+                    onBlur={() => claimUnattributed()} />
                 </label>
-                <div className="settings-note">Written as <code>proposed_by</code> on every segment you create — how your coding is told apart from a second coder's in the exported CSV.</div>
+                <div className="settings-note">Written as <code>proposed_by</code> on every segment you create — how your coding is told apart from a second coder's in the exported CSV. Also in the toolbar, where you can see it while you work.</div>
                 <div className="srow">
                   <span>Lane width</span>
                   <div className="seg">

@@ -22,6 +22,10 @@
    the divider + 1rem), rather than floating in a gap short of it */
 .lineRow { display:flex; align-items:center; gap:8px; padding:0 0 0 16px;
   cursor:pointer; user-select:none; }
+/* ponytail: same fractional-DPI seam as the lane strip, on the row's own opaque
+   backgrounds (hover / selection). Bleed 1px into the next row so the highlight
+   band reads continuous; border-box is unchanged so virtua doesn't re-open it. */
+.lineRow { margin-bottom:-1px; }
 /* vertical spacing lives on the text so the lane strip spans the full row
    height and multiline segment bars connect (no inter-row gap) */
 .lineRow .txt { padding-block:6px; }
@@ -90,6 +94,12 @@
 .laneBar { width:var(--lane-w, 18px); flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
+/* ponytail: bleed the whole lane strip 1px into the row below. The rows are
+   virtualized (virtua) and at fractional DPI (e.g. 125%) a row boundary lands on a
+   sub-device-pixel, leaving a hairline seam every few rows in the strip's left
+   divider and its bars. Negative margin doesn't change the border-box virtua
+   measures, so it paints over the seam without shifting the next row down. */
+.lineRow .lanes { margin-bottom:-1px; }
 
 /* WCAG 1.4.1: which code a lane bar is must not be carried by HUE ALONE. Each code
    also gets one of six patterns (patternOf(), derived from the code name), drawn as

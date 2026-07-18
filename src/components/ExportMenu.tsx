@@ -28,8 +28,12 @@ const zipName = (s: string) =>
 //   the CSVs are interchange — a pipeline, a co-author, a paper appendix.
 export function ExportMenu() {
   const [open, setOpen] = useState(false);
+  // A pending export, parked behind the "still signed (default)?" nudge. null = no gate.
+  const [gate, setGate] = useState<(() => void) | null>(null);
+  const [gateName, setGateName] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const tabs = useStore((s) => s.tabs);
+  const hasDefault = useStore((s) => s.segments.some((x) => !x.proposedBy.trim() || x.proposedBy === "(default)"));
   const editCount = useStore((s) => Object.values(s.transcripts)
     .reduce((n, t) => n + t.lines.filter((l) => l.orig !== undefined).length, 0));
   const aiCalls = useStore((s) => s.aiLog.length);
@@ -45,15 +49,37 @@ export function ExportMenu() {
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onEsc); };
   }, [open]);
 
+  useEffect(() => {
+    if (!gate) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setGate(null); } };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
+  }, [gate]);
+
   const base = slug(tabs[0] ?? "qually");
   const s = () => useStore.getState();
+
+  // Any export that carries proposed_by passes through here. If some codes are still
+  // "(default)", offer to sign them first — but never block: "keep default" ships as-is.
+  const gated = (run: () => void) => () => {
+    if (!hasDefault) return run();
+    setGateName(s().ui.coderName.trim());
+    setGate(() => run);
+    setOpen(false);
+  };
+  const signAndRun = () => {
+    const name = gateName.trim();
+    if (name && name !== "(default)") { s().setUi({ coderName: name }); s().claimUnattributed(); }
+    gate?.();
+    setGate(null);
+  };
 
   const doProject = () => {
     saveText(s().exportProject(), `${base}.qually.json`, "application/json");
     setOpen(false);
   };
 
-  const doBundle = () => {
+  const doBundle = gated(() => {
     const st = s();
     const files = [
       { name: "README.txt", text:
@@ -90,7 +116,7 @@ it round-trips everything, including corrections and AI marks.
     save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
       new Date()), `${base}-csv.zip`);
     setOpen(false);
-  };
+  });
 
   const item = (label: string, hint: string, onClick: () => void, primary = false) => (
     <button className={"exitem" + (primary ? " pri" : "")} onClick={onClick}>
@@ -112,7 +138,7 @@ it round-trips everything, including corrections and AI marks.
           {item("Project (.qually.json)", "Everything — transcripts, corrections, codes, AI marks. Load this to pick up where you left off.", doProject, true)}
           <div className="exsec">Share &amp; publish</div>
           {item("All as CSVs (.zip)", "The whole bundle as spreadsheets, for a pipeline or a co-author.", doBundle)}
-          {item("Coded segments (.csv)", "Segments with computed excerpts.", () => { saveText(s().exportCSV(), "coded-segments.csv"); setOpen(false); })}
+          {item("Coded segments (.csv)", "Segments with computed excerpts.", gated(() => { saveText(s().exportCSV(), "coded-segments.csv"); setOpen(false); }))}
           {item("Codebook (.csv)", "Codes with colors, definitions, status.", () => { saveText(s().exportCodebook(), "codebook.csv"); setOpen(false); })}
           {editCount > 0 && item(`Transcript edits (.csv) · ${editCount}`, "Every correction: original vs corrected.",
             () => { saveText(s().exportEdits(), "transcript-edits.csv"); setOpen(false); })}
@@ -120,6 +146,33 @@ it round-trips everything, including corrections and AI marks.
             () => { saveText(s().exportNotices(), "ai-noticings.csv"); setOpen(false); })}
           {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost — your methods appendix.",
             () => { saveText(s().exportAiLog(), "ai-provenance.csv"); setOpen(false); })}
+        </div>
+      )}
+      {gate && (
+        <div className="about-backdrop" onMouseDown={() => setGate(null)}>
+          <div className="about imp" role="dialog" aria-modal="true"
+            aria-labelledby="signgate-title" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="about-head">
+              <h2 id="signgate-title">Some codes aren't signed</h2>
+              <button className="btn iconbtn" onClick={() => setGate(null)} title="Cancel (Esc)">
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <p className="about-lede">
+              Codes you made without a name are signed <code>(default)</code>. Sign them as yourself
+              before exporting, or ship them as <code>(default)</code>.
+            </p>
+            <label className="signfield"><span>Your name</span>
+              <input className="signinput" autoFocus value={gateName} placeholder="your name"
+                onChange={(e) => setGateName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && gateName.trim()) signAndRun(); }} />
+            </label>
+            <div className="imp-actions">
+              <button className="btn primary" disabled={!gateName.trim() || gateName.trim() === "(default)"}
+                onClick={signAndRun}>Sign &amp; export</button>
+              <button className="btn" onClick={() => { gate?.(); setGate(null); }}>Keep (default) &amp; export</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

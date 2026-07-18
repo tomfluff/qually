@@ -41,6 +41,7 @@ export interface Ui {
   minimapDetail: "detailed" | "simplified"; // minimap abstraction level
   showNotices: boolean; // AI noticing highlights visible (hide to read/code blind)
   lanePattern: boolean; // give each code a pattern as well as a colour (see patternOf)
+  smoothScroll: boolean; // animate Home/End/PageUp/PageDown and jumps instead of teleporting
   speakerColors: Record<string, string>; // per-speaker overrides; unset = speakerColor()
   // How loudly each speaker's words are set. "quiet" is usually the interviewer, so the
   // participants carry the page; "bold" is the one you're following. Unset = normal.
@@ -116,12 +117,16 @@ interface State {
   pendingImports: PendingImport[]; // re-imports awaiting a user decision
   pendingProject: Project | null;  // a loaded project awaiting the replace confirmation
   pendingSegUpdates: SegUpdate[];  // status/notes overwrites awaiting consent
+  pendingImportSign: { sids: number[] } | null; // just-imported (default) rows: "whose are these?"
+  pendingCoderAsk: boolean; // a transcript is loaded but the coder is still (default): "who's coding?"
   saveFailed: boolean; // localStorage write failed (quota) — autosave is NOT happening
 
   importFiles: (files: FileList | File[]) => Promise<void>;
   newProject: () => void;
   resolveImport: (choice: ImportChoice) => void;
   resolveSegUpdates: (apply: boolean) => void;
+  resolveImportSign: (name: string | null) => void;
+  resolveCoderAsk: (name: string | null) => void;
   ensureCode: (code: string) => string;
   addSegment: (pid: string, start: number, end: number, code: string,
     proposedBy?: string, status?: string, notes?: string) => void;
@@ -173,6 +178,7 @@ interface State {
   setFontSize: (n: number) => void;
   setSidebarFontSize: (n: number) => void;
   setUi: (patch: Partial<Ui>) => void;
+  claimUnattributed: () => void;
   toggleTheme: () => void;
   setHotbarMode: (mode: "auto" | "pinned") => void;
   setZen: (v: boolean) => void;
@@ -257,12 +263,12 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false,
-        speakerColors: {}, speakerWeight: {}, coderName: "tom" },
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false, smoothScroll: false,
+        speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
-      pendingImports: [], pendingProject: null, pendingSegUpdates: [], saveFailed: false,
+      pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
 
       // wipe the workspace, keep the person: ui prefs (coder name, theme, fonts)
       // and AI settings survive; everything project-shaped resets — including the
@@ -276,7 +282,7 @@ export const useStore = create<State>()(
           ui: { ...get().ui, speakerColors: {}, speakerWeight: {} },
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
-          pendingImports: [], pendingProject: null, pendingSegUpdates: [],
+          pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
           nextSid: 1,
         });
         forgetScroll();
@@ -284,6 +290,10 @@ export const useStore = create<State>()(
 
       importFiles: async (files) => {
         const skipped: string[] = [];
+        // sids present before this batch, so we can tell rows that just arrived from the
+        // user's own — the only way to attribute imported (default) rows without a flag
+        const before = new Set(get().segments.map((s) => s.sid));
+        const tBefore = Object.keys(get().transcripts).length;
         // Imports mutate snapshotted state (segments/codebook), so they must go on the
         // undo stack like any other edit: one entry for the whole batch, pushed before
         // the first mutation. pushUndo also clears redoStack — a stale redo snapshot
@@ -334,6 +344,15 @@ export const useStore = create<State>()(
           }
         }
         set({ hotbarCache: hotbarCodes(get()) });
+        // someone else's codes arrived unsigned? offer to attribute just those rows
+        const fresh = get().segments.filter((s) => !before.has(s.sid) && s.proposedBy === "(default)").map((s) => s.sid);
+        if (fresh.length) set({ pendingImportSign: { sids: fresh } });
+        // your FIRST transcript just loaded into an empty workspace and you haven't said
+        // who you are? ask. Only the empty->first moment — later transcripts don't re-ask.
+        const nm = get().ui.coderName.trim();
+        if (tBefore === 0 && Object.keys(get().transcripts).length > 0 && (!nm || nm === "(default)")) {
+          set({ pendingCoderAsk: true });
+        }
         if (skipped.length) throw new Error(skipped.join("; "));
       },
 
@@ -344,6 +363,37 @@ export const useStore = create<State>()(
         const by = new Map(updates.map((u) => [u.sid, u.to]));
         get().pushUndo();
         set({ segments: get().segments.map((x) => by.has(x.sid) ? { ...x, ...by.get(x.sid)! } : x) });
+      },
+
+      // The "who's coding?" ask, raised when a transcript loads with no coder set. name
+      // set => become that coder (and claimUnattributed signs the work done so far);
+      // null/blank => dismiss and keep coding as (default) until the next transcript loads.
+      resolveCoderAsk: (name) => {
+        set({ pendingCoderAsk: false });
+        const by = (name || "").trim();
+        if (!by || by === "(default)") return;
+        get().setUi({ coderName: by });
+        get().claimUnattributed();
+      },
+
+      // Attribute the (default) rows a colleague's file just brought in — but ONLY those
+      // sids, never the user's own (default) work. name null / blank / "(default)" = keep
+      // them as (default). Dedup: the new name can collide a row onto an existing one.
+      resolveImportSign: (name) => {
+        const p = get().pendingImportSign;
+        set({ pendingImportSign: null });
+        const by = (name || "").trim();
+        if (!p || !by || by === "(default)") return;
+        const target = new Set(p.sids);
+        get().pushUndo();
+        const seen = new Set<string>();
+        const segments = get().segments
+          .map((s) => (target.has(s.sid) ? { ...s, proposedBy: by } : s))
+          .filter((s) => {
+            const k = `${s.pid}|${s.start}|${s.end}|${norm(s.code)}|${s.proposedBy}`;
+            return seen.has(k) ? false : (seen.add(k), true);
+          });
+        set({ segments });
       },
 
       resolveImport: (choice) => {
@@ -386,7 +436,11 @@ export const useStore = create<State>()(
 
       addSegment: (pid, start, end, code, proposedBy, status = "accepted", notes = "") => {
         const s = get();
-        const by = proposedBy ?? (s.ui.coderName.trim() || "tom");
+        // Unset name => "(default)", the visible marker for "coded, nobody signed".
+        // Never empty: proposed_by is the column that tells two coders apart, and an
+        // empty field reads as a bug. claimUnattributed sweeps these into a real name
+        // once you commit one; export nudges you before it ships.
+        const by = proposedBy ?? (s.ui.coderName.trim() || "(default)");
         // dedup is per coder: two coders holding the same span+code is agreement data, not a dupe
         if (s.segments.some((x) => x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(code) && x.proposedBy === by)) return;
         set({ segments: [...s.segments, { sid: s.nextSid, pid, start, end, code, notes, proposedBy: by, status }], nextSid: s.nextSid + 1 });
@@ -649,7 +703,7 @@ export const useStore = create<State>()(
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
-          pendingImports: [], pendingProject: null, pendingSegUpdates: [],
+          pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
           nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
         });
         set({ hotbarCache: hotbarCodes(get()) });
@@ -791,6 +845,25 @@ export const useStore = create<State>()(
       setFontSize: (n) => set({ ui: { ...get().ui, fontSize: n } }),
       setSidebarFontSize: (n) => set({ ui: { ...get().ui, sidebarFontSize: n } }),
       setUi: (patch) => set({ ui: { ...get().ui, ...patch } }),
+      // Sign the unsigned work as the current coder. Relabels every "(default)" (and any
+      // legacy blank) segment to the committed name — BLANKET, by design: with no
+      // provenance flag we can't tell your own default rows from imported ones, and the
+      // user owns that call (they're nudged at export before it ships). Call on COMMIT
+      // (blur/Enter/save), never per keystroke, or "jo" typed one letter at a time stamps
+      // everything "j" and leaves nothing to claim. Dedup after: relabeling can land two
+      // rows on the same pid+span+code+coder (e.g. a "(default)" onto an existing name).
+      claimUnattributed: () => {
+        const by = get().ui.coderName.trim();
+        if (!by || by === "(default)") return;
+        const seen = new Set<string>();
+        const segments = get().segments
+          .map((s) => (s.proposedBy.trim() && s.proposedBy !== "(default)" ? s : { ...s, proposedBy: by }))
+          .filter((s) => {
+            const k = `${s.pid}|${s.start}|${s.end}|${norm(s.code)}|${s.proposedBy}`;
+            return seen.has(k) ? false : (seen.add(k), true);
+          });
+        set({ segments });
+      },
       toggleTheme: () => set({ ui: { ...get().ui, dark: !get().ui.dark } }),
       setHotbarMode: (mode) => { set({ hotbar: { ...get().hotbar, mode } }); set({ hotbarCache: hotbarCodes(get()) }); },
       setZen: (v) => set({ ui: { ...get().ui, zen: v } }),
@@ -804,8 +877,9 @@ export const useStore = create<State>()(
           excerpt: excerptOf((s.transcripts[seg.pid]?.lines || [])
             .filter((l) => l.id >= seg.start && l.id <= seg.end)
             .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt,
-          code: seg.code, proposed_by: seg.proposedBy, status: seg.status, notes: seg.notes,
-        })).concat(s.extSegRows as never[]);
+          // never-empty invariant enforced at the write edge, whatever the source
+          code: seg.code, proposed_by: seg.proposedBy.trim() || "(default)", status: seg.status, notes: seg.notes,
+        })).concat(s.extSegRows.map((r) => ({ ...r, proposed_by: (r.proposed_by || "").trim() || "(default)" })) as never[]);
         return toCSV(rows, fields);
       },
     }),
@@ -841,10 +915,13 @@ export const useStore = create<State>()(
         s.ai.lenses ??= ["transcription"];
         s.ui.showNotices ??= true;
         s.ui.lanePattern ??= false;
+        s.ui.smoothScroll ??= false;
         s.ui.speakerColors ??= {};
         s.ui.speakerWeight ??= {};
         s.ui.fontFamily ??= "system";
-        s.ui.coderName ??= "tom";
+        s.ui.coderName ??= "";
+        // never-empty invariant: rows written empty by an earlier build become "(default)"
+        s.segments = s.segments.map((x) => (x.proposedBy?.trim() ? x : { ...x, proposedBy: "(default)" }));
       },
     }
   )
@@ -981,7 +1058,8 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
       return;
     }
     const canon = ensureCode(get, set, r.code);
-    const coder = (r.proposed_by || "").trim() || get().ui.coderName.trim() || "tom";
+    // an imported row with no coder is NOT yours — mark it "(default)", never your name
+    const coder = (r.proposed_by || "").trim() || "(default)";
     const status = r.status || "accepted", notes = r.notes || "";
     const existing = get().segments.find((x) =>
       x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(canon) && x.proposedBy === coder);

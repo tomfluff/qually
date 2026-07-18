@@ -46,6 +46,13 @@
 /* re-import conflict modal */
 .imp { width:min(520px, 100%); }
 
+/* the name field shared by the export sign-nudge and the import "whose is this?" dialog */
+.signfield { display:flex; align-items:center; gap:10px; margin:4px 0 2px; }
+.signfield > span { font-weight:500; color:var(--fg); white-space:nowrap; }
+.signinput { flex:1; min-width:0; font:inherit; padding:6px 9px; color:var(--fg);
+  background:var(--bg); border:1px solid var(--line); border-radius:7px; }
+.signinput:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+
 /* AI scan modal: wider than the import dialog (two-column lens grid + payload preview),
    and a fixed-head / scrolling-body / pinned-footer layout so the consent buttons never
    fall below the fold. .about is already a flex column capped at 84vh; .ai-body takes the
