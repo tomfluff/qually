@@ -12,8 +12,9 @@ import { Icon } from "./Icon";
 // pointer-events:none by design, and this needs buttons (apply fix, dismiss)
 // and selectable text. Same conventions as SegmentPopover: fixed at the mark,
 // sized from the sidebar text setting, outside-click / Escape to close.
-export function AiMarkPopover({ pid, line, span, x, y, onClose }: {
+export function AiMarkPopover({ pid, line, span, x, y, onClose, onCycle }: {
   pid: string; line: number; span: Flag; x: number; y: number; onClose: () => void;
+  onCycle?: () => void; // M pressed inside the popover: advance to the line's next mark
 }) {
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const dismissNotice = useStore((s) => s.dismissNotice);
@@ -39,6 +40,9 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose }: {
 
   return (
     <div className="pop aipop" ref={setRef} role="dialog" tabIndex={-1}
+      // focus lives in here while open, so the transcript's own M handler can't
+      // hear the key — forward it to keep the open→cycle→cycle rhythm working
+      onKeyDown={(e) => { if (e.key === "m" || e.key === "M") { e.preventDefault(); onCycle?.(); } }}
       aria-label={`${lens?.label ?? "AI mark"} on line ${line}`}
       style={{ left: Math.min(x, window.innerWidth - 300), top: Math.min(y, window.innerHeight - 200), fontSize: sidebarFontSize }}>
       <div className="row aipop-head">

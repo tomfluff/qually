@@ -429,6 +429,29 @@ export function TranscriptView() {
       () => vref.current?.scrollToIndex(n, { align: "end", offset: dock + 8 }));
   };
 
+  // Open the selected line's AI-mark popover; called again (M — from the list or
+  // forwarded by the open popover) it advances to the line's next mark and wraps.
+  // Returns whether it acted, so callers only preventDefault when it did.
+  const cycleMarkPopover = (): boolean => {
+    const sel = useStore.getState().selection;
+    if (sel.pid !== active || sel.head === null) return false;
+    const g = groups.find((x) => sel.head! >= x.startId && sel.head! <= x.endId);
+    if (!g) return false;
+    const all: { line: number; span: Flag; idx: number }[] = [];
+    for (const l of g.lines)
+      (flagsByLine.get(l.id) ?? []).forEach((span, idx) => all.push({ line: l.id, span, idx }));
+    if (!all.length) return false;
+    const at = aiPop ? all.findIndex((m) => m.span === aiPop.span) : -1;
+    const next = all[(at + 1) % all.length];
+    // anchor at the mark's rendered span; fall back to the row if virtua
+    // hasn't got it on screen
+    const mk = tviewRef.current?.querySelector<HTMLElement>(`[data-ai="${next.line}:${next.idx}"]`)
+      ?? document.getElementById(`trow-${g.startId}`);
+    const r = mk?.getBoundingClientRect();
+    setAiPop({ line: next.line, span: next.span, x: r?.left ?? 100, y: (r?.bottom ?? 100) + 6 });
+    return true;
+  };
+
   // The ONLY way into a selection used to be onMouseDown on a row: arrow keys are
   // gated on a selection already existing, so a keyboard user could never make the
   // first one — and the digit hotkeys, the whole point of the app, stayed forever
@@ -453,25 +476,10 @@ export function TranscriptView() {
     }
     // M: the keyboard route to the AI-mark popover — the marks themselves are
     // deliberately not tab stops (per-row stops were a wall). Opens the selected
-    // line's first mark; pressing again cycles through the line's marks.
+    // line's first mark; the POPOVER forwards further M presses back here to
+    // cycle (once it's open, focus sits inside it, so this handler can't hear M).
     if (e.key === "m" || e.key === "M") {
-      const sel = useStore.getState().selection;
-      if (sel.pid !== active || sel.head === null) return;
-      const g = groups.find((x) => sel.head! >= x.startId && sel.head! <= x.endId);
-      if (!g) return;
-      const all: { line: number; span: Flag; idx: number }[] = [];
-      for (const l of g.lines)
-        (flagsByLine.get(l.id) ?? []).forEach((span, idx) => all.push({ line: l.id, span, idx }));
-      if (!all.length) return;
-      e.preventDefault();
-      const at = aiPop ? all.findIndex((m) => m.span === aiPop.span) : -1;
-      const next = all[(at + 1) % all.length];
-      // anchor at the mark's rendered span; fall back to the row if virtua
-      // hasn't got it on screen
-      const mk = tviewRef.current?.querySelector<HTMLElement>(`[data-ai="${next.line}:${next.idx}"]`)
-        ?? document.getElementById(`trow-${g.startId}`);
-      const r = mk?.getBoundingClientRect();
-      setAiPop({ line: next.line, span: next.span, x: r?.left ?? 100, y: (r?.bottom ?? 100) + 6 });
+      if (cycleMarkPopover()) e.preventDefault();
       return;
     }
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -765,7 +773,7 @@ export function TranscriptView() {
       </div>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
       {aiPop && <AiMarkPopover pid={active} line={aiPop.line} span={aiPop.span}
-        x={aiPop.x} y={aiPop.y} onClose={() => setAiPop(null)} />}
+        x={aiPop.x} y={aiPop.y} onClose={() => setAiPop(null)} onCycle={cycleMarkPopover} />}
     </>
   );
 }
