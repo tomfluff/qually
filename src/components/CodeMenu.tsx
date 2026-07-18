@@ -13,6 +13,8 @@ export function CodeMenu({ code, x, y, onClose }: {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
   const isPinned = useStore((s) => s.hotbar.pinned.includes(code));
+  // pinning only steers the hotbar in "pinned" mode; in auto (by usage) it's inert
+  const hotbarMode = useStore((s) => s.hotbar.mode);
   const segCount = segments.filter((z) => norm(z.code) === norm(code)).length;
   const others = Object.keys(codebook).filter((c) => c !== code).sort();
   const renameCode = useStore((s) => s.renameCode);
@@ -70,7 +72,8 @@ export function CodeMenu({ code, x, y, onClose }: {
           <button onClick={() => setMode("rename")}><Icon name="pencil" size={15} />Rename…</button>
           <button onClick={() => setMode("def")}><Icon name="text" size={15} />Edit definition…</button>
           <button onClick={pickColor}><Icon name="droplet" size={15} />Change color…</button>
-          <button onClick={() => { togglePin(code); onClose(); }}>
+          <button onClick={() => { togglePin(code); onClose(); }} disabled={hotbarMode !== "pinned"}
+            title={hotbarMode !== "pinned" ? "The hotbar is in auto (by usage) mode — switch it to pinned in Settings first" : undefined}>
             <Icon name="pin" size={15} />{isPinned ? "Unpin from hotbar" : "Pin to hotbar"}
           </button>
           {others.length > 0 && <button onClick={() => setMode("merge")}><Icon name="merge" size={15} />Merge into…</button>}

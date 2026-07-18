@@ -12,6 +12,8 @@
   padding:7px 8px; border-radius:6px; cursor:pointer; font-size:inherit;
   display:flex; align-items:center; gap:7px; }
 .ctxmenu button:hover { background:var(--sel); }
+.ctxmenu button:disabled { color:var(--muted); cursor:default; }
+.ctxmenu button:disabled:hover { background:transparent; }
 .ctxmenu button svg { flex-shrink:0; color:var(--muted); }
 .ctxmenu button.danger svg { color:inherit; }
 .ctxmenu button.danger { color:#e0554f; }
