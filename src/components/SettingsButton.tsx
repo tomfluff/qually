@@ -89,7 +89,7 @@ export function SettingsButton() {
                     {PALETTES.map((p) => (
                       <button key={p.id} className={"swatchbtn" + (accent === p.id ? " on" : "")}
                         style={{ background: dark ? p.dark : p.light }}
-                        title={p.name} aria-label={p.name} onClick={() => setUi({ accent: p.id })} />
+                        title={p.name} onClick={() => setUi({ accent: p.id })} />
                     ))}
                   </div>
                 </div>

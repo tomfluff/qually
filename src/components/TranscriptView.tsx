@@ -828,7 +828,7 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
 
   return (
     <span className="lineEdit">
-      <textarea ref={taRef} rows={1} value={value} aria-label={`Correct line ${line.id}. Enter saves, Escape cancels.`}
+      <textarea ref={taRef} rows={1} value={value} aria-label={`Correct line ${line.id}`}
         onChange={(e) => { setValue(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight}px`; }}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); save(value); }
