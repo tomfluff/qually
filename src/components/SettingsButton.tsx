@@ -43,7 +43,13 @@ export function SettingsButton() {
   // 286px dropdown made it a long thin scroll. Same shell as the Help/AI dialogs.
   useEffect(() => {
     if (!open) return;
-    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
+    // bail while the color picker popover is up: both Esc handlers are document
+    // capture listeners and stopPropagation can't suppress a same-node sibling —
+    // without this one Esc closed the picker AND the settings dialog under it
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || document.querySelector(".clrpop")) return;
+      e.stopPropagation(); setOpen(false);
+    };
     document.addEventListener("keydown", onEsc, true);
     return () => document.removeEventListener("keydown", onEsc, true);
   }, [open]);

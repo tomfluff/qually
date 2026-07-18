@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
 import { openColorPicker } from "../colorPicker";
+import { useDismiss } from "../usePopover";
 
 export function CodeMenu({ code, x, y, onClose }: {
   code: string; x: number; y: number; onClose: () => void;
@@ -35,14 +36,10 @@ export function CodeMenu({ code, x, y, onClose }: {
     return () => opener?.focus();
   }, []);
 
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    // stopPropagation so App's global Esc doesn't also clear the line selection
-    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); mode === "menu" ? onClose() : setMode("menu"); } };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onEsc); };
-  }, [mode, onClose]);
+  // Escape peels one layer (a sub-form goes back to the menu); an outside click
+  // closes outright whatever the mode
+  const back = useCallback(() => { mode === "menu" ? onClose() : setMode("menu"); }, [mode, onClose]);
+  useDismiss(ref, onClose, { onEscape: back });
 
   // anchor at the menu's own position (the code row), not the menu item — the
   // menu is gone by the time the popover shows
@@ -73,8 +70,12 @@ export function CodeMenu({ code, x, y, onClose }: {
           <button onClick={() => setMode("rename")}><Icon name="pencil" size={15} />Rename…</button>
           <button onClick={() => setMode("def")}><Icon name="text" size={15} />Edit definition…</button>
           <button onClick={pickColor}><Icon name="droplet" size={15} />Change color…</button>
-          <button onClick={() => { togglePin(code); onClose(); }} disabled={hotbarMode !== "pinned"}
-            title={hotbarMode !== "pinned" ? "The hotbar is in auto (by usage) mode — switch it to pinned in Settings first" : undefined}>
+          {/* aria-disabled, not disabled: a disabled button is unfocusable, so the
+              why-is-this-off hint was mouse-only. This stays in the arrow walk and
+              announces as disabled; data-tip shows the hint on hover AND focus. */}
+          <button aria-disabled={hotbarMode !== "pinned"}
+            onClick={() => { if (hotbarMode !== "pinned") return; togglePin(code); onClose(); }}
+            data-tip={hotbarMode !== "pinned" ? "The hotbar is in auto (by usage) mode — switch it to pinned in Settings first" : undefined}>
             <Icon name="pin" size={15} />{isPinned ? "Unpin from hotbar" : "Pin to hotbar"}
           </button>
           {others.length > 0 && <button onClick={() => setMode("merge")}><Icon name="merge" size={15} />Merge into…</button>}

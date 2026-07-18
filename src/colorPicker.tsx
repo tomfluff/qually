@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore, COLORS } from "./state/store";
+import { useDialogFocus } from "./useDialogFocus";
+import { useDismiss, useClampToViewport } from "./usePopover";
 
 // In-app color picker popover, anchored to the swatch that opened it. The native
 // <input type=color> could not be anchored when opened PROGRAMMATICALLY — Chrome
@@ -26,29 +28,25 @@ export function ColorPickerHost() {
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const [req, setReq] = useState<Req | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  // focus in on open (first swatch), Tab cycles inside, focus RESTORED to the
+  // opener on close — without the restore, closing the picker dropped keyboard
+  // focus on <body>
+  const dialogRef = useDialogFocus();
+  const setRef = useCallback((el: HTMLDivElement | null) => { ref.current = el; return dialogRef(el); }, [dialogRef]);
   useEffect(() => { openFn = setReq; return () => { openFn = null; }; }, []);
 
-  // keyboard route (CodeMenu → "Change color…"): focus lands on the first swatch
-  useEffect(() => { if (req) ref.current?.querySelector("button")?.focus(); }, [req]);
-
-  useEffect(() => {
-    if (!req) return;
-    // capture, not bubble: the settings dialog (and other modals) stopPropagation
-    // on mousedown, so a bubble listener never hears clicks inside them and the
-    // popover survived its own opener closing
-    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setReq(null); };
-    // capture + stopPropagation so App's global Esc doesn't also clear the line selection
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setReq(null); } };
-    document.addEventListener("mousedown", down, true);
-    document.addEventListener("keydown", esc, true);
-    return () => { document.removeEventListener("mousedown", down, true); document.removeEventListener("keydown", esc, true); };
-  }, [req]);
+  useClampToViewport(ref, [req, fs]);
+  // capture: the settings dialog stopPropagation-s its mousedowns, so a bubble
+  // listener would never hear clicks inside it and the popover would survive
+  // its own opener closing
+  const close = useCallback(() => setReq(null), []);
+  useDismiss(ref, close, { capture: true, enabled: !!req });
 
   if (!req) return null;
   const pick = (c: string) => { req.onPick(c); setReq(null); };
   return (
-    <div className="clrpop" ref={ref} role="dialog" aria-label="Pick a color"
-      style={{ left: Math.min(req.x, window.innerWidth - 190), top: Math.min(req.y, window.innerHeight - 140), fontSize: fs }}>
+    <div className="clrpop" ref={setRef} role="dialog" aria-label="Pick a color"
+      style={{ left: req.x, top: req.y, fontSize: fs }}>
       <div className="clrgrid">
         {COLORS.map((c) => (
           <button key={c} className={"clrsw" + (c === req.value.toLowerCase() ? " on" : "")}

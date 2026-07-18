@@ -40,21 +40,36 @@ export function Tooltip() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // the host whose tip is showing: mouseover fires again on every boundary
+    // crossing between a host's own children (icon → label → count), and
+    // re-opening for the same host is a layout read + portal re-render for nothing
+    let cur: HTMLElement | null = null;
     const openFor = (el: HTMLElement) => {
+      cur = el;
       const r = el.getBoundingClientRect();
-      const below = r.top < 90; // no room above → drop below
+      // flip below when the tip won't fit above; threshold scales with the tip's
+      // own text size (it was a hardcoded 90, which a large-text tip outgrew)
+      const below = r.top < useStore.getState().ui.sidebarFontSize * 4.5;
       setTip({ node: contentFor(el), cx: r.left + r.width / 2, edge: below ? r.bottom + GAP : r.top - GAP, below });
     };
-    const close = () => setTip(null);
+    const close = () => { cur = null; setTip(null); };
     const host = (t: EventTarget | null) => (t as HTMLElement)?.closest?.<HTMLElement>("[data-tip], [data-tipdel]");
 
+    // no read-only tip on top of an open interactive overlay (the tooltip's
+    // z-index beats the popovers') — unless the host lives INSIDE the overlay
+    // (the popovers' own buttons carry tips too)
+    const covered = (el: HTMLElement) => {
+      const ov = document.querySelector(".pop, .ctxmenu, .clrpop");
+      return !!ov && !ov.contains(el);
+    };
     const onOver = (e: MouseEvent) => {
       const el = host(e.target);
-      if (el) openFor(el); else close();
+      if (el === cur) return;
+      if (el && !covered(el)) openFor(el); else close();
     };
     const onFocus = (e: FocusEvent) => {
       const el = host(e.target);
-      if (el) openFor(el);
+      if (el && el !== cur && !covered(el)) openFor(el);
     };
     const onBlur = () => close();
     // a click means attention moved to whatever was clicked (often a popover
@@ -80,14 +95,20 @@ export function Tooltip() {
 
   // Keep the bubble inside the viewport horizontally. It's centred on its host,
   // which pushes it off-screen for hosts near an edge (the far-right lane bars).
+  // Always REASSIGN the full transform, never append: React re-renders with an
+  // identical transform string when the tip hops host-to-host, skips the style
+  // write, and an appended correction from the previous host would survive (and
+  // stack) — the measurement below would then be of the already-shifted box.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || !tip) return;
+    const base = `translateX(-50%)${tip.below ? "" : " translateY(-100%)"}`;
+    el.style.transform = base;
     const r = el.getBoundingClientRect();
     const pad = 6;
     const dx = r.left < pad ? pad - r.left
       : r.right > window.innerWidth - pad ? window.innerWidth - pad - r.right : 0;
-    if (dx) el.style.transform += ` translateX(${dx}px)`;
+    if (dx) el.style.transform = `${base} translateX(${dx}px)`;
   }, [tip]);
 
   if (!tip) return null;

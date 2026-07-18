@@ -37,10 +37,11 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
 }
 
 // AI marks in the text. Transcription flags: amber dotted (something's wrong).
-// Noticing lenses: a quiet per-lens tint (something to look at) — hover names the
-// lens, Alt-click dismisses (plain click still selects the line). Search
-// highlighting wins when a query is active — two overlapping mark-ups on the same
-// characters is noise, and you're hunting, not proofreading.
+// Noticing lenses: a quiet per-lens tint (something to look at). Hover shows the
+// read-only tip (errors include the suggested fix); a plain click opens the
+// mark's popover (selection deliberately suppressed); Alt-click stays the dismiss
+// shortcut. Search highlighting wins when a query is active — two overlapping
+// mark-ups on the same characters is noise, and you're hunting, not proofreading.
 // The ✱ on a repaired line. Its tooltip shows only the span that changed (the
 // Tooltip component reads the data-tip* attrs and renders a struck-old/new diff),
 // not the whole original re-quoted.
@@ -51,11 +52,11 @@ function EditMark({ orig, text }: { orig: string; text: string }): ReactNode {
 }
 
 function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
-  const hits: { at: number; len: number; span: Flag }[] = [];
-  for (const s of spans) {
+  const hits: { at: number; len: number; span: Flag; idx: number }[] = [];
+  spans.forEach((s, idx) => {
     const at = text.indexOf(s.quote);
-    if (at >= 0) hits.push({ at, len: s.quote.length, span: s });
-  }
+    if (at >= 0) hits.push({ at, len: s.quote.length, span: s, idx });
+  });
   if (!hits.length) return text;
   hits.sort((a, b) => a.at - b.at);
   const nodes: ReactNode[] = [];
@@ -65,20 +66,17 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
     if (h.at > last) nodes.push(text.slice(last, h.at));
     const lens = lensOf(spanLens(h.span));
     const isError = spanLens(h.span) === "transcription";
-    // Clicks on a mark belong to the mark, not the row: selection happens on the
-    // row's MOUSEDOWN, which would fire first, select the line, and the resulting
-    // keep-in-view scroll would fight the popover the click opens. Swallow the
-    // mousedown; the click bubbles to the list's delegated [data-ai] handler,
-    // which opens the mark's popover (hover keeps the quick read-only tip).
-    const own = (e: MouseEvent) => e.stopPropagation();
-    const ai = `${lineId}:${spans.indexOf(h.span)}`;
+    // A mark's press must NOT select the row (onRowDown bails on [data-ai]), but
+    // the mousedown still bubbles — document-level closers (open code menu,
+    // segment popover, color picker) rely on hearing it. The click then reaches
+    // the list's delegated [data-ai] handler, which opens the mark's popover.
+    const ai = `${lineId}:${h.idx}`;
     nodes.push(isError
       ? <span key={k} className="aidoubt" data-ai={ai}
           data-tip={h.span.fix ? `${h.span.reason} → “${h.span.fix}”` : h.span.reason}
-          onMouseDown={own}>{text.slice(h.at, h.at + h.len)}</span>
+          >{text.slice(h.at, h.at + h.len)}</span>
       : <span key={k} className={`ainote lens-${spanLens(h.span)}`} style={{ "--lens-c": lens?.color } as CSSProperties}
           data-ai={ai} data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason}`}
-          onMouseDown={own}
           onClick={(e) => {
             if (!e.altKey) return; // plain click opens the popover (delegated); alt-click stays the dismiss shortcut
             e.stopPropagation();
@@ -282,9 +280,16 @@ export function TranscriptView() {
     wheelStop.current = stop;
     const step = (t: number) => {
       // Backstop for writers that don't route through stopAnims (search, a tab
-      // restore, virtua's own corrections): if the scroll isn't where this loop
-      // left it, someone else moved it — their position wins, the chase ends.
-      if (lastSet >= 0 && Math.abs(el.scrollTop - lastSet) > 4) { running = false; return; }
+      // restore): if the scroll isn't where this loop left it, someone else moved
+      // it. A LARGE move is a navigation — their position wins, the chase ends. A
+      // small one is virtua's own estimate correction while rows measure (routine
+      // when wheeling up through unmeasured content) — carry the shift into the
+      // target instead of aborting mid-gesture, or the first pass would stutter.
+      if (lastSet >= 0) {
+        const drift = el.scrollTop - lastSet;
+        if (Math.abs(drift) > 48) { running = false; return; }
+        if (Math.abs(drift) > 4) target = Math.max(0, Math.min(target + drift, el.scrollHeight - el.clientHeight));
+      }
       const dt = Math.min(64, t - last); // a backgrounded tab resumes with a huge dt
       last = t;
       const d = target - el.scrollTop;
@@ -335,6 +340,13 @@ export function TranscriptView() {
     return m;
   }, [aiFlags, transcript, active, showNotices]);
 
+  // The mark popover holds a SNAPSHOT of its span — close it when that span is no
+  // longer in the flag set (a scan finished and replaced the flags, an undo, the
+  // notices eye-toggle), or Apply/Dismiss would act on a superseded mark.
+  useEffect(() => {
+    if (aiPop && !flagsByLine.get(aiPop.line)?.includes(aiPop.span)) setAiPop(null);
+  }, [flagsByLine, aiPop]);
+
   // Click on an AI mark → its popover. Delegated on the list container: the marks
   // live inside virtualized rows, so per-mark state wiring would thread through
   // every Row; the spans instead carry a data-ai="line:index" key into flagsByLine.
@@ -383,6 +395,10 @@ export function TranscriptView() {
   useEffect(() => {
     if (pad === null) return;             // container not laid out yet; the pad is a guess
     if (useStore.getState().jump) return; // a Browse -> line jump owns the position
+    // a glide started on the PREVIOUS tab would keep animating scrollTop against
+    // the old tab's targets, overwrite the restore below, and (worse) its bogus
+    // positions would get recorded as the new tab's saved scroll
+    stopAnims();
     positioning.current = true;
     // One frame so the swapped-in children are committed, then let virtua do the
     // scrolling: its scrollToIndex re-evaluates the target after every row
@@ -433,6 +449,29 @@ export function TranscriptView() {
         const g = groups.find((x) => sel.head! >= x.startId && sel.head! <= x.endId);
         if (g) { e.preventDefault(); seekVideo(g.ts); }
       }
+      return;
+    }
+    // M: the keyboard route to the AI-mark popover — the marks themselves are
+    // deliberately not tab stops (per-row stops were a wall). Opens the selected
+    // line's first mark; pressing again cycles through the line's marks.
+    if (e.key === "m" || e.key === "M") {
+      const sel = useStore.getState().selection;
+      if (sel.pid !== active || sel.head === null) return;
+      const g = groups.find((x) => sel.head! >= x.startId && sel.head! <= x.endId);
+      if (!g) return;
+      const all: { line: number; span: Flag; idx: number }[] = [];
+      for (const l of g.lines)
+        (flagsByLine.get(l.id) ?? []).forEach((span, idx) => all.push({ line: l.id, span, idx }));
+      if (!all.length) return;
+      e.preventDefault();
+      const at = aiPop ? all.findIndex((m) => m.span === aiPop.span) : -1;
+      const next = all[(at + 1) % all.length];
+      // anchor at the mark's rendered span; fall back to the row if virtua
+      // hasn't got it on screen
+      const mk = tviewRef.current?.querySelector<HTMLElement>(`[data-ai="${next.line}:${next.idx}"]`)
+        ?? document.getElementById(`trow-${g.startId}`);
+      const r = mk?.getBoundingClientRect();
+      setAiPop({ line: next.line, span: next.span, x: r?.left ?? 100, y: (r?.bottom ?? 100) + 6 });
       return;
     }
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -611,9 +650,12 @@ export function TranscriptView() {
   // click selects; click+drag selects a range (Shift extends, Ctrl toggles — no drag)
   const onRowDown = (e: MouseEvent, id: number) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts,.lineEdit")) return;
-    // Alt-click on an AI notice is its dismiss gesture (handled on click) — selecting
-    // here too would clear/collapse the very selection the notice sits on
-    if (e.altKey && (e.target as HTMLElement).closest(".ainote")) return;
+    // A press on an AI mark belongs to the mark (its click opens the popover, or
+    // alt-click dismisses) — selecting here would trigger a keep-in-view scroll
+    // that fights the popover. Bailing HERE rather than stopPropagation on the
+    // span keeps the mousedown visible to document-level closers (an open code
+    // menu / segment popover must still close on this press).
+    if ((e.target as HTMLElement).closest("[data-ai]")) return;
     if (e.detail > 1) return; // second press of a double-click: that's an edit, not a re-select
     const st = useStore.getState();
     // open the gesture BEFORE any mutation — a click and a whole drag are one undo step
@@ -670,7 +712,7 @@ export function TranscriptView() {
           drop role=option/aria-selected for the same reason. */}
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
         tabIndex={0} onKeyDown={onListKeyDown}
-        aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line.`}
+        aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line, M to review the selected line's AI marks.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line

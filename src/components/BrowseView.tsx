@@ -164,9 +164,10 @@ export function BrowseView() {
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code: c, x: e.clientX, y: e.clientY }); }}
             data-tip={c}>
             <div className="bCodeMain">
-              {/* right-click only, matching the main sidebar's swatch */}
+              {/* right-click only, matching the main sidebar's swatch (data-tip, not
+                  title — the row's data-tip would double with a native tip here) */}
               <span className="codebar"
-                style={{ background: codebook[c].color }} title="right-click to recolor"
+                style={{ background: codebook[c].color }} data-tip="right-click to recolor"
                 onContextMenu={(e) => {
                   e.preventDefault(); e.stopPropagation();
                   openColorPicker(codebook[c].color, (v) => setColor(c, v), e.currentTarget);

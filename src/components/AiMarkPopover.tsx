@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { useStore } from "../state/store";
 import { lensOf, spanLens, type Flag } from "../ai/flag";
 import { useDialogFocus } from "../useDialogFocus";
+import { useDismiss, useClampToViewport } from "../usePopover";
 import { announce } from "../announce";
 import { Icon } from "./Icon";
 
@@ -24,26 +25,17 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose }: {
   const isError = spanLens(span) === "transcription";
   const lens = lensOf(spanLens(span));
 
-  // measure and pull back inside the viewport (the box scales with the text size)
+  // reset the inline anchor before the clamp measures: if this instance is ever
+  // reused for a new mark, React can skip the style write when the inline value
+  // is unchanged, leaving the previous clamp's manual left/top in place
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
-    const pad = 8;
-    if (r.right > window.innerWidth - pad)
-      el.style.left = Math.max(pad, window.innerWidth - r.width - pad) + "px";
-    if (r.bottom > window.innerHeight - pad)
-      el.style.top = Math.max(pad, window.innerHeight - r.height - pad) + "px";
-  }, [sidebarFontSize]);
-
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    // stopPropagation so App's global Esc doesn't also clear the line selection
-    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onEsc); };
-  }, [onClose]);
+    el.style.left = Math.min(x, window.innerWidth - 300) + "px";
+    el.style.top = Math.min(y, window.innerHeight - 200) + "px";
+  }, [sidebarFontSize, x, y]);
+  useClampToViewport(ref, [sidebarFontSize, x, y]);
+  useDismiss(ref, onClose);
 
   return (
     <div className="pop aipop" ref={setRef} role="dialog" tabIndex={-1}
@@ -56,9 +48,9 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose }: {
           dismissNotice(pid, line, spanLens(span), span.quote);
           announce("Mark dismissed");
           onClose();
-        }} title="Dismiss this mark (it won't return on re-scan)"
+        }} data-tip="Dismiss this mark (it won't return on re-scan)"
           aria-label="Dismiss this mark"><Icon name="trash" size={16} /></button>
-        <button className="btn iconclose" onClick={onClose} title="close"><Icon name="x" size={16} /></button>
+        <button className="btn iconclose" onClick={onClose} data-tip="close" aria-label="Close"><Icon name="x" size={16} /></button>
       </div>
       <div className="aipop-quote">“{span.quote}”</div>
       <div className="aipop-reason">{span.reason}</div>

@@ -58,8 +58,11 @@ export function CodeSidebar() {
             {/* right-click only: a left-click on the swatch is almost always a missed
                 click on the row (apply code) — let it fall through. Keyboard and
                 screen-reader users recolor via the ⋯ menu's "Change color…". */}
+            {/* data-tip, not title: the row above carries data-tip (the code name), and
+                a native title here showed BOTH tips — the swatch's own data-tip is
+                nearer in the closest() walk, so it wins cleanly and scales */}
             <span className={"codebar" + (lanePattern ? ` lp${patternOf(code)}` : "")}
-              style={{ background: codebook[code].color }} title="right-click to recolor"
+              style={{ background: codebook[code].color }} data-tip="right-click to recolor"
               onContextMenu={(e) => {
                 e.preventDefault(); e.stopPropagation();
                 openColorPicker(codebook[code].color, (v) => setColor(code, v), e.currentTarget);

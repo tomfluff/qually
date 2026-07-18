@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useStore } from "../state/store";
 import { speakerGroupedText } from "../format";
 import { excerptOf } from "../contract/excerpt";
 import { useDialogFocus } from "../useDialogFocus";
+import { useDismiss, useClampToViewport } from "../usePopover";
 import { Icon } from "./Icon";
 
 export function SegmentPopover({ sid, x, y, onClose }: {
@@ -34,25 +35,10 @@ export function SegmentPopover({ sid, x, y, onClose }: {
       .map((l) => ({ speaker: l.speaker, text: l.text })));
   };
 
-  // The popover grows with the sidebar text size, so a fixed clamp can't keep it
-  // on screen — measure the real box and pull it back inside the viewport.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const pad = 8;
-    if (r.right > window.innerWidth - pad)
-      el.style.left = Math.max(pad, window.innerWidth - r.width - pad) + "px";
-    if (r.bottom > window.innerHeight - pad)
-      el.style.top = Math.max(pad, window.innerHeight - r.height - pad) + "px";
-  }, [sidebarFontSize]);
+  useClampToViewport(ref, [sidebarFontSize]);
+  useDismiss(ref, onClose);
 
   useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    // stopPropagation so App's global Esc doesn't also clear the line selection
-    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
     // Ctrl+C while the popover is open copies the segment (App's copy handler defers to us)
     const onCopy = (e: ClipboardEvent) => {
       const t = document.activeElement;
@@ -63,15 +49,10 @@ export function SegmentPopover({ sid, x, y, onClose }: {
       e.clipboardData?.setData("text/plain", txt);
       e.preventDefault();
     };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
     document.addEventListener("copy", onCopy);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onEsc);
-      document.removeEventListener("copy", onCopy);
-    };
-  }, [onClose]);
+    return () => document.removeEventListener("copy", onCopy);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!seg) return null;
   const range = seg.start === seg.end ? `${seg.start}` : `${seg.start}-${seg.end}`;

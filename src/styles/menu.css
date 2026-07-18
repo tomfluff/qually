@@ -12,8 +12,8 @@
   padding:7px 8px; border-radius:6px; cursor:pointer; font-size:inherit;
   display:flex; align-items:center; gap:7px; }
 .ctxmenu button:hover { background:var(--sel); }
-.ctxmenu button:disabled { color:var(--muted); cursor:default; }
-.ctxmenu button:disabled:hover { background:transparent; }
+.ctxmenu button:disabled, .ctxmenu button[aria-disabled="true"] { color:var(--muted); cursor:default; }
+.ctxmenu button:disabled:hover, .ctxmenu button[aria-disabled="true"]:hover { background:transparent; }
 .ctxmenu button svg { flex-shrink:0; color:var(--muted); }
 .ctxmenu button.danger svg { color:inherit; }
 .ctxmenu button.danger { color:#e0554f; }
@@ -39,7 +39,11 @@
 .clrgrid { display:grid; grid-template-columns:repeat(6, 1fr); gap:6px; }
 .clrsw { width:1.7em; height:1.7em; padding:0; border:1px solid rgba(0,0,0,.25);
   border-radius:6px; cursor:pointer; }
-.clrsw.on { outline:2px solid var(--fg); outline-offset:1px; }
+.clrsw:hover, .clrcustom input:hover { border-color:var(--fg); }
+/* selected ring via box-shadow, NOT outline — an author outline replaces the UA
+   :focus-visible ring, and keyboard focus landing on the selected swatch (the
+   first focus target from the code menu) would become invisible */
+.clrsw.on { box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--fg); }
 .clrcustom { display:flex; align-items:center; gap:7px; margin-top:8px;
   color:var(--muted); cursor:pointer; }
 .clrcustom input { width:1.7em; height:1.7em; padding:0; border:1px solid var(--line);

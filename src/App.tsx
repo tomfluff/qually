@@ -114,7 +114,7 @@ export function App() {
       // and code menu open without taking focus, so keydowns still target the list
       // under them. Each of these closes itself on Escape; the palette additionally
       // needs the hand below for when focus has left its input.
-      if (document.querySelector(".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop")) {
+      if (document.querySelector(".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop, .clrpop")) {
         if (e.key === "Escape" && s.paletteOpen) {
           s.setPalette(false); // and back to the list, same as the palette's own close
           document.querySelector<HTMLElement>(".tviewlist")?.focus();
