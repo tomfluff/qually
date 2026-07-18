@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useState } from "react";
 import { useStore, inkOn } from "../state/store";
+import { CodeMenu } from "./CodeMenu";
 import { Icon } from "./Icon";
 
 // up to 2 initials from the code's first two significant words (skip stopwords)
@@ -25,6 +26,8 @@ export function HotbarDock() {
   const applyCode = useStore((s) => s.applyCode);
   const refreshHotbar = useStore((s) => s.refreshHotbar);
   const [collapsed, setCollapsed] = useState(false);
+  // right-click (or the menu key) on a tile: the same code menu the sidebar rows open
+  const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
 
   // no early return on an empty codebook: before the first code exists the dock
   // still shows the "0" palette tile (the way to CREATE that first code) + refresh
@@ -33,6 +36,7 @@ export function HotbarDock() {
   const apply = (code: string) => { if (hasSel) applyCode(code); };
 
   return (
+    <>
     <div className={"hotbar" + (collapsed ? " collapsed" : "")}>
       {/* collapse arrow extrudes from the top edge, always visible */}
       <button className="hbhandle" onClick={() => setCollapsed((c) => !c)}
@@ -51,7 +55,15 @@ export function HotbarDock() {
             <button className="tile" aria-label={`Apply code ${code} (key ${i + 1})`}
               data-tip={code}
               style={{ background: codebook[code].color, color: inkOn(codebook[code].color) }}
-              onClick={() => apply(code)}>
+              onClick={() => apply(code)}
+              onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
+              onKeyDown={(e) => {
+                if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setMenu({ code, x: r.left, y: r.top }); // the menu clamps itself on-screen
+                }
+              }}>
               <span className="tinit">{initials(code)}</span>
             </button>
             <span className="tnum" aria-hidden="true">{i + 1}</span>
@@ -76,5 +88,9 @@ export function HotbarDock() {
           )}
       </div>
     </div>
+    {/* sibling of the dock, not a child: .hotbar's z-index:45 is its own stacking
+        context, and a menu inside it could paint under the video dock (z 50) */}
+    {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
+    </>
   );
 }
