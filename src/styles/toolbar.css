@@ -13,7 +13,8 @@
 .brandname { font-weight:700; font-size:14px; color:var(--fg); }
 .brand-ally { color:var(--accent); }
 .brandtag { font-style:italic; color:var(--muted); white-space:nowrap; }
-@media (max-width:900px) { .brandtag { display:none; } } /* toolbar gets tight before the buttons do */
+/* decoration goes first: the labeled bar with the tagline needs ~1255px */
+@media (max-width:1320px) { .brandtag { display:none; } }
 .ghlink { color:inherit; text-decoration:none; }
 
 /* one control height across the bar — labeled buttons, icon buttons and the round
@@ -25,6 +26,18 @@
 #toolbar .btn:disabled { opacity:.35; cursor:default; }
 #toolbar .btn:disabled:hover { border-color:var(--line); }
 #toolbar .tbdiv { width:1px; align-self:stretch; background:var(--line); margin:2px 2px; }
+
+/* Tight: the labeled row (tagline already gone) wraps around ~1045 CSS px, plus
+   headroom for a long coder name and status text — below 1150px the button
+   labels collapse to icons. A media query rather than a measurement: browser
+   zoom shrinks the CSS viewport, so 175% zoom on a 1920 screen collapses too.
+   Import and Export keep their labels: the two doors in and out of the app stay
+   named. Hidden the sr-only way, not display:none, so every button keeps its
+   accessible name and its native tooltip still says what it is. */
+@media (max-width: 1150px) {
+  #toolbar .blabel { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+}
 
 /* who your codes are signed as; sits at the head of the right cluster */
 #toolbar .coderchip { max-width:22ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

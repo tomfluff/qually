@@ -58,7 +58,7 @@ export function DataFormatButton() {
   return (
     <>
       <button className="btn dfbtn" title="Transcript format & import guide" onClick={() => setOpen(true)}>
-        <Icon name="file-text" size={15} /> File format
+        <Icon name="file-text" size={15} /> <span className="blabel">File format</span>
       </button>
       {open && (
         <div className="about-backdrop" onMouseDown={() => setOpen(false)}>

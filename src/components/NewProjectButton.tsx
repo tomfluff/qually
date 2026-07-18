@@ -26,7 +26,7 @@ export function NewProjectButton() {
     <>
       <button className="btn iconlabel" onClick={() => setConfirm(true)}
         title="Clear this workspace and start fresh (asks first; offers a snapshot)">
-        <Icon name="file-plus" size={16} /> New
+        <Icon name="file-plus" size={16} /> <span className="blabel">New</span>
       </button>
       {confirm && (
         <div className="about-backdrop" onMouseDown={() => setConfirm(false)}>
