@@ -2,16 +2,16 @@
    Copyright (C) 2026 Yotam Sechayk */
 #sidebar h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
   color:var(--muted); margin:14px 0 6px; }
-/* wrap, don't clip: when the name + badges outgrow the row (large sidebar text,
-   long code name), the key/count/⋯ drop to their own right-aligned line and the
-   name keeps every letter — the name is what a low-vision reader came to read */
-.codeItem { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:4px 6px;
+/* Truncate + tooltip, coherent with the Browse code list: the name stays on one
+   line (ellipsised) so the key/count/⋯ never wrap, and the full name is one hover
+   away (the shared Tooltip reads the row's data-tip). */
+.codeItem { display:flex; align-items:center; gap:8px; padding:4px 6px;
   border-radius:6px; cursor:pointer; }
 .codeItem:hover { background:var(--sel); }
 /* color pill indicator (shared with the Browse code list) */
 .codebar { width:10px; align-self:stretch; border-radius:3px; flex-shrink:0; cursor:pointer;
   position:relative; } /* anchors the .lp* pattern overlay — same one the lane bars use */
-.codeItem .cname { flex:1 1 10ch; min-width:0; overflow-wrap:break-word; }
+.codeItem .cname { flex:1 1 10ch; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .codeItem .cnt { margin-left:auto; color:var(--muted); font-size:.8em; flex-shrink:0; }
 /* when a key is present it takes the gap; the count sits right next to it */
 .codeItem .key ~ .cnt { margin-left:0; }

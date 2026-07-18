@@ -8,13 +8,13 @@ import { excerptOf, RESEARCHER } from "../contract/excerpt";
 import { mergeGroups, type Group } from "../merge";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
-import { hashLine, type Flag } from "../ai/flag";
+import { hashLine, spanLens, type Flag } from "../ai/flag";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll } from "../scrollMemory";
 import { announce } from "../announce";
 
-const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
+export const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
 
 // orig = the imported text, present only while an in-app correction differs from it
@@ -151,6 +151,7 @@ interface State {
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
   clearFlags: (pid: string) => void;
   dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
+  applyFix: (pid: string, id: number, quote: string, fix: string) => void;
   logAiCall: (call: AiCall) => void;
   exportAiLog: () => string;
   exportCodebook: () => string;
@@ -612,6 +613,28 @@ export const useStore = create<State>()(
         const cur = get().aiFlags[key];
         if (!cur) return;
         set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, spans: cur.spans.filter((s) => !((s.lens ?? "transcription") === lens && s.quote === quote)) } } });
+      },
+      // One-click transcription repair from a mark's popover. Rides editLine (so
+      // `orig` tracking, the ✱ diff and exports behave exactly like a manual
+      // repair), then re-hashes the flag record against the corrected text with
+      // only the applied span removed — an edit normally invalidates every mark
+      // on the line, which would strand a second error until a re-scan.
+      applyFix: (pid, id, quote, fix) => {
+        const l = get().transcripts[pid]?.lines.find((x) => x.id === id);
+        if (!l || !l.text.includes(quote)) return;
+        // replacer FUNCTION, not the string: in String.replace a string replacement
+        // interprets $-sequences ($&, $', $`), so a fix containing them would write
+        // something other than what the Apply button showed
+        const text = l.text.replace(quote, () => fix); // first occurrence — the one the mark underlines
+        get().editLine(pid, id, text);
+        const key = `${pid}:${id}`;
+        const cur = get().aiFlags[key];
+        if (!cur) return;
+        // drop the applied span, and any span whose quote the repair broke (it can
+        // never render again, but would still be read out by the line announcement)
+        const spans = cur.spans.filter((s) =>
+          !(spanLens(s) === "transcription" && s.quote === quote) && text.includes(s.quote));
+        set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, hash: hashLine(text), spans } } });
       },
 
       logAiCall: (call) => set({ aiLog: [...get().aiLog, call] }),

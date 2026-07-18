@@ -100,14 +100,3 @@
 [data-theme=dark] .set-modal .wseg button.on { color:#12161a; }
 .set-modal .wseg button:first-child { border-radius:6px 0 0 6px; }
 .set-modal .wseg button:last-child { border-radius:0 6px 6px 0; }
-/* Tooltips inside the settings panel: it scrolls (overflow-y:auto, which per CSS
-   forces overflow-x:auto too), so any tip that spills past an edge is clipped —
-   the base tip sits ABOVE and CENTRED, which cut the first row's tips at the panel
-   top and the leftmost swatch's tip at the left. Drop them below the control and
-   anchor them inward: the swatch to its left edge, the weight buttons to their right. */
-.set-modal .set-panel [data-tip]:hover::after,
-.set-modal .set-panel [data-tip]:focus-visible::after { bottom:auto; top:calc(100% + 7px); }
-.set-modal .spkswatch[data-tip]:hover::after,
-.set-modal .spkswatch[data-tip]:focus-visible::after { left:0; transform:none; }
-.set-modal .wseg button[data-tip]:hover::after,
-.set-modal .wseg button[data-tip]:focus-visible::after { left:auto; right:0; transform:none; }

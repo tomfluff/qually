@@ -25,7 +25,10 @@ export function hashLine(text: string): string {
   return (h >>> 0).toString(36);
 }
 
-export interface Flag { quote: string; reason: string; lens: string }
+// fix: transcription errors only — the exact replacement text, so the mark's
+// popover can offer a one-click repair. Absent on other lenses and on scans
+// made before the field existed (those get no Apply button until re-scanned).
+export interface Flag { quote: string; reason: string; lens: string; fix?: string }
 
 export interface Lens {
   id: string;
@@ -38,7 +41,7 @@ export interface Lens {
 export const LENSES: Lens[] = [
   {
     id: "transcription", label: "Transcription errors", method: "feeds the line editor", color: "#e0a020",
-    instruction: `Mark ONLY spans the speech recogniser probably got wrong: non-words and word salad ("two dance" for "too dense"); homophone confusions ("ticket marks" for "tick marks", "guest" for "guessed"); words implausible in context, especially domain terms; garbled proper nouns. Do NOT mark informal speech, filler, false starts, or grammatical errors — real speech is messy, and that is data. note = what it probably should be.`,
+    instruction: `Mark ONLY spans the speech recogniser probably got wrong: non-words and word salad ("two dance" for "too dense"); homophone confusions ("ticket marks" for "tick marks", "guest" for "guessed"); words implausible in context, especially domain terms; garbled proper nouns. Do NOT mark informal speech, filler, false starts, or grammatical errors — real speech is messy, and that is data. note = what's wrong, briefly. fix = the exact corrected text that should replace the quote (same casing and punctuation style as the surrounding line); leave fix empty if you cannot state the correction with confidence.`,
   },
   {
     id: "emotion", label: "Emotional expressions", method: "emotion coding", color: "#e0554f",
@@ -94,8 +97,11 @@ const schemaFor = (lensIds: string[]) => ({
           lens: { type: "string", enum: lensIds, description: "which scan this instance belongs to" },
           quote: { type: "string", description: "the exact substring, copied verbatim" },
           note: { type: "string", description: "the short note that scan asks for" },
+          // strict json_schema mode forbids optional fields, so fix is always
+          // present and "" outside the transcription scan
+          fix: { type: "string", description: "transcription scan only: the exact corrected replacement for the quote; empty string for every other scan or when unsure" },
         },
-        required: ["line_id", "lens", "quote", "note"],
+        required: ["line_id", "lens", "quote", "note", "fix"],
         additionalProperties: false,
       },
     },
@@ -120,7 +126,7 @@ export const estimateChunkTokens = (lines: Line[], r: Redaction, lensIds: string
 export async function scanChunk(opts: {
   key: string; model: string; lines: Line[]; lenses: string[]; redaction: Redaction; signal?: AbortSignal;
 }): Promise<{ flags: Record<number, Flag[]>; usage: Usage }> {
-  const { data, usage } = await callJson<{ flags: { line_id: number; lens: string; quote: string; note: string }[] }>({
+  const { data, usage } = await callJson<{ flags: { line_id: number; lens: string; quote: string; note: string; fix?: string }[] }>({
     key: opts.key,
     model: opts.model,
     system: buildSystem(opts.lenses),
@@ -143,7 +149,20 @@ export async function scanChunk(opts: {
     // genuine substring — a hallucinated quote would highlight text that isn't there.
     const quote = opts.redaction.restore(f.quote);
     if (!quote || !line.text.includes(quote)) continue;
-    (flags[f.line_id] ??= []).push({ quote, reason: f.note, lens: f.lens });
+    // the fix rides only on transcription flags, restored through the same
+    // redaction map; a fix that still contains a placeholder (or equals the
+    // quote) is no fix at all. Lines are the data model's unit, so a fix must
+    // stay a line-safe string: no newlines/control/bidi-override characters
+    // (bidi could make the Apply button's preview misrepresent the insertion),
+    // and no ballooning past any plausible repair of the quote.
+    const fix = f.lens === "transcription" ? opts.redaction.restore(f.fix?.trim() ?? "") : "";
+    const fixOk = fix && fix !== quote && !opts.redaction.hasPlaceholder(fix)
+      && !/[\r\n\u0000-\u001f\u202a-\u202e]/.test(fix)
+      && fix.length <= quote.length * 4 + 40;
+    (flags[f.line_id] ??= []).push({
+      quote, reason: f.note, lens: f.lens,
+      ...(fixOk ? { fix } : {}),
+    });
   }
   return { flags, usage };
 }

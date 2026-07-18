@@ -12,6 +12,8 @@
   padding:7px 8px; border-radius:6px; cursor:pointer; font-size:inherit;
   display:flex; align-items:center; gap:7px; }
 .ctxmenu button:hover { background:var(--sel); }
+.ctxmenu button:disabled, .ctxmenu button[aria-disabled="true"] { color:var(--muted); cursor:default; }
+.ctxmenu button:disabled:hover, .ctxmenu button[aria-disabled="true"]:hover { background:transparent; }
 .ctxmenu button svg { flex-shrink:0; color:var(--muted); }
 .ctxmenu button.danger svg { color:inherit; }
 .ctxmenu button.danger { color:#e0554f; }
@@ -28,3 +30,21 @@
   max-height:calc(1.4em * 3 + 14px); }
 .ctxmenu .ctxrow { display:flex; gap:6px; }
 .ctxmenu .ctxrow .btn { flex:1; justify-content:center; font-size:inherit; }
+
+/* color picker popover (colorPicker.tsx) — anchored to the swatch that opened it.
+   z-index above the settings modal (backdrop is 95): the speaker swatches open
+   this from inside that modal. font-size comes inline from ui.sidebarFontSize. */
+.clrpop { position:fixed; z-index:120; background:var(--bg); border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 10px 34px rgba(0,0,0,.35); padding:9px; }
+.clrgrid { display:grid; grid-template-columns:repeat(6, 1fr); gap:6px; }
+.clrsw { width:1.7em; height:1.7em; padding:0; border:1px solid rgba(0,0,0,.25);
+  border-radius:6px; cursor:pointer; }
+.clrsw:hover, .clrcustom input:hover { border-color:var(--fg); }
+/* selected ring via box-shadow, NOT outline — an author outline replaces the UA
+   :focus-visible ring, and keyboard focus landing on the selected swatch (the
+   first focus target from the code menu) would become invisible */
+.clrsw.on { box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--fg); }
+.clrcustom { display:flex; align-items:center; gap:7px; margin-top:8px;
+  color:var(--muted); cursor:pointer; }
+.clrcustom input { width:1.7em; height:1.7em; padding:0; border:1px solid var(--line);
+  border-radius:6px; background:none; cursor:pointer; }

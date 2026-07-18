@@ -25,8 +25,9 @@ valuable next step.
   which is what happens if you lean on browser zoom instead.
 - Browser zoom (`Ctrl` `+`) works and is not hijacked — `Ctrl+0` resets it. (It *was*
   hijacked: the digit-key code handler swallowed it. Fixed.)
-- The transcript's tooltips are custom and scale **with the transcript font size**;
-  native tooltips are stuck at ~12px.
+- Tooltips are custom and app-wide (one shared bubble, portaled above every panel, so
+  nothing clips it) and scale **with the sidebar text size**, opening on keyboard focus
+  as well as hover; native tooltips are stuck at ~12px.
 - The minimap's "simplified" mode enlarges its marks and enforces minimum block sizes.
 
 ### Reading font
@@ -41,11 +42,13 @@ valuable next step.
 - Coding is fully keyboard-operable: `Tab` into the transcript, `↓`/`↑` to select a line,
   `Shift`+arrows to extend, `1`–`9` for the hotbar, `0` for the searchable palette,
   `Ctrl+Z`/`Ctrl+Shift+Z`, `Ctrl+F`, `PageUp`/`PageDown`/`Home`/`End`, `Esc` to back out,
-  `Enter` to play the loaded media from the selected line.
+  `Enter` to play the loaded media from the selected line, `M` to open the selected
+  line's AI mark (apply its suggested fix when one is offered, or dismiss it; pressing
+  again cycles the line's marks).
 - So is everything around the coding: tabs switch and close from the keyboard; sidebar
   and Browse code rows apply on `Enter`; every code-management action (rename, recolor,
-  merge, pin, delete) is reachable through a per-row `⋯` button (or `Shift+F10`), not
-  right-click alone; a segment's lane bar is a real button — `Enter` opens its popover
+  merge, pin, delete) is reachable through a per-row `⋯` button (or `Shift+F10` — on
+  hotbar tiles too), not right-click alone; a segment's lane bar is a real button — `Enter` opens its popover
   (notes, reject, delete, copy); panel dividers resize with arrow keys; search results
   are focusable and `Enter` jumps.
 - The selection follows the keyboard: arrowing past the viewport edge scrolls it into view.
@@ -65,8 +68,9 @@ most valuable thing anyone could do for this project:
   ("Coded lines 8 to 10 as workarounds"), undo/redo, segment status changes and
   deletions, import results, search-match position, AI-scan completion.
 - Every modal is a labelled `role="dialog"` with `aria-modal`, a focus trap, and focus
-  restoration to the opener. Popovers (segment editor, code menu, settings) are labelled
-  dialogs too, and `Esc` always closes and hands focus back.
+  restoration to the opener. Popovers (segment editor, code menu, AI mark, color picker,
+  settings) are labelled dialogs too, and `Esc` always closes and hands focus back
+  (in the code menu's sub-forms it steps back to the menu first).
 - Every icon-only control carries an accessible name; the tab strip is a `tablist`;
   the hotbar a labelled `toolbar`; code rows announce as "Apply code …, hotkey n,
   k segments" instead of a soup of child text; the code inputs are proper comboboxes;
@@ -119,9 +123,10 @@ Listed plainly, worst first. These are real; do not read the README as claiming 
    sees a window, not the whole transcript. Treat "supported" as unearned until someone
    who relies on a screen reader has coded a real transcript with it.
 2. **Mouse-only interactions with no keyboard equivalent:** dragging a segment's edge to
-   resize it (the popover has no range editor yet), the minimap (navigation duplicate;
-   keyboard has Home/End/PageUp and back-to-selection), and `Alt`-click to dismiss an AI
-   noticing in the transcript (Browse → Noticings has keyboard-reachable dismiss buttons).
+   resize it (the popover has no range editor yet) and the minimap (navigation duplicate;
+   keyboard has Home/End/PageUp and back-to-selection). `Alt`-click dismissal of an AI
+   mark left this list: `M` now opens the selected line's mark popover, which carries
+   the dismiss (and apply-fix) buttons.
 3. **Lane bars and the close-call badge do not scale with the transcript font size.** Set the
    text to 48px and the code lanes stay where they were, unless you separately raise the
    lane-width setting.

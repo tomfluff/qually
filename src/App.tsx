@@ -15,6 +15,8 @@ import { ImportModal, SegUpdateModal, ImportSignModal } from "./components/Impor
 import { ProjectModal } from "./components/ProjectModal";
 import { SearchBar } from "./components/SearchBar";
 import { Welcome } from "./components/Welcome";
+import { Tooltip } from "./components/Tooltip";
+import { ColorPickerHost } from "./colorPicker";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
@@ -58,7 +60,6 @@ export function App() {
   const dark = useStore((s) => s.ui.dark);
   const accent = useStore((s) => s.ui.accent);
   const minimapWidth = useStore((s) => s.ui.minimapWidth);
-  const fontSize = useStore((s) => s.ui.fontSize);
   const fontFamily = useStore((s) => s.ui.fontFamily);
   const zen = useStore((s) => s.ui.zen);
   const searchOpen = useStore((s) => s.search.open);
@@ -73,14 +74,6 @@ export function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--mm-w", `${minimapWidth}px`);
   }, [minimapWidth]);
-
-  // Tooltips size themselves from --txt-fs. It was only ever set on the transcript list,
-  // so every tip OUTSIDE the transcript silently fell back to 16px * .8 = 12.8px — the
-  // unreadably-small tooltip we replaced native `title` to escape. Set it at the root so
-  // the whole app's tips follow the text size the reader actually chose.
-  useEffect(() => {
-    document.documentElement.style.setProperty("--txt-fs", `${fontSize}px`);
-  }, [fontSize]);
 
   // Reading font for the transcript text and Browse excerpts (the chrome stays
   // system). Atkinson Hyperlegible is embedded (styles/fonts.css); the others map
@@ -121,7 +114,7 @@ export function App() {
       // and code menu open without taking focus, so keydowns still target the list
       // under them. Each of these closes itself on Escape; the palette additionally
       // needs the hand below for when focus has left its input.
-      if (document.querySelector(".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop")) {
+      if (document.querySelector(".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop, .clrpop")) {
         if (e.key === "Escape" && s.paletteOpen) {
           s.setPalette(false); // and back to the list, same as the palette's own close
           document.querySelector<HTMLElement>(".tviewlist")?.focus();
@@ -225,6 +218,8 @@ export function App() {
       <ImportSignModal />
       <ProjectModal />
       <SaveWarning />
+      <ColorPickerHost />
+      <Tooltip />
     </div>
   );
 }

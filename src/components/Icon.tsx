@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Yotam Sechayk
 // Inlined Tabler icon paths (MIT) — kept offline, no CDN (constraint #1).
 const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
+  "arrow-up": { d: ["M12 5l0 14", "M18 11l-6 -6", "M6 11l6 -6"] },
+  "arrow-down": { d: ["M12 5l0 14", "M18 13l-6 6", "M6 13l6 6"] },
   "chevron-up": { d: ["M6 15l6 -6l6 6"] },
   "chevron-down": { d: ["M6 9l6 6l6 -6"] },
   "chevron-left": { d: ["M15 6l-6 6l6 6"] },

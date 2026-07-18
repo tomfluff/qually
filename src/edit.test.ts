@@ -4,6 +4,7 @@
 // segments untouched, corrected text flowing into both exports.
 import { beforeAll, test, expect } from "vitest";
 import { parseCSV } from "./contract/csv";
+import { hashLine } from "./ai/flag";
 
 let useStore: typeof import("./state/store").useStore;
 
@@ -81,4 +82,57 @@ test("dismissing a notice removes the span but keeps the line marked as scanned"
   const f = useStore.getState().aiFlags["P01:1"];
   expect(f.spans.map((s) => s.lens)).toEqual(["transcription"]); // emotion span gone
   expect(f.lenses).toContain("emotion");                          // no re-fetch of the same mark
+});
+
+test("applyFix repairs the line and keeps the OTHER marks alive", () => {
+  const st = useStore.getState();
+  const lines = st.transcripts.P01.lines;
+  st.addFlags("P01", { 1: [
+    { quote: "ticket marks", reason: "misheard", lens: "transcription", fix: "tick marks" },
+    { quote: "losing", reason: "frustration", lens: "emotion" },
+  ] }, lines, ["transcription", "emotion"]);
+  st.applyFix("P01", 1, "ticket marks", "tick marks");
+  const l = useStore.getState().transcripts.P01.lines[0];
+  expect(l.text).toBe("I kept losing the tick marks");
+  expect(l.orig).toBe("I kept losing the ticket marks"); // same provenance as a manual edit
+  const f = useStore.getState().aiFlags["P01:1"];
+  // the applied span is gone, the emotion span survives, and the record is
+  // re-hashed against the corrected text so it still counts as valid
+  expect(f.spans.map((s) => s.lens)).toEqual(["emotion"]);
+  expect(f.hash).toBe(hashLine(l.text));
+});
+
+test("applyFix is a no-op when the quote is not in the line (or the line doesn't exist)", () => {
+  const st = useStore.getState();
+  st.applyFix("P01", 2, "ticket marks", "tick marks"); // quote lives on line 1, not here
+  st.applyFix("P01", 999, "zoomed", "zoomed out");     // no such line
+  const l = useStore.getState().transcripts.P01.lines[1];
+  expect(l.text).toBe("so I zoomed in further");
+  expect(l.orig).toBeUndefined(); // no phantom edit recorded
+});
+
+test("applyFix replaces only the FIRST occurrence — the one the mark underlines", () => {
+  const st = useStore.getState();
+  st.editLine("P01", 2, "the zoom broke the zoom");
+  st.applyFix("P01", 2, "zoom", "map");
+  expect(useStore.getState().transcripts.P01.lines[1].text).toBe("the map broke the zoom");
+});
+
+test("applyFix with no flag record still repairs the line and doesn't resurrect one", () => {
+  useStore.getState().clearFlags("P01");
+  useStore.getState().applyFix("P01", 2, "zoom", "view");
+  expect(useStore.getState().transcripts.P01.lines[1].text).toBe("the map broke the view");
+  expect(useStore.getState().aiFlags["P01:2"]).toBeUndefined();
+});
+
+test("applyFix drops a span whose quote the repair broke (never orphaned)", () => {
+  const st = useStore.getState();
+  st.addFlags("P01", { 1: [
+    { quote: "tick marks", reason: "misheard", lens: "transcription", fix: "text marks" },
+    { quote: "the tick", reason: "frustration", lens: "emotion" }, // straddles the fixed region
+  ] }, st.transcripts.P01.lines, ["transcription", "emotion"]);
+  st.applyFix("P01", 1, "tick marks", "text marks");
+  // the emotion quote can never render against the corrected text — it must be
+  // dropped, not kept as an invisible span the line announcement still reads out
+  expect(useStore.getState().aiFlags["P01:1"].spans).toEqual([]);
 });

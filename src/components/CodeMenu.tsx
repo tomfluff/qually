@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
 import { openColorPicker } from "../colorPicker";
+import { useDismiss } from "../usePopover";
 
 export function CodeMenu({ code, x, y, onClose }: {
   code: string; x: number; y: number; onClose: () => void;
@@ -13,6 +14,8 @@ export function CodeMenu({ code, x, y, onClose }: {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
   const isPinned = useStore((s) => s.hotbar.pinned.includes(code));
+  // pinning only steers the hotbar in "pinned" mode; in auto (by usage) it's inert
+  const hotbarMode = useStore((s) => s.hotbar.mode);
   const segCount = segments.filter((z) => norm(z.code) === norm(code)).length;
   const others = Object.keys(codebook).filter((c) => c !== code).sort();
   const renameCode = useStore((s) => s.renameCode);
@@ -33,17 +36,15 @@ export function CodeMenu({ code, x, y, onClose }: {
     return () => opener?.focus();
   }, []);
 
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    // stopPropagation so App's global Esc doesn't also clear the line selection
-    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); mode === "menu" ? onClose() : setMode("menu"); } };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onEsc);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onEsc); };
-  }, [mode, onClose]);
+  // Escape peels one layer (a sub-form goes back to the menu); an outside click
+  // closes outright whatever the mode
+  const back = useCallback(() => { mode === "menu" ? onClose() : setMode("menu"); }, [mode, onClose]);
+  useDismiss(ref, onClose, { onEscape: back });
 
+  // anchor at the menu's own position (the code row), not the menu item — the
+  // menu is gone by the time the popover shows
   const pickColor = () => {
-    openColorPicker(codebook[code]?.color || "#888888", (v) => setColor(code, v));
+    openColorPicker(codebook[code]?.color || "#888888", (v) => setColor(code, v), { x, y });
     onClose();
   };
 
@@ -51,7 +52,8 @@ export function CodeMenu({ code, x, y, onClose }: {
   const onArrows = (e: React.KeyboardEvent) => {
     if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || (e.target as HTMLElement).matches("input, textarea")) return;
     e.preventDefault();
-    const items = Array.from(ref.current?.querySelectorAll("button") ?? []);
+    // skip disabled items: focus() on one is a silent no-op, and the walk would stick
+    const items = Array.from(ref.current?.querySelectorAll("button") ?? []).filter((b) => !b.disabled);
     if (!items.length) return;
     const at = items.indexOf(document.activeElement as HTMLButtonElement);
     items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length].focus();
@@ -68,7 +70,12 @@ export function CodeMenu({ code, x, y, onClose }: {
           <button onClick={() => setMode("rename")}><Icon name="pencil" size={15} />Rename…</button>
           <button onClick={() => setMode("def")}><Icon name="text" size={15} />Edit definition…</button>
           <button onClick={pickColor}><Icon name="droplet" size={15} />Change color…</button>
-          <button onClick={() => { togglePin(code); onClose(); }}>
+          {/* aria-disabled, not disabled: a disabled button is unfocusable, so the
+              why-is-this-off hint was mouse-only. This stays in the arrow walk and
+              announces as disabled; data-tip shows the hint on hover AND focus. */}
+          <button aria-disabled={hotbarMode !== "pinned"}
+            onClick={() => { if (hotbarMode !== "pinned") return; togglePin(code); onClose(); }}
+            data-tip={hotbarMode !== "pinned" ? "The hotbar is in auto (by usage) mode — switch it to pinned in Settings first" : undefined}>
             <Icon name="pin" size={15} />{isPinned ? "Unpin from hotbar" : "Pin to hotbar"}
           </button>
           {others.length > 0 && <button onClick={() => setMode("merge")}><Icon name="merge" size={15} />Merge into…</button>}

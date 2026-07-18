@@ -16,6 +16,7 @@ const KEYS: [string, string][] = [
   ["1 – 9", "Apply the matching hotbar code to the selection"],
   ["0", "Open the code palette (fuzzy search or create a code)"],
   ["Enter", "Play the loaded media from the selected line"],
+  ["M", "Open the selected line's AI mark (apply fix / dismiss); again cycles its marks"],
   ["Double-click a line", "Fix its transcription in place; Enter saves, Esc cancels"],
   ["Ctrl + C", "Copy the selected lines (speaker-grouped)"],
   ["Ctrl + Z  /  Ctrl + Shift + Z", "Undo / redo"],

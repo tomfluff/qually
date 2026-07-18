@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useState } from "react";
 import { useStore, inkOn } from "../state/store";
+import { CodeMenu } from "./CodeMenu";
 import { Icon } from "./Icon";
 
 // up to 2 initials from the code's first two significant words (skip stopwords)
@@ -21,11 +22,12 @@ export function HotbarDock() {
   const codes = useStore((s) => s.hotbarCache);
   const mode = useStore((s) => s.hotbar.mode);
   const codebook = useStore((s) => s.codebook);
-  const fontSize = useStore((s) => s.ui.fontSize);
   const hasSel = useStore((s) => s.selection.lines.size > 0);
   const applyCode = useStore((s) => s.applyCode);
   const refreshHotbar = useStore((s) => s.refreshHotbar);
   const [collapsed, setCollapsed] = useState(false);
+  // right-click (or the menu key) on a tile: the same code menu the sidebar rows open
+  const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
 
   // no early return on an empty codebook: before the first code exists the dock
   // still shows the "0" palette tile (the way to CREATE that first code) + refresh
@@ -34,6 +36,7 @@ export function HotbarDock() {
   const apply = (code: string) => { if (hasSel) applyCode(code); };
 
   return (
+    <>
     <div className={"hotbar" + (collapsed ? " collapsed" : "")}>
       {/* collapse arrow extrudes from the top edge, always visible */}
       <button className="hbhandle" onClick={() => setCollapsed((c) => !c)}
@@ -47,28 +50,35 @@ export function HotbarDock() {
           <div key={code} className="hbslot">
             {/* ink from the tile's own luminance (inkOn), not hardcoded white —
                 code colours are user-picked, same fix as the speaker chip */}
-            {/* the initials are visual shorthand — the accessible name carries the
-                full code and its number key */}
+            {/* the initials are visual shorthand — the full code name is one hover/focus
+                away (shared Tooltip); the accessible name carries it plus the number key */}
             <button className="tile" aria-label={`Apply code ${code} (key ${i + 1})`}
+              data-tip={code}
               style={{ background: codebook[code].color, color: inkOn(codebook[code].color) }}
-              onClick={() => apply(code)}>
+              onClick={() => apply(code)}
+              onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
+              onKeyDown={(e) => {
+                if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setMenu({ code, x: r.left, y: r.top }); // the menu clamps itself on-screen
+                }
+              }}>
               <span className="tinit">{initials(code)}</span>
-              <span className="tname" style={{ fontSize }}>{code}</span>
             </button>
             <span className="tnum" aria-hidden="true">{i + 1}</span>
           </div>
         ))}
         <div className="hbslot">
           <button className="tile newcode" onClick={() => useStore.getState().setPalette(true)}
-            title="open the code palette (fuzzy search)">
+            data-tip="new / find code… (fuzzy search)">
             <Icon name="library-plus" size={20} />
-            <span className="tname" style={{ fontSize }}>new / find code…</span>
           </button>
           <span className="tnum" aria-hidden="true">0</span>
         </div>
         {mode === "auto"
           ? (
-            <button className="tile refresh" onClick={refreshHotbar} title="recompute by usage"
+            <button className="tile refresh" onClick={refreshHotbar} data-tip="recompute by usage"
               aria-label="Refresh hotbar (recompute by usage)">
               <Icon name="refresh" size={20} />
             </button>
@@ -78,5 +88,9 @@ export function HotbarDock() {
           )}
       </div>
     </div>
+    {/* sibling of the dock, not a child: .hotbar's z-index:45 is its own stacking
+        context, and a menu inside it could paint under the video dock (z 50) */}
+    {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
+    </>
   );
 }

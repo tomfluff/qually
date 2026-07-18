@@ -149,6 +149,33 @@ describe("scanChunk — what the model says is not trusted", () => {
     expect(body.input[1].content).not.toContain("Ann");
     expect(body.input[1].content).toContain("[REDACTED_1]");
   });
+
+  // the fix field: a one-click repair is a WRITE into the transcript, so every
+  // gate matters — see the validation block at the end of scanChunk
+  it("keeps a usable fix on a transcription mark", async () => {
+    const { flags } = await run([{ line_id: 2, lens: "transcription", quote: "ticket marks", note: "misheard", fix: "tick marks" }]);
+    expect(flags[2]).toEqual([{ quote: "ticket marks", reason: "misheard", lens: "transcription", fix: "tick marks" }]);
+  });
+
+  it("drops a fix that merely repeats the quote — nothing to apply", async () => {
+    const { flags } = await run([{ line_id: 2, lens: "transcription", quote: "ticket marks", note: "odd", fix: "ticket marks" }]);
+    expect(flags[2]).toEqual([{ quote: "ticket marks", reason: "odd", lens: "transcription" }]); // mark survives, fix does not
+  });
+
+  it("drops a fix still holding an unknown placeholder — applying it would write [REDACTED_n] into the transcript", async () => {
+    const { flags } = await run([{ line_id: 2, lens: "transcription", quote: "ticket marks", note: "x", fix: "[REDACTED_9] marks" }]);
+    expect(flags[2]![0].fix).toBeUndefined();
+  });
+
+  it("restores a KNOWN placeholder inside the fix, same as the quote", async () => {
+    const { flags } = await run([{ line_id: 1, lens: "transcription", quote: "read a chart", note: "x", fix: "read [REDACTED_1]'s chart" }]);
+    expect(flags[1]![0].fix).toBe("read Ann's chart");
+  });
+
+  it("ignores a fix on a non-transcription lens — strict schema forces the field, only this lens gives it meaning", async () => {
+    const { flags } = await run([{ line_id: 2, lens: "emotion", quote: "I hate this chart", note: "frustration", fix: "I love this chart" }]);
+    expect(flags[2]).toEqual([{ quote: "I hate this chart", reason: "frustration", lens: "emotion" }]);
+  });
 });
 
 describe("lenses", () => {

@@ -5,6 +5,8 @@ import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
+import { AiMarkPopover } from "./AiMarkPopover";
+import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine } from "../video/seek";
@@ -14,6 +16,7 @@ import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
 import { savedScroll, positioned } from "../scrollMemory";
 import { announce } from "../announce";
+import { tinyDiff } from "../diff";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
@@ -34,16 +37,26 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
 }
 
 // AI marks in the text. Transcription flags: amber dotted (something's wrong).
-// Noticing lenses: a quiet per-lens tint (something to look at) — hover names the
-// lens, Alt-click dismisses (plain click still selects the line). Search
-// highlighting wins when a query is active — two overlapping mark-ups on the same
-// characters is noise, and you're hunting, not proofreading.
+// Noticing lenses: a quiet per-lens tint (something to look at). Hover shows the
+// read-only tip (errors include the suggested fix); a plain click opens the
+// mark's popover (selection deliberately suppressed); Alt-click stays the dismiss
+// shortcut. Search highlighting wins when a query is active — two overlapping
+// mark-ups on the same characters is noise, and you're hunting, not proofreading.
+// The ✱ on a repaired line. Its tooltip shows only the span that changed (the
+// Tooltip component reads the data-tip* attrs and renders a struck-old/new diff),
+// not the whole original re-quoted.
+function EditMark({ orig, text }: { orig: string; text: string }): ReactNode {
+  const d = tinyDiff(orig, text);
+  return <span className="editmark" data-tipdel={d.del} data-tipins={d.ins}
+    data-tippre={d.pre || undefined} data-tipsuf={d.suf || undefined}>✱</span>;
+}
+
 function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
-  const hits: { at: number; len: number; span: Flag }[] = [];
-  for (const s of spans) {
+  const hits: { at: number; len: number; span: Flag; idx: number }[] = [];
+  spans.forEach((s, idx) => {
     const at = text.indexOf(s.quote);
-    if (at >= 0) hits.push({ at, len: s.quote.length, span: s });
-  }
+    if (at >= 0) hits.push({ at, len: s.quote.length, span: s, idx });
+  });
   if (!hits.length) return text;
   hits.sort((a, b) => a.at - b.at);
   const nodes: ReactNode[] = [];
@@ -53,12 +66,19 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
     if (h.at > last) nodes.push(text.slice(last, h.at));
     const lens = lensOf(spanLens(h.span));
     const isError = spanLens(h.span) === "transcription";
+    // A mark's press must NOT select the row (onRowDown bails on [data-ai]), but
+    // the mousedown still bubbles — document-level closers (open code menu,
+    // segment popover, color picker) rely on hearing it. The click then reaches
+    // the list's delegated [data-ai] handler, which opens the mark's popover.
+    const ai = `${lineId}:${h.idx}`;
     nodes.push(isError
-      ? <span key={k} className="aidoubt" data-tip={h.span.reason}>{text.slice(h.at, h.at + h.len)}</span>
+      ? <span key={k} className="aidoubt" data-ai={ai}
+          data-tip={h.span.fix ? `${h.span.reason} → “${h.span.fix}”` : h.span.reason}
+          >{text.slice(h.at, h.at + h.len)}</span>
       : <span key={k} className={`ainote lens-${spanLens(h.span)}`} style={{ "--lens-c": lens?.color } as CSSProperties}
-          data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason} · Alt-click to dismiss`}
+          data-ai={ai} data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason}`}
           onClick={(e) => {
-            if (!e.altKey) return; // plain click keeps selecting the line
+            if (!e.altKey) return; // plain click opens the popover (delegated); alt-click stays the dismiss shortcut
             e.stopPropagation();
             const st = useStore.getState();
             st.dismissNotice(st.active, lineId, spanLens(h.span), h.span.quote);
@@ -164,8 +184,9 @@ export function TranscriptView() {
   const groupsRef = useRef<Group[]>([]);
   const selBounds = useRef<{ first: number; last: number } | null>(null);
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
+  const [aiPop, setAiPop] = useState<{ line: number; span: Flag; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
-  useEffect(() => { setEditingId(null); }, [active]);
+  useEffect(() => { setEditingId(null); setAiPop(null); }, [active]);
   const [hoverSid, setHoverSid] = useState<number | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // debounce clearing so moving between a segment's bars doesn't flicker the brackets
@@ -204,6 +225,17 @@ export function TranscriptView() {
   // "back to selection" button off this so a follow doesn't flash it. (Instant/smooth-off
   // glides never set it: they land in one go, before any 'scroll' fires.)
   const gliding = useRef(false);
+  // Three things write scrollTop: the glide loop, the wheel-chase loop, and instant
+  // jumps (minimap, search, tab restore). The loops run for ~a half second after
+  // their trigger, so a jump landing mid-loop got overwritten on the next frame —
+  // click the minimap during a wheel's ease-out tail and the tail yanked the view
+  // back. Every navigation entry point calls this first: one writer at a time.
+  const wheelStop = useRef<() => void>(() => {});
+  const stopAnims = () => {
+    cancelAnimationFrame(tween.current);
+    gliding.current = false;
+    wheelStop.current();
+  };
   // virtua's own `smooth` option delegates to scrollTo({behavior:"smooth"}), which the
   // browser silently downgrades to a jump when the OS asks for reduced motion — so the
   // app toggle could never win on a machine that asks for it. Animate scrollTop on a rAF
@@ -216,8 +248,7 @@ export function TranscriptView() {
   const glide = (targetOf: (v: VListHandle, from: number) => number, land: () => void) => {
     const v = vref.current;
     const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
-    cancelAnimationFrame(tween.current);
-    gliding.current = false;
+    stopAnims(); // includes the wheel-chase loop, which would fight this glide frame by frame
     if (!v || !el || !smooth()) return land();
     const from = el.scrollTop;
     const to = Math.max(0, Math.min(targetOf(v, from), el.scrollHeight - el.clientHeight));
@@ -244,13 +275,27 @@ export function TranscriptView() {
   useEffect(() => {
     const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
     if (!el) return;
-    let target = 0, raf = 0, last = 0, running = false;
+    let target = 0, raf = 0, last = 0, running = false, lastSet = -1;
+    const stop = () => { cancelAnimationFrame(raf); running = false; };
+    wheelStop.current = stop;
     const step = (t: number) => {
+      // Backstop for writers that don't route through stopAnims (search, a tab
+      // restore): if the scroll isn't where this loop left it, someone else moved
+      // it. A LARGE move is a navigation — their position wins, the chase ends. A
+      // small one is virtua's own estimate correction while rows measure (routine
+      // when wheeling up through unmeasured content) — carry the shift into the
+      // target instead of aborting mid-gesture, or the first pass would stutter.
+      if (lastSet >= 0) {
+        const drift = el.scrollTop - lastSet;
+        if (Math.abs(drift) > 48) { running = false; return; }
+        if (Math.abs(drift) > 4) target = Math.max(0, Math.min(target + drift, el.scrollHeight - el.clientHeight));
+      }
       const dt = Math.min(64, t - last); // a backgrounded tab resumes with a huge dt
       last = t;
       const d = target - el.scrollTop;
       if (Math.abs(d) < 0.5) { el.scrollTop = target; running = false; return; }
       el.scrollTop += d * (1 - Math.exp(-dt / WHEEL_TAU));
+      lastSet = el.scrollTop;
       raf = requestAnimationFrame(step);
     };
     const onWheel = (e: WheelEvent) => {
@@ -264,10 +309,10 @@ export function TranscriptView() {
       cancelAnimationFrame(tween.current); gliding.current = false; // a keyboard glide loses to the hand on the wheel
       const max = el.scrollHeight - el.clientHeight;
       target = Math.max(0, Math.min((running ? target : el.scrollTop) + px, max));
-      if (!running) { running = true; last = performance.now(); raf = requestAnimationFrame(step); }
+      if (!running) { running = true; last = performance.now(); lastSet = el.scrollTop; raf = requestAnimationFrame(step); }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => { el.removeEventListener("wheel", onWheel); cancelAnimationFrame(raf); };
+    return () => { el.removeEventListener("wheel", onWheel); stop(); wheelStop.current = () => {}; };
   }, [transcript, fontSize]);
 
   // scroll the selection back into view — the way home after Home/End
@@ -294,6 +339,26 @@ export function TranscriptView() {
     }
     return m;
   }, [aiFlags, transcript, active, showNotices]);
+
+  // The mark popover holds a SNAPSHOT of its span — close it when that span is no
+  // longer in the flag set (a scan finished and replaced the flags, an undo, the
+  // notices eye-toggle), or Apply/Dismiss would act on a superseded mark.
+  useEffect(() => {
+    if (aiPop && !flagsByLine.get(aiPop.line)?.includes(aiPop.span)) setAiPop(null);
+  }, [flagsByLine, aiPop]);
+
+  // Click on an AI mark → its popover. Delegated on the list container: the marks
+  // live inside virtualized rows, so per-mark state wiring would thread through
+  // every Row; the spans instead carry a data-ai="line:index" key into flagsByLine.
+  const onAiClick = (e: MouseEvent<HTMLDivElement>) => {
+    const el = (e.target as HTMLElement).closest?.<HTMLElement>("[data-ai]");
+    if (!el || e.altKey) return; // alt-click is the dismiss shortcut, handled on the span
+    const [lid, k] = (el.getAttribute("data-ai") ?? "").split(":").map(Number);
+    const span = flagsByLine.get(lid)?.[k];
+    if (!span) return;
+    const r = el.getBoundingClientRect();
+    setAiPop({ line: lid, span, x: r.left, y: r.bottom + 6 });
+  };
 
   // Scroll headroom, VS Code's `scrollBeyondLastLine` but on both ends: a pad of
   // (viewport − one row) lets ANY line be pulled to the top or the bottom of the
@@ -330,6 +395,10 @@ export function TranscriptView() {
   useEffect(() => {
     if (pad === null) return;             // container not laid out yet; the pad is a guess
     if (useStore.getState().jump) return; // a Browse -> line jump owns the position
+    // a glide started on the PREVIOUS tab would keep animating scrollTop against
+    // the old tab's targets, overwrite the restore below, and (worse) its bogus
+    // positions would get recorded as the new tab's saved scroll
+    stopAnims();
     positioning.current = true;
     // One frame so the swapped-in children are committed, then let virtua do the
     // scrolling: its scrollToIndex re-evaluates the target after every row
@@ -360,6 +429,29 @@ export function TranscriptView() {
       () => vref.current?.scrollToIndex(n, { align: "end", offset: dock + 8 }));
   };
 
+  // Open the selected line's AI-mark popover; called again (M — from the list or
+  // forwarded by the open popover) it advances to the line's next mark and wraps.
+  // Returns whether it acted, so callers only preventDefault when it did.
+  const cycleMarkPopover = (): boolean => {
+    const sel = useStore.getState().selection;
+    if (sel.pid !== active || sel.head === null) return false;
+    const g = groups.find((x) => sel.head! >= x.startId && sel.head! <= x.endId);
+    if (!g) return false;
+    const all: { line: number; span: Flag; idx: number }[] = [];
+    for (const l of g.lines)
+      (flagsByLine.get(l.id) ?? []).forEach((span, idx) => all.push({ line: l.id, span, idx }));
+    if (!all.length) return false;
+    const at = aiPop ? all.findIndex((m) => m.span === aiPop.span) : -1;
+    const next = all[(at + 1) % all.length];
+    // anchor at the mark's rendered span; fall back to the row if virtua
+    // hasn't got it on screen
+    const mk = tviewRef.current?.querySelector<HTMLElement>(`[data-ai="${next.line}:${next.idx}"]`)
+      ?? document.getElementById(`trow-${g.startId}`);
+    const r = mk?.getBoundingClientRect();
+    setAiPop({ line: next.line, span: next.span, x: r?.left ?? 100, y: (r?.bottom ?? 100) + 6 });
+    return true;
+  };
+
   // The ONLY way into a selection used to be onMouseDown on a row: arrow keys are
   // gated on a selection already existing, so a keyboard user could never make the
   // first one — and the digit hotkeys, the whole point of the app, stayed forever
@@ -380,6 +472,14 @@ export function TranscriptView() {
         const g = groups.find((x) => sel.head! >= x.startId && sel.head! <= x.endId);
         if (g) { e.preventDefault(); seekVideo(g.ts); }
       }
+      return;
+    }
+    // M: the keyboard route to the AI-mark popover — the marks themselves are
+    // deliberately not tab stops (per-row stops were a wall). Opens the selected
+    // line's first mark; the POPOVER forwards further M presses back here to
+    // cycle (once it's open, focus sits inside it, so this handler can't hear M).
+    if (e.key === "m" || e.key === "M") {
+      if (cycleMarkPopover()) e.preventDefault();
       return;
     }
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -421,7 +521,7 @@ export function TranscriptView() {
     // want to own the scroll position. Following the selection head on top of either
     // would yank the list straight back off the target.
     if (jump || !positioned.has(active)) return;
-    const gi = groups.findIndex((g) => headId >= g.startId && headId <= g.endId);
+    const gi = groupsRef.current.findIndex((g) => headId >= g.startId && headId <= g.endId);
     if (gi < 0) return;
     const idx = gi + 1; // +1 for the top vpad
     const first = v.findItemIndex(v.scrollOffset);
@@ -435,7 +535,11 @@ export function TranscriptView() {
     if (idx <= first) glide((vh) => vh.getItemOffset(idx), () => v.scrollToIndex(idx, { align: "start" }));
     else if (idx >= last) glide((vh) => vh.getItemOffset(idx) + vh.getItemSize(idx) - vh.viewportSize,
       () => v.scrollToIndex(idx, { align: "end" }));
-  }, [headId, groups]);
+    // headId ONLY: follow the selection when it MOVES. groups was a dep once, but
+    // any transcript edit (applying an AI fix included) rebuilds it, and the re-run
+    // yanked the view back to a selection you had deliberately scrolled away from.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headId]);
 
   // Speak the selection as it moves. The listbox exposes the head via
   // aria-activedescendant (line 590), which NVDA/JAWS read — but Narrator's support for
@@ -474,23 +578,6 @@ export function TranscriptView() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headId, selLines]);
-
-  // Tooltips open upward, but the list is a scroller and clips them — and with the
-  // headroom, the line you're reading is usually parked at the very top. Flip the tip
-  // below when there isn't room above it. Delegated: the rows are virtualized, so
-  // per-row listeners would churn. Lane bars are side-positioned; leave them alone.
-  useEffect(() => {
-    const el = tviewRef.current;
-    if (!el) return;
-    const onOver = (e: globalThis.MouseEvent) => {
-      const t = (e.target as HTMLElement).closest<HTMLElement>("[data-tip]");
-      if (!t || t.classList.contains("laneBar")) return;
-      const room = t.getBoundingClientRect().top - el.getBoundingClientRect().top;
-      t.classList.toggle("tipbelow", room < fontSize * 4.5); // ~ a two-line tip + gap
-    };
-    el.addEventListener("mouseover", onOver);
-    return () => el.removeEventListener("mouseover", onOver);
-  }, [fontSize]);
 
   // sync the minimap viewport box on mount and whenever the list content changes
   useEffect(() => { const id = requestAnimationFrame(syncMinimap); return () => cancelAnimationFrame(id); });
@@ -571,9 +658,12 @@ export function TranscriptView() {
   // click selects; click+drag selects a range (Shift extends, Ctrl toggles — no drag)
   const onRowDown = (e: MouseEvent, id: number) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest(".lanes,.ts,.lineEdit")) return;
-    // Alt-click on an AI notice is its dismiss gesture (handled on click) — selecting
-    // here too would clear/collapse the very selection the notice sits on
-    if (e.altKey && (e.target as HTMLElement).closest(".ainote")) return;
+    // A press on an AI mark belongs to the mark (its click opens the popover, or
+    // alt-click dismisses) — selecting here would trigger a keep-in-view scroll
+    // that fights the popover. Bailing HERE rather than stopPropagation on the
+    // span keeps the mousedown visible to document-level closers (an open code
+    // menu / segment popover must still close on this press).
+    if ((e.target as HTMLElement).closest("[data-ai]")) return;
     if (e.detail > 1) return; // second press of a double-click: that's an edit, not a re-select
     const st = useStore.getState();
     // open the gesture BEFORE any mutation — a click and a whole drag are one undo step
@@ -620,7 +710,7 @@ export function TranscriptView() {
 
   return (
     <>
-      <div className="tview" ref={tviewRef}>
+      <div className="tview" ref={tviewRef} onClick={onAiClick}>
       {/* A plain focusable region, deliberately NOT an ARIA listbox. A focused listbox
           narrates its own selected option (in DOM order, AI-highlight markup and all) on
           every move — which double-spoke over, and fought the order of, our own live
@@ -630,8 +720,8 @@ export function TranscriptView() {
           drop role=option/aria-selected for the same reason. */}
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
         tabIndex={0} onKeyDown={onListKeyDown}
-        aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line.`}
-        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
+        aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line, M to review the selected line's AI marks.`}
+        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line
           ...groups.map((g) => (
@@ -673,15 +763,17 @@ export function TranscriptView() {
       </VList>
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
       <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
-        closeCallSids={closeCallSids} detail={minimapDetail} ui={ui} vref={vref} />
+        closeCallSids={closeCallSids} detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims} />
         {selOff && (
           <button className={`backtosel ${selOff}`} onClick={backToSelection}
-            data-tip="Scroll back to your selected line(s)">
-            {selOff === "up" ? "↑" : "↓"} back to selection
+            style={{ fontSize: ui.sidebarFontSize }} aria-label="Scroll back to your selected line(s)">
+            <Icon name={selOff === "up" ? "arrow-up" : "arrow-down"} size={ui.sidebarFontSize + 2} /> return
           </button>
         )}
       </div>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
+      {aiPop && <AiMarkPopover pid={active} line={aiPop.line} span={aiPop.span}
+        x={aiPop.x} y={aiPop.y} onClose={() => setAiPop(null)} onCycle={cycleMarkPopover} />}
     </>
   );
 }
@@ -821,7 +913,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
                   : flagsByLine.has(l.id)
                     ? renderFlagged(l.text, flagsByLine.get(l.id)!, l.id)
                     : l.text}
-                {l.orig !== undefined && <span className="editmark" data-tip={`was: “${l.orig}”`}>✱</span>}
+                {l.orig !== undefined && <EditMark orig={l.orig} text={l.text} />}
               </span>
             )}
           </Fragment>

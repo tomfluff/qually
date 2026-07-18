@@ -94,12 +94,15 @@
 .laneBar { width:var(--lane-w, 18px); flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
-/* ponytail: bleed the whole lane strip 1px into the row below. The rows are
-   virtualized (virtua) and at fractional DPI (e.g. 125%) a row boundary lands on a
-   sub-device-pixel, leaving a hairline seam every few rows in the strip's left
-   divider and its bars. Negative margin doesn't change the border-box virtua
-   measures, so it paints over the seam without shifting the next row down. */
-.lineRow .lanes { margin-bottom:-1px; }
+/* Fractional-DPI seam cover, UPWARD: at 125% a row boundary lands on a
+   sub-device-pixel, leaving a hairline gap every few rows in the strip's divider
+   and its bars. The strip bleeds 1px INTO THE ROW ABOVE — each virtua row paints
+   over its predecessor, so an upward bleed wins over the previous row's opaque
+   hover/selection background (a downward bleed painted UNDER the next row and
+   the hover fill clipped the bars' bottom edge). segStart bars step back down
+   1px so a segment's rounded top doesn't start early inside the row above. */
+.lineRow .lanes { margin-top:-1px; }
+.laneBar.segStart { margin-top:1px; }
 
 /* WCAG 1.4.1: which code a lane bar is must not be carried by HUE ALONE. Each code
    also gets one of six patterns (patternOf(), derived from the code name), drawn as
@@ -148,43 +151,6 @@
 .laneBar .grip { position:absolute; left:-3px; right:-3px; height:8px; cursor:ns-resize; }
 .laneBar .gripTop { top:-3px; } .laneBar .gripBot { bottom:-3px; }
 .laneEmpty { width:var(--lane-w, 18px); flex-shrink:0; }
-
-/* Custom tooltip. Sized from --txt-fs (the transcript's own text size, set on the
-   list) rather than the browser's fixed ~12px native tip — at 28px transcript text a
-   native title is unreadably small next to the words it describes.
-   NOT em-based: a host can shrink its own font (.editmark is .6em), and an em tip
-   would inherit that shrink and come out tiny — the very bug this replaces.
-   Base: above the element, wrapping. The lane bars override it to sit alongside. */
-[data-tip] { position:relative; }
-/* :focus-visible alongside :hover — the app is keyboard-first (see base.css), so a
-   tip a mouse can summon must open on keyboard focus too */
-[data-tip]:hover::after, [data-tip]:focus-visible::after {
-  content: attr(data-tip);
-  position:absolute; bottom:calc(100% + 7px); left:50%; transform:translateX(-50%);
-  background:var(--fg); color:var(--bg); padding:5px 10px; border-radius:7px;
-  font-size:calc(var(--txt-fs, 16px) * .8); font-weight:600; line-height:1.4;
-  font-style:normal; text-align:left; letter-spacing:normal;
-  width:max-content; max-width:min(34ch, 60vw); white-space:normal;
-  z-index:80; pointer-events:none; box-shadow:0 4px 16px rgba(0,0,0,.32); }
-
-/* too close to the top of the scroller to open upward: flip below (set in JS, which
-   is the only thing that can measure the space — CSS can't) */
-[data-tip].tipbelow:hover::after,
-[data-tip].tipbelow:focus-visible::after { bottom:auto; top:calc(100% + 7px); }
-
-/* virtua wraps each row in a `contain`ed item — its own stacking context — so the
-   tooltip's z-index can't rise above the rows BELOW it (the ones a downward tip
-   overlaps); they'd paint on top. Lift the hovered row's item wrapper past its
-   siblings while the tip is open, so the tip clears them. */
-.tviewlist :has(> .lineRow:hover),
-.tviewlist :has(> .lineRow:focus-within) { z-index:1; }
-
-/* lane bars: to the LEFT of the bar, one line — reset every base property it changes */
-.laneBar[data-tip]:hover::after, .laneBar[data-tip]:focus-visible::after {
-  bottom:auto; left:auto; right:calc(100% + 8px); top:50%; transform:translateY(-50%);
-  display:flex; align-items:center; line-height:1;
-  padding:4px 9px; border-radius:6px; font-size:var(--txt-fs, 16px);
-  max-width:none; white-space:nowrap; }
 
 .empty { padding:16px; color:var(--muted); }
 
@@ -255,7 +221,7 @@
 .backtosel { position:absolute; left:14px; bottom:12px; z-index:20;
   display:inline-flex; align-items:center; gap:6px; padding:6px 13px;
   background:var(--accent); color:#fff; border:none; border-radius:999px;
-  font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;
+  font:inherit; font-weight:600; cursor:pointer; /* font-size inline, from the sidebar text setting */
   box-shadow:0 3px 14px rgba(0,0,0,.3); }
 [data-theme=dark] .backtosel { color:#12161a; }
 .backtosel:hover { filter:brightness(1.08); }
