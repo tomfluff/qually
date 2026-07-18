@@ -55,12 +55,14 @@ export function CodeSidebar() {
             }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
             data-tip={code}>
+            {/* right-click only: a left-click on the swatch is almost always a missed
+                click on the row (apply code) — let it fall through. Keyboard and
+                screen-reader users recolor via the ⋯ menu's "Change color…". */}
             <span className={"codebar" + (lanePattern ? ` lp${patternOf(code)}` : "")}
-              role="button" aria-label={`Recolor ${code}`}
-              style={{ background: codebook[code].color }} title="recolor"
-              onClick={(e) => {
-                e.stopPropagation();
-                openColorPicker(codebook[code].color, (v) => setColor(code, v));
+              style={{ background: codebook[code].color }} title="right-click to recolor"
+              onContextMenu={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                openColorPicker(codebook[code].color, (v) => setColor(code, v), e.currentTarget);
               }} />
             <span className="cname">{code}</span>
             {pinned.includes(code) && <span className="pindot" title="pinned">●</span>}

@@ -250,23 +250,17 @@ function SpeakerRows() {
             <button className="spkswatch"
               style={{ background: speakerColor(ui, sp), color: inkOn(speakerColor(ui, sp)) }}
               data-tip={`Recolour ${sp}`} aria-label={`Recolour ${sp}`}
-              onClick={() => openColorPicker(speakerColor(ui, sp),
-                (v) => setUi({ speakerColors: { ...ui.speakerColors, [sp]: v } }))}>
+              onClick={(e) => openColorPicker(speakerColor(ui, sp),
+                (v) => setUi({ speakerColors: { ...ui.speakerColors, [sp]: v } }), e.currentTarget)}>
               {sp.slice(0, 3)}
             </button>
             <span className="spkname">{sp}</span>
             {/* The control previews its own effect: an "A" at each weight, rather than
-                three words to read (and translate). data-tip, not title — the native
-                tooltip is a fixed ~12px, which is the wrong thing to hand someone
-                who is here because 12px is too small. */}
+                three words to read (and translate). The note below carries the meaning;
+                aria-label carries it for a screen reader. */}
             <div className="seg wseg">
               {WEIGHTS.map(([id, label]) => (
-                // data-tip is short on purpose: it only has to NAME the state the icon
-                // replaced, and the tip scales with the text size, so a sentence here
-                // would grow wider than the popover and clip. The note below carries
-                // the meaning; aria-label carries it for anyone not seeing the tip.
                 <button key={id} className={(w === id ? "on " : "") + `wt-${id}`}
-                  data-tip={id[0].toUpperCase() + id.slice(1)}
                   aria-label={`${sp}: ${label}`} aria-pressed={w === id}
                   onClick={() => setWeight(sp, id)}>A</button>
               ))}

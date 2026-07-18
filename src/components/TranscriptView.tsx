@@ -5,6 +5,7 @@ import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
+import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine } from "../video/seek";
@@ -14,6 +15,7 @@ import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
 import { savedScroll, positioned } from "../scrollMemory";
 import { announce } from "../announce";
+import { tinyDiff } from "../diff";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
@@ -38,6 +40,15 @@ function renderText(text: string, query: string, curOcc: number): ReactNode {
 // lens, Alt-click dismisses (plain click still selects the line). Search
 // highlighting wins when a query is active — two overlapping mark-ups on the same
 // characters is noise, and you're hunting, not proofreading.
+// The ✱ on a repaired line. Its tooltip shows only the span that changed (the
+// Tooltip component reads the data-tip* attrs and renders a struck-old/new diff),
+// not the whole original re-quoted.
+function EditMark({ orig, text }: { orig: string; text: string }): ReactNode {
+  const d = tinyDiff(orig, text);
+  return <span className="editmark" data-tipdel={d.del} data-tipins={d.ins}
+    data-tippre={d.pre || undefined} data-tipsuf={d.suf || undefined}>✱</span>;
+}
+
 function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
   const hits: { at: number; len: number; span: Flag }[] = [];
   for (const s of spans) {
@@ -53,12 +64,19 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
     if (h.at > last) nodes.push(text.slice(last, h.at));
     const lens = lensOf(spanLens(h.span));
     const isError = spanLens(h.span) === "transcription";
+    // Clicks on a mark belong to the mark, not the row: selection happens on the
+    // row's MOUSEDOWN, which would fire first, select the line, and the resulting
+    // keep-in-view scroll would close the tip the click just pinned. Swallow the
+    // mousedown so a click here only opens the tip (alt-click still dismisses).
+    const own = (e: MouseEvent) => e.stopPropagation();
     nodes.push(isError
-      ? <span key={k} className="aidoubt" data-tip={h.span.reason}>{text.slice(h.at, h.at + h.len)}</span>
+      ? <span key={k} className="aidoubt" data-tip={h.span.reason} data-tip-click=""
+          onMouseDown={own}>{text.slice(h.at, h.at + h.len)}</span>
       : <span key={k} className={`ainote lens-${spanLens(h.span)}`} style={{ "--lens-c": lens?.color } as CSSProperties}
-          data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason} · Alt-click to dismiss`}
+          data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason} · Alt-click to dismiss`} data-tip-click=""
+          onMouseDown={own}
           onClick={(e) => {
-            if (!e.altKey) return; // plain click keeps selecting the line
+            if (!e.altKey) return;
             e.stopPropagation();
             const st = useStore.getState();
             st.dismissNotice(st.active, lineId, spanLens(h.span), h.span.quote);
@@ -475,23 +493,6 @@ export function TranscriptView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headId, selLines]);
 
-  // Tooltips open upward, but the list is a scroller and clips them — and with the
-  // headroom, the line you're reading is usually parked at the very top. Flip the tip
-  // below when there isn't room above it. Delegated: the rows are virtualized, so
-  // per-row listeners would churn. Lane bars are side-positioned; leave them alone.
-  useEffect(() => {
-    const el = tviewRef.current;
-    if (!el) return;
-    const onOver = (e: globalThis.MouseEvent) => {
-      const t = (e.target as HTMLElement).closest<HTMLElement>("[data-tip]");
-      if (!t || t.classList.contains("laneBar")) return;
-      const room = t.getBoundingClientRect().top - el.getBoundingClientRect().top;
-      t.classList.toggle("tipbelow", room < fontSize * 4.5); // ~ a two-line tip + gap
-    };
-    el.addEventListener("mouseover", onOver);
-    return () => el.removeEventListener("mouseover", onOver);
-  }, [fontSize]);
-
   // sync the minimap viewport box on mount and whenever the list content changes
   useEffect(() => { const id = requestAnimationFrame(syncMinimap); return () => cancelAnimationFrame(id); });
 
@@ -631,7 +632,7 @@ export function TranscriptView() {
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
         tabIndex={0} onKeyDown={onListKeyDown}
         aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line.`}
-        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
+        style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line
           ...groups.map((g) => (
@@ -676,8 +677,8 @@ export function TranscriptView() {
         closeCallSids={closeCallSids} detail={minimapDetail} ui={ui} vref={vref} />
         {selOff && (
           <button className={`backtosel ${selOff}`} onClick={backToSelection}
-            data-tip="Scroll back to your selected line(s)">
-            {selOff === "up" ? "↑" : "↓"} back to selection
+            style={{ fontSize: ui.sidebarFontSize }} aria-label="Scroll back to your selected line(s)">
+            <Icon name={selOff === "up" ? "arrow-up" : "arrow-down"} size={ui.sidebarFontSize + 2} /> return
           </button>
         )}
       </div>
@@ -821,7 +822,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
                   : flagsByLine.has(l.id)
                     ? renderFlagged(l.text, flagsByLine.get(l.id)!, l.id)
                     : l.text}
-                {l.orig !== undefined && <span className="editmark" data-tip={`was: “${l.orig}”`}>✱</span>}
+                {l.orig !== undefined && <EditMark orig={l.orig} text={l.text} />}
               </span>
             )}
           </Fragment>

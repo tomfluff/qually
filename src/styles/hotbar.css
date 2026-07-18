@@ -28,11 +28,6 @@
   border-color:rgba(0,0,0,.32); }
 .tile.newcode { background:var(--panel); color:var(--accent);
   border:1px dashed var(--muted); }
-.tile .tname { position:absolute; bottom:calc(100% + 8px); left:50%;
-  transform:translateX(-50%); background:var(--fg); color:var(--bg);
-  padding:3px 9px; border-radius:6px; white-space:nowrap; display:none;
-  pointer-events:none; z-index:80; }
-.tile:hover .tname, .tile:focus-visible .tname { display:block; } /* keyboard focus reveals the name too */
 /* extruding tab on the top-center edge of the dock (always visible) */
 .hbhandle { position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
   padding:2px 16px 3px; border:1px solid var(--line); border-bottom:none;

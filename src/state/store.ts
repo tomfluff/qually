@@ -14,7 +14,7 @@ import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll } from "../scrollMemory";
 import { announce } from "../announce";
 
-const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
+export const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
 
 // orig = the imported text, present only while an in-app correction differs from it

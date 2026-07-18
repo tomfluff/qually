@@ -162,13 +162,14 @@ export function BrowseView() {
               }
             }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code: c, x: e.clientX, y: e.clientY }); }}
-            title={`${c}  (right-click for options)`}>
+            data-tip={c}>
             <div className="bCodeMain">
-              <span className="codebar" role="button" aria-label={`Recolor ${c}`}
-                style={{ background: codebook[c].color }} title="recolor"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openColorPicker(codebook[c].color, (v) => setColor(c, v));
+              {/* right-click only, matching the main sidebar's swatch */}
+              <span className="codebar"
+                style={{ background: codebook[c].color }} title="right-click to recolor"
+                onContextMenu={(e) => {
+                  e.preventDefault(); e.stopPropagation();
+                  openColorPicker(codebook[c].color, (v) => setColor(c, v), e.currentTarget);
                 }} />
               <span className="bCodeName">{c}</span>
               {/* the count is already in the row's aria-label — don't double-speak */}

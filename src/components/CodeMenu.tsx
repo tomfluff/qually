@@ -42,8 +42,10 @@ export function CodeMenu({ code, x, y, onClose }: {
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onEsc); };
   }, [mode, onClose]);
 
+  // anchor at the menu's own position (the code row), not the menu item — the
+  // menu is gone by the time the popover shows
   const pickColor = () => {
-    openColorPicker(codebook[code]?.color || "#888888", (v) => setColor(code, v));
+    openColorPicker(codebook[code]?.color || "#888888", (v) => setColor(code, v), { x, y });
     onClose();
   };
 

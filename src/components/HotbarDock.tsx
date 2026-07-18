@@ -21,7 +21,6 @@ export function HotbarDock() {
   const codes = useStore((s) => s.hotbarCache);
   const mode = useStore((s) => s.hotbar.mode);
   const codebook = useStore((s) => s.codebook);
-  const fontSize = useStore((s) => s.ui.fontSize);
   const hasSel = useStore((s) => s.selection.lines.size > 0);
   const applyCode = useStore((s) => s.applyCode);
   const refreshHotbar = useStore((s) => s.refreshHotbar);
@@ -47,28 +46,27 @@ export function HotbarDock() {
           <div key={code} className="hbslot">
             {/* ink from the tile's own luminance (inkOn), not hardcoded white —
                 code colours are user-picked, same fix as the speaker chip */}
-            {/* the initials are visual shorthand — the accessible name carries the
-                full code and its number key */}
+            {/* the initials are visual shorthand — the full code name is one hover/focus
+                away (shared Tooltip); the accessible name carries it plus the number key */}
             <button className="tile" aria-label={`Apply code ${code} (key ${i + 1})`}
+              data-tip={code}
               style={{ background: codebook[code].color, color: inkOn(codebook[code].color) }}
               onClick={() => apply(code)}>
               <span className="tinit">{initials(code)}</span>
-              <span className="tname" style={{ fontSize }}>{code}</span>
             </button>
             <span className="tnum" aria-hidden="true">{i + 1}</span>
           </div>
         ))}
         <div className="hbslot">
           <button className="tile newcode" onClick={() => useStore.getState().setPalette(true)}
-            title="open the code palette (fuzzy search)">
+            data-tip="new / find code… (fuzzy search)">
             <Icon name="library-plus" size={20} />
-            <span className="tname" style={{ fontSize }}>new / find code…</span>
           </button>
           <span className="tnum" aria-hidden="true">0</span>
         </div>
         {mode === "auto"
           ? (
-            <button className="tile refresh" onClick={refreshHotbar} title="recompute by usage"
+            <button className="tile refresh" onClick={refreshHotbar} data-tip="recompute by usage"
               aria-label="Refresh hotbar (recompute by usage)">
               <Icon name="refresh" size={20} />
             </button>

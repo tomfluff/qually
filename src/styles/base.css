@@ -42,6 +42,21 @@ button { font-family:inherit; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
   overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
 
+/* The app's one tooltip (components/Tooltip.tsx portals a single element here).
+   z-index:200 is the single value that keeps it above every panel and modal
+   (backdrop 95, palette 90) — no per-host stacking games. position/left/top and
+   font-size come inline from JS. */
+.tooltip { position:fixed; z-index:200; pointer-events:none;
+  background:var(--fg); color:var(--bg); padding:5px 10px; border-radius:7px;
+  font-weight:600; line-height:1.4; text-align:left; letter-spacing:normal; font-style:normal;
+  width:max-content; max-width:min(40ch, 60vw); white-space:normal;
+  box-shadow:0 4px 16px rgba(0,0,0,.32); }
+/* edited-line diff: struck old, underlined new — decoration only, since the
+   bubble inverts between themes (dark-on-light and light-on-dark) and no single
+   accent colour would read on both. */
+.tooltip .tipdiff s { opacity:.7; }
+.tooltip .tipins { text-decoration:underline; text-underline-offset:2px; }
+
 /* Respect a stated preference for less motion. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
