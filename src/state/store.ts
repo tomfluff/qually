@@ -8,7 +8,7 @@ import { excerptOf, RESEARCHER } from "../contract/excerpt";
 import { mergeGroups, type Group } from "../merge";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
-import { hashLine, type Flag } from "../ai/flag";
+import { hashLine, spanLens, type Flag } from "../ai/flag";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll } from "../scrollMemory";
@@ -622,12 +622,18 @@ export const useStore = create<State>()(
       applyFix: (pid, id, quote, fix) => {
         const l = get().transcripts[pid]?.lines.find((x) => x.id === id);
         if (!l || !l.text.includes(quote)) return;
-        const text = l.text.replace(quote, fix); // first occurrence — the one the mark underlines
+        // replacer FUNCTION, not the string: in String.replace a string replacement
+        // interprets $-sequences ($&, $', $`), so a fix containing them would write
+        // something other than what the Apply button showed
+        const text = l.text.replace(quote, () => fix); // first occurrence — the one the mark underlines
         get().editLine(pid, id, text);
         const key = `${pid}:${id}`;
         const cur = get().aiFlags[key];
         if (!cur) return;
-        const spans = cur.spans.filter((s) => !((s.lens ?? "transcription") === "transcription" && s.quote === quote));
+        // drop the applied span, and any span whose quote the repair broke (it can
+        // never render again, but would still be read out by the line announcement)
+        const spans = cur.spans.filter((s) =>
+          !(spanLens(s) === "transcription" && s.quote === quote) && text.includes(s.quote));
         set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, hash: hashLine(text), spans } } });
       },
 

@@ -151,11 +151,17 @@ export async function scanChunk(opts: {
     if (!quote || !line.text.includes(quote)) continue;
     // the fix rides only on transcription flags, restored through the same
     // redaction map; a fix that still contains a placeholder (or equals the
-    // quote) is no fix at all
+    // quote) is no fix at all. Lines are the data model's unit, so a fix must
+    // stay a line-safe string: no newlines/control/bidi-override characters
+    // (bidi could make the Apply button's preview misrepresent the insertion),
+    // and no ballooning past any plausible repair of the quote.
     const fix = f.lens === "transcription" ? opts.redaction.restore(f.fix?.trim() ?? "") : "";
+    const fixOk = fix && fix !== quote && !opts.redaction.hasPlaceholder(fix)
+      && !/[\r\n\u0000-\u001f\u202a-\u202e]/.test(fix)
+      && fix.length <= quote.length * 4 + 40;
     (flags[f.line_id] ??= []).push({
       quote, reason: f.note, lens: f.lens,
-      ...(fix && fix !== quote && !opts.redaction.hasPlaceholder(fix) ? { fix } : {}),
+      ...(fixOk ? { fix } : {}),
     });
   }
   return { flags, usage };

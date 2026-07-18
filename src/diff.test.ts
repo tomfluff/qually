@@ -14,4 +14,9 @@ describe("tinyDiff", () => {
   it("no shared ends → whole strings", () => {
     expect(tinyDiff("cat", "dog")).toEqual({ del: "cat", ins: "dog", pre: false, suf: false });
   });
+  it("never splits a surrogate pair (emoji sharing a high surrogate)", () => {
+    // 😀 and 😁 share the high surrogate \ud83d — a naive trim keeps it in the
+    // prefix and emits lone low surrogates that render as �
+    expect(tinyDiff("call 😀", "call 😁")).toEqual({ del: "😀", ins: "😁", pre: true, suf: false });
+  });
 });
