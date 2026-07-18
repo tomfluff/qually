@@ -13,6 +13,7 @@ import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
 import { savedScroll, positioned } from "../scrollMemory";
+import { announce } from "../announce";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
@@ -436,6 +437,44 @@ export function TranscriptView() {
       () => v.scrollToIndex(idx, { align: "end" }));
   }, [headId, groups]);
 
+  // Speak the selection as it moves. The listbox exposes the head via
+  // aria-activedescendant (line 590), which NVDA/JAWS read — but Narrator's support for
+  // activedescendant is unreliable and often silent, so pipe it through the live region
+  // too. Cost: NVDA/JAWS then hear it twice; acceptable until they're tested.
+  // One line: "selected|not selected, speaker, text, time". Many: "N selected" then
+  // speaker + text for every selected line (no time). Full speaker label always — short
+  // mode is a visual abbreviation, no use to a listener. (line.speaker is the full label.)
+  useEffect(() => {
+    const lines = transcript?.lines;
+    if (headId === null || !lines) return;
+    const at = (id: number) => lines.find((l) => l.id === id);
+    // AI marks on a line, spoken after it: non-transcription notices as their type
+    // (the lens label), transcription errors as "possible transcript errors:" plus the
+    // note the tooltip shows. flagsByLine already honours the notices-hidden toggle.
+    const marks = (id: number) => {
+      const fs = flagsByLine.get(id);
+      if (!fs?.length) return "";
+      const notices = [...new Set(fs.filter((f) => spanLens(f) !== "transcription")
+        .map((f) => lensOf(spanLens(f))?.label ?? spanLens(f)))];
+      const errs = fs.filter((f) => spanLens(f) === "transcription").map((f) => f.reason);
+      const out: string[] = [];
+      if (notices.length) out.push(notices.join(", "));
+      if (errs.length) out.push(`possible transcript errors: ${errs.join(", ")}`);
+      return out.length ? `, ${out.join(", ")}` : "";
+    };
+    const count = selLines?.size ?? 0;
+    if (count > 1 && selLines) {
+      const parts = [...selLines].sort((a, b) => a - b)
+        .map((id) => { const l = at(id); return l ? `${l.speaker.trim()}, ${l.text}${marks(id)}` : null; })
+        .filter(Boolean);
+      announce(`${count} selected, ${parts.join(", ")}`);
+    } else {
+      const l = at(headId);
+      if (l) announce(`${selLines?.has(headId) ? "selected" : "not selected"}, ${l.speaker.trim()}, ${l.text}, ${l.ts}${marks(headId)}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headId, selLines]);
+
   // Tooltips open upward, but the list is a scroller and clips them — and with the
   // headroom, the line you're reading is usually parked at the very top. Flip the tip
   // below when there isn't room above it. Delegated: the rows are virtualized, so
@@ -582,25 +621,24 @@ export function TranscriptView() {
   return (
     <>
       <div className="tview" ref={tviewRef}>
-      {/* A virtualized listbox is an honest compromise: rows scrolled away don't
-          exist in the DOM, but aria-setsize/posinset keep the counts truthful and
-          the active descendant (the selection head) is always rendered while it's
-          being driven. Announcements (announce.ts) carry what this can't. */}
+      {/* A plain focusable region, deliberately NOT an ARIA listbox. A focused listbox
+          narrates its own selected option (in DOM order, AI-highlight markup and all) on
+          every move — which double-spoke over, and fought the order of, our own live
+          region. The widget contract and a custom narration can't coexist, and only the
+          live region can express our order + the AI marks + a whole multi-line selection.
+          So the selection-announce effect above is the single, consistent voice; the rows
+          drop role=option/aria-selected for the same reason. */}
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
         tabIndex={0} onKeyDown={onListKeyDown}
-        role="listbox" aria-multiselectable={true}
-        aria-activedescendant={headId !== null ? `trow-${headId}` : undefined}
         aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--txt-fs": `${fontSize}px`, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line
-          ...groups.map((g, gi) => (
+          ...groups.map((g) => (
             <Row
               key={g.startId}
               group={g}
               selected={g.ids.some((id) => selLines?.has(id))}
-              posinset={gi + 1}
-              setsize={groups.length}
               cols={cols}
               laned={laned}
               codebook={codebook}
@@ -648,11 +686,9 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, posinset, setsize, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
-  posinset: number;
-  setsize: number;
   cols: number;
   laned: LanedSeg[];
   codebook: Record<string, { color: string }>;
@@ -751,8 +787,7 @@ function Row({ group, selected, posinset, setsize, cols, laned, codebook, onRowD
 
   return (
     <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
-      id={`trow-${startId}`} role="option" aria-selected={selected}
-      aria-setsize={setsize} aria-posinset={posinset}
+      id={`trow-${startId}`}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
       style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
       {showLid && <span className="lid">{lidLabel(group)}</span>}

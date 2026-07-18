@@ -10,6 +10,7 @@ import { AiCheckModal } from "./AiCheckModal";
 import { ExportMenu } from "./ExportMenu";
 import { NewProjectButton } from "./NewProjectButton";
 import { ProjectError } from "../project";
+import { announce } from "../announce";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
 
@@ -122,14 +123,17 @@ export function Toolbar() {
       // a project file or a coded re-import is only STAGED by importFiles — a modal
       // confirms (or cancels) it later, so don't claim those were imported
       const staged = countPending(useStore.getState()) - before;
-      setStatus(staged
+      const msg = staged
         ? n > staged
           ? `imported ${n - staged} file(s); ${staged} awaiting your decision`
           : `${staged} file(s) awaiting your decision`
-        : `imported ${n} file(s)`);
+        : `imported ${n} file(s)`;
+      setStatus(msg); announce(msg);
     } catch (e) {
-      // a bad/newer project file must say so, not fail silently
-      setStatus(e instanceof ProjectError ? e.message : `import failed: ${(e as Error).message}`);
+      // a bad/newer project file must say so, not fail silently — and an error is the
+      // one thing that should interrupt the reader, not queue behind it.
+      const msg = e instanceof ProjectError ? e.message : `import failed: ${(e as Error).message}`;
+      setStatus(msg); announce(msg, { assertive: true });
     }
   };
 
@@ -164,8 +168,9 @@ export function Toolbar() {
       <button className="btn iconbtn" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
         <Icon name="redo" size={16} />
       </button>
-      {/* role=status: import results (and failures) announce to screen readers */}
-      <span className="status" role="status">{status}</span>
+      {/* visual only — the SR announcement is fired imperatively in doImport (polite for
+          results, assertive for failures) so it isn't also spoken by a live region here */}
+      <span className="status">{status}</span>
       <CoderChip />
       {/* right-edge cluster, left→right: GitHub · File format · Help · Settings */}
       <a className="btn iconlabel ghlink" href="https://github.com/tomfluff/qually" target="_blank"
