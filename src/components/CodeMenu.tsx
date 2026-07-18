@@ -55,7 +55,8 @@ export function CodeMenu({ code, x, y, onClose }: {
   const onArrows = (e: React.KeyboardEvent) => {
     if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || (e.target as HTMLElement).matches("input, textarea")) return;
     e.preventDefault();
-    const items = Array.from(ref.current?.querySelectorAll("button") ?? []);
+    // skip disabled items: focus() on one is a silent no-op, and the walk would stick
+    const items = Array.from(ref.current?.querySelectorAll("button") ?? []).filter((b) => !b.disabled);
     if (!items.length) return;
     const at = items.indexOf(document.activeElement as HTMLButtonElement);
     items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length].focus();
