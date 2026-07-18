@@ -52,24 +52,25 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose }: {
       <div className="row aipop-head">
         <span className="swatch" style={{ background: lens?.color ?? "#999" }} aria-hidden="true" />
         <strong>{lens?.label ?? spanLens(span)}</strong>
+        <button className="btn iconclose" onClick={() => {
+          dismissNotice(pid, line, spanLens(span), span.quote);
+          announce("Mark dismissed");
+          onClose();
+        }} title="Dismiss this mark (it won't return on re-scan)"
+          aria-label="Dismiss this mark"><Icon name="trash" size={16} /></button>
         <button className="btn iconclose" onClick={onClose} title="close"><Icon name="x" size={16} /></button>
       </div>
       <div className="aipop-quote">“{span.quote}”</div>
       <div className="aipop-reason">{span.reason}</div>
-      <div className="row">
-        {isError && span.fix && (
+      {isError && span.fix && (
+        <div className="row">
           <button className="btn primary" onClick={() => {
             applyFix(pid, line, span.quote, span.fix!);
             announce(`Fixed: “${span.quote}” is now “${span.fix}”`);
             onClose();
           }}>Apply fix: “{span.fix}”</button>
-        )}
-        <button className="btn" onClick={() => {
-          dismissNotice(pid, line, spanLens(span), span.quote);
-          announce("Mark dismissed");
-          onClose();
-        }}>Dismiss</button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
