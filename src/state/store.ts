@@ -151,6 +151,7 @@ interface State {
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
   clearFlags: (pid: string) => void;
   dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
+  applyFix: (pid: string, id: number, quote: string, fix: string) => void;
   logAiCall: (call: AiCall) => void;
   exportAiLog: () => string;
   exportCodebook: () => string;
@@ -612,6 +613,22 @@ export const useStore = create<State>()(
         const cur = get().aiFlags[key];
         if (!cur) return;
         set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, spans: cur.spans.filter((s) => !((s.lens ?? "transcription") === lens && s.quote === quote)) } } });
+      },
+      // One-click transcription repair from a mark's popover. Rides editLine (so
+      // `orig` tracking, the ✱ diff and exports behave exactly like a manual
+      // repair), then re-hashes the flag record against the corrected text with
+      // only the applied span removed — an edit normally invalidates every mark
+      // on the line, which would strand a second error until a re-scan.
+      applyFix: (pid, id, quote, fix) => {
+        const l = get().transcripts[pid]?.lines.find((x) => x.id === id);
+        if (!l || !l.text.includes(quote)) return;
+        const text = l.text.replace(quote, fix); // first occurrence — the one the mark underlines
+        get().editLine(pid, id, text);
+        const key = `${pid}:${id}`;
+        const cur = get().aiFlags[key];
+        if (!cur) return;
+        const spans = cur.spans.filter((s) => !((s.lens ?? "transcription") === "transcription" && s.quote === quote));
+        set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, hash: hashLine(text), spans } } });
       },
 
       logAiCall: (call) => set({ aiLog: [...get().aiLog, call] }),

@@ -11,8 +11,8 @@ import { useStore } from "../state/store";
 // rendered behind panels. A single element portaled to <body> sidesteps both —
 // it is nobody's child, and one z-index (owned by .tooltip) sits above
 // everything. It reads the same data-tip attributes the hosts already carry.
-//   Two modes: hover/focus for plain tips; click-to-open for [data-tip-click]
-// (the AI marks), which stays until you scroll, hit Escape, or click elsewhere.
+//   Hover/focus only, read-only, pointer-events:none. Anything interactive
+// (buttons, selectable text) is a popover's job — see AiMarkPopover.
 //   Sized from the SIDEBAR text setting: tips are chrome, not transcript content,
 // and shouldn't balloon when the reading text is cranked up.
 type Tip = { node: ReactNode; cx: number; edge: number; below: boolean };
@@ -38,35 +38,28 @@ export function Tooltip() {
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const [tip, setTip] = useState<Tip | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const pinnedRef = useRef(false);
 
   useEffect(() => {
-    const openFor = (el: HTMLElement, pinned: boolean) => {
+    const openFor = (el: HTMLElement) => {
       const r = el.getBoundingClientRect();
       const below = r.top < 90; // no room above → drop below
       setTip({ node: contentFor(el), cx: r.left + r.width / 2, edge: below ? r.bottom + GAP : r.top - GAP, below });
-      pinnedRef.current = pinned;
     };
-    const close = () => { setTip(null); pinnedRef.current = false; };
+    const close = () => setTip(null);
     const host = (t: EventTarget | null) => (t as HTMLElement)?.closest?.<HTMLElement>("[data-tip], [data-tipdel]");
 
     const onOver = (e: MouseEvent) => {
-      if (pinnedRef.current) return;
       const el = host(e.target);
-      if (!el || el.hasAttribute("data-tip-click")) { close(); return; }
-      openFor(el, false);
+      if (el) openFor(el); else close();
     };
     const onFocus = (e: FocusEvent) => {
-      if (pinnedRef.current) return;
       const el = host(e.target);
-      if (el && !el.hasAttribute("data-tip-click")) openFor(el, false);
+      if (el) openFor(el);
     };
-    const onBlur = () => { if (!pinnedRef.current) close(); };
-    const onClick = (e: MouseEvent) => {
-      const el = (e.target as HTMLElement)?.closest?.<HTMLElement>("[data-tip-click]");
-      if (el && !e.altKey) { openFor(el, true); return; } // alt-click is the mark's own dismiss
-      if (pinnedRef.current) close();
-    };
+    const onBlur = () => close();
+    // a click means attention moved to whatever was clicked (often a popover
+    // opening over the hovered mark) — get the tip out of the way
+    const onClick = () => close();
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
 
     document.addEventListener("mouseover", onOver);

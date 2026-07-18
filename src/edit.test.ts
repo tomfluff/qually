@@ -4,6 +4,7 @@
 // segments untouched, corrected text flowing into both exports.
 import { beforeAll, test, expect } from "vitest";
 import { parseCSV } from "./contract/csv";
+import { hashLine } from "./ai/flag";
 
 let useStore: typeof import("./state/store").useStore;
 
@@ -81,4 +82,22 @@ test("dismissing a notice removes the span but keeps the line marked as scanned"
   const f = useStore.getState().aiFlags["P01:1"];
   expect(f.spans.map((s) => s.lens)).toEqual(["transcription"]); // emotion span gone
   expect(f.lenses).toContain("emotion");                          // no re-fetch of the same mark
+});
+
+test("applyFix repairs the line and keeps the OTHER marks alive", () => {
+  const st = useStore.getState();
+  const lines = st.transcripts.P01.lines;
+  st.addFlags("P01", { 1: [
+    { quote: "ticket marks", reason: "misheard", lens: "transcription", fix: "tick marks" },
+    { quote: "losing", reason: "frustration", lens: "emotion" },
+  ] }, lines, ["transcription", "emotion"]);
+  st.applyFix("P01", 1, "ticket marks", "tick marks");
+  const l = useStore.getState().transcripts.P01.lines[0];
+  expect(l.text).toBe("I kept losing the tick marks");
+  expect(l.orig).toBe("I kept losing the ticket marks"); // same provenance as a manual edit
+  const f = useStore.getState().aiFlags["P01:1"];
+  // the applied span is gone, the emotion span survives, and the record is
+  // re-hashed against the corrected text so it still counts as valid
+  expect(f.spans.map((s) => s.lens)).toEqual(["emotion"]);
+  expect(f.hash).toBe(hashLine(l.text));
 });

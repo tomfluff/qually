@@ -5,6 +5,7 @@ import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
+import { AiMarkPopover } from "./AiMarkPopover";
 import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
@@ -66,17 +67,20 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
     const isError = spanLens(h.span) === "transcription";
     // Clicks on a mark belong to the mark, not the row: selection happens on the
     // row's MOUSEDOWN, which would fire first, select the line, and the resulting
-    // keep-in-view scroll would close the tip the click just pinned. Swallow the
-    // mousedown so a click here only opens the tip (alt-click still dismisses).
+    // keep-in-view scroll would fight the popover the click opens. Swallow the
+    // mousedown; the click bubbles to the list's delegated [data-ai] handler,
+    // which opens the mark's popover (hover keeps the quick read-only tip).
     const own = (e: MouseEvent) => e.stopPropagation();
+    const ai = `${lineId}:${spans.indexOf(h.span)}`;
     nodes.push(isError
-      ? <span key={k} className="aidoubt" data-tip={h.span.reason} data-tip-click=""
+      ? <span key={k} className="aidoubt" data-ai={ai}
+          data-tip={h.span.fix ? `${h.span.reason} → “${h.span.fix}”` : h.span.reason}
           onMouseDown={own}>{text.slice(h.at, h.at + h.len)}</span>
       : <span key={k} className={`ainote lens-${spanLens(h.span)}`} style={{ "--lens-c": lens?.color } as CSSProperties}
-          data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason} · Alt-click to dismiss`} data-tip-click=""
+          data-ai={ai} data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason}`}
           onMouseDown={own}
           onClick={(e) => {
-            if (!e.altKey) return;
+            if (!e.altKey) return; // plain click opens the popover (delegated); alt-click stays the dismiss shortcut
             e.stopPropagation();
             const st = useStore.getState();
             st.dismissNotice(st.active, lineId, spanLens(h.span), h.span.quote);
@@ -182,8 +186,9 @@ export function TranscriptView() {
   const groupsRef = useRef<Group[]>([]);
   const selBounds = useRef<{ first: number; last: number } | null>(null);
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
+  const [aiPop, setAiPop] = useState<{ line: number; span: Flag; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
-  useEffect(() => { setEditingId(null); }, [active]);
+  useEffect(() => { setEditingId(null); setAiPop(null); }, [active]);
   const [hoverSid, setHoverSid] = useState<number | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // debounce clearing so moving between a segment's bars doesn't flicker the brackets
@@ -330,6 +335,19 @@ export function TranscriptView() {
     return m;
   }, [aiFlags, transcript, active, showNotices]);
 
+  // Click on an AI mark → its popover. Delegated on the list container: the marks
+  // live inside virtualized rows, so per-mark state wiring would thread through
+  // every Row; the spans instead carry a data-ai="line:index" key into flagsByLine.
+  const onAiClick = (e: MouseEvent<HTMLDivElement>) => {
+    const el = (e.target as HTMLElement).closest?.<HTMLElement>("[data-ai]");
+    if (!el || e.altKey) return; // alt-click is the dismiss shortcut, handled on the span
+    const [lid, k] = (el.getAttribute("data-ai") ?? "").split(":").map(Number);
+    const span = flagsByLine.get(lid)?.[k];
+    if (!span) return;
+    const r = el.getBoundingClientRect();
+    setAiPop({ line: lid, span, x: r.left, y: r.bottom + 6 });
+  };
+
   // Scroll headroom, VS Code's `scrollBeyondLastLine` but on both ends: a pad of
   // (viewport − one row) lets ANY line be pulled to the top or the bottom of the
   // screen, so the first and last lines get coded under the same conditions as the
@@ -456,7 +474,7 @@ export function TranscriptView() {
     // want to own the scroll position. Following the selection head on top of either
     // would yank the list straight back off the target.
     if (jump || !positioned.has(active)) return;
-    const gi = groups.findIndex((g) => headId >= g.startId && headId <= g.endId);
+    const gi = groupsRef.current.findIndex((g) => headId >= g.startId && headId <= g.endId);
     if (gi < 0) return;
     const idx = gi + 1; // +1 for the top vpad
     const first = v.findItemIndex(v.scrollOffset);
@@ -470,7 +488,11 @@ export function TranscriptView() {
     if (idx <= first) glide((vh) => vh.getItemOffset(idx), () => v.scrollToIndex(idx, { align: "start" }));
     else if (idx >= last) glide((vh) => vh.getItemOffset(idx) + vh.getItemSize(idx) - vh.viewportSize,
       () => v.scrollToIndex(idx, { align: "end" }));
-  }, [headId, groups]);
+    // headId ONLY: follow the selection when it MOVES. groups was a dep once, but
+    // any transcript edit (applying an AI fix included) rebuilds it, and the re-run
+    // yanked the view back to a selection you had deliberately scrolled away from.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headId]);
 
   // Speak the selection as it moves. The listbox exposes the head via
   // aria-activedescendant (line 590), which NVDA/JAWS read — but Narrator's support for
@@ -638,7 +660,7 @@ export function TranscriptView() {
 
   return (
     <>
-      <div className="tview" ref={tviewRef}>
+      <div className="tview" ref={tviewRef} onClick={onAiClick}>
       {/* A plain focusable region, deliberately NOT an ARIA listbox. A focused listbox
           narrates its own selected option (in DOM order, AI-highlight markup and all) on
           every move — which double-spoke over, and fought the order of, our own live
@@ -700,6 +722,8 @@ export function TranscriptView() {
         )}
       </div>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
+      {aiPop && <AiMarkPopover pid={active} line={aiPop.line} span={aiPop.span}
+        x={aiPop.x} y={aiPop.y} onClose={() => setAiPop(null)} />}
     </>
   );
 }
