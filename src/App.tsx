@@ -11,7 +11,7 @@ import { BrowseView } from "./components/BrowseView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
-import { ImportModal, SegUpdateModal } from "./components/ImportModal";
+import { ImportModal, SegUpdateModal, ImportSignModal } from "./components/ImportModal";
 import { ProjectModal } from "./components/ProjectModal";
 import { SearchBar } from "./components/SearchBar";
 import { Welcome } from "./components/Welcome";
@@ -222,6 +222,7 @@ export function App() {
       <CommandPalette />
       <ImportModal />
       <SegUpdateModal />
+      <ImportSignModal />
       <ProjectModal />
       <SaveWarning />
     </div>

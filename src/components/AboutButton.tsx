@@ -29,7 +29,8 @@ export function AboutButton() {
   const [open, setOpen] = useState(false);
   const dialogRef = useDialogFocus();
 
-  // auto-open once, on the first ever launch
+  // auto-open once, on the first ever launch (the name ask is a separate prompt — see
+  // CoderPrompt in Toolbar — that surfaces after this closes)
   useEffect(() => { if (!helpSeen) setOpen(true); }, [helpSeen]);
 
   const close = () => { setOpen(false); if (!helpSeen) setUi({ helpSeen: true }); };

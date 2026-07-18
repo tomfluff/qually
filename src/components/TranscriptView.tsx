@@ -90,6 +90,9 @@ const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 
 const MIN_PAD = 48;    // headroom floor (also the spacer height until the viewport is measured)
 const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
+const GLIDE_MS = 260; // smooth-scroll duration; long enough to read as motion, short enough to not wait on
+const WHEEL_TAU = 90; // ms; how hard the wheel glide chases its target (~3x this to settle)
+const WHEEL_MIN = 40; // px; below this a wheel event is really a trackpad, which is smooth already
 
 // per-tab scroll anchors — shared with the store, which must forget them on a
 // re-import or project swap (a pid is not stable identity). See scrollMemory.ts.
@@ -185,13 +188,83 @@ export function TranscriptView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selLines, groups, active]);
 
+  // Animate the jumps, opt-in (Settings -> Transcript). Read straight from the store,
+  // not a subscription: the keydown effect below captures its closures once. Deliberately
+  // does NOT defer to prefers-reduced-motion: it defaults off, so switching it on is an
+  // explicit per-app choice, and it should beat the OS-wide default it contradicts.
+  const smooth = () => useStore.getState().ui.smoothScroll;
+  const tween = useRef(0);
+  // virtua's own `smooth` option delegates to scrollTo({behavior:"smooth"}), which the
+  // browser silently downgrades to a jump when the OS asks for reduced motion — so the
+  // app toggle could never win on a machine that asks for it. Animate scrollTop on a rAF
+  // loop instead, which nothing downgrades.
+  //
+  // `targetOf` computes the destination up front (scrollToIndex can't tell us: it lands
+  // asynchronously, over several frames, as rows measure). That makes the target only as
+  // good as virtua's height estimates above it, so `land` runs at the end and puts us
+  // exactly where the instant path would have — by then the rows we crossed are measured.
+  const glide = (targetOf: (v: VListHandle, from: number) => number, land: () => void) => {
+    const v = vref.current;
+    const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
+    cancelAnimationFrame(tween.current);
+    if (!v || !el || !smooth()) return land();
+    const from = el.scrollTop;
+    const to = Math.max(0, Math.min(targetOf(v, from), el.scrollHeight - el.clientHeight));
+    if (Math.abs(to - from) < 2) return land(); // already there; don't stage a 0px glide
+    const t0 = performance.now();
+    const step = (t: number) => {
+      const p = Math.min(1, (t - t0) / GLIDE_MS);
+      el.scrollTop = from + (to - from) * (1 - (1 - p) ** 3); // easeOutCubic
+      if (p < 1) tween.current = requestAnimationFrame(step);
+      else land();
+    };
+    tween.current = requestAnimationFrame(step);
+  };
+  useEffect(() => () => cancelAnimationFrame(tween.current), []);
+  // virtua's "center" alignment, computed rather than requested
+  const centerOn = (i: number) => (v: VListHandle) => v.getItemOffset(i) - (v.viewportSize - v.getItemSize(i)) / 2;
+
+  // The wheel. Chrome animates its own ~100px-per-click jumps, but only while the OS
+  // isn't asking for reduced motion — ask for it and every click lands in one frame.
+  // So chase the wheel ourselves: accumulate clicks into a target and ease scrollTop
+  // toward it. Deliberately eased by TIME, not per-frame: a fixed fraction per frame
+  // would scroll twice as fast on a 120Hz screen.
+  useEffect(() => {
+    const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
+    if (!el) return;
+    let target = 0, raf = 0, last = 0, running = false;
+    const step = (t: number) => {
+      const dt = Math.min(64, t - last); // a backgrounded tab resumes with a huge dt
+      last = t;
+      const d = target - el.scrollTop;
+      if (Math.abs(d) < 0.5) { el.scrollTop = target; running = false; return; }
+      el.scrollTop += d * (1 - Math.exp(-dt / WHEEL_TAU));
+      raf = requestAnimationFrame(step);
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!smooth() || e.ctrlKey) return; // ctrl+wheel is browser zoom, not ours to take
+      // ponytail: |delta| is the only cheap tell between a wheel click and a trackpad
+      // swipe. Trackpads already scroll pixel-by-pixel — smoothing them just adds lag —
+      // so only the chunky events get chased. If a device lands wrong, this is the knob.
+      const px = e.deltaMode === 1 ? e.deltaY * fontSize * ROW_RATIO : e.deltaY;
+      if (Math.abs(px) < WHEEL_MIN) return;
+      e.preventDefault();
+      cancelAnimationFrame(tween.current); // a keyboard glide loses to the hand on the wheel
+      const max = el.scrollHeight - el.clientHeight;
+      target = Math.max(0, Math.min((running ? target : el.scrollTop) + px, max));
+      if (!running) { running = true; last = performance.now(); raf = requestAnimationFrame(step); }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => { el.removeEventListener("wheel", onWheel); cancelAnimationFrame(raf); };
+  }, [transcript, fontSize]);
+
   // scroll the selection back into view — the way home after Home/End
   const backToSelection = () => {
     const st = useStore.getState();
     if (st.selection.pid !== active || !st.selection.lines.size) return;
     const first = Math.min(...st.selection.lines);
     const gi = groups.findIndex((g) => g.endId >= first);
-    if (gi >= 0) vref.current?.scrollToIndex(gi + 1, { align: "center" }); // +1 for the top vpad
+    if (gi >= 0) glide(centerOn(gi + 1), () => vref.current?.scrollToIndex(gi + 1, { align: "center" })); // +1 for the top vpad
   };
 
   // AI marks for this transcript, but only where the line still reads as it did when
@@ -264,13 +337,15 @@ export function TranscriptView() {
 
   // With a viewport-sized top pad, offset 0 is a blank screen: "the top" now means
   // the first line parked at the top of the viewport, which is index 1 (0 = the pad).
-  const toTop = () => vref.current?.scrollToIndex(1, { align: "start" });
+  const toTop = () => glide((v) => v.getItemOffset(1), () => vref.current?.scrollToIndex(1, { align: "start" }));
   // align "end" alone parks the last line exactly at the viewport bottom — which is
   // where the floating hotbar dock sits, so End left it occluded. Overshoot by the
   // dock's current height (collapsed docks measure small, which is right) plus a gap.
   const toBottom = () => {
     const dock = document.querySelector(".hotbar")?.getBoundingClientRect().height ?? 64;
-    vref.current?.scrollToIndex(groups.length, { align: "end", offset: dock + 8 });
+    const n = groups.length;
+    glide((v) => v.getItemOffset(n) + v.getItemSize(n) - v.viewportSize + dock + 8,
+      () => vref.current?.scrollToIndex(n, { align: "end", offset: dock + 8 }));
   };
 
   // The ONLY way into a selection used to be onMouseDown on a row: arrow keys are
@@ -318,7 +393,7 @@ export function TranscriptView() {
   useEffect(() => {
     if (pad === null || !jump || jump.pid !== active || !transcript) return;
     const idx = groups.findIndex((g) => jump.line >= g.startId && jump.line <= g.endId);
-    if (idx >= 0) vref.current?.scrollToIndex(idx + 1, { align: "center" }); // +1 for the top vpad
+    if (idx >= 0) glide(centerOn(idx + 1), () => vref.current?.scrollToIndex(idx + 1, { align: "center" })); // +1 for the top vpad
     positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
     clearJump();
   }, [jump, active, transcript, groups, clearJump, pad]);
@@ -370,8 +445,16 @@ export function TranscriptView() {
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
       const v = vref.current;
       if (!v) return;
-      if (e.key === "PageDown") { e.preventDefault(); v.scrollBy(v.viewportSize * 0.9); }
-      else if (e.key === "PageUp") { e.preventDefault(); v.scrollBy(-v.viewportSize * 0.9); }
+      if (e.key === "PageDown" || e.key === "PageUp") {
+        e.preventDefault();
+        const d = (e.key === "PageDown" ? 0.9 : -0.9) * v.viewportSize;
+        // Measure the page off the live scrollTop, not v.scrollOffset — virtua's copy
+        // lags a frame behind after a re-measure, which paged short. No `land` step: a
+        // page is an exact pixel target, and scrollBy is relative, so re-running it at
+        // the end would page twice.
+        if (smooth()) glide((_, from) => from + d, () => {});
+        else v.scrollBy(d);
+      }
       // Home/End mean first/last LINE, not the ends of the scrollable area — those
       // are now a screen of empty headroom.
       else if (e.key === "Home") { e.preventDefault(); toTop(); }

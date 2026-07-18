@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
+import { useEffect, useState } from "react";
 import { useStore, type SegUpdate } from "../state/store";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
@@ -80,6 +81,58 @@ const clip = (s: string) => (s.length > 60 ? s.slice(0, 60) + "…" : s);
 // both versions, same shape, so the eye can compare line against line
 const sideOf = (v: SegUpdate["from"], withNotes: boolean) =>
   v.status + (withNotes ? (v.notes ? ` · “${clip(v.notes)}”` : " · no note") : "");
+
+// Shown when an import brings in coded segments that carry no coder — signed
+// "(default)" in the file, or blank. Offers to attribute them to a name you supply
+// (you may know whose file this is), touching ONLY the rows that just arrived.
+export function ImportSignModal() {
+  const pending = useStore((s) => s.pendingImportSign);
+  const resolve = useStore((s) => s.resolveImportSign);
+  const [name, setName] = useState("");
+  const dialogRef = useDialogFocus();
+  const done = (nm: string | null) => { resolve(nm); setName(""); };
+
+  useEffect(() => {
+    if (!pending) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); done(null); } };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending]);
+  if (!pending) return null;
+
+  const n = pending.sids.length;
+  const it = n === 1 ? "it" : "them";
+  return (
+    <div className="about-backdrop" onMouseDown={() => done(null)}>
+      <div className="about imp" ref={dialogRef} role="dialog" aria-modal="true"
+        aria-labelledby="import-sign-title" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="about-head">
+          <h2 id="import-sign-title">{n} imported code{n === 1 ? "" : "s"} {n === 1 ? "is" : "are"} unsigned</h2>
+          <button className="btn iconbtn" onClick={() => done(null)} title="Keep as (default) (Esc)">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <p className="about-lede">
+          {n === 1 ? "This code" : "These codes"} came in signed <code>(default)</code> — whoever coded {it}{" "}
+          never set a name. If you know whose {n === 1 ? "it is" : "they are"}, sign {it} now; otherwise
+          keep <code>(default)</code>.
+        </p>
+        <label className="signfield"><span>Their name</span>
+          <input className="signinput" autoFocus value={name} placeholder="their name"
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) done(name); }} />
+        </label>
+        <div className="imp-actions">
+          <button className="btn primary" disabled={!name.trim() || name.trim() === "(default)"}
+            onClick={() => done(name)}>Sign {it} as “{name.trim() || "…"}”</button>
+          <button className="btn" onClick={() => done(null)}>Keep as (default)</button>
+        </div>
+        <div className="imp-note">Only these {n} imported {n === 1 ? "row" : "rows"} — your own codes aren't touched. One undo step.</div>
+      </div>
+    </div>
+  );
+}
 
 export function SegUpdateModal() {
   const updates = useStore((s) => s.pendingSegUpdates);

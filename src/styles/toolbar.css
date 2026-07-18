@@ -26,6 +26,15 @@
 #toolbar .btn:disabled:hover { border-color:var(--line); }
 #toolbar .tbdiv { width:1px; align-self:stretch; background:var(--line); margin:2px 2px; }
 
+/* who your codes are signed as; sits at the head of the right cluster */
+#toolbar .coderchip { max-width:22ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Unset is a data problem, not a preference: an unsigned export can't be told from a
+   second coder's. Loud enough to answer, not so loud it reads as an error. */
+#toolbar .coderchip.unset { color:var(--accent); border-color:var(--accent); }
+#toolbar .coderchip-edit {
+  height:28px; width:16ch; padding:0 8px; font-size:12.5px; font-family:inherit;
+  color:var(--fg); background:var(--bg); border:1px solid var(--accent); border-radius:6px; }
+
 
 /* Export dropdown — two sections, because a project file and a CSV do different jobs */
 .exmenu { position:absolute; top:calc(100% + 6px); left:0; z-index:70; width:330px;
