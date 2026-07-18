@@ -222,6 +222,17 @@ export function TranscriptView() {
   // "back to selection" button off this so a follow doesn't flash it. (Instant/smooth-off
   // glides never set it: they land in one go, before any 'scroll' fires.)
   const gliding = useRef(false);
+  // Three things write scrollTop: the glide loop, the wheel-chase loop, and instant
+  // jumps (minimap, search, tab restore). The loops run for ~a half second after
+  // their trigger, so a jump landing mid-loop got overwritten on the next frame —
+  // click the minimap during a wheel's ease-out tail and the tail yanked the view
+  // back. Every navigation entry point calls this first: one writer at a time.
+  const wheelStop = useRef<() => void>(() => {});
+  const stopAnims = () => {
+    cancelAnimationFrame(tween.current);
+    gliding.current = false;
+    wheelStop.current();
+  };
   // virtua's own `smooth` option delegates to scrollTo({behavior:"smooth"}), which the
   // browser silently downgrades to a jump when the OS asks for reduced motion — so the
   // app toggle could never win on a machine that asks for it. Animate scrollTop on a rAF
@@ -234,8 +245,7 @@ export function TranscriptView() {
   const glide = (targetOf: (v: VListHandle, from: number) => number, land: () => void) => {
     const v = vref.current;
     const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
-    cancelAnimationFrame(tween.current);
-    gliding.current = false;
+    stopAnims(); // includes the wheel-chase loop, which would fight this glide frame by frame
     if (!v || !el || !smooth()) return land();
     const from = el.scrollTop;
     const to = Math.max(0, Math.min(targetOf(v, from), el.scrollHeight - el.clientHeight));
@@ -262,13 +272,20 @@ export function TranscriptView() {
   useEffect(() => {
     const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
     if (!el) return;
-    let target = 0, raf = 0, last = 0, running = false;
+    let target = 0, raf = 0, last = 0, running = false, lastSet = -1;
+    const stop = () => { cancelAnimationFrame(raf); running = false; };
+    wheelStop.current = stop;
     const step = (t: number) => {
+      // Backstop for writers that don't route through stopAnims (search, a tab
+      // restore, virtua's own corrections): if the scroll isn't where this loop
+      // left it, someone else moved it — their position wins, the chase ends.
+      if (lastSet >= 0 && Math.abs(el.scrollTop - lastSet) > 4) { running = false; return; }
       const dt = Math.min(64, t - last); // a backgrounded tab resumes with a huge dt
       last = t;
       const d = target - el.scrollTop;
       if (Math.abs(d) < 0.5) { el.scrollTop = target; running = false; return; }
       el.scrollTop += d * (1 - Math.exp(-dt / WHEEL_TAU));
+      lastSet = el.scrollTop;
       raf = requestAnimationFrame(step);
     };
     const onWheel = (e: WheelEvent) => {
@@ -282,10 +299,10 @@ export function TranscriptView() {
       cancelAnimationFrame(tween.current); gliding.current = false; // a keyboard glide loses to the hand on the wheel
       const max = el.scrollHeight - el.clientHeight;
       target = Math.max(0, Math.min((running ? target : el.scrollTop) + px, max));
-      if (!running) { running = true; last = performance.now(); raf = requestAnimationFrame(step); }
+      if (!running) { running = true; last = performance.now(); lastSet = el.scrollTop; raf = requestAnimationFrame(step); }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => { el.removeEventListener("wheel", onWheel); cancelAnimationFrame(raf); };
+    return () => { el.removeEventListener("wheel", onWheel); stop(); wheelStop.current = () => {}; };
   }, [transcript, fontSize]);
 
   // scroll the selection back into view — the way home after Home/End
@@ -674,7 +691,7 @@ export function TranscriptView() {
       </VList>
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
       <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
-        closeCallSids={closeCallSids} detail={minimapDetail} ui={ui} vref={vref} />
+        closeCallSids={closeCallSids} detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims} />
         {selOff && (
           <button className={`backtosel ${selOff}`} onClick={backToSelection}
             style={{ fontSize: ui.sidebarFontSize }} aria-label="Scroll back to your selected line(s)">

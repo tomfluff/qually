@@ -23,7 +23,8 @@ export const Minimap = forwardRef<MinimapHandle, {
   detail: "detailed" | "simplified";
   ui: Ui; // speaker colours + weights; the minimap was the LAST place still hardcoding "R"
   vref: RefObject<VListHandle | null>;
-}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, detail, ui, vref }, ref) {
+  onNav?: () => void; // stop the list's scroll animations before a scrub jump, or they overwrite it
+}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, detail, ui, vref, onNav }, ref) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -181,6 +182,7 @@ export const Minimap = forwardRef<MinimapHandle, {
   const scrubTo = (clientY: number) => {
     const wrap = wrapRef.current, v = vref.current;
     if (!wrap || !v || !N) return;
+    onNav?.();
     const r = wrap.getBoundingClientRect();
     const f = Math.min(1, Math.max(0, (clientY - r.top) / r.height));
     v.scrollToIndex(Math.min(N - 1, Math.floor(f * N)) + 1, { align: "center" });
