@@ -59,8 +59,8 @@ export function SettingsButton() {
   return (
     <div className="settings-wrap" ref={ref}>
       <button className="btn iconlabel" aria-expanded={open} aria-haspopup="dialog"
-        onClick={() => setOpen((o) => !o)}>
-        <Icon name="settings" size={16} /> Settings
+        title="Settings" onClick={() => setOpen((o) => !o)}>
+        <Icon name="settings" size={16} /> <span className="blabel">Settings</span>
       </button>
       {open && (
         <div className="about-backdrop" onMouseDown={() => setOpen(false)}>

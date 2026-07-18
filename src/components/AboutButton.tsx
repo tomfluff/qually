@@ -46,7 +46,7 @@ export function AboutButton() {
   return (
     <>
       <button className="btn iconlabel" title="Help & shortcuts" onClick={() => setOpen(true)}>
-        <Icon name="help" size={16} /> Help
+        <Icon name="help" size={16} /> <span className="blabel">Help</span>
       </button>
       {open && (
         <div className="about-backdrop" onMouseDown={close}>

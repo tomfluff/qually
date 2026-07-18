@@ -90,7 +90,7 @@ function CoderChip() {
       title={name
         ? `Coding as "${name}" — the name written as proposed_by on every code you make. Click to change.`
         : "No name set — your codes are signed (default). Click to sign them as you."}>
-      <Icon name="pencil" size={14} /> {name || "(default)"}
+      <Icon name="pencil" size={14} /> <span className="blabel">{name || "(default)"}</span>
     </button>
   );
 }
@@ -148,7 +148,7 @@ export function Toolbar() {
       <NewProjectButton />
       <button className="btn primary iconlabel" onClick={() => fileRef.current?.click()}
         title="Import transcript/codebook/segment CSVs, or open a .qually.json project">
-        <Icon name="upload" size={16} /> Import files…
+        <Icon name="upload" size={16} /> Import
       </button>
       <ExportMenu />
       <span className="tbdiv" />
@@ -157,7 +157,7 @@ export function Toolbar() {
           <button className="btn iconlabel aibtn" onClick={() => setAiOpen(true)}
             aria-haspopup="dialog" aria-expanded={aiOpen}
             title="Scan this transcript with AI: transcription errors, plus noticing lenses you choose (emotions, likes/dislikes, desires…)">
-            <Icon name="sparkle" size={15} /> AI scan
+            <Icon name="sparkle" size={15} /> <span className="blabel">AI scan</span>
           </button>
           <span className="tbdiv" />
         </>
@@ -175,7 +175,7 @@ export function Toolbar() {
       {/* right-edge cluster, left→right: GitHub · File format · Help · Settings */}
       <a className="btn iconlabel ghlink" href="https://github.com/tomfluff/qually" target="_blank"
         rel="noreferrer" title="Code on GitHub" aria-label="View QuAlly on GitHub">
-        <Icon name="github" size={16} /> GitHub
+        <Icon name="github" size={16} /> <span className="blabel">GitHub</span>
       </a>
       <DataFormatButton />
       <AboutButton />
