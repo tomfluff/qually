@@ -43,12 +43,12 @@ valuable next step.
   `Shift`+arrows to extend, `1`–`9` for the hotbar, `0` for the searchable palette,
   `Ctrl+Z`/`Ctrl+Shift+Z`, `Ctrl+F`, `PageUp`/`PageDown`/`Home`/`End`, `Esc` to back out,
   `Enter` to play the loaded media from the selected line, `M` to open the selected
-  line's AI mark (apply the suggested fix or dismiss it; pressing again cycles the
-  line's marks).
+  line's AI mark (apply its suggested fix when one is offered, or dismiss it; pressing
+  again cycles the line's marks).
 - So is everything around the coding: tabs switch and close from the keyboard; sidebar
   and Browse code rows apply on `Enter`; every code-management action (rename, recolor,
-  merge, pin, delete) is reachable through a per-row `⋯` button (or `Shift+F10`), not
-  right-click alone; a segment's lane bar is a real button — `Enter` opens its popover
+  merge, pin, delete) is reachable through a per-row `⋯` button (or `Shift+F10` — on
+  hotbar tiles too), not right-click alone; a segment's lane bar is a real button — `Enter` opens its popover
   (notes, reject, delete, copy); panel dividers resize with arrow keys; search results
   are focusable and `Enter` jumps.
 - The selection follows the keyboard: arrowing past the viewport edge scrolls it into view.
@@ -69,7 +69,8 @@ most valuable thing anyone could do for this project:
   deletions, import results, search-match position, AI-scan completion.
 - Every modal is a labelled `role="dialog"` with `aria-modal`, a focus trap, and focus
   restoration to the opener. Popovers (segment editor, code menu, AI mark, color picker,
-  settings) are labelled dialogs too, and `Esc` always closes and hands focus back.
+  settings) are labelled dialogs too, and `Esc` always closes and hands focus back
+  (in the code menu's sub-forms it steps back to the menu first).
 - Every icon-only control carries an accessible name; the tab strip is a `tablist`;
   the hotbar a labelled `toolbar`; code rows announce as "Apply code …, hotkey n,
   k segments" instead of a soup of child text; the code inputs are proper comboboxes;
