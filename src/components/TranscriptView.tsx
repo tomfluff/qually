@@ -140,8 +140,9 @@ export function TranscriptView() {
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
     // Home/End (and any scroll) leave the selection behind. Rather than silently move
     // it — the selection is your place in the argument, not your place on screen — note
-    // when it has gone off-screen and offer a way back.
-    setSelOff(offscreenDir(v));
+    // when it has gone off-screen and offer a way back. Not mid-glide: a follow drives
+    // 'scroll' every frame with the head still catching up, which would flash the button.
+    if (!gliding.current) setSelOff(offscreenDir(v));
   };
   // Which way the selection lies, if it isn't visible. Runs on EVERY scroll event, so it
   // may not walk the selection: `Math.min(...set)` spreads it, which is O(n) per frame
@@ -184,7 +185,10 @@ export function TranscriptView() {
     for (const id of selLines) { if (id < first) first = id; if (id > last) last = id; }
     selBounds.current = { first, last };
     const v = vref.current;
-    if (v) setSelOff(offscreenDir(v)); // the selection may already be off-screen
+    // the selection may already be off-screen (e.g. a tab switch restored an offset that
+    // doesn't include it). But when keep-in-view owns the head — positioned, no pending
+    // jump — it's about to pull the head back, so don't flash the button on the way there.
+    if (v) setSelOff(positioned.has(active) && !jump ? null : offscreenDir(v));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selLines, groups, active]);
 
@@ -194,6 +198,11 @@ export function TranscriptView() {
   // explicit per-app choice, and it should beat the OS-wide default it contradicts.
   const smooth = () => useStore.getState().ui.smoothScroll;
   const tween = useRef(0);
+  // true only while a glide is animating: the scroll it drives fires 'scroll' every
+  // frame, and the selection reads as off-screen until the glide catches up — gate the
+  // "back to selection" button off this so a follow doesn't flash it. (Instant/smooth-off
+  // glides never set it: they land in one go, before any 'scroll' fires.)
+  const gliding = useRef(false);
   // virtua's own `smooth` option delegates to scrollTo({behavior:"smooth"}), which the
   // browser silently downgrades to a jump when the OS asks for reduced motion — so the
   // app toggle could never win on a machine that asks for it. Animate scrollTop on a rAF
@@ -207,16 +216,18 @@ export function TranscriptView() {
     const v = vref.current;
     const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
     cancelAnimationFrame(tween.current);
+    gliding.current = false;
     if (!v || !el || !smooth()) return land();
     const from = el.scrollTop;
     const to = Math.max(0, Math.min(targetOf(v, from), el.scrollHeight - el.clientHeight));
     if (Math.abs(to - from) < 2) return land(); // already there; don't stage a 0px glide
+    gliding.current = true;
     const t0 = performance.now();
     const step = (t: number) => {
       const p = Math.min(1, (t - t0) / GLIDE_MS);
       el.scrollTop = from + (to - from) * (1 - (1 - p) ** 3); // easeOutCubic
       if (p < 1) tween.current = requestAnimationFrame(step);
-      else land();
+      else { gliding.current = false; land(); }
     };
     tween.current = requestAnimationFrame(step);
   };
@@ -249,7 +260,7 @@ export function TranscriptView() {
       const px = e.deltaMode === 1 ? e.deltaY * fontSize * ROW_RATIO : e.deltaY;
       if (Math.abs(px) < WHEEL_MIN) return;
       e.preventDefault();
-      cancelAnimationFrame(tween.current); // a keyboard glide loses to the hand on the wheel
+      cancelAnimationFrame(tween.current); gliding.current = false; // a keyboard glide loses to the hand on the wheel
       const max = el.scrollHeight - el.clientHeight;
       target = Math.max(0, Math.min((running ? target : el.scrollTop) + px, max));
       if (!running) { running = true; last = performance.now(); raf = requestAnimationFrame(step); }
@@ -411,11 +422,18 @@ export function TranscriptView() {
     if (jump || !positioned.has(active)) return;
     const gi = groups.findIndex((g) => headId >= g.startId && headId <= g.endId);
     if (gi < 0) return;
+    const idx = gi + 1; // +1 for the top vpad
     const first = v.findItemIndex(v.scrollOffset);
     const last = v.findItemIndex(v.scrollOffset + v.viewportSize);
-    const idx = gi + 1; // +1 for the top vpad
-    if (idx <= first) v.scrollToIndex(idx, { align: "start" });
-    else if (idx >= last) v.scrollToIndex(idx, { align: "end" });
+    // glide, not raw scrollToIndex: it lands on an explicitly-computed target, where
+    // scrollToIndex estimates the height above and visibly overshoots-then-corrects
+    // mid-list (a scroll-back bounce). When smooth is off, glide lands instantly.
+    // Bottom edge is treated symmetrically with the top — no hotbar offset: the dock
+    // resizes (collapsed->expanded) the moment a selection exists, and keying the scroll
+    // to its height fights that change.
+    if (idx <= first) glide((vh) => vh.getItemOffset(idx), () => v.scrollToIndex(idx, { align: "start" }));
+    else if (idx >= last) glide((vh) => vh.getItemOffset(idx) + vh.getItemSize(idx) - vh.viewportSize,
+      () => v.scrollToIndex(idx, { align: "end" }));
   }, [headId, groups]);
 
   // Tooltips open upward, but the list is a scroller and clips them — and with the
