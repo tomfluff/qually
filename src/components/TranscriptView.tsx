@@ -820,20 +820,19 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const cc = closeCallSids.has(seg.sid);
     const cls = "laneBar" + (rej ? " rejected" : cand ? " candidate" : lanePattern ? ` lp${patternOf(seg.code)}` : "")
       + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
-    // rejected: keep the code color, but faded + striped + outlined to read as inactive.
+    // rejected: an empty husk — NO fill, just a faint (semi-transparent) outline of
+    // the code colour where the segment used to be. Reads as "hollowed out" against
+    // accepted's solid fill and candidate's pale fill; the fill-vs-no-fill contrast
+    // is the non-hue channel, so it survives any palette and both themes.
     // draw top/bottom only on the segment's first/last line so a multi-line reject
     // reads as one continuous outline instead of per-line notches.
-    const b = `1.5px solid ${color}`;
+    const b = `1.5px solid ${color}70`;
     // candidate (another coder's suggestion awaiting a verdict): pale fill + dashed
-    // outline — "pencilled in", distinct from both solid-accepted and striped-rejected
+    // outline — "pencilled in", distinct from both solid-accepted and hollow-rejected
     // by outline style alone, so it doesn't rely on hue.
     const d = `1.5px dashed ${color}`;
     const style: CSSProperties = rej
       ? {
-          // vertical (90deg) stripes, 2px on / 2px off — aligns across a multi-line
-          // reject since the pattern is invariant along y
-          background: `repeating-linear-gradient(90deg, ${color}55, ${color}55 2px, transparent 2px, transparent 4px)`,
-          backgroundPosition: "1px 0",
           borderLeft: b, borderRight: b,
           borderTop: isStart ? b : undefined,
           borderBottom: isEnd ? b : undefined,

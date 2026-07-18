@@ -103,17 +103,23 @@
    1px so a segment's rounded top doesn't start early inside the row above. */
 .lineRow .lanes { margin-top:-1px; }
 .laneBar.segStart { margin-top:1px; }
+/* Translucent bars must NOT join the seam bleed: painting a semi-transparent
+   pixel twice doubles its alpha, which drew a darker 1px join line across every
+   row boundary (candidate's pale fill, rejected's faint side borders). They step
+   back down like segStart; the fractional-DPI hairline they give up is a faint
+   gap in an already-faint bar — invisible next to the dark join it replaces. */
+.laneBar.candidate:not(.segStart), .laneBar.rejected:not(.segStart) { margin-top:1px; }
 
 /* WCAG 1.4.1: which code a lane bar is must not be carried by HUE ALONE. Each code
    also gets one of six patterns (patternOf(), derived from the code name), drawn as
    a --bg overlay so it works on any code colour in either theme. The same classes
    paint the sidebar swatch — the swatch is what TEACHES the pattern, so both must
    draw it identically.
-   Repeating fine VERTICAL stripes are deliberately not in this set: that is the
-   "rejected" treatment (see the rejected style below), and the two were genuinely
-   indistinguishable when tried side by side. The three patterns that vary along Y
-   restart at each row boundary within a multi-line segment; the seam is minor next
-   to the alternative, which is no non-colour channel at all. */
+   (Repeating fine vertical stripes stay out of this set for history's sake: they
+   were the rejected treatment until it became a hollow outline, and old exports/
+   screenshots still show them.) The three patterns that vary along Y restart at
+   each row boundary within a multi-line segment; the seam is minor next to the
+   alternative, which is no non-colour channel at all. */
 /* Explicit list, NOT [class*="lp"] — that substring selector also matched .helpbtn
    ("he-lp-btn") and injected an absolute overlay into the Help button. */
 .lp0::before, .lp1::before, .lp2::before,
