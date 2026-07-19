@@ -88,9 +88,17 @@
   margin-inline-start:calc(1rem - 8px); padding-inline-start:1rem; }
 /* and its highlight reads QUIETER than the line's — wash whatever the row is showing
    (hover OR selection) back toward the page colour behind the (transparent) bars, so
-   the strip never looks as clickable/selectable as the readable line */
+   the strip never looks as clickable/selectable as the readable line.
+   The wash starts 1px DOWN (gradient positioned, not full-box): the strip's box
+   bleeds 1px into the row above (the seam cover), and a wash painted there sat on
+   top of that row's bar bottoms — the "clipped corners on hover" bug. NOT z-index
+   games: sinking the hovered wrapper made hit-testing oscillate at row boundaries
+   (hover → sink → neighbour on top → hover flips → rise), a visible flicker. */
 .lineRow:hover .lanes,
-.lineRow.selected .lanes { background:color-mix(in srgb, var(--bg) 50%, transparent); }
+.lineRow.selected .lanes {
+  background-image:linear-gradient(color-mix(in srgb, var(--bg) 50%, transparent),
+                                   color-mix(in srgb, var(--bg) 50%, transparent));
+  background-repeat:no-repeat; background-position:0 1px; }
 .laneBar { width:var(--lane-w, 18px); flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
@@ -108,15 +116,6 @@
    never alpha — translucent paint can't tile (overlap doubles it into a dark join
    line; no overlap leaves the fractional-DPI gap). */
 
-/* A hovered or selected row paints its opaque background OVER the previous row's
-   boundary pixel (virtua rows paint in DOM order, and fractional DPI rounds their
-   edges apart) — which sliced the bottom edge off any bar ending on the row above.
-   Sink that row's wrapper BELOW its siblings instead: every neighbour's bars (and
-   their seam bleeds) now paint over the hovered/selected background, so bar bottoms
-   keep their corners. Safe at z:-1 — the wrappers are the only children of virtua's
-   (transparent) container, so nothing else can slide in front. */
-.tviewlist :has(> .lineRow:hover),
-.tviewlist :has(> .lineRow.selected) { z-index:-1; }
 
 /* WCAG 1.4.1: which code a lane bar is must not be carried by HUE ALONE. Each code
    also gets one of six patterns (patternOf(), derived from the code name), drawn as
