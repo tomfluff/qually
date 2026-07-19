@@ -88,9 +88,17 @@
   margin-inline-start:calc(1rem - 8px); padding-inline-start:1rem; }
 /* and its highlight reads QUIETER than the line's — wash whatever the row is showing
    (hover OR selection) back toward the page colour behind the (transparent) bars, so
-   the strip never looks as clickable/selectable as the readable line */
+   the strip never looks as clickable/selectable as the readable line.
+   The wash starts 1px DOWN (gradient positioned, not full-box): the strip's box
+   bleeds 1px into the row above (the seam cover), and a wash painted there sat on
+   top of that row's bar bottoms — the "clipped corners on hover" bug. NOT z-index
+   games: sinking the hovered wrapper made hit-testing oscillate at row boundaries
+   (hover → sink → neighbour on top → hover flips → rise), a visible flicker. */
 .lineRow:hover .lanes,
-.lineRow.selected .lanes { background:color-mix(in srgb, var(--bg) 50%, transparent); }
+.lineRow.selected .lanes {
+  background-image:linear-gradient(color-mix(in srgb, var(--bg) 50%, transparent),
+                                   color-mix(in srgb, var(--bg) 50%, transparent));
+  background-repeat:no-repeat; background-position:0 1px; }
 .laneBar { width:var(--lane-w, 18px); flex-shrink:0; position:relative; cursor:pointer; }
 .laneBar.segStart { border-top-left-radius:6px; border-top-right-radius:6px; }
 .laneBar.segEnd { border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
@@ -103,17 +111,28 @@
    1px so a segment's rounded top doesn't start early inside the row above. */
 .lineRow .lanes { margin-top:-1px; }
 .laneBar.segStart { margin-top:1px; }
+/* …and segEnd bars step 1px back UP: the next row's wrapper overlaps this row's
+   bottom pixel (the row-background seam cover works through that overlap), so a
+   bar running flush to the boundary gets its corners painted over by the next
+   row's opaque hover/selection fill. Ending 1px early keeps the bar's bottom
+   edge out of the overlap zone — invisible, and nothing can clip it. */
+.laneBar.segEnd { margin-bottom:1px; }
+/* Every bar joins the seam bleed, including candidate/rejected: their "faint"
+   colours are OPAQUE flattened mixes (color-mix against --bg, see the Row styles),
+   never alpha — translucent paint can't tile (overlap doubles it into a dark join
+   line; no overlap leaves the fractional-DPI gap). */
+
 
 /* WCAG 1.4.1: which code a lane bar is must not be carried by HUE ALONE. Each code
    also gets one of six patterns (patternOf(), derived from the code name), drawn as
    a --bg overlay so it works on any code colour in either theme. The same classes
    paint the sidebar swatch — the swatch is what TEACHES the pattern, so both must
    draw it identically.
-   Repeating fine VERTICAL stripes are deliberately not in this set: that is the
-   "rejected" treatment (see the rejected style below), and the two were genuinely
-   indistinguishable when tried side by side. The three patterns that vary along Y
-   restart at each row boundary within a multi-line segment; the seam is minor next
-   to the alternative, which is no non-colour channel at all. */
+   (Repeating fine vertical stripes stay out of this set for history's sake: they
+   were the rejected treatment until it became a hollow outline, and old exports/
+   screenshots still show them.) The three patterns that vary along Y restart at
+   each row boundary within a multi-line segment; the seam is minor next to the
+   alternative, which is no non-colour channel at all. */
 /* Explicit list, NOT [class*="lp"] — that substring selector also matched .helpbtn
    ("he-lp-btn") and injected an absolute overlay into the Help button. */
 .lp0::before, .lp1::before, .lp2::before,
@@ -206,7 +225,9 @@
   background-image:repeating-linear-gradient(-45deg, var(--line), var(--line) 1px, transparent 1px, transparent 8px); }
 /* border on the edge that meets the transcript, same color as the hatches */
 .vpad-top { background-position:bottom; border-bottom:1px solid #f6f6f6; }
-.vpad-bot { background-position:top; border-top:1px solid #f6f6f6; }
+/* 1px down: the pad is drawn AFTER the last row and its top border/pattern landed
+   on the final bar's bottom edge at fractional DPI, slicing its corners off */
+.vpad-bot { background-position:top; border-top:1px solid #f6f6f6; margin-top:1px; }
 [data-theme=dark] .vpad-top { border-bottom-color:var(--line); }
 [data-theme=dark] .vpad-bot { border-top-color:var(--line); }
 

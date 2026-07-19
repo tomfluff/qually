@@ -820,27 +820,41 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const cc = closeCallSids.has(seg.sid);
     const cls = "laneBar" + (rej ? " rejected" : cand ? " candidate" : lanePattern ? ` lp${patternOf(seg.code)}` : "")
       + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
-    // rejected: keep the code color, but faded + striped + outlined to read as inactive.
+    // rejected: an empty husk — NO fill, just a faint outline of the code colour
+    // where the segment used to be. Reads as "hollowed out" against accepted's
+    // solid fill and candidate's pale fill; the fill-vs-no-fill contrast is the
+    // non-hue channel, so it survives any palette and both themes.
     // draw top/bottom only on the segment's first/last line so a multi-line reject
     // reads as one continuous outline instead of per-line notches.
-    const b = `1.5px solid ${color}`;
+    //
+    // "Faint" via color-mix against --bg, NEVER alpha: these bars take part in the
+    // 1px fractional-DPI seam bleed, and a translucent paint can't tile — the
+    // overlap doubles its alpha into a darker join line, while skipping the bleed
+    // leaves the DPI hairline gap. An opaque flattened colour looks identical over
+    // the page and paints over itself invisibly, so multi-row bars connect smoothly.
+    const b = `2.5px solid color-mix(in srgb, ${color} 44%, var(--bg))`;
     // candidate (another coder's suggestion awaiting a verdict): pale fill + dashed
-    // outline — "pencilled in", distinct from both solid-accepted and striped-rejected
+    // outline — "pencilled in", distinct from both solid-accepted and hollow-rejected
     // by outline style alone, so it doesn't rely on hue.
     const d = `1.5px dashed ${color}`;
     const style: CSSProperties = rej
       ? {
-          // vertical (90deg) stripes, 2px on / 2px off — aligns across a multi-line
-          // reject since the pattern is invariant along y
-          background: `repeating-linear-gradient(90deg, ${color}55, ${color}55 2px, transparent 2px, transparent 4px)`,
-          backgroundPosition: "1px 0",
+          // a faint diagonal hatch inside the husk — the universal "voided"
+          // texture. Anchored to the VIEWPORT (background-attachment: fixed), not
+          // the element: a per-element pattern restarts its phase at every row of
+          // a multi-line reject and kinks at the joins; anchored, every row
+          // samples the same stripes and the 1px seam overlap repaints identical
+          // (opaque, see above) pixels. Trade-off: the hatch holds still while
+          // the content scrolls past — a subtle shimmer, accepted for the seams.
+          background: `repeating-linear-gradient(45deg, color-mix(in srgb, ${color} 22%, var(--bg)) 0 2px, transparent 2px 5px)`,
+          backgroundAttachment: "fixed",
           borderLeft: b, borderRight: b,
           borderTop: isStart ? b : undefined,
           borderBottom: isEnd ? b : undefined,
         }
       : cand
       ? {
-          background: `${color}38`,
+          background: `color-mix(in srgb, ${color} 22%, var(--bg))`,
           borderLeft: d, borderRight: d,
           borderTop: isStart ? d : undefined,
           borderBottom: isEnd ? d : undefined,
