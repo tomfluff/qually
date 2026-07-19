@@ -111,6 +111,12 @@
    1px so a segment's rounded top doesn't start early inside the row above. */
 .lineRow .lanes { margin-top:-1px; }
 .laneBar.segStart { margin-top:1px; }
+/* …and segEnd bars step 1px back UP: the next row's wrapper overlaps this row's
+   bottom pixel (the row-background seam cover works through that overlap), so a
+   bar running flush to the boundary gets its corners painted over by the next
+   row's opaque hover/selection fill. Ending 1px early keeps the bar's bottom
+   edge out of the overlap zone — invisible, and nothing can clip it. */
+.laneBar.segEnd { margin-bottom:1px; }
 /* Every bar joins the seam bleed, including candidate/rejected: their "faint"
    colours are OPAQUE flattened mixes (color-mix against --bg, see the Row styles),
    never alpha — translucent paint can't tile (overlap doubles it into a dark join
