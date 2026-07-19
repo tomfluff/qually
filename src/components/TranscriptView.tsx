@@ -839,6 +839,15 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const d = `1.5px dashed ${color}`;
     const style: CSSProperties = rej
       ? {
+          // a faint diagonal hatch inside the husk — the universal "voided"
+          // texture. Anchored to the VIEWPORT (background-attachment: fixed), not
+          // the element: a per-element pattern restarts its phase at every row of
+          // a multi-line reject and kinks at the joins; anchored, every row
+          // samples the same stripes and the 1px seam overlap repaints identical
+          // (opaque, see above) pixels. Trade-off: the hatch holds still while
+          // the content scrolls past — a subtle shimmer, accepted for the seams.
+          background: `repeating-linear-gradient(45deg, color-mix(in srgb, ${color} 22%, var(--bg)) 0 2px, transparent 2px 5px)`,
+          backgroundAttachment: "fixed",
           borderLeft: b, borderRight: b,
           borderTop: isStart ? b : undefined,
           borderBottom: isEnd ? b : undefined,
