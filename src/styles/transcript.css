@@ -103,12 +103,10 @@
    1px so a segment's rounded top doesn't start early inside the row above. */
 .lineRow .lanes { margin-top:-1px; }
 .laneBar.segStart { margin-top:1px; }
-/* Translucent bars must NOT join the seam bleed: painting a semi-transparent
-   pixel twice doubles its alpha, which drew a darker 1px join line across every
-   row boundary (candidate's pale fill, rejected's faint side borders). They step
-   back down like segStart; the fractional-DPI hairline they give up is a faint
-   gap in an already-faint bar — invisible next to the dark join it replaces. */
-.laneBar.candidate:not(.segStart), .laneBar.rejected:not(.segStart) { margin-top:1px; }
+/* Every bar joins the seam bleed, including candidate/rejected: their "faint"
+   colours are OPAQUE flattened mixes (color-mix against --bg, see the Row styles),
+   never alpha — translucent paint can't tile (overlap doubles it into a dark join
+   line; no overlap leaves the fractional-DPI gap). */
 
 /* WCAG 1.4.1: which code a lane bar is must not be carried by HUE ALONE. Each code
    also gets one of six patterns (patternOf(), derived from the code name), drawn as

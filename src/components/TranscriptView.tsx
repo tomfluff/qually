@@ -820,13 +820,19 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     const cc = closeCallSids.has(seg.sid);
     const cls = "laneBar" + (rej ? " rejected" : cand ? " candidate" : lanePattern ? ` lp${patternOf(seg.code)}` : "")
       + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
-    // rejected: an empty husk — NO fill, just a faint (semi-transparent) outline of
-    // the code colour where the segment used to be. Reads as "hollowed out" against
-    // accepted's solid fill and candidate's pale fill; the fill-vs-no-fill contrast
-    // is the non-hue channel, so it survives any palette and both themes.
+    // rejected: an empty husk — NO fill, just a faint outline of the code colour
+    // where the segment used to be. Reads as "hollowed out" against accepted's
+    // solid fill and candidate's pale fill; the fill-vs-no-fill contrast is the
+    // non-hue channel, so it survives any palette and both themes.
     // draw top/bottom only on the segment's first/last line so a multi-line reject
     // reads as one continuous outline instead of per-line notches.
-    const b = `1.5px solid ${color}70`;
+    //
+    // "Faint" via color-mix against --bg, NEVER alpha: these bars take part in the
+    // 1px fractional-DPI seam bleed, and a translucent paint can't tile — the
+    // overlap doubles its alpha into a darker join line, while skipping the bleed
+    // leaves the DPI hairline gap. An opaque flattened colour looks identical over
+    // the page and paints over itself invisibly, so multi-row bars connect smoothly.
+    const b = `2.5px solid color-mix(in srgb, ${color} 44%, var(--bg))`;
     // candidate (another coder's suggestion awaiting a verdict): pale fill + dashed
     // outline — "pencilled in", distinct from both solid-accepted and hollow-rejected
     // by outline style alone, so it doesn't rely on hue.
@@ -839,7 +845,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
         }
       : cand
       ? {
-          background: `${color}38`,
+          background: `color-mix(in srgb, ${color} 22%, var(--bg))`,
           borderLeft: d, borderRight: d,
           borderTop: isStart ? d : undefined,
           borderBottom: isEnd ? d : undefined,
