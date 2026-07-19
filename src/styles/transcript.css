@@ -108,6 +108,16 @@
    never alpha — translucent paint can't tile (overlap doubles it into a dark join
    line; no overlap leaves the fractional-DPI gap). */
 
+/* A hovered or selected row paints its opaque background OVER the previous row's
+   boundary pixel (virtua rows paint in DOM order, and fractional DPI rounds their
+   edges apart) — which sliced the bottom edge off any bar ending on the row above.
+   Sink that row's wrapper BELOW its siblings instead: every neighbour's bars (and
+   their seam bleeds) now paint over the hovered/selected background, so bar bottoms
+   keep their corners. Safe at z:-1 — the wrappers are the only children of virtua's
+   (transparent) container, so nothing else can slide in front. */
+.tviewlist :has(> .lineRow:hover),
+.tviewlist :has(> .lineRow.selected) { z-index:-1; }
+
 /* WCAG 1.4.1: which code a lane bar is must not be carried by HUE ALONE. Each code
    also gets one of six patterns (patternOf(), derived from the code name), drawn as
    a --bg overlay so it works on any code colour in either theme. The same classes
@@ -210,7 +220,9 @@
   background-image:repeating-linear-gradient(-45deg, var(--line), var(--line) 1px, transparent 1px, transparent 8px); }
 /* border on the edge that meets the transcript, same color as the hatches */
 .vpad-top { background-position:bottom; border-bottom:1px solid #f6f6f6; }
-.vpad-bot { background-position:top; border-top:1px solid #f6f6f6; }
+/* 1px down: the pad is drawn AFTER the last row and its top border/pattern landed
+   on the final bar's bottom edge at fractional DPI, slicing its corners off */
+.vpad-bot { background-position:top; border-top:1px solid #f6f6f6; margin-top:1px; }
 [data-theme=dark] .vpad-top { border-bottom-color:var(--line); }
 [data-theme=dark] .vpad-bot { border-top-color:var(--line); }
 
