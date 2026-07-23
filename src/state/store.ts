@@ -55,6 +55,12 @@ export interface Ui {
   coderName: string; // written as proposed_by on segments created in this browser
 }
 export type SpeakerWeight = "quiet" | "normal" | "bold";
+// the loop-speed stops (Settings seg + the edit bar's cycler) — one list, two UIs
+export const LOOP_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
+const UNDO_CAP = 80; // one cap for BOTH push sites (pushUndo and editLine)
+// minimap width bounds — used by the Resizer clamp AND the rehydrate migration
+export const clampMinimapWidth = (w: number) =>
+  Number.isFinite(w) ? Math.max(64, Math.min(256, w)) : 66; // NaN slips through ?? — catch it here
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
   current: { line: number; occ: number } | null; // the emphasized occurrence
@@ -236,11 +242,18 @@ function lineEntry(s: State, pid: string, id: number): string | null {
 function restoreLine(get: () => State, set: (p: Partial<State>) => void,
   o: { pid: string; id: number; line: Line; flags: LineFlags | null }) {
   const t = get().transcripts[o.pid];
-  if (t) set({ transcripts: { ...get().transcripts, [o.pid]: { lines: t.lines.map((l) => l.id === o.id ? o.line : l) } } });
+  // the whole restore is gated on the line still existing — a half-restore that
+  // skipped the text but wrote the flags would persist an orphan aiFlags record
+  // keyed to a transcript that's gone
+  if (!t || !t.lines.some((l) => l.id === o.id)) return;
+  set({ transcripts: { ...get().transcripts, [o.pid]: { lines: t.lines.map((l) => l.id === o.id ? o.line : l) } } });
   const flags = { ...get().aiFlags };
   const key = `${o.pid}:${o.id}`;
   if (o.flags) flags[key] = o.flags; else delete flags[key];
   set({ aiFlags: flags });
+  // a line entry doesn't snapshot `active` the way full snapshots do — navigate
+  // to the edited transcript so the undo is never a silent off-screen change
+  if (get().active !== o.pid && get().tabs.includes(o.pid)) set({ active: o.pid });
 }
 function restore(get: () => State, set: (p: Partial<State>) => void, json: string) {
   const o = JSON.parse(json);
@@ -305,7 +318,9 @@ export const useStore = create<State>()(
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
           video: {}, aiFlags: {}, aiLog: [],
-          ui: { ...get().ui, speakerColors: {}, speakerWeight: {} },
+          // speakerFocus cleared with them: a stale focus name matching a speaker in
+          // the NEXT study would silently dim everyone else there
+          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: null },
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
@@ -600,7 +615,7 @@ export const useStore = create<State>()(
         if (!t || !cur || cur.text === text) return; // no change, no undo entry
         const entry = lineEntry(s, pid, id)!;
         const stack = [...s.undoStack, entry];
-        if (stack.length > 80) stack.shift();
+        if (stack.length > UNDO_CAP) stack.shift();
         set({ undoStack: stack, redoStack: [], selRun: false }); // same contract as pushUndo
         const lines = t.lines.map((l) => {
           if (l.id !== id || l.text === text) return l;
@@ -631,12 +646,12 @@ export const useStore = create<State>()(
             next[key] = { hash, lenses: scanned, spans: fresh };
           }
         }
-        set({ aiFlags: next });
+        set({ aiFlags: next, redoStack: [] }); // line-entry redo snapshots hold flags — invalidate
       },
       clearFlags: (pid) => {
         const next: Record<string, LineFlags> = {};
         for (const [k, v] of Object.entries(get().aiFlags)) if (!k.startsWith(`${pid}:`)) next[k] = v;
-        set({ aiFlags: next });
+        set({ aiFlags: next, redoStack: [] }); // ditto — see addFlags
       },
       // "I disagree with this mark": the span goes, but the line stays recorded as
       // scanned under that lens, so dismissing doesn't cause a re-fetch of the same mark.
@@ -644,7 +659,9 @@ export const useStore = create<State>()(
         const key = `${pid}:${id}`;
         const cur = get().aiFlags[key];
         if (!cur) return;
-        set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, spans: cur.spans.filter((s) => !((s.lens ?? "transcription") === lens && s.quote === quote)) } } });
+        // redoStack cleared too: redoing an older line edit would restore the flag
+        // snapshot from before this dismissal — the dismissed mark would come back
+        set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, spans: cur.spans.filter((s) => !((s.lens ?? "transcription") === lens && s.quote === quote)) } }, redoStack: [] });
       },
       // One-click transcription repair from a mark's popover. Rides editLine (so
       // `orig` tracking, the ✱ diff and exports behave exactly like a manual
@@ -751,7 +768,9 @@ export const useStore = create<State>()(
               .map((sp) => [sp, "quiet" as SpeakerWeight])),
         };
         set({
-          ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight },
+          // speakerFocus doesn't travel between studies — a stale name matching a
+          // speaker in the loaded project would silently dim everyone else
+          ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: null },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiLog: p.aiLog,
@@ -852,7 +871,7 @@ export const useStore = create<State>()(
       pushUndo: () => {
         const s = get();
         const stack = [...s.undoStack, snapshot(s)];
-        if (stack.length > 80) stack.shift();
+        if (stack.length > UNDO_CAP) stack.shift();
         // clears the selection gesture too: any real edit ends it, so the NEXT click is
         // its own undo step rather than being swallowed as "the same gesture"
         set({ undoStack: stack, redoStack: [], selRun: false }); // new action invalidates redo
@@ -985,7 +1004,7 @@ export const useStore = create<State>()(
         s.ui.loopEdit ??= true;
         s.ui.loopSpeed ??= 0.75;
         // bounds moved (44–160 → 64–256): pull an old persisted width into range
-        s.ui.minimapWidth = Math.max(64, Math.min(256, s.ui.minimapWidth ?? 66));
+        s.ui.minimapWidth = clampMinimapWidth(s.ui.minimapWidth ?? 66);
         s.ui.speakerFocus ??= null;
         s.ui.speakerFocusMode ??= "dim";
         s.ui.speakerColors ??= {};

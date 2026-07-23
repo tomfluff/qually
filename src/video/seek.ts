@@ -18,6 +18,11 @@ export const hasVideo = () => el !== null;
 // live rate change while a loop is running (the edit bar's speed button)
 export function setPlaybackRate(r: number) { if (el) el.playbackRate = r; }
 
+// whether a loop currently owns the playback rate — the dock's own rate effect
+// checks this so the two writers never fight over el.playbackRate
+let loopActive = false;
+export const isLooping = () => loopActive;
+
 export function tsToSec(ts: string): number | null {
   const p = (ts || "").split(".")[0].split(":").map(Number);
   if (!p.length || p.some(isNaN)) return null;
@@ -33,27 +38,37 @@ export function seekVideo(ts: string): boolean {
   return true;
 }
 
+// The window a loop plays: this line's start to the next line's (6s fallback),
+// never under 1s (a sub-second range would stutter). ONE definition — the edit
+// bar's duration label derives from the same math (loopWindow, not a copy).
+export function loopWindow(startTs: string, endTs: string | null): { s: number; e: number } | null {
+  const s = tsToSec(startTs);
+  if (s === null) return null;
+  const e = (endTs !== null ? tsToSec(endTs) : null) ?? s + 6;
+  return { s, e: Math.max(s + 1, e) };
+}
+
 // Loop one utterance while its line is being retyped (transcript repair).
-// endTs is usually the next line's timestamp; without one, loop a 6s window.
 // Plays at `rate` (the ui.loopSpeed setting), restoring the dock's own rate on
 // stop — so the loop can run slow without the dock losing its speed.
 // Returns a stop function that pauses.
 export function loopLine(startTs: string, endTs: string | null, rate: number): (() => void) | null {
   if (!el) return null;
-  const s = tsToSec(startTs);
-  if (s === null) return null;
-  const e = (endTs !== null ? tsToSec(endTs) : null) ?? s + 6;
+  const win = loopWindow(startTs, endTs);
+  if (win === null) return null;
   const v = el;
-  const from = Math.max(0, s + offset);
-  const to = Math.max(from + 1, e + offset); // a sub-second range would stutter
+  const from = Math.max(0, win.s + offset);
+  const to = Math.max(from + 1, win.e + offset);
   const prevRate = v.playbackRate;
   const onTime = () => { if (v.currentTime >= to) v.currentTime = from; };
+  loopActive = true;
   v.playbackRate = rate;
   v.currentTime = from;
   v.addEventListener("timeupdate", onTime);
   void v.play();
   return () => {
     v.removeEventListener("timeupdate", onTime);
+    loopActive = false;
     v.playbackRate = prevRate;
     v.pause(); // ponytail: always pause on exit; resuming a pre-existing playback isn't tracked
   };

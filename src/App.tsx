@@ -22,8 +22,8 @@ import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
 import { AUTHOR_AVATAR } from "./assets/avatar";
 import { LENSES, spanLens } from "./ai/flag";
-import { useMemo, useRef } from "react";
-import { useDismiss } from "./usePopover";
+import { useCallback, useMemo, useRef } from "react";
+import { useDismiss, OVERLAY_SELECTOR } from "./usePopover";
 
 // Show/hide the AI noticing highlights — the blind-reading control. Only appears
 // once the active transcript actually has notices, so it costs no chrome before.
@@ -35,7 +35,10 @@ function NoticeToggle() {
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useDismiss(ref, () => setMenu(false), { enabled: menu });
+  // stable callback: an inline arrow re-attached useDismiss's document listeners
+  // on every re-render (and this component re-renders per flag write during a scan)
+  const closeMenu = useCallback(() => setMenu(false), []);
+  useDismiss(ref, closeMenu, { enabled: menu });
   // which lenses actually have marks here — the dropdown lists only these
   // (transcription included: its errors are toggleable from the menu too)
   const presentLenses = useMemo(() => {
@@ -44,7 +47,9 @@ function NoticeToggle() {
       if (k.startsWith(`${active}:`)) for (const sp of v.spans) p.add(spanLens(sp));
     return LENSES.filter((l) => p.has(l.id));
   }, [aiFlags, active]);
-  if (!presentLenses.some((l) => l.id !== "transcription")) return null;
+  // render when ANY marks exist — a transcription-only transcript still needs the
+  // dropdown (its checkbox is the only way BACK if transcription was hidden)
+  if (!presentLenses.length) return null;
   const toggleLens = (id: string) =>
     useStore.getState().setUi({
       hiddenLenses: hiddenLenses.includes(id)
@@ -69,13 +74,13 @@ function NoticeToggle() {
             // transcription errors ignore the eye (it hides NOTICINGS) — their
             // checkbox stays live even while reading blind
             const t = l.id === "transcription";
-            const active = t ? true : show;
+            const on = t ? true : show; // NOT "active" — that's the project id above
             return (
               // lensdiv: transcription is a different KIND of mark (repair, not
               // noticing) — a quiet divider separates it from the lenses
-              <label key={l.id} className={(active ? "" : "off") + (t ? " lensdiv" : "")}>
-                <input type="checkbox" disabled={!active}
-                  checked={active && !hiddenLenses.includes(l.id)}
+              <label key={l.id} className={(on ? "" : "off") + (t ? " lensdiv" : "")}>
+                <input type="checkbox" disabled={!on}
+                  checked={on && !hiddenLenses.includes(l.id)}
                   onChange={() => toggleLens(l.id)} />
                 <span className="lensdot" style={{ background: l.color }} />
                 <span className="lenslabel">{l.label}</span>
@@ -159,7 +164,7 @@ export function App() {
       // and code menu open without taking focus, so keydowns still target the list
       // under them. Each of these closes itself on Escape; the palette additionally
       // needs the hand below for when focus has left its input.
-      if (document.querySelector(".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop, .clrpop")) {
+      if (document.querySelector(OVERLAY_SELECTOR)) {
         if (e.key === "Escape" && s.paletteOpen) {
           s.setPalette(false); // and back to the list, same as the palette's own close
           document.querySelector<HTMLElement>(".tviewlist")?.focus();

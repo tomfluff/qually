@@ -42,7 +42,8 @@ valuable next step.
 - Coding is fully keyboard-operable: `Tab` into the transcript, `↓`/`↑` to select a line,
   `Shift`+arrows to extend, `1`–`9` for the hotbar, `0` for the searchable palette,
   `Ctrl+Z`/`Ctrl+Shift+Z`, `Ctrl+F`, `PageUp`/`PageDown`/`Home`/`End`, `Esc` to back out,
-  `Enter` to play the loaded media from the selected line, `M` to open the selected
+  `Enter` to play the loaded media from the selected line, `Space` to play/pause it and
+  `[`/`]` to change its speed (all three stand down while typing), `M` to open the selected
   line's AI mark (apply its suggested fix when one is offered, or dismiss it; pressing
   again cycles the line's marks).
 - So is everything around the coding: tabs switch and close from the keyboard; sidebar

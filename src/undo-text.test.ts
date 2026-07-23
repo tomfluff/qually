@@ -64,21 +64,39 @@ test("undoing an applyFix restores the text AND the consumed mark", () => {
 
 test("line entries and coding snapshots interleave on one stack", () => {
   const st = useStore.getState();
+  const base = st.undoStack.length; // earlier tests/import leave entries below us
   st.editLine("P01", 2, "so I zoomed in");            // line entry
   st.clearSelection();
   st.pushSelUndo(); st.selectLine(1); st.endSelGesture();
   useStore.getState().applyCode("magnification");     // snapshot entries
   useStore.getState().editLine("P01", 1, "I lost the ticket marks"); // line entry
 
+  // this test added exactly: [line-2 entry, selection snap, applyCode snap, line-1 entry]
+  expect(useStore.getState().undoStack).toHaveLength(base + 4);
   useStore.getState().undo(); // text edit on line 1
   expect(useStore.getState().transcripts.P01.lines[0].text).toBe("I kept losing the ticket marks");
   expect(useStore.getState().segments.some((x) => x.code === "magnification")).toBe(true);
   useStore.getState().undo(); // the coding edit
   expect(useStore.getState().segments.some((x) => x.code === "magnification")).toBe(false);
-  useStore.getState().undo(); // selection entry (may coalesce), then the line-2 edit
-  if (useStore.getState().transcripts.P01.lines[1].text !== "so I zoomed in further")
-    useStore.getState().undo();
+  useStore.getState().undo(); // the selection snap (no visible text change)
+  useStore.getState().undo(); // the line-2 edit
   expect(useStore.getState().transcripts.P01.lines[1].text).toBe("so I zoomed in further");
+});
+
+test("a flag mutation after undo invalidates the redo branch (no resurrected marks)", () => {
+  const st = useStore.getState();
+  st.addFlags("P01", { 1: [
+    { quote: "ticket marks", reason: "misheard", lens: "transcription", fix: "tick marks" },
+  ] }, st.transcripts.P01.lines, ["transcription"]);
+  useStore.getState().editLine("P01", 1, "redo-probe wording");
+  useStore.getState().undo();
+  expect(useStore.getState().redoStack.length).toBeGreaterThan(0);
+  // dismissing a mark mutates aiFlags — a stale line-entry redo would bring it back
+  useStore.getState().dismissNotice("P01", 1, "transcription", "ticket marks");
+  expect(useStore.getState().redoStack).toHaveLength(0);
+  useStore.getState().redo(); // no-op
+  expect(useStore.getState().aiFlags["P01:1"].spans).toEqual([]);
+  useStore.getState().clearFlags("P01");
 });
 
 test("a fresh edit after undo invalidates the redo branch", () => {

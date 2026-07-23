@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useStore } from "../state/store";
-import { registerVideo, tsToSec } from "../video/seek";
-import { useDismiss } from "../usePopover";
+import { registerVideo, tsToSec, isLooping } from "../video/seek";
+import { useDismiss, OVERLAY_SELECTOR } from "../usePopover";
 import { Icon } from "./Icon";
 
 // bottom-RIGHT-anchored: expanding/collapsing grows upward and LEFTWARD, so the
@@ -14,12 +14,28 @@ import { Icon } from "./Icon";
 // users get one reset to the default corner.)
 interface Geom { r: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
 const DEFAULT: Geom = { r: null, bottom: null, w: 400, collapsed: true, rate: 1 };
-const MIN_W = 400; // expanded minimum (collapsed shrinks to its controls)
+const MIN_W = 400; // expanded minimum (collapsed shrinks to its controls) — must match video.css .vdock min-width
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
-  try { return { ...DEFAULT, ...JSON.parse(localStorage.getItem("coding-app-dock") || "{}") }; }
-  catch { return DEFAULT; }
+  try {
+    // pick known keys only (a blind spread carried the obsolete left-edge `x`
+    // forward and re-persisted it forever), validate shapes (localStorage is
+    // hand-editable; a NaN transform or negative playbackRate throws later),
+    // and CONVERT a legacy left-edge position instead of discarding it
+    const p = JSON.parse(localStorage.getItem("coding-app-dock") || "{}");
+    const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+    const w = num(p.w) ? Math.max(MIN_W, p.w) : DEFAULT.w; // old min was 220
+    const r = num(p.r) ? p.r
+      : num(p.x) ? window.innerWidth - p.x - w // pre-right-anchor geom: same spot, new reference edge
+      : DEFAULT.r;
+    return {
+      r, w,
+      bottom: num(p.bottom) ? p.bottom : DEFAULT.bottom,
+      collapsed: typeof p.collapsed === "boolean" ? p.collapsed : DEFAULT.collapsed,
+      rate: num(p.rate) && p.rate > 0 && p.rate <= 4 ? p.rate : DEFAULT.rate,
+    };
+  } catch { return DEFAULT; }
 }
 
 export function VideoDock() {
@@ -45,7 +61,8 @@ export function VideoDock() {
   // the menu is portaled out of speedRef (see below), so contains() can't claim
   // it — the ignore predicate keeps a mousedown on the menu from closing it
   const inSpeedMenu = useCallback((e: MouseEvent) => !!(e.target as Element | null)?.closest?.(".vspeedmenu"), []);
-  useDismiss(speedRef, () => setSpeedMenu(null), { enabled: speedMenu !== null, ignore: inSpeedMenu });
+  const closeSpeedMenu = useCallback(() => setSpeedMenu(null), []);
+  useDismiss(speedRef, closeSpeedMenu, { enabled: speedMenu !== null, ignore: inSpeedMenu });
   // Where each tab's media was last at. One <video> element serves every tab, so switching
   // tabs swaps its src and resets currentTime to 0 — this remembers each tab's position so
   // returning to it resumes where you left off. `switching` guards the reset: on a source
@@ -59,17 +76,32 @@ export function VideoDock() {
   // put disk I/O on the drag's critical path. The dock's position isn't worth one write
   // per frame; one write once you let go is plenty.
   useEffect(() => {
-    const t = setTimeout(() => localStorage.setItem("coding-app-dock", JSON.stringify(geom)), 250);
+    // swallow quota/disabled-storage errors: dock geometry isn't worth an
+    // uncaught timer exception (the main store has its own save-failed banner)
+    const t = setTimeout(() => { try { localStorage.setItem("coding-app-dock", JSON.stringify(geom)); } catch { /* transient */ } }, 250);
     return () => clearTimeout(t);
   }, [geom]);
   const cur = media[pid];
+  // prune object URLs whose transcript is gone (new/open project, closed data):
+  // a loaded video would otherwise stay retained for the page's lifetime
+  const transcripts = useStore((s) => s.transcripts);
+  useEffect(() => {
+    setMedia((m) => {
+      const dead = Object.keys(m).filter((k) => !transcripts[k]);
+      if (!dead.length) return m;
+      const next = { ...m };
+      for (const k of dead) { URL.revokeObjectURL(next[k].url); delete next[k]; }
+      return next;
+    });
+  }, [transcripts]);
   // keep the seek bridge pointed at the current element + offset
   useEffect(() => { registerVideo(videoRef.current, offset); }, [cur, offset, pid]);
   // the source is about to change (tab switch / new media): ignore the reset-to-0
   // timeupdate that follows, so it can't clobber the position we'll restore on load
   useEffect(() => { switching.current = true; }, [cur?.url]);
-  // apply persisted playback rate whenever the source or rate changes
-  useEffect(() => { if (videoRef.current) videoRef.current.playbackRate = geom.rate; }, [cur, geom.rate]);
+  // apply persisted playback rate whenever the source or rate changes — unless a
+  // line-edit loop owns the rate right now (it restores the dock's rate on stop)
+  useEffect(() => { if (videoRef.current && !isLooping()) videoRef.current.playbackRate = geom.rate; }, [cur, geom.rate]);
 
   // The clamp in `pos` only runs while rendering, and nothing re-renders on a window
   // resize — so shrinking the window left the dock at its old transform, stranded
@@ -93,7 +125,9 @@ export function VideoDock() {
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT"
         || t.tagName === "BUTTON" || t.isContentEditable) return;
-      if (document.querySelector(".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop, .clrpop")) return;
+      // the focused <video> already handles Space natively — doubling up nets a no-op
+      if (t.tagName === "VIDEO" || t.tagName === "A") return;
+      if (document.querySelector(OVERLAY_SELECTOR)) return;
       const v = videoRef.current;
       if (!v) return;
       e.preventDefault(); // Space would otherwise page-scroll the focused list
@@ -234,10 +268,14 @@ export function VideoDock() {
   // changes the height OR width (the corner is where the toggle button lives).
   // Clamped so a drag (or a position persisted from a larger window) can't strand
   // the dock offscreen with no way to grab it back.
+  // clamp against the width actually RENDERED: an expanded dock dragged far left
+  // (legitimate negative r) that then collapses to ~150px would otherwise sit
+  // entirely offscreen, persisted, with nothing left to grab
+  const effW = geom.collapsed ? 150 : geom.w;
   const pos = geom.r !== null && geom.bottom !== null
     ? {
         right: 0, bottom: 0, left: "auto" as const, top: "auto" as const,
-        transform: `translate3d(${-Math.max(60 - geom.w, Math.min(geom.r, window.innerWidth - 60))}px, ${
+        transform: `translate3d(${-Math.max(60 - effW, Math.min(geom.r, window.innerWidth - 60))}px, ${
           -Math.max(0, Math.min(geom.bottom, window.innerHeight - 40))}px, 0)`,
       }
     : { right: 24, bottom: 24 };

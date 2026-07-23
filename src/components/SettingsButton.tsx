@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore, speakersOf, speakerColor, weightOf, inkOn, type SpeakerWeight } from "../state/store";
+import { useStore, speakersOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, type SpeakerWeight } from "../state/store";
 import { openColorPicker } from "../colorPicker";
 import { PALETTES } from "../palettes";
 import { MODELS, modelOf } from "../ai/openai";
@@ -13,6 +13,13 @@ import { Icon } from "./Icon";
 export function SettingsButton() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"Appearance"|"Transcript"|"Codes"|"Speakers"|"AI">("Appearance");
+  const [dragSpeed, setDragSpeed] = useState<number | null>(null); // scroll slider mid-drag value (%)
+  // Esc can close the modal mid-drag — React fires no blur on unmount, so an
+  // uncommitted drag value would silently vanish. Commit it on close instead.
+  useEffect(() => {
+    if (!open && dragSpeed !== null) { setUi({ scrollSpeed: dragSpeed / 100 }); setDragSpeed(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   const ref = useRef<HTMLDivElement>(null);
   const dialogRef = useDialogFocus();
   const fontSize = useStore((s) => s.ui.fontSize);
@@ -161,11 +168,17 @@ export function SettingsButton() {
                 <div className="settings-note">Eases the mouse wheel, and animates Home/End, PageUp/PageDown and jumps to a line — so you can see where you moved to rather than arriving there. Overrides your system's reduced-motion setting, which otherwise turns all of it off.</div>
                 <label className="srow">
                   <span>Scroll distance</span>
-                  {/* percent with 5% steps — the old 0.25× steps made the thumb jump */}
-                  <input type="range" min={25} max={300} step={5} value={Math.round(scrollSpeed * 100)}
-                    onChange={(e) => setUi({ scrollSpeed: +e.target.value / 100 })} />
-                  <span className="sval">{Math.round(scrollSpeed * 100)}%</span>
-                  <button className="sreset" onClick={(e) => { e.preventDefault(); setUi({ scrollSpeed: 1 }); }} title="Reset to 100%">reset</button>
+                  {/* percent with 5% steps (the old 0.25× steps made the thumb jump);
+                      committed on RELEASE — a store write per tick re-rendered the
+                      whole transcript under the drag, which read as jitter */}
+                  <input type="range" min={25} max={300} step={5}
+                    value={dragSpeed ?? Math.round(scrollSpeed * 100)}
+                    onChange={(e) => setDragSpeed(+e.target.value)}
+                    onPointerUp={() => { if (dragSpeed !== null) { setUi({ scrollSpeed: dragSpeed / 100 }); setDragSpeed(null); } }}
+                    onKeyUp={() => { if (dragSpeed !== null) { setUi({ scrollSpeed: dragSpeed / 100 }); setDragSpeed(null); } }}
+                    onBlur={() => { if (dragSpeed !== null) { setUi({ scrollSpeed: dragSpeed / 100 }); setDragSpeed(null); } }} />
+                  <span className="sval">{dragSpeed ?? Math.round(scrollSpeed * 100)}%</span>
+                  <button className="sreset" onClick={(e) => { e.preventDefault(); setDragSpeed(null); setUi({ scrollSpeed: 1 }); }} title="Reset to 100%">reset</button>
                 </label>
                 <div className="settings-note">How far one wheel click moves the transcript. 100% is your device's default.</div>
                 <div className="srow">
@@ -178,7 +191,7 @@ export function SettingsButton() {
                 <div className="srow">
                   <span>Loop speed</span>
                   <div className="seg loopseg">
-                    {[0.5, 0.75, 1, 1.25, 1.5].map((s) => (
+                    {LOOP_SPEEDS.map((s) => (
                       <button key={s} className={loopSpeed === s ? "on" : ""}
                         onClick={() => setUi({ loopSpeed: s })}>{s}×</button>
                     ))}

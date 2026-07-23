@@ -2,14 +2,14 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
-import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn } from "../state/store";
+import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, clampMinimapWidth } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { AiMarkPopover } from "./AiMarkPopover";
 import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
-import { seekVideo, loopLine, hasVideo, setPlaybackRate, tsToSec } from "../video/seek";
+import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
@@ -282,7 +282,8 @@ export function TranscriptView() {
     const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
     if (!el) return;
     let target = 0, raf = 0, last = 0, running = false, lastSet = -1;
-    const stop = () => { cancelAnimationFrame(raf); running = false; };
+    let directAcc = 0, directRaf = 0; // scaled-but-unchased wheel path (see onWheel)
+    const stop = () => { cancelAnimationFrame(raf); cancelAnimationFrame(directRaf); directRaf = 0; directAcc = 0; running = false; };
     wheelStop.current = stop;
     const step = (t: number) => {
       // Backstop for writers that don't route through stopAnims (search, a tab
@@ -311,14 +312,24 @@ export function TranscriptView() {
       // ponytail: |delta| is the only cheap tell between a wheel click and a trackpad
       // swipe. Trackpads already scroll pixel-by-pixel — smoothing them just adds lag —
       // so only the chunky events get chased. If a device lands wrong, this is the knob.
-      const raw = e.deltaMode === 1 ? e.deltaY * fontSize * ROW_RATIO : e.deltaY;
+      const raw = e.deltaMode === 1 ? e.deltaY * fontSize * ROW_RATIO
+        : e.deltaMode === 2 ? e.deltaY * el.clientHeight // page-mode devices: a page is a viewport
+        : e.deltaY;
       const px = raw * mult; // the Settings "scroll distance" knob scales every device
       if (!smooth() || Math.abs(raw) < WHEEL_MIN) {
         // no chase for this event (smoothing off, or a trackpad's pixel stream) —
-        // but a non-1 multiplier still has to scale it, directly
-        if (mult === 1) return;
+        // but a non-1 multiplier still has to scale it. Deltas accumulate and the
+        // write lands ONCE per frame: a per-event scrollTop write forces layout on
+        // every wheel tick of the virtualized list.
+        if (mult === 1 || !px) return; // pure-horizontal events aren't ours to eat
         e.preventDefault();
-        el.scrollTop = Math.max(0, Math.min(el.scrollTop + px, el.scrollHeight - el.clientHeight));
+        cancelAnimationFrame(tween.current); gliding.current = false; // the hand on the wheel beats a glide
+        directAcc += px;
+        if (!directRaf) directRaf = requestAnimationFrame(() => {
+          directRaf = 0;
+          el.scrollTop = Math.max(0, Math.min(el.scrollTop + directAcc, el.scrollHeight - el.clientHeight));
+          directAcc = 0;
+        });
         return;
       }
       e.preventDefault();
@@ -789,7 +800,7 @@ export function TranscriptView() {
           <div className="vpad vpad-bot" key="vpad-bot" style={{ height: pad ?? MIN_PAD }} />, // headroom after the last line
         ]}
       </VList>
-      <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(64, Math.min(256, w)) })} />
+      <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: clampMinimapWidth(w) })} />
       <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
         closeCallSids={closeCallSids} flagsByLine={flagsByLine}
         detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims} />
@@ -973,14 +984,10 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLane
 // stops it, the dock's speed control applies) so the fix is made against the audio,
 // not from memory. Enter saves, Esc cancels, blur saves (it's a typo fix, losing
 // it to a stray click would hurt more than keeping it).
-const LOOP_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
-// how long the looped clip is — same window loopLine plays (next line's start,
-// or a 6s fallback, never under 1s)
+// how long the looped clip is — derived from the SAME window loopLine plays
 function loopDur(ts: string, nextTs: string | null): string {
-  const s = tsToSec(ts);
-  if (s === null) return "";
-  const e = (nextTs !== null ? tsToSec(nextTs) : null) ?? s + 6;
-  return `${Math.round(Math.max(1, e - s))}s`;
+  const win = loopWindow(ts, nextTs);
+  return win === null ? "" : `${Math.round(win.e - win.s)}s`;
 }
 function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | null; onDone: () => void }) {
   const [value, setValue] = useState(line.text);
@@ -989,6 +996,10 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
   const taRef = useRef<HTMLTextAreaElement>(null);
   const looping = useRef<(() => void) | null>(null);
   const [loopOn, setLoopOn] = useState(false);
+  // the pid this editor OPENED on — save must never resolve identity at commit
+  // time (an undo/redo can switch `active` before the blur-save fires, which
+  // would stamp this text onto the same line id in a different transcript)
+  const pid = useRef(useStore.getState().active);
 
   useEffect(() => {
     const ta = taRef.current;
@@ -1021,7 +1032,7 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
 
   const save = (text: string) => {
     const t = text.trim();
-    if (t) useStore.getState().editLine(useStore.getState().active, line.id, t);
+    if (t) useStore.getState().editLine(pid.current, line.id, t);
     onDone();
   };
 

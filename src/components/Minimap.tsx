@@ -30,6 +30,8 @@ export const Minimap = forwardRef<MinimapHandle, {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const drawRef = useRef<(() => void) | null>(null); // latest draw closure, for the mount-only observer
+  const syncRef = useRef<(() => void) | null>(null); // ditto — syncFromList closes over N
   const lineToGi = useRef(new Map<number, number>());
   const N = groups.length;
 
@@ -198,12 +200,22 @@ export const Minimap = forwardRef<MinimapHandle, {
     };
     draw();
     syncFromList();
-    const ro = new ResizeObserver(() => { draw(); syncFromList(); });
-    ro.observe(wrap);
-    return () => ro.disconnect();
+    drawRef.current = draw; syncRef.current = syncFromList; // the mount-only observer calls through these
   }, [groups, laned, cols, codebook, closeCallSids, flagsByLine, detail, N,
       ui.speakerColors, ui.speakerWeight, // recolour the rail when the speaker map changes
       ui.dark]); // repaint on theme flip so the muted amount-bars pick up the new --muted
+
+  // ONE observer for the component's lifetime: re-creating it on every data-dep
+  // change made each repaint cost two full draws (the fresh observe() fires the
+  // callback immediately on top of the effect's own draw)
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const ro = new ResizeObserver(() => { drawRef.current?.(); syncRef.current?.(); });
+    ro.observe(wrap);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const scrubTo = (clientY: number) => {
     const wrap = wrapRef.current, v = vref.current;
