@@ -111,6 +111,7 @@ interface State {
   codebook: Record<string, { color: string; def: string; status: string }>;
   extSegRows: Record<string, string>[];
   tabs: string[];
+  pinnedTabs: string[]; // pids pinned to the FRONT of the tab list, in pin order
   active: string;
   hotbar: { mode: "auto" | "pinned"; pinned: string[] };
   hotbarCache: string[];
@@ -153,6 +154,10 @@ interface State {
   clearSelection: () => void;
   setActive: (pid: string) => void;
   closeTab: (pid: string) => void;
+  togglePinTab: (pid: string) => void;
+  // rename a transcript file (remaps every pid-keyed slice); returns an error
+  // message for the rename form, or null on success
+  renameTranscript: (from: string, to: string) => string | null;
   jumpTo: (pid: string, line: number) => void;
   clearJump: () => void;
   scrollToLine: (line: number) => void;
@@ -304,7 +309,7 @@ export const useStore = create<State>()(
   persist(
     (set, get) => ({
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
-      tabs: [], active: "browse",
+      tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
@@ -319,7 +324,7 @@ export const useStore = create<State>()(
       // "P is quiet" from study A would silently apply to study B's "P"
       newProject: () => {
         set({
-          transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [],
+          transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
           video: {}, aiFlags: {}, aiLog: [],
           // speakerFocus cleared with them: a stale focus name matching a speaker in
@@ -607,6 +612,62 @@ export const useStore = create<State>()(
         set({ tabs, active: next, selection: saved[next] ?? emptySel(), savedSelections: saved });
       },
 
+      togglePinTab: (pid) => {
+        const s = get();
+        if (s.pinnedTabs.includes(pid)) {
+          // unpin keeps the tab where it sits — only the "stay in front" claim goes
+          set({ pinnedTabs: s.pinnedTabs.filter((p) => p !== pid) });
+        } else {
+          const pinnedTabs = [...s.pinnedTabs, pid];
+          const front = pinnedTabs.filter((p) => s.tabs.includes(p));
+          set({ pinnedTabs, tabs: [...front, ...s.tabs.filter((t) => !front.includes(t))] });
+        }
+      },
+
+      // The pid is the KEY everywhere — remap every slice that carries it. Undo
+      // stacks are cleared: their snapshots and line entries hold the old pid and
+      // replaying them would resurrect it. (Loaded media in the video dock is
+      // keyed by pid too and component-local; it drops on rename — re-pick it.)
+      renameTranscript: (from, toRaw) => {
+        const s = get();
+        const to = toRaw.trim();
+        if (!s.transcripts[from]) return "unknown transcript";
+        if (!to) return "the name can't be empty";
+        if (to === from) return null;
+        if (to === "browse") return "that name is reserved";
+        if (to.includes(":")) return "no “:” — segment refs use it (P01:2-4)";
+        if (s.transcripts[to]) return "a transcript with that name already exists";
+        const transcripts = { ...s.transcripts, [to]: s.transcripts[from] };
+        delete transcripts[from];
+        const aiFlags: typeof s.aiFlags = {};
+        for (const [k, v] of Object.entries(s.aiFlags))
+          aiFlags[k.startsWith(`${from}:`) ? `${to}:${k.slice(from.length + 1)}` : k] = v;
+        const saved: typeof s.savedSelections = {};
+        for (const [k, v] of Object.entries(s.savedSelections))
+          saved[k === from ? to : k] = k === from ? { ...v, pid: to } : v;
+        const video = { ...s.video };
+        if (from in video) { video[to] = video[from]; delete video[from]; }
+        const speakerFocus = { ...s.ui.speakerFocus };
+        if (from in speakerFocus) { speakerFocus[to] = speakerFocus[from]; delete speakerFocus[from]; }
+        set({
+          transcripts,
+          segments: s.segments.map((x) => x.pid === from ? { ...x, pid: to } : x),
+          extSegRows: s.extSegRows.map((r) => r.pid === from
+            ? { ...r, pid: to, segment_ref: r.segment_ref.startsWith(`${from}:`) ? to + r.segment_ref.slice(from.length) : r.segment_ref }
+            : r),
+          tabs: s.tabs.map((x) => x === from ? to : x),
+          pinnedTabs: s.pinnedTabs.map((x) => x === from ? to : x),
+          active: s.active === from ? to : s.active,
+          selection: s.selection.pid === from ? { ...s.selection, pid: to } : s.selection,
+          savedSelections: saved,
+          aiFlags, video,
+          ui: { ...s.ui, speakerFocus },
+          undoStack: [], redoStack: [],
+        });
+        forgetScroll(from);
+        return null;
+      },
+
       // In-app transcription fix. The imported text is kept in `orig` (first edit
       // wins) so the correction is a recorded, revertible fact, not a silent change;
       // editing back to the original clears the flag. Line ids never change, so
@@ -776,7 +837,7 @@ export const useStore = create<State>()(
           // speaker in the loaded project would silently dim everyone else
           ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {} },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
-          extSegRows: p.extSegRows, tabs: p.tabs, active: p.active,
+          extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: [], active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiLog: p.aiLog,
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
@@ -990,7 +1051,7 @@ export const useStore = create<State>()(
       })),
       partialize: (s) => ({
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
-        extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
+        extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
       }),
@@ -1000,6 +1061,7 @@ export const useStore = create<State>()(
         s.hotbarCache = hotbarCodes(s as State);
         // fields added after a persisted state was written (persist merges shallowly)
         s.ai.lenses ??= ["transcription"];
+        s.pinnedTabs ??= [];
         s.ui.showNotices ??= true;
         s.ui.hiddenLenses ??= [];
         s.ui.lanePattern ??= false;

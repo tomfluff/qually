@@ -28,6 +28,7 @@
   width:100%; box-sizing:border-box; }
 .ctxmenu .ctxform textarea { line-height:1.4; resize:none; overflow-y:auto;
   max-height:calc(1.4em * 3 + 14px); }
+.ctxmenu .ctxerr { color:#e0554f; font-size:.9em; padding:0 2px; }
 .ctxmenu .ctxrow { display:flex; gap:6px; }
 .ctxmenu .ctxrow .btn { flex:1; justify-content:center; font-size:inherit; }
 
