@@ -7,22 +7,42 @@ import { Icon } from "./Icon";
 
 // The prompt a user pastes into an AI (ChatGPT / Claude) to turn any transcript
 // into the CSV this app imports. Kept in sync with DATA-FORMAT.md.
-const AI_PROMPT = `You are a data-formatting assistant. Convert my interview/session transcript into a CSV for a qualitative-coding app. Write a small Python 3 script (standard library only, using the csv module) that reads my transcript from a file named input.txt in the same folder and writes transcript.csv with EXACTLY these columns, in this order:
+const AI_PROMPT = `You are a data-formatting assistant. Convert my interview/session transcript into a CSV
+for a qualitative-coding app. Write a Python 3 script (standard library only, csv module)
+that reads input.txt in the same folder and writes transcript.csv with EXACTLY these
+columns, in this order:
 
 line_id,timestamp,speaker,text,codes
 
-The script must:
-- Write one row per spoken line / utterance.
+Requirements:
+- One row per digestible chunk of speech, not per whole speaker turn.
+  * Always start a new row when the speaker changes.
+  * If the transcript already contains timecodes INSIDE a long turn, honor them:
+    each mid-turn timecode starts a new row, with that timecode as its timestamp.
+    The same speaker may therefore appear on several consecutive rows.
+  * If a long turn has no mid-turn timecodes, split it anyway at the finest
+    time-stamped boundary the format offers (per-segment timings, cue anchors, etc.),
+    once a row passes ~300 characters, preferring a break after a sentence end.
+    Hard-cut at ~600 characters if no sentence end appears. Never split mid-segment
+    and never invent a timestamp — every row's timestamp must come from a real
+    boundary in the source.
 - line_id: sequential integers starting at 1.
-- timestamp: the line's start time as H:MM:SS or MM:SS (drop any milliseconds). Leave empty if a line has no time.
-- speaker: a consistent label per speaker — a name is fine, it need not be short. Reuse the exact same label for the same speaker. To have the interviewer's lines auto-dimmed in the app, label them exactly "R" or "Interviewer"; participant names (e.g. "Rachel") are left as participants.
-- text: the spoken text for that line, whitespace-trimmed.
+- timestamp: that row's start time as H:MM:SS, or MM:SS under an hour. Drop milliseconds.
+  Empty if the row has no time.
+- speaker: consistent label per speaker; reuse the exact same label. If the source uses
+  speaker codes (S01, S2, A15, SPEAKER_01, ...), prompt me for a real name for each code,
+  showing two sample lines from that speaker so I can tell them apart. Blank input keeps
+  the code.
+- text: spoken text, whitespace-trimmed, with any speaker-label prefix and inline
+  timecode markers removed.
 - codes: always empty.
-- Use Python's csv.writer so any field containing a comma, quote, or newline is correctly quoted (RFC 4180). Write the header row first.
-- Print the first 5 output rows so I can sanity-check.
+- Use csv.writer so fields containing commas, quotes, or newlines are correctly quoted
+  (RFC 4180). Header row first.
+- Print the row count and the first 5 output rows for a sanity check.
+- Leave the chunk-size thresholds as named constants at the top so I can tune them.
 
-Adapt the parsing to my transcript, which looks like this:
-<<< paste a short sample of your transcript here >>>`;
+Adapt the parsing to my transcript format: 
+<<paste or attach a sample>>`;
 
 const EXAMPLE_CSV = `line_id,timestamp,speaker,text,codes
 1,00:00:03,R,So how do you usually read a chart?,
