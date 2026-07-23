@@ -351,10 +351,14 @@ export function TranscriptView() {
     for (const l of transcript?.lines ?? []) {
       const f = aiFlags[`${active}:${l.id}`];
       if (!f || !f.spans.length || f.hash !== hashLine(l.text)) continue;
-      // transcription errors always show (they feed the line editor); noticings can
-      // be hidden wholesale (the eye) or per lens (the eye's dropdown)
-      const spans = f.spans.filter((s) => spanLens(s) === "transcription"
-        || (showNotices && !hiddenLenses.includes(spanLens(s))));
+      // noticings hide wholesale (the eye) or per lens (the eye's dropdown);
+      // transcription errors have their own dropdown entry and IGNORE the eye —
+      // hiding "AI noticings" to read blind shouldn't also hide repair marks
+      const spans = f.spans.filter((s) => {
+        const lens = spanLens(s);
+        if (lens === "transcription") return !hiddenLenses.includes("transcription");
+        return showNotices && !hiddenLenses.includes(lens);
+      });
       if (spans.length) m.set(l.id, spans);
     }
     return m;
@@ -785,7 +789,7 @@ export function TranscriptView() {
           <div className="vpad vpad-bot" key="vpad-bot" style={{ height: pad ?? MIN_PAD }} />, // headroom after the last line
         ]}
       </VList>
-      <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
+      <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(64, Math.min(256, w)) })} />
       <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
         closeCallSids={closeCallSids} flagsByLine={flagsByLine}
         detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims} />

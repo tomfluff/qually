@@ -984,6 +984,8 @@ export const useStore = create<State>()(
         s.ui.scrollSpeed ??= 1;
         s.ui.loopEdit ??= true;
         s.ui.loopSpeed ??= 0.75;
+        // bounds moved (44–160 → 64–256): pull an old persisted width into range
+        s.ui.minimapWidth = Math.max(64, Math.min(256, s.ui.minimapWidth ?? 66));
         s.ui.speakerFocus ??= null;
         s.ui.speakerFocusMode ??= "dim";
         s.ui.speakerColors ??= {};

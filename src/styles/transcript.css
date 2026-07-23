@@ -81,12 +81,13 @@
    font's own scale each way — and colour only reinforces the quiet end. */
 .lineRow.spk-quiet .txt { font-weight:300; color:var(--fg-dim); }
 .lineRow.spk-bold .txt { font-weight:600; }
-/* speaker focus: everyone else steps back — the WHOLE row (chips, lanes, text)
-   drops via opacity. A deliberate exception to the no-opacity rule (base.css):
-   this is a user-chosen filter state, not resting chrome, and the owner asked
-   for the entire line to recede as one. "collapse" additionally folds the row
-   to one ellipsised line, keeping the conversation's skeleton without its bulk. */
-.lineRow.spk-off-dim, .lineRow.spk-off-collapse { opacity:.4; }
+/* speaker focus: everyone else steps back — chips and text drop via opacity, but
+   the LANES stay at full strength: a segment's coding is about the code, not the
+   speaker, and dimming it would misread as a rejected/candidate state. (Opacity
+   here is a deliberate exception to the no-opacity rule — user-chosen filter
+   state, owner's call.) "collapse" additionally folds the row to one ellipsised
+   line, keeping the conversation's skeleton without its bulk. */
+.lineRow.spk-off-dim > :not(.lanes), .lineRow.spk-off-collapse > :not(.lanes) { opacity:.4; }
 .lineRow.spk-off-collapse .txt { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .lineRow .txt { flex:1; line-height:1.45; font-family:var(--read-font); }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */

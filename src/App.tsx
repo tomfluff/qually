@@ -36,15 +36,15 @@ function NoticeToggle() {
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, () => setMenu(false), { enabled: menu });
-  // which noticing lenses actually have marks here — the dropdown lists only these
+  // which lenses actually have marks here — the dropdown lists only these
+  // (transcription included: its errors are toggleable from the menu too)
   const presentLenses = useMemo(() => {
     const p = new Set<string>();
     for (const [k, v] of Object.entries(aiFlags))
       if (k.startsWith(`${active}:`)) for (const sp of v.spans) p.add(spanLens(sp));
-    p.delete("transcription");
     return LENSES.filter((l) => p.has(l.id));
   }, [aiFlags, active]);
-  if (!presentLenses.length) return null;
+  if (!presentLenses.some((l) => l.id !== "transcription")) return null;
   const toggleLens = (id: string) =>
     useStore.getState().setUi({
       hiddenLenses: hiddenLenses.includes(id)
@@ -65,16 +65,22 @@ function NoticeToggle() {
       {menu && (
         <div className="noticemenu" role="group" aria-label="Noticings shown"
           style={{ fontSize: sidebarFontSize }}>
-          {presentLenses.map((l) => (
-            <label key={l.id} className={show ? "" : "off"}>
-              <input type="checkbox" disabled={!show}
-                checked={show && !hiddenLenses.includes(l.id)}
-                onChange={() => toggleLens(l.id)} />
-              <span className="lensdot" style={{ background: l.color }} />
-              <span className="lenslabel">{l.label}</span>
-            </label>
-          ))}
-          {!show && <div className="noticemenu-note">All noticings are hidden (the eye)</div>}
+          {presentLenses.map((l) => {
+            // transcription errors ignore the eye (it hides NOTICINGS) — their
+            // checkbox stays live even while reading blind
+            const t = l.id === "transcription";
+            const active = t ? true : show;
+            return (
+              <label key={l.id} className={active ? "" : "off"}>
+                <input type="checkbox" disabled={!active}
+                  checked={active && !hiddenLenses.includes(l.id)}
+                  onChange={() => toggleLens(l.id)} />
+                <span className="lensdot" style={{ background: l.color }} />
+                <span className="lenslabel">{l.label}</span>
+              </label>
+            );
+          })}
+          {!show && <div className="noticemenu-note">Noticings are hidden (the eye)</div>}
         </div>
       )}
     </div>
