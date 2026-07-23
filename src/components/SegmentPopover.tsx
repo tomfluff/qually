@@ -36,7 +36,11 @@ export function SegmentPopover({ sid, x, y, onClose }: {
   };
 
   useClampToViewport(ref, [sidebarFontSize]);
-  useDismiss(ref, onClose);
+  // let mousedowns on this segment's own lane through: the lane's click handler
+  // toggles the popover, and dismissing here first would make it reopen instead
+  const isOwnLane = useCallback(
+    (e: MouseEvent) => !!(e.target as Element | null)?.closest?.(`[data-sid="${sid}"]`), [sid]);
+  useDismiss(ref, onClose, { ignore: isOwnLane });
 
   useEffect(() => {
     // Ctrl+C while the popover is open copies the segment (App's copy handler defers to us)

@@ -12,7 +12,8 @@
 .bCode:hover { background:var(--sel); }
 .bCode.sel { background:var(--sel); }
 .bCodeMain { display:flex; align-items:center; gap:8px; line-height:1; }
-.bCodeName { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bCodeName { overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  line-height:normal; } /* NOT the row's line-height:1 — overflow:hidden at 1em clips descenders (g y p) */
 .bCodeMain .cnt { margin-left:auto; color:var(--muted); font-size:.8em; flex-shrink:0; }
 .bCodeDef { color:var(--muted); font-size:.78em; line-height:1.3; padding-left:13px; }
 .bGroup { margin-bottom:22px; }

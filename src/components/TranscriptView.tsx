@@ -9,7 +9,7 @@ import { AiMarkPopover } from "./AiMarkPopover";
 import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
-import { seekVideo, loopLine } from "../video/seek";
+import { seekVideo, loopLine, hasVideo } from "../video/seek";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
@@ -198,6 +198,12 @@ export function TranscriptView() {
 
   // merged display units (singletons when the toggle is off)
   const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
+  // speaker focus (Settings → Speakers): a focus name not present in THIS
+  // transcript is ignored rather than dimming every row
+  const focusActive = useMemo(
+    () => ui.speakerFocus && groups.some((g) => g.speaker.trim() === ui.speakerFocus)
+      ? ui.speakerFocus : null,
+    [groups, ui.speakerFocus]);
   groupsRef.current = groups; // syncMinimap runs outside render and needs the current groups
 
   // min/max of the selection, walked ONCE when it changes rather than on every scroll
@@ -299,12 +305,22 @@ export function TranscriptView() {
       raf = requestAnimationFrame(step);
     };
     const onWheel = (e: WheelEvent) => {
-      if (!smooth() || e.ctrlKey) return; // ctrl+wheel is browser zoom, not ours to take
+      if (e.ctrlKey) return; // ctrl+wheel is browser zoom, not ours to take
+      const mult = useStore.getState().ui.scrollSpeed || 1;
+      if (!smooth() && mult === 1) return; // nothing to do: native scroll is right
       // ponytail: |delta| is the only cheap tell between a wheel click and a trackpad
       // swipe. Trackpads already scroll pixel-by-pixel — smoothing them just adds lag —
       // so only the chunky events get chased. If a device lands wrong, this is the knob.
-      const px = e.deltaMode === 1 ? e.deltaY * fontSize * ROW_RATIO : e.deltaY;
-      if (Math.abs(px) < WHEEL_MIN) return;
+      const raw = e.deltaMode === 1 ? e.deltaY * fontSize * ROW_RATIO : e.deltaY;
+      const px = raw * mult; // the Settings "scroll distance" knob scales every device
+      if (!smooth() || Math.abs(raw) < WHEEL_MIN) {
+        // no chase for this event (smoothing off, or a trackpad's pixel stream) —
+        // but a non-1 multiplier still has to scale it, directly
+        if (mult === 1) return;
+        e.preventDefault();
+        el.scrollTop = Math.max(0, Math.min(el.scrollTop + px, el.scrollHeight - el.clientHeight));
+        return;
+      }
       e.preventDefault();
       cancelAnimationFrame(tween.current); gliding.current = false; // a keyboard glide loses to the hand on the wheel
       const max = el.scrollHeight - el.clientHeight;
@@ -329,16 +345,20 @@ export function TranscriptView() {
   // hidden (the eye toggle: read/code blind), only transcription flags remain.
   const aiFlags = useStore((s) => s.aiFlags);
   const showNotices = useStore((s) => s.ui.showNotices);
+  const hiddenLenses = useStore((s) => s.ui.hiddenLenses);
   const flagsByLine = useMemo(() => {
     const m = new Map<number, Flag[]>();
     for (const l of transcript?.lines ?? []) {
       const f = aiFlags[`${active}:${l.id}`];
       if (!f || !f.spans.length || f.hash !== hashLine(l.text)) continue;
-      const spans = showNotices ? f.spans : f.spans.filter((s) => spanLens(s) === "transcription");
+      // transcription errors always show (they feed the line editor); noticings can
+      // be hidden wholesale (the eye) or per lens (the eye's dropdown)
+      const spans = f.spans.filter((s) => spanLens(s) === "transcription"
+        || (showNotices && !hiddenLenses.includes(spanLens(s))));
       if (spans.length) m.set(l.id, spans);
     }
     return m;
-  }, [aiFlags, transcript, active, showNotices]);
+  }, [aiFlags, transcript, active, showNotices, hiddenLenses]);
 
   // The mark popover holds a SNAPSHOT of its span — close it when that span is no
   // longer in the flag set (a scan finished and replaced the flags, an undo, the
@@ -729,11 +749,15 @@ export function TranscriptView() {
               key={g.startId}
               group={g}
               selected={g.ids.some((id) => selLines?.has(id))}
+              spkOff={focusActive && focusActive !== g.speaker.trim() ? ui.speakerFocusMode : null}
               cols={cols}
               laned={laned}
               codebook={codebook}
               onRowDown={(e) => onRowDown(e, g.startId)}
-              onLaneClick={(seg, e) => setPop({ sid: seg.sid, x: e.clientX, y: e.clientY })}
+              onLaneClick={(seg, e) =>
+                // clicking the segment's own lane while its popover is open closes it
+                // (useDismiss ignores this lane, so the mousedown doesn't close-then-reopen)
+                setPop((p) => p && p.sid === seg.sid ? null : { sid: seg.sid, x: e.clientX, y: e.clientY })}
               onGripDown={dragEdge}
               onLaneHover={onLaneHover}
               hl={hl}
@@ -778,9 +802,10 @@ export function TranscriptView() {
   );
 }
 
-function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
+  spkOff: "dim" | "collapse" | null; // speaker focus: how a NON-focused speaker's row steps back
   cols: number;
   laned: LanedSeg[];
   codebook: Record<string, { color: string }>;
@@ -863,7 +888,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
     lanes.push(
       // a real (keyboard-reachable) control on the segment's FIRST line only: one Tab
       // stop per segment opens its popover; the continuation bars stay decorative
-      <span key={i} className={cls} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cand ? ` — suggested by ${seg.proposedBy}` : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
+      <span key={i} className={cls} data-sid={seg.sid} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cand ? ` — suggested by ${seg.proposedBy}` : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
         style={style}
         {...(isStart ? {
           role: "button" as const, tabIndex: 0,
@@ -892,7 +917,7 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
   const merged = startId !== endId;
 
   return (
-    <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
+    <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + (spkOff ? ` spk-off-${spkOff}` : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
       id={`trow-${startId}`}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
       style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
@@ -939,14 +964,15 @@ function Row({ group, selected, cols, laned, codebook, onRowDown, onLaneClick, o
 }
 
 // Inline transcription repair (dblclick a line). While open, the loaded media —
-// if any — loops this utterance at 0.75× so the fix is made against the audio,
+// if any — loops this utterance (a Settings toggle; the editbar button starts and
+// stops it, the dock's speed control applies) so the fix is made against the audio,
 // not from memory. Enter saves, Esc cancels, blur saves (it's a typo fix, losing
 // it to a stray click would hurt more than keeping it).
 function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | null; onDone: () => void }) {
   const [value, setValue] = useState(line.text);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const looping = useRef<(() => void) | null>(null);
-  const [hasAudio, setHasAudio] = useState(false);
+  const [loopOn, setLoopOn] = useState(false);
 
   useEffect(() => {
     const ta = taRef.current;
@@ -955,11 +981,19 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
       ta.setSelectionRange(ta.value.length, ta.value.length);
       ta.style.height = "auto"; ta.style.height = `${ta.scrollHeight}px`;
     }
-    looping.current = loopLine(line.ts, nextTs);
-    setHasAudio(looping.current !== null);
+    // auto-loop is a Settings choice now; the editbar button starts it either way
+    if (useStore.getState().ui.loopEdit) {
+      looping.current = loopLine(line.ts, nextTs);
+      setLoopOn(looping.current !== null);
+    }
     return () => { looping.current?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const toggleLoop = () => {
+    if (looping.current) { looping.current(); looping.current = null; setLoopOn(false); }
+    else { looping.current = loopLine(line.ts, nextTs); setLoopOn(looping.current !== null); }
+  };
 
   const save = (text: string) => {
     const t = text.trim();
@@ -978,7 +1012,14 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
         onBlur={() => save(value)} />
       <span className="editbar">
         <kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel
-        {hasAudio && <span className="editloop">▶ looping {line.ts.split(".")[0]} · 0.75×</span>}
+        {hasVideo() && (
+          // mousedown preventDefault: the textarea must NOT blur (blur saves + closes)
+          <button className={"editloop" + (loopOn ? " on" : "")} onMouseDown={(e) => e.preventDefault()}
+            onClick={toggleLoop} aria-pressed={loopOn}
+            title={loopOn ? "Stop looping this utterance" : "Loop this utterance while you edit"}>
+            {loopOn ? "⏸ stop loop" : "▶ loop"} {line.ts.split(".")[0]}
+          </button>
+        )}
         {line.orig !== undefined && (
           <button className="editrevert" onMouseDown={(e) => e.preventDefault()}
             onClick={() => save(line.orig!)}>

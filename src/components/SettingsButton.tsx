@@ -33,6 +33,8 @@ export function SettingsButton() {
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const smoothScroll = useStore((s) => s.ui.smoothScroll);
+  const scrollSpeed = useStore((s) => s.ui.scrollSpeed);
+  const loopEdit = useStore((s) => s.ui.loopEdit);
   const claimUnattributed = useStore((s) => s.claimUnattributed);
   const setUi = useStore((s) => s.setUi);
   const dark = useStore((s) => s.ui.dark);
@@ -156,6 +158,22 @@ export function SettingsButton() {
                   </div>
                 </div>
                 <div className="settings-note">Eases the mouse wheel, and animates Home/End, PageUp/PageDown and jumps to a line — so you can see where you moved to rather than arriving there. Overrides your system's reduced-motion setting, which otherwise turns all of it off.</div>
+                <label className="srow">
+                  <span>Scroll distance</span>
+                  <input type="range" min={0.25} max={3} step={0.25} value={scrollSpeed}
+                    onChange={(e) => setUi({ scrollSpeed: +e.target.value })} />
+                  <span className="sval">{scrollSpeed}×</span>
+                  <button className="sreset" onClick={(e) => { e.preventDefault(); setUi({ scrollSpeed: 1 }); }} title="Reset to 1×">reset</button>
+                </label>
+                <div className="settings-note">How far one wheel click moves the transcript. 1× is your device's default.</div>
+                <div className="srow">
+                  <span>Loop audio on edit</span>
+                  <div className="seg">
+                    <button className={!loopEdit ? "on" : ""} onClick={() => setUi({ loopEdit: false })}>off</button>
+                    <button className={loopEdit ? "on" : ""} onClick={() => setUi({ loopEdit: true })}>on</button>
+                  </div>
+                </div>
+                <div className="settings-note">When editing a line, loop its utterance in the loaded media so you fix it against the audio. The edit bar can start/stop the loop either way; the video dock's speed control applies.</div>
                 <div className="srow">
                   <span>Minimap</span>
                   <div className="seg">
@@ -246,6 +264,7 @@ function SpeakerRows() {
 
   const setWeight = (sp: string, w: SpeakerWeight) =>
     setUi({ speakerWeight: { ...ui.speakerWeight, [sp]: w } });
+  const focus = ui.speakerFocus;
 
   return (
     <>
@@ -271,13 +290,32 @@ function SpeakerRows() {
                   onClick={() => setWeight(sp, id)}>A</button>
               ))}
             </div>
+            <button className={"spkfocus" + (focus === sp ? " on" : "")}
+              aria-pressed={focus === sp}
+              aria-label={focus === sp ? "Show everyone" : `Focus on ${sp}'s dialogue`}
+              data-tip={focus === sp ? "Show everyone" : `Focus on ${sp}`}
+              onClick={() => setUi({ speakerFocus: focus === sp ? null : sp })}>
+              <Icon name="target" size={14} />
+            </button>
           </div>
         );
       })}
+      {focus && (
+        <div className="srow">
+          <span>Others</span>
+          <div className="seg">
+            <button className={ui.speakerFocusMode === "dim" ? "on" : ""}
+              onClick={() => setUi({ speakerFocusMode: "dim" })}>dim</button>
+            <button className={ui.speakerFocusMode === "collapse" ? "on" : ""}
+              onClick={() => setUi({ speakerFocusMode: "collapse" })}>collapse</button>
+          </div>
+        </div>
+      )}
       <div className="settings-note">
         Click a swatch to recolour. Set how loudly each speaker's words are set: <b>quiet</b>{" "}
         for the interviewer, so the participants carry the page — <b>bold</b> for whoever
-        you're following. Guessed on import; correct it here.
+        you're following. Guessed on import; correct it here. The target focuses one
+        speaker's dialogue: everyone else is <b>dimmed</b>, or <b>collapsed</b> to one line.
       </div>
     </>
   );

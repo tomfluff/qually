@@ -16,6 +16,7 @@ export function CommandPalette() {
   const open = useStore((s) => s.paletteOpen);
   const selCount = useStore((s) => s.selection.lines.size);
   const palettePos = useStore((s) => s.ui.palettePos);
+  const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const setPalette = useStore((s) => s.setPalette);
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; listMax: number } | null>(null);
 
@@ -51,10 +52,13 @@ export function CommandPalette() {
     <div className={"palette-backdrop" + (anchored ? " anchored" : "")} onMouseDown={close}>
       <div className={"palette" + (anchored ? " palette-anchored" : "")}
         role="dialog" aria-label="Code palette"
-        style={anchored ? {
-          position: "fixed", left: pos!.left, top: pos!.top, bottom: pos!.bottom, width: W,
-          "--ac-max": `${pos!.listMax}px`,
-        } as CSSProperties : undefined}
+        style={{
+          fontSize: sidebarFontSize, // sized like the sidebar/popovers (children are em-based)
+          ...(anchored ? {
+            position: "fixed", left: pos!.left, top: pos!.top, bottom: pos!.bottom, width: W,
+            "--ac-max": `${pos!.listMax}px`,
+          } : null),
+        } as CSSProperties}
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="palette-head">
           {selCount > 0

@@ -100,3 +100,10 @@
 [data-theme=dark] .set-modal .wseg button.on { color:#12161a; }
 .set-modal .wseg button:first-child { border-radius:6px 0 0 6px; }
 .set-modal .wseg button:last-child { border-radius:0 6px 6px 0; }
+/* speaker focus target: isolate one speaker's dialogue in the transcript */
+.set-modal .spkfocus { display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:28px; flex-shrink:0; border:1px solid var(--line); border-radius:6px;
+  background:var(--bg); color:var(--muted); cursor:pointer; }
+.set-modal .spkfocus:hover { border-color:var(--accent); color:var(--fg); }
+.set-modal .spkfocus.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+[data-theme=dark] .set-modal .spkfocus.on { color:#12161a; }

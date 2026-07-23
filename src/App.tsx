@@ -21,8 +21,9 @@ import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
 import { AUTHOR_AVATAR } from "./assets/avatar";
-import { spanLens } from "./ai/flag";
-import { useMemo } from "react";
+import { LENSES, spanLens } from "./ai/flag";
+import { useMemo, useRef } from "react";
+import { useDismiss } from "./usePopover";
 
 // Show/hide the AI noticing highlights — the blind-reading control. Only appears
 // once the active transcript actually has notices, so it costs no chrome before.
@@ -30,18 +31,53 @@ function NoticeToggle() {
   const active = useStore((s) => s.active);
   const aiFlags = useStore((s) => s.aiFlags);
   const show = useStore((s) => s.ui.showNotices);
-  const hasNotices = useMemo(
-    () => Object.entries(aiFlags).some(([k, v]) =>
-      k.startsWith(`${active}:`) && v.spans.some((sp) => spanLens(sp) !== "transcription")),
-    [aiFlags, active]
-  );
-  if (!hasNotices) return null;
+  const hiddenLenses = useStore((s) => s.ui.hiddenLenses);
+  const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
+  const [menu, setMenu] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(ref, () => setMenu(false), { enabled: menu });
+  // which noticing lenses actually have marks here — the dropdown lists only these
+  const presentLenses = useMemo(() => {
+    const p = new Set<string>();
+    for (const [k, v] of Object.entries(aiFlags))
+      if (k.startsWith(`${active}:`)) for (const sp of v.spans) p.add(spanLens(sp));
+    p.delete("transcription");
+    return LENSES.filter((l) => p.has(l.id));
+  }, [aiFlags, active]);
+  if (!presentLenses.length) return null;
+  const toggleLens = (id: string) =>
+    useStore.getState().setUi({
+      hiddenLenses: hiddenLenses.includes(id)
+        ? hiddenLenses.filter((x) => x !== id) : [...hiddenLenses, id],
+    });
   return (
-    <button className="noticetoggle" onClick={() => useStore.getState().setUi({ showNotices: !show })}
-      aria-label={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}
-      title={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}>
-      <Icon name={show ? "eye" : "eye-off"} size={17} />
-    </button>
+    <div className="noticewrap" ref={ref}>
+      <button className="noticetoggle" onClick={() => useStore.getState().setUi({ showNotices: !show })}
+        aria-label={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}
+        title={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}>
+        <Icon name={show ? "eye" : "eye-off"} size={17} />
+      </button>
+      <button className="noticemore" onClick={() => setMenu((m) => !m)}
+        aria-expanded={menu} aria-haspopup="menu"
+        aria-label="Choose which noticings are shown" title="Choose which noticings are shown">
+        <Icon name={menu ? "chevron-up" : "chevron-down"} size={13} />
+      </button>
+      {menu && (
+        <div className="noticemenu" role="group" aria-label="Noticings shown"
+          style={{ fontSize: sidebarFontSize }}>
+          {presentLenses.map((l) => (
+            <label key={l.id} className={show ? "" : "off"}>
+              <input type="checkbox" disabled={!show}
+                checked={show && !hiddenLenses.includes(l.id)}
+                onChange={() => toggleLens(l.id)} />
+              <span className="lensdot" style={{ background: l.color }} />
+              {l.label}
+            </label>
+          ))}
+          {!show && <div className="noticemenu-note">All noticings are hidden (the eye)</div>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -62,6 +98,7 @@ export function App() {
   const minimapWidth = useStore((s) => s.ui.minimapWidth);
   const fontFamily = useStore((s) => s.ui.fontFamily);
   const zen = useStore((s) => s.ui.zen);
+  const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const searchOpen = useStore((s) => s.search.open);
 
   useEffect(() => {
@@ -208,8 +245,9 @@ export function App() {
       {active !== "browse" && <HotbarDock />}
       <VideoDock />
       {zen && (
-        <button className="zenexit" onClick={() => useStore.getState().setZen(false)}>
-          <Icon name="x" size={13} /> Exit zen <kbd>Esc</kbd>
+        <button className="zenexit" style={{ fontSize: sidebarFontSize }}
+          onClick={() => useStore.getState().setZen(false)}>
+          <Icon name="x" size={sidebarFontSize + 1} /> Exit zen <kbd>Esc</kbd>
         </button>
       )}
       <CommandPalette />

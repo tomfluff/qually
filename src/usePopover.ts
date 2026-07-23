@@ -14,17 +14,23 @@ import { useEffect, useLayoutEffect, type DependencyList, type RefObject } from 
 // closed (the color picker host renders null but its hooks still run).
 // onEscape: when Escape should do something gentler than a full close (CodeMenu
 // steps a sub-form back to the menu; an outside click still closes outright).
+// ignore: outside-mousedowns this predicate claims are left alone — for a
+// trigger that toggles the popover itself (the segment's own lane bar), where
+// dismiss-on-mousedown would close it just before the click reopens it.
 export function useDismiss(
   ref: RefObject<HTMLElement | null>,
   onClose: () => void,
-  opts?: { capture?: boolean; enabled?: boolean; onEscape?: () => void },
+  opts?: { capture?: boolean; enabled?: boolean; onEscape?: () => void; ignore?: (e: MouseEvent) => boolean },
 ) {
   const capture = opts?.capture ?? false;
   const enabled = opts?.enabled ?? true;
   const onEscape = opts?.onEscape ?? onClose;
+  const ignore = opts?.ignore;
   useEffect(() => {
     if (!enabled) return;
-    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const down = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node) && !ignore?.(e)) onClose();
+    };
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onEscape(); } };
     document.addEventListener("mousedown", down, capture);
     document.addEventListener("keydown", esc, true);
@@ -32,7 +38,7 @@ export function useDismiss(
       document.removeEventListener("mousedown", down, capture);
       document.removeEventListener("keydown", esc, true);
     };
-  }, [ref, onClose, onEscape, capture, enabled]);
+  }, [ref, onClose, onEscape, capture, enabled, ignore]);
 }
 
 // Clamp: the popovers are em-sized and scale with the sidebar text setting, so

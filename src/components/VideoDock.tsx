@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal, flushSync } from "react-dom";
 import { useStore } from "../state/store";
 import { registerVideo, tsToSec } from "../video/seek";
+import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
 
 // bottom-anchored so expanding/collapsing grows and shrinks upward
 interface Geom { x: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
 const DEFAULT: Geom = { x: null, bottom: null, w: 380, collapsed: true, rate: 1 };
-const SPEEDS = [0.75, 1, 1.5, 2];
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
   try { return { ...DEFAULT, ...JSON.parse(localStorage.getItem("coding-app-dock") || "{}") }; }
@@ -26,8 +27,16 @@ export function VideoDock() {
   const [geom, setGeom] = useState<Geom>(loadGeom);
   const [media, setMedia] = useState<Record<string, { url: string; name: string }>>({});
   const [playing, setPlaying] = useState(false);
+  // anchor coords, not a boolean: the menu renders position:fixed at the button's
+  // corner because .vdock's overflow:hidden would clip a child that pokes above it
+  const [speedMenu, setSpeedMenu] = useState<{ x: number; y: number } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const speedRef = useRef<HTMLDivElement>(null);
+  // the menu is portaled out of speedRef (see below), so contains() can't claim
+  // it — the ignore predicate keeps a mousedown on the menu from closing it
+  const inSpeedMenu = useCallback((e: MouseEvent) => !!(e.target as Element | null)?.closest?.(".vspeedmenu"), []);
+  useDismiss(speedRef, () => setSpeedMenu(null), { enabled: speedMenu !== null, ignore: inSpeedMenu });
   // Where each tab's media was last at. One <video> element serves every tab, so switching
   // tabs swaps its src and resets currentTime to 0 — this remembers each tab's position so
   // returning to it resumes where you left off. `switching` guards the reset: on a source
@@ -87,7 +96,8 @@ export function VideoDock() {
   // There is no handoff left to flicker.
   const startDrag = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button,input")) return;
-    const el = (e.currentTarget as HTMLElement).parentElement as HTMLElement;
+    // closest, not parentElement: both bars drag now (vhead sits on .vdock, vctrl on .vbody)
+    const el = (e.currentTarget as HTMLElement).closest(".vdock") as HTMLElement;
     const r = el.getBoundingClientRect();
     // If the dock has never been dragged it sits on the CSS default (right:24/bottom:24)
     // with no transform. Convert to transform positioning NOW, before any movement —
@@ -199,8 +209,9 @@ export function VideoDock() {
       {cur ? (
         <div className="vbody">
           {!geom.collapsed && (
-            <div className="vctrl">
-              {/* top control: find the current playback position in the transcript */}
+            <div className="vctrl" onMouseDown={startDrag}>
+              {/* top control: find the current playback position in the transcript.
+                  The strip is also a drag handle (like vhead) — buttons/inputs opt out. */}
               <button className="vbtn accent" onClick={syncToLine}
                 title="Select the transcript line playing now, and scroll to it">
                 <Icon name="target" size={15} /> Jump to line
@@ -237,19 +248,38 @@ export function VideoDock() {
       ))}
 
       <div className="vhead" onMouseDown={startDrag}>
+        <span className="vgrip" aria-hidden="true"><Icon name="grip-horizontal" size={14} /></span>
         <span className="vtitle">{cur ? cur.name : `video · ${pid}`}</span>
         <span style={{ flex: 1 }} />
         {cur && (
           <>
-            <button className="vbtn icononly" onClick={togglePlay} title="Play / pause"
+            <button className="vbtn playbtn" onClick={togglePlay} title="Play / pause"
               aria-label={playing ? "Pause" : "Play"}>
-              <Icon name={playing ? "pause" : "play"} size={15} />
+              <Icon name={playing ? "pause" : "play"} size={13} />
             </button>
-            <div className="vspeeds">
-              {SPEEDS.map((s) => (
-                <button key={s} className={"vbtn speed" + (geom.rate === s ? " on" : "")}
-                  onClick={() => setRate(s)} title={`${s}× speed`}>{s}×</button>
-              ))}
+            {/* speed lives in a popover now — ten steps would not fit as pills */}
+            <div className="vspeedwrap" ref={speedRef}>
+              <button className={"vbtn speed" + (speedMenu ? " on" : "")}
+                onClick={(e) => {
+                  // rect BEFORE setState: React nulls currentTarget after dispatch,
+                  // and the functional updater may run later than the handler
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setSpeedMenu((m) => m ? null : { x: r.right, y: r.top - 6 });
+                }} title="Playback speed"
+                aria-haspopup="menu" aria-expanded={speedMenu !== null}>{geom.rate}×</button>
+              {/* PORTALED to body: .vdock is overflow:hidden AND transformed, so a
+                  fixed child would position against the dock (not the viewport) and
+                  get clipped at its top edge. The dismiss hook's ignore predicate
+                  (above) covers the portal. */}
+              {speedMenu && createPortal(
+                <div className="vspeedmenu" role="menu" aria-label="Playback speed"
+                  style={{ left: speedMenu.x, top: speedMenu.y }}>
+                  {SPEEDS.map((s) => (
+                    <button key={s} role="menuitemradio" aria-checked={geom.rate === s}
+                      className={"vspeeditem" + (geom.rate === s ? " on" : "")}
+                      onClick={() => { setRate(s); setSpeedMenu(null); }}>{s}×</button>
+                  ))}
+                </div>, document.body)}
             </div>
           </>
         )}

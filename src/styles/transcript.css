@@ -77,6 +77,11 @@
    font's own scale each way — and colour only reinforces the quiet end. */
 .lineRow.spk-quiet .txt { font-weight:300; color:var(--fg-dim); }
 .lineRow.spk-bold .txt { font-weight:600; }
+/* speaker focus: everyone else steps back — by COLOUR, never opacity (see base.css).
+   "collapse" additionally folds the row to one ellipsised line, keeping the
+   conversation's skeleton without its bulk. */
+.lineRow.spk-off-dim .txt, .lineRow.spk-off-collapse .txt { color:var(--fg-dim); font-weight:300; }
+.lineRow.spk-off-collapse .txt { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .lineRow .txt { flex:1; line-height:1.45; font-family:var(--read-font); }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
 .lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;
@@ -183,7 +188,11 @@
   font-size:11px; color:var(--muted); padding:3px 2px 1px; }
 .editbar kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
   padding:0 4px; background:var(--panel); font:inherit; }
-.editloop { color:var(--accent); }
+/* a button now (start/stop the loop), styled like the quiet text it replaced */
+.editloop { color:var(--accent); background:none; border:none; font:inherit;
+  padding:0 2px; cursor:pointer; border-radius:4px; }
+.editloop:hover { background:var(--sel); }
+.editloop.on { font-weight:600; }
 .editrevert { border:0; background:none; font:inherit; color:var(--muted); cursor:pointer;
   font-style:italic; padding:0; }
 .editrevert:hover { color:var(--accent); }

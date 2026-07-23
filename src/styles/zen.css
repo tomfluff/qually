@@ -5,7 +5,8 @@
 .zenexit { position:fixed; top:10px; left:12px; z-index:60;
   display:inline-flex; align-items:center; gap:6px; padding:5px 11px;
   background:var(--panel); border:1px solid var(--line); border-radius:999px;
-  color:var(--muted); font:inherit; font-size:12px; line-height:1; cursor:pointer;
+  color:var(--muted); font:inherit; line-height:1; cursor:pointer;
+  /* font-size comes inline from ui.sidebarFontSize (like the popovers) */
   box-shadow:0 2px 10px rgba(0,0,0,.16); transition:color .15s, border-color .15s; }
 /* was opacity:.5, i.e. ~1.9:1 — the ONLY way out of zen mode was the least
    readable thing on screen. Full-strength muted, and it dims nothing. */

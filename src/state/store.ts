@@ -40,8 +40,13 @@ export interface Ui {
   minimapWidth: number; // transcript minimap width (px)
   minimapDetail: "detailed" | "simplified"; // minimap abstraction level
   showNotices: boolean; // AI noticing highlights visible (hide to read/code blind)
+  hiddenLenses: string[]; // noticing lenses filtered out while showNotices is on
   lanePattern: boolean; // give each code a pattern as well as a colour (see patternOf)
   smoothScroll: boolean; // animate Home/End/PageUp/PageDown and jumps instead of teleporting
+  scrollSpeed: number; // wheel distance multiplier for the transcript (1 = device default)
+  loopEdit: boolean; // loop the utterance's audio while its line is being edited
+  speakerFocus: string | null; // isolate one speaker's dialogue (null = everyone)
+  speakerFocusMode: "dim" | "collapse"; // how the OTHER speakers' lines step back
   speakerColors: Record<string, string>; // per-speaker overrides; unset = speakerColor()
   // How loudly each speaker's words are set. "quiet" is usually the interviewer, so the
   // participants carry the page; "bold" is the one you're following. Unset = normal.
@@ -217,6 +222,25 @@ function snapshot(s: State): string {
     sel: { ...s.selection, lines: [...s.selection.lines] },
   });
 }
+// Text edits get a TARGETED undo entry (kind:"line") instead of a full snapshot:
+// the snapshot above deliberately omits transcripts/aiFlags, and 80 copies of a
+// whole transcript would not be a stack, it would be a memory leak. The entry
+// holds the one line (with its orig) and the line's AI-flag record, so undoing
+// an applyFix brings back both the wording and the mark it consumed.
+function lineEntry(s: State, pid: string, id: number): string | null {
+  const line = s.transcripts[pid]?.lines.find((l) => l.id === id);
+  if (!line) return null;
+  return JSON.stringify({ kind: "line", pid, id, line, flags: s.aiFlags[`${pid}:${id}`] ?? null });
+}
+function restoreLine(get: () => State, set: (p: Partial<State>) => void,
+  o: { pid: string; id: number; line: Line; flags: LineFlags | null }) {
+  const t = get().transcripts[o.pid];
+  if (t) set({ transcripts: { ...get().transcripts, [o.pid]: { lines: t.lines.map((l) => l.id === o.id ? o.line : l) } } });
+  const flags = { ...get().aiFlags };
+  const key = `${o.pid}:${o.id}`;
+  if (o.flags) flags[key] = o.flags; else delete flags[key];
+  set({ aiFlags: flags });
+}
 function restore(get: () => State, set: (p: Partial<State>) => void, json: string) {
   const o = JSON.parse(json);
   const cur = get();
@@ -264,7 +288,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, lanePattern: false, smoothScroll: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, speakerFocus: null, speakerFocusMode: "dim",
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
@@ -566,10 +590,17 @@ export const useStore = create<State>()(
       // In-app transcription fix. The imported text is kept in `orig` (first edit
       // wins) so the correction is a recorded, revertible fact, not a silent change;
       // editing back to the original clears the flag. Line ids never change, so
-      // segments are untouched. Not on the undo stack — `orig` IS the undo.
+      // segments are untouched. On the undo stack as a targeted line entry (see
+      // lineEntry) — `orig` stays the RECORD of the change, Ctrl+Z steps it back.
       editLine: (pid, id, text) => {
-        const t = get().transcripts[pid];
-        if (!t) return;
+        const s = get();
+        const t = s.transcripts[pid];
+        const cur = t?.lines.find((l) => l.id === id);
+        if (!t || !cur || cur.text === text) return; // no change, no undo entry
+        const entry = lineEntry(s, pid, id)!;
+        const stack = [...s.undoStack, entry];
+        if (stack.length > 80) stack.shift();
+        set({ undoStack: stack, redoStack: [], selRun: false }); // same contract as pushUndo
         const lines = t.lines.map((l) => {
           if (l.id !== id || l.text === text) return l;
           const orig = l.orig ?? l.text;
@@ -850,18 +881,27 @@ export const useStore = create<State>()(
         set({ selRun: true });  // ...so claim it after
       },
       endSelGesture: () => set({ selRun: false }),
+      // Two entry kinds on one stack: full snapshots (coding edits) and targeted
+      // line entries (text edits). The opposite stack gets the SAME kind, capturing
+      // the same slice of state, so undo/redo round-trips whichever kind it meets.
       undo: () => {
         const s = get();
         if (!s.undoStack.length) return;
-        set({ redoStack: [...s.redoStack, snapshot(s)], undoStack: s.undoStack.slice(0, -1) });
-        restore(get, set, s.undoStack[s.undoStack.length - 1]);
+        const raw = s.undoStack[s.undoStack.length - 1];
+        const o = JSON.parse(raw);
+        const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? raw : snapshot(s);
+        set({ redoStack: [...s.redoStack, back], undoStack: s.undoStack.slice(0, -1) });
+        if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, raw);
         announce("Undone");
       },
       redo: () => {
         const s = get();
         if (!s.redoStack.length) return;
-        set({ undoStack: [...s.undoStack, snapshot(s)], redoStack: s.redoStack.slice(0, -1) });
-        restore(get, set, s.redoStack[s.redoStack.length - 1]);
+        const raw = s.redoStack[s.redoStack.length - 1];
+        const o = JSON.parse(raw);
+        const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? raw : snapshot(s);
+        set({ undoStack: [...s.undoStack, back], redoStack: s.redoStack.slice(0, -1) });
+        if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, raw);
         announce("Redone");
       },
 
@@ -937,8 +977,13 @@ export const useStore = create<State>()(
         // fields added after a persisted state was written (persist merges shallowly)
         s.ai.lenses ??= ["transcription"];
         s.ui.showNotices ??= true;
+        s.ui.hiddenLenses ??= [];
         s.ui.lanePattern ??= false;
         s.ui.smoothScroll ??= false;
+        s.ui.scrollSpeed ??= 1;
+        s.ui.loopEdit ??= true;
+        s.ui.speakerFocus ??= null;
+        s.ui.speakerFocusMode ??= "dim";
         s.ui.speakerColors ??= {};
         s.ui.speakerWeight ??= {};
         s.ui.fontFamily ??= "system";
