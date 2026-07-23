@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, clampMinimapWidth } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
@@ -10,6 +10,7 @@ import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
+import { useDismiss } from "../usePopover";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
@@ -198,12 +199,13 @@ export function TranscriptView() {
 
   // merged display units (singletons when the toggle is off)
   const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
-  // speaker focus (Settings → Speakers): a focus name not present in THIS
-  // transcript is ignored rather than dimming every row
+  // speaker focus (the target button, bottom right) — per transcript. A stale
+  // focus name no longer in THIS transcript is ignored rather than dimming
+  // every row (a re-import can rename speakers under a stored focus).
+  const focusName = ui.speakerFocus[active];
   const focusActive = useMemo(
-    () => ui.speakerFocus && groups.some((g) => g.speaker.trim() === ui.speakerFocus)
-      ? ui.speakerFocus : null,
-    [groups, ui.speakerFocus]);
+    () => focusName && groups.some((g) => g.speaker.trim() === focusName) ? focusName : null,
+    [groups, focusName]);
   groupsRef.current = groups; // syncMinimap runs outside render and needs the current groups
 
   // min/max of the selection, walked ONCE when it changes rather than on every scroll
@@ -764,7 +766,9 @@ export function TranscriptView() {
               key={g.startId}
               group={g}
               selected={g.ids.some((id) => selLines?.has(id))}
-              spkOff={focusActive && focusActive !== g.speaker.trim() ? ui.speakerFocusMode : null}
+              spkOff={focusActive && focusActive !== g.speaker.trim()
+                ? (ui.focusDim ? " spk-off-dim" : "") + (ui.focusCollapse ? " spk-off-collapse" : "")
+                : ""}
               cols={cols}
               laned={laned}
               codebook={codebook}
@@ -810,6 +814,7 @@ export function TranscriptView() {
             <Icon name={selOff === "up" ? "arrow-up" : "arrow-down"} size={ui.sidebarFontSize + 2} /> return
           </button>
         )}
+      <SpeakerFocus active={active} groups={groups} />
       </div>
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
       {aiPop && <AiMarkPopover pid={active} line={aiPop.line} span={aiPop.span}
@@ -821,7 +826,7 @@ export function TranscriptView() {
 function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
-  spkOff: "dim" | "collapse" | null; // speaker focus: how a NON-focused speaker's row steps back
+  spkOff: string; // speaker focus: class(es) a NON-focused speaker's row carries ("" = focused/none)
   cols: number;
   laned: LanedSeg[];
   codebook: Record<string, { color: string }>;
@@ -933,7 +938,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLane
   const merged = startId !== endId;
 
   return (
-    <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + (spkOff ? ` spk-off-${spkOff}` : "") + (selected ? " selected" : "") + (merged ? " merged" : "")}
+    <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + spkOff + (selected ? " selected" : "") + (merged ? " merged" : "")}
       id={`trow-${startId}`}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
       style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
@@ -984,6 +989,68 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLane
 // stops it, the dock's speed control applies) so the fix is made against the audio,
 // not from memory. Enter saves, Esc cancels, blur saves (it's a typo fix, losing
 // it to a stray click would hurt more than keeping it).
+// Focus one speaker's dialogue — a floating target button at the transcript's
+// bottom right (the eye-menu pattern, mirrored to the bottom). PER TRANSCRIPT:
+// focus is a lens on a study file, not a global. Only appears when the file
+// actually has more than one speaker.
+function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
+  const ui = useStore((s) => s.ui);
+  const setUi = useStore((s) => s.setUi);
+  const [menu, setMenu] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setMenu(false), []);
+  useDismiss(ref, close, { enabled: menu });
+  const speakers = useMemo(() => {
+    const seen: string[] = [];
+    for (const g of groups) { const sp = g.speaker.trim(); if (sp && !seen.includes(sp)) seen.push(sp); }
+    return seen;
+  }, [groups]);
+  if (speakers.length < 2) return null;
+  const focus = ui.speakerFocus[active];
+  const setFocus = (sp: string | null) => {
+    const next = { ...ui.speakerFocus };
+    if (sp) next[active] = sp; else delete next[active];
+    setUi({ speakerFocus: next });
+  };
+  return (
+    <div className="focuswrap" ref={ref}>
+      {menu && (
+        <div className="focusmenu" role="group" aria-label="Focus one speaker's dialogue"
+          style={{ fontSize: ui.sidebarFontSize }}>
+          <button className={"focusitem" + (!focus ? " on" : "")} onClick={() => setFocus(null)}>
+            <span className="focusname">Everyone</span>{!focus && " ✓"}
+          </button>
+          {speakers.map((sp) => (
+            <button key={sp} className={"focusitem" + (focus === sp ? " on" : "")}
+              onClick={() => setFocus(focus === sp ? null : sp)}>
+              <span className="lensdot" style={{ background: speakerColor(ui, sp) }} />
+              <span className="focusname">{sp}</span>{focus === sp && " ✓"}
+            </button>
+          ))}
+          {/* independent, combinable effects — dim only, collapse only, or both */}
+          <div className="focusmode">
+            <span>Others:</span>
+            <label className="focuscheck">
+              <input type="checkbox" checked={ui.focusDim}
+                onChange={() => setUi({ focusDim: !ui.focusDim })} /> dim
+            </label>
+            <label className="focuscheck">
+              <input type="checkbox" checked={ui.focusCollapse}
+                onChange={() => setUi({ focusCollapse: !ui.focusCollapse })} /> collapse
+            </label>
+          </div>
+        </div>
+      )}
+      <button className={"focustoggle" + (focus ? " on" : "")} onClick={() => setMenu((m) => !m)}
+        aria-expanded={menu} aria-haspopup="menu" aria-pressed={!!focus}
+        aria-label={focus ? `Focused on ${focus} — change or clear` : "Focus one speaker's dialogue"}
+        title={focus ? `Focused on ${focus}` : "Focus one speaker's dialogue"}>
+        <Icon name="target" size={17} />
+      </button>
+    </div>
+  );
+}
+
 // how long the looped clip is — derived from the SAME window loopLine plays
 function loopDur(ts: string, nextTs: string | null): string {
   const win = loopWindow(ts, nextTs);

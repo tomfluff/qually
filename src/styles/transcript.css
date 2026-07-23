@@ -81,14 +81,41 @@
    font's own scale each way — and colour only reinforces the quiet end. */
 .lineRow.spk-quiet .txt { font-weight:300; color:var(--fg-dim); }
 .lineRow.spk-bold .txt { font-weight:600; }
-/* speaker focus: everyone else steps back — chips and text drop via opacity, but
-   the LANES stay at full strength: a segment's coding is about the code, not the
-   speaker, and dimming it would misread as a rejected/candidate state. (Opacity
-   here is a deliberate exception to the no-opacity rule — user-chosen filter
-   state, owner's call.) "collapse" additionally folds the row to one ellipsised
-   line, keeping the conversation's skeleton without its bulk. */
-.lineRow.spk-off-dim > :not(.lanes), .lineRow.spk-off-collapse > :not(.lanes) { opacity:.4; }
+/* speaker focus: everyone else steps back. Two INDEPENDENT, combinable effects
+   (the target menu's checkboxes): dim drops the row via opacity — except the
+   LANES, a segment's coding is about the code, not the speaker, and dimming it
+   would misread as rejected/candidate (opacity is a deliberate exception to the
+   no-opacity rule — user-chosen filter state, owner's call); collapse folds the
+   row to one ellipsised line, keeping the conversation's skeleton without its bulk. */
+.lineRow.spk-off-dim > :not(.lanes) { opacity:.4; }
 .lineRow.spk-off-collapse .txt { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+
+/* the focus control: floating target button at the transcript's bottom right,
+   menu opens UPWARD — the eye/lens-menu pattern mirrored to the bottom edge */
+.focuswrap { position:absolute; bottom:10px; right:calc(16px + var(--mm-w) + 8px); z-index:60;
+  display:flex; flex-direction:column; align-items:flex-end; }
+.focustoggle { width:43px; height:43px; display:inline-flex; align-items:center; justify-content:center;
+  background:var(--bg); border:1px solid var(--line); border-radius:10px; color:var(--muted);
+  cursor:pointer; box-shadow:0 8px 26px rgba(0,0,0,.28); }
+.focustoggle:hover { color:var(--fg); border-color:var(--accent); }
+.focustoggle.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+[data-theme=dark] .focustoggle.on { color:#12161a; }
+.focusmenu { position:absolute; bottom:calc(100% + 6px); right:0; min-width:13em;
+  max-width:min(26em, calc(100vw - 140px));
+  display:flex; flex-direction:column; gap:2px; padding:.6em;
+  background:var(--bg); border:1px solid var(--line); border-radius:10px;
+  box-shadow:0 8px 26px rgba(0,0,0,.28); white-space:nowrap; }
+.focusitem { display:flex; align-items:center; gap:.55em; padding:.3em .45em;
+  border:none; background:none; color:var(--fg); font:inherit; text-align:left;
+  border-radius:6px; cursor:pointer; min-width:0; }
+.focusitem:hover { background:var(--sel); }
+.focusitem.on { font-weight:600; } /* the ✓ carries the state; weight seconds it */
+.focusitem .lensdot { width:.7em; height:.7em; border-radius:50%; flex-shrink:0; }
+.focusname { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.focusmode { display:flex; align-items:center; gap:.8em; padding:.4em .45em 0;
+  margin-top:.3em; border-top:1px solid var(--line); color:var(--muted); }
+.focuscheck { display:flex; align-items:center; gap:.35em; cursor:pointer; color:var(--fg); }
+.focuscheck input[type=checkbox] { width:1em; height:1em; accent-color:var(--accent); }
 .lineRow .txt { flex:1; line-height:1.45; font-family:var(--read-font); }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
 .lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;

@@ -305,14 +305,13 @@ function SpeakerRows() {
   // never a silently blank panel — say why there's nothing here
   if (!speakers.length) return (
     <div className="settings-note">
-      Import a transcript first — its speakers appear here for recolouring,
-      emphasis (quiet/bold), and focusing one speaker's dialogue.
+      Import a transcript first — its speakers appear here for recolouring
+      and emphasis (quiet/bold).
     </div>
   );
 
   const setWeight = (sp: string, w: SpeakerWeight) =>
     setUi({ speakerWeight: { ...ui.speakerWeight, [sp]: w } });
-  const focus = ui.speakerFocus;
 
   return (
     <>
@@ -339,31 +338,13 @@ function SpeakerRows() {
                   onClick={() => setWeight(sp, id)}>A</button>
               ))}
             </div>
-            <button className={"spkfocus" + (focus === sp ? " on" : "")}
-              aria-pressed={focus === sp}
-              aria-label={focus === sp ? "Show everyone" : `Focus on ${sp}'s dialogue`}
-              data-tip={focus === sp ? "Show everyone" : `Focus on ${sp}`}
-              onClick={() => setUi({ speakerFocus: focus === sp ? null : sp })}>
-              <Icon name="target" size={14} />
-            </button>
           </div>
         );
       })}
-      {focus && (
-        <div className="srow">
-          <span>Others</span>
-          <div className="seg">
-            <button className={ui.speakerFocusMode === "dim" ? "on" : ""}
-              onClick={() => setUi({ speakerFocusMode: "dim" })}>dim</button>
-            <button className={ui.speakerFocusMode === "collapse" ? "on" : ""}
-              onClick={() => setUi({ speakerFocusMode: "collapse" })}>collapse</button>
-          </div>
-        </div>
-      )}
       <div className="settings-note">
         Click a swatch to recolour. <b>quiet</b> dims a speaker's words (usually the
-        interviewer), <b>bold</b> emphasises them. The target focuses one speaker —
-        everyone else is <b>dimmed</b> or <b>collapsed</b> to one line.
+        interviewer), <b>bold</b> emphasises them. To focus one speaker's dialogue,
+        use the target button at the transcript's bottom right — it's per transcript.
       </div>
     </>
   );

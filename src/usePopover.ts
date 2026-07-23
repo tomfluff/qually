@@ -8,7 +8,7 @@ import { useEffect, useLayoutEffect, type DependencyList, type RefObject } from 
 // Every overlay that owns the keyboard while open. App's global keydown and
 // VideoDock's media keys both suppress themselves against this ONE list —
 // add new overlay classes here, not in either handler.
-export const OVERLAY_SELECTOR = ".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop, .clrpop, .vspeedmenu, .noticemenu";
+export const OVERLAY_SELECTOR = ".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop, .clrpop, .vspeedmenu, .noticemenu, .focusmenu";
 
 // Dismiss: mousedown outside the ref closes; Escape closes. Escape listens in
 // the CAPTURE phase with stopPropagation so App's global Esc (clear selection)

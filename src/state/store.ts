@@ -46,8 +46,12 @@ export interface Ui {
   scrollSpeed: number; // wheel distance multiplier for the transcript (1 = device default)
   loopEdit: boolean; // loop the utterance's audio while its line is being edited
   loopSpeed: number; // playback rate while looping (independent of the dock's rate)
-  speakerFocus: string | null; // isolate one speaker's dialogue (null = everyone)
-  speakerFocusMode: "dim" | "collapse"; // how the OTHER speakers' lines step back
+  // isolate one speaker's dialogue, PER TRANSCRIPT (focus is a lens on a study
+  // file, not a global): pid -> speaker name; absent = everyone
+  speakerFocus: Record<string, string>;
+  // how the OTHER speakers' rows step back — independent, combinable effects
+  focusDim: boolean;      // whole row drops via opacity
+  focusCollapse: boolean; // row folds to one ellipsised line
   speakerColors: Record<string, string>; // per-speaker overrides; unset = speakerColor()
   // How loudly each speaker's words are set. "quiet" is usually the interviewer, so the
   // participants carry the page; "bold" is the one you're following. Unset = normal.
@@ -302,7 +306,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: null, speakerFocusMode: "dim",
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
@@ -320,7 +324,7 @@ export const useStore = create<State>()(
           video: {}, aiFlags: {}, aiLog: [],
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
-          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: null },
+          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {} },
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
@@ -770,7 +774,7 @@ export const useStore = create<State>()(
         set({
           // speakerFocus doesn't travel between studies — a stale name matching a
           // speaker in the loaded project would silently dim everyone else
-          ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: null },
+          ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {} },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiLog: p.aiLog,
@@ -1005,8 +1009,14 @@ export const useStore = create<State>()(
         s.ui.loopSpeed ??= 0.75;
         // bounds moved (44–160 → 64–256): pull an old persisted width into range
         s.ui.minimapWidth = clampMinimapWidth(s.ui.minimapWidth ?? 66);
-        s.ui.speakerFocus ??= null;
-        s.ui.speakerFocusMode ??= "dim";
+        // was `string | null` (global) before it went per-transcript — an old
+        // scalar value can't be mapped to a pid, so it resets to everyone
+        if (typeof s.ui.speakerFocus !== "object" || s.ui.speakerFocus === null) s.ui.speakerFocus = {};
+        // dim/collapse were one exclusive mode before they became combinable
+        // toggles; the old "collapse" mode dimmed too, so it maps to both on
+        const legacyMode = (s.ui as { speakerFocusMode?: string }).speakerFocusMode;
+        s.ui.focusDim ??= true;
+        s.ui.focusCollapse ??= legacyMode === "collapse";
         s.ui.speakerColors ??= {};
         s.ui.speakerWeight ??= {};
         s.ui.fontFamily ??= "system";
