@@ -82,6 +82,33 @@ export function VideoDock() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Space: play/pause. [ / ]: step the playback speed down/up. Global — but not
+  // while typing (the line editor, any input), not on a focused control (Space
+  // must stay "activate button"), and not while a dialog/popover owns the
+  // keyboard (same overlay list App.tsx uses).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key !== " " && e.key !== "[" && e.key !== "]") return;
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT"
+        || t.tagName === "BUTTON" || t.isContentEditable) return;
+      if (document.querySelector(".about-backdrop, .pop, .ctxmenu, .exmenu, .palette-backdrop, .clrpop")) return;
+      const v = videoRef.current;
+      if (!v) return;
+      e.preventDefault(); // Space would otherwise page-scroll the focused list
+      if (e.key === " ") { v.paused ? void v.play() : v.pause(); return; }
+      setGeom((g) => {
+        const i = SPEEDS.indexOf(g.rate);
+        const at = i < 0 ? SPEEDS.indexOf(1) : i; // a rate not in the list steps from 1×
+        const j = e.key === "]" ? Math.min(SPEEDS.length - 1, at + 1) : Math.max(0, at - 1);
+        return { ...g, rate: SPEEDS[j] };
+      });
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   if (pid === "browse" || !hasTranscript) return null;
 
   const pickMedia = (f: File | undefined) => {
