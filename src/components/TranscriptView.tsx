@@ -970,6 +970,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLane
 // it to a stray click would hurt more than keeping it).
 function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | null; onDone: () => void }) {
   const [value, setValue] = useState(line.text);
+  const sidebarFs = useStore((s) => s.ui.sidebarFontSize); // the edit bar is chrome — sidebar-sized
   const taRef = useRef<HTMLTextAreaElement>(null);
   const looping = useRef<(() => void) | null>(null);
   const [loopOn, setLoopOn] = useState(false);
@@ -1010,7 +1011,7 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
           else if (e.key === "Escape") { e.stopPropagation(); onDone(); }
         }}
         onBlur={() => save(value)} />
-      <span className="editbar">
+      <span className="editbar" style={{ fontSize: sidebarFs }}>
         <kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel
         {hasVideo() && (
           // mousedown preventDefault: the textarea must NOT blur (blur saves + closes)

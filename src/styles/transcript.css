@@ -184,8 +184,11 @@
   font:inherit; color:inherit; line-height:inherit;
   background:var(--bg); border:2px solid var(--accent); border-radius:6px; padding:3px 7px; }
 .lineEdit textarea:focus { outline:none; }
-.editbar { display:flex; align-items:center; gap:7px; flex-wrap:wrap;
-  font-size:11px; color:var(--muted); padding:3px 2px 1px; }
+/* font-size comes inline from ui.sidebarFontSize (LineEditor) — the bar holds
+   real controls now (loop, revert), which must stay readable and hittable at
+   magnification, not ride the transcript size (they're chrome, not content) */
+.editbar { display:flex; align-items:center; gap:.55em; flex-wrap:wrap;
+  color:var(--muted); padding:3px 2px 1px; }
 .editbar kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
   padding:0 4px; background:var(--panel); font:inherit; }
 /* a button now (start/stop the loop), styled like the quiet text it replaced */
