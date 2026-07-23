@@ -71,7 +71,7 @@ function NoticeToggle() {
                 checked={show && !hiddenLenses.includes(l.id)}
                 onChange={() => toggleLens(l.id)} />
               <span className="lensdot" style={{ background: l.color }} />
-              {l.label}
+              <span className="lenslabel">{l.label}</span>
             </label>
           ))}
           {!show && <div className="noticemenu-note">All noticings are hidden (the eye)</div>}
