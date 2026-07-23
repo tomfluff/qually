@@ -18,6 +18,10 @@
 .vhead:hover { background:var(--sel); } /* says "grab me" before you commit to a drag */
 .vhead .vgrip { display:inline-flex; flex-shrink:0; } /* the visual drag affordance */
 .vhead .vtitle { max-width:12em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* minimised: just grip + transport + expand, shoulder to shoulder */
+.vdock.collapsed { min-width:0; }
+.vdock.collapsed .vtitle { display:none; }
+.vdock.collapsed .vhead { flex-wrap:nowrap; }
 .vbody { position:relative; }
 
 /* One control family across the dock: every button is 2.35em tall so the head and

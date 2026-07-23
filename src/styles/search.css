@@ -52,6 +52,10 @@
   border-radius:6px; cursor:pointer; }
 .noticemenu label:hover:not(.off) { background:var(--sel); }
 .noticemenu label.off { color:var(--muted); cursor:default; }
+/* transcription errors are repair marks, not noticings — a quiet divider keeps
+   the two kinds apart in the menu */
+.noticemenu label.lensdiv { border-bottom:1px solid var(--line); border-radius:6px 6px 0 0;
+  padding-bottom:.5em; margin-bottom:.35em; }
 /* native checkboxes don't inherit font-size — em them so they grow with the menu */
 .noticemenu input[type=checkbox] { width:1em; height:1em; flex-shrink:0;
   accent-color:var(--accent); }

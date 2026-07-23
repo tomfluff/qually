@@ -71,7 +71,9 @@ function NoticeToggle() {
             const t = l.id === "transcription";
             const active = t ? true : show;
             return (
-              <label key={l.id} className={active ? "" : "off"}>
+              // lensdiv: transcription is a different KIND of mark (repair, not
+              // noticing) — a quiet divider separates it from the lenses
+              <label key={l.id} className={(active ? "" : "off") + (t ? " lensdiv" : "")}>
                 <input type="checkbox" disabled={!active}
                   checked={active && !hiddenLenses.includes(l.id)}
                   onChange={() => toggleLens(l.id)} />

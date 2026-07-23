@@ -210,9 +210,12 @@ export function VideoDock() {
   return (
     <div className={"vdock" + (geom.collapsed ? " collapsed" : "")}
       style={{
-        // floor the width by the text size: magnified chrome in a 380px dock wraps
-        // into a three-row jumble. The user's dragged width still wins above the floor.
-        width: Math.min(Math.max(cur ? geom.w : 260, fs * 20), window.innerWidth - 48),
+        // collapsed: shrink to the controls (grip + transport + expand), no title —
+        // a minimised dock shouldn't cost a filename's width of screen.
+        // expanded: floor the width by the text size — magnified chrome in a 380px
+        // dock wraps into a three-row jumble. A dragged width wins above the floor.
+        width: geom.collapsed ? "auto"
+          : Math.min(Math.max(cur ? geom.w : 260, fs * 20), window.innerWidth - 48),
         fontSize: fs, ...pos,
       }}>
       {cur ? (
@@ -257,7 +260,9 @@ export function VideoDock() {
 
       <div className="vhead" onMouseDown={startDrag}>
         <span className="vgrip" aria-hidden="true"><Icon name="grip-horizontal" size={fs + 1} /></span>
-        <span className="vtitle">{cur ? cur.name : `video · ${pid}`}</span>
+        {/* minimised with media: controls only — the filename returns on expand.
+            (The empty dock keeps its label; a bare grip+chevron pill says nothing.) */}
+        {!(geom.collapsed && cur) && <span className="vtitle">{cur ? cur.name : `video · ${pid}`}</span>}
         <span style={{ flex: 1 }} />
         {cur && (
           <>
