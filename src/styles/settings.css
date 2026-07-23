@@ -49,14 +49,16 @@
 /* control rows — rescoped from the old .settings-pop; behaviour unchanged */
 .set-modal .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
 .set-modal .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
-.set-modal .srow input[type=range] { width:92px; margin:0; align-self:center; accent-color:var(--accent); }
+.set-modal .srow input[type=range] { width:160px; margin:0; align-self:center; accent-color:var(--accent); }
+  /* 160, not 92: a 92px track made every stop a couple of pixels apart — hostile
+     at magnification, and this is the app FOR magnification */
 .set-modal .sval { min-width:2.2ch; padding:2px 4px; text-align:center; color:var(--fg);
   font-variant-numeric:tabular-nums; background:var(--bg);
   border:1px solid var(--line); border-radius:5px; }
 /* a range input is a small drag target and has no way back to the default */
-.set-modal .sreset { border:none; background:none; padding:2px 3px; cursor:pointer;
-  color:var(--muted); font:inherit; font-size:.85em; text-decoration:underline; }
-.set-modal .sreset:hover { color:var(--accent); }
+.set-modal .sreset { border:none; background:none; padding:5px 6px; min-height:24px; cursor:pointer;
+  color:var(--muted); font:inherit; font-size:.85em; text-decoration:underline; border-radius:5px; }
+.set-modal .sreset:hover { color:var(--accent); background:var(--panel); }
 .set-modal .seg { display:flex; width:150px; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
 .set-modal .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
   padding:5px 0; font:inherit; font-weight:500; text-align:center; cursor:pointer;
@@ -77,7 +79,19 @@
 .set-modal .swatchbtn { width:22px; height:22px; border-radius:50%; padding:0;
   border:2px solid transparent; cursor:pointer; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); }
 .set-modal .swatchbtn.on { border-color:var(--fg); }
-.settings-note { font-size:12px; color:var(--muted); text-align:left; line-height:1.4; }
+/* a note explains the ROW ABOVE it: pulled tight against that row (and indented
+   with it) so ownership is visible, with the panel gap kept below */
+.settings-note { font-size:12px; color:var(--muted); text-align:left; line-height:1.4;
+  margin-top:-7px; }
+.settings-note kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
+  padding:0 4px; background:var(--panel); font:inherit; }
+/* a note directly under a heading (or first in the panel) is intro text, not a
+   row explainer — no pull-up */
+.set-h + .settings-note, .set-panel > .settings-note:first-child { margin-top:0; }
+/* group headings inside a tab — same voice as the sidebar's ALL CODES header */
+.set-h { font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:600;
+  color:var(--muted); margin:10px 0 -3px; }
+.set-panel > .set-h:first-child { margin-top:0; }
 .set-cat .opt { font-weight:400; text-transform:none; letter-spacing:0; color:var(--muted); font-size:.9em; }
 
 /* AI settings block */

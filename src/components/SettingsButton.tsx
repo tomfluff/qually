@@ -12,7 +12,7 @@ import { Icon } from "./Icon";
 // Settings popover: instant-apply controls (no save button), all persisted via ui autosave.
 export function SettingsButton() {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"Appearance"|"Transcript"|"Codes"|"Speakers"|"AI">("Appearance");
+  const [tab, setTab] = useState<"Appearance"|"Reading"|"Media"|"Coding"|"Speakers"|"AI">("Appearance");
   const [dragSpeed, setDragSpeed] = useState<number | null>(null); // scroll slider mid-drag value (%)
   // Esc can close the modal mid-drag — React fires no blur on unmount, so an
   // uncommitted drag value would silently vanish. Commit it on close instead.
@@ -64,7 +64,9 @@ export function SettingsButton() {
     return () => document.removeEventListener("keydown", onEsc, true);
   }, [open]);
 
-  const TABS = ["Appearance", "Transcript", "Codes", "Speakers", "AI"] as const;
+  // Reading = how the transcript reads; Media = the loaded audio/video;
+  // Coding = lanes + keyboard workflow. One concern per tab, grouped inside.
+  const TABS = ["Appearance", "Reading", "Media", "Coding", "Speakers", "AI"] as const;
 
   return (
     <div className="settings-wrap" ref={ref}>
@@ -92,6 +94,7 @@ export function SettingsButton() {
               </nav>
               <div className="set-panel nicescroll">
               {tab === "Appearance" && <>
+                <div className="set-h">Colour</div>
                 <div className="srow">
                   <span>Theme</span>
                   <div className="seg">
@@ -100,7 +103,7 @@ export function SettingsButton() {
                   </div>
                 </div>
                 <div className="srow">
-                  <span>Primary</span>
+                  <span>Primary colour</span>
                   <div className="swatches">
                     {PALETTES.map((p) => (
                       <button key={p.id} className={"swatchbtn" + (accent === p.id ? " on" : "")}
@@ -109,6 +112,7 @@ export function SettingsButton() {
                     ))}
                   </div>
                 </div>
+                <div className="set-h">Text</div>
                 {/* WCAG 1.4.4 expects text to reach 200% without loss of content: from the
                     16px default that is 32px, which the old max of 30 could not even reach. */}
                 <label className="srow">
@@ -123,6 +127,7 @@ export function SettingsButton() {
                   <span className="sval">{sidebarFontSize}</span>
                   <button className="sreset" onClick={(e) => { e.preventDefault(); setSidebarFontSize(13); }} title="Reset to 13px">reset</button>
                 </label>
+                <div className="settings-note">Sidebar text also sizes the popovers, menus, video dock, and tooltips.</div>
                 <div className="srow">
                   <span>Reading font</span>
                   <div className="seg fontseg">
@@ -131,10 +136,11 @@ export function SettingsButton() {
                     <button className={fontFamily === "atkinson" ? "on" : ""} style={{ fontFamily: "'Atkinson Hyperlegible', sans-serif" }} onClick={() => setUi({ fontFamily: "atkinson" })}>Atkinson</button>
                   </div>
                 </div>
-                <div className="settings-note">Sets the transcript and excerpt text. <b>Atkinson Hyperlegible</b> is drawn so easily-confused letters (b/d, I/l/1, O/0) stay distinct — designed for low vision.</div>
+                <div className="settings-note"><b>Atkinson Hyperlegible</b> keeps easily-confused letters (b/d, I/l/1, O/0) distinct — designed for low vision.</div>
               </>}
 
-              {tab === "Transcript" && <>
+              {tab === "Reading" && <>
+                <div className="set-h">Layout</div>
                 <div className="srow">
                   <span>Line numbers</span>
                   <div className="seg">
@@ -157,7 +163,16 @@ export function SettingsButton() {
                     <button className={mergeLines ? "on" : ""} onClick={() => setUi({ mergeLines: true })}>on</button>
                   </div>
                 </div>
-                <div className="settings-note">Joins consecutive same-speaker lines that don't end in . ? ! … into one unit.</div>
+                <div className="settings-note">Joins a speaker's unfinished lines (no . ? ! …) into one reading unit.</div>
+                <div className="srow">
+                  <span>Minimap</span>
+                  <div className="seg">
+                    <button className={minimapDetail === "detailed" ? "on" : ""} onClick={() => setUi({ minimapDetail: "detailed" })}>detailed</button>
+                    <button className={minimapDetail === "simplified" ? "on" : ""} onClick={() => setUi({ minimapDetail: "simplified" })}>simple</button>
+                  </div>
+                </div>
+                <div className="settings-note">Simple uses bigger, blockier marks. Drag the minimap's edge to widen it.</div>
+                <div className="set-h">Scrolling</div>
                 <div className="srow">
                   <span>Smooth scrolling</span>
                   <div className="seg">
@@ -165,7 +180,7 @@ export function SettingsButton() {
                     <button className={smoothScroll ? "on" : ""} onClick={() => setUi({ smoothScroll: true })}>on</button>
                   </div>
                 </div>
-                <div className="settings-note">Eases the mouse wheel, and animates Home/End, PageUp/PageDown and jumps to a line — so you can see where you moved to rather than arriving there. Overrides your system's reduced-motion setting, which otherwise turns all of it off.</div>
+                <div className="settings-note">Eases the wheel and animates jumps so you see where you moved. Overrides the system's reduced-motion setting.</div>
                 <label className="srow">
                   <span>Scroll distance</span>
                   {/* percent with 5% steps (the old 0.25× steps made the thumb jump);
@@ -181,8 +196,13 @@ export function SettingsButton() {
                   <button className="sreset" onClick={(e) => { e.preventDefault(); setDragSpeed(null); setUi({ scrollSpeed: 1 }); }} title="Reset to 100%">reset</button>
                 </label>
                 <div className="settings-note">How far one wheel click moves the transcript. 100% is your device's default.</div>
+              </>}
+
+              {tab === "Media" && <>
+                <div className="settings-note"><kbd>Space</kbd> plays/pauses the loaded media, <kbd>[</kbd> and <kbd>]</kbd> change its speed — except while typing.</div>
+                <div className="set-h">Editing loop</div>
                 <div className="srow">
-                  <span>Loop audio on edit</span>
+                  <span>Loop while editing</span>
                   <div className="seg">
                     <button className={!loopEdit ? "on" : ""} onClick={() => setUi({ loopEdit: false })}>off</button>
                     <button className={loopEdit ? "on" : ""} onClick={() => setUi({ loopEdit: true })}>on</button>
@@ -197,37 +217,23 @@ export function SettingsButton() {
                     ))}
                   </div>
                 </div>
-                <div className="settings-note">When editing a line, loop its utterance in the loaded media so you fix it against the audio. The edit bar can start/stop the loop and change this speed; the dock's own speed returns when the loop stops.</div>
-                <div className="srow">
-                  <span>Minimap</span>
-                  <div className="seg">
-                    <button className={minimapDetail === "detailed" ? "on" : ""} onClick={() => setUi({ minimapDetail: "detailed" })}>detailed</button>
-                    <button className={minimapDetail === "simplified" ? "on" : ""} onClick={() => setUi({ minimapDetail: "simplified" })}>simple</button>
-                  </div>
-                </div>
+                <div className="settings-note">Double-clicking a line loops its utterance while you correct it. The edit bar can start/stop the loop and change this speed either way; the dock's own speed returns when the loop ends.</div>
               </>}
 
-              {tab === "Codes" && <>
+              {tab === "Coding" && <>
                 <label className="srow">
                   <span>Coder name</span>
                   <input type="text" className="settext" value={coderName} placeholder="your name"
                     onChange={(e) => setUi({ coderName: e.target.value })}
                     onBlur={() => claimUnattributed()} />
                 </label>
-                <div className="settings-note">Written as <code>proposed_by</code> on every segment you create — how your coding is told apart from a second coder's in the exported CSV. Also in the toolbar, where you can see it while you work.</div>
+                <div className="settings-note">Written as <code>proposed_by</code> on your segments — how two coders are told apart in the exported CSV.</div>
+                <div className="set-h">Lanes</div>
                 <div className="srow">
                   <span>Lane width</span>
                   <div className="seg">
                     {(["xs", "sm", "md", "lg"] as const).map((sz) => (
                       <button key={sz} className={laneWidth === sz ? "on" : ""} onClick={() => setUi({ laneWidth: sz })}>{sz}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="srow">
-                  <span>Warning size</span>
-                  <div className="seg">
-                    {(["xs", "sm", "md", "lg"] as const).map((sz) => (
-                      <button key={sz} className={warnSize === sz ? "on" : ""} onClick={() => setUi({ warnSize: sz })}>{sz}</button>
                     ))}
                   </div>
                 </div>
@@ -240,19 +246,31 @@ export function SettingsButton() {
                 </div>
                 <div className="settings-note">A texture as well as a colour, so codes stay apart without relying on hue.</div>
                 <div className="srow">
-                  <span>Hotbar</span>
+                  <span>Mixed-speaker badge</span>
+                  <div className="seg">
+                    {(["xs", "sm", "md", "lg"] as const).map((sz) => (
+                      <button key={sz} className={warnSize === sz ? "on" : ""} onClick={() => setUi({ warnSize: sz })}>{sz}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-note">The <b>!</b> on a segment whose excerpt keeps only its dominant speaker.</div>
+                <div className="set-h">Shortcuts</div>
+                <div className="srow">
+                  <span>Hotbar 1–9</span>
                   <div className="seg">
                     <button className={mode === "auto" ? "on" : ""} onClick={() => setHotbarMode("auto")}>auto</button>
                     <button className={mode === "pinned" ? "on" : ""} onClick={() => setHotbarMode("pinned")}>pinned</button>
                   </div>
                 </div>
+                <div className="settings-note">Auto fills the tiles with your most-used codes; pinned shows only codes you pin.</div>
                 <div className="srow">
-                  <span>Cmd palette</span>
+                  <span>Code palette 0</span>
                   <div className="seg">
                     <button className={palettePos === "auto" ? "on" : ""} onClick={() => setUi({ palettePos: "auto" })}>near</button>
                     <button className={palettePos === "centered" ? "on" : ""} onClick={() => setUi({ palettePos: "centered" })}>center</button>
                   </div>
                 </div>
+                <div className="settings-note">Where the palette opens: next to your selected lines, or screen-centered.</div>
               </>}
 
               {tab === "Speakers" && <SpeakerRows />}
@@ -284,7 +302,13 @@ function SpeakerRows() {
   const tabs = useStore((s) => s.tabs);
   const speakers = useMemo(() => speakersOf({ transcripts, tabs }), [transcripts, tabs]);
   const setUi = useStore((s) => s.setUi);
-  if (!speakers.length) return null;
+  // never a silently blank panel — say why there's nothing here
+  if (!speakers.length) return (
+    <div className="settings-note">
+      Import a transcript first — its speakers appear here for recolouring,
+      emphasis (quiet/bold), and focusing one speaker's dialogue.
+    </div>
+  );
 
   const setWeight = (sp: string, w: SpeakerWeight) =>
     setUi({ speakerWeight: { ...ui.speakerWeight, [sp]: w } });
@@ -337,10 +361,9 @@ function SpeakerRows() {
         </div>
       )}
       <div className="settings-note">
-        Click a swatch to recolour. Set how loudly each speaker's words are set: <b>quiet</b>{" "}
-        for the interviewer, so the participants carry the page — <b>bold</b> for whoever
-        you're following. Guessed on import; correct it here. The target focuses one
-        speaker's dialogue: everyone else is <b>dimmed</b>, or <b>collapsed</b> to one line.
+        Click a swatch to recolour. <b>quiet</b> dims a speaker's words (usually the
+        interviewer), <b>bold</b> emphasises them. The target focuses one speaker —
+        everyone else is <b>dimmed</b> or <b>collapsed</b> to one line.
       </div>
     </>
   );
@@ -374,6 +397,7 @@ function AiSettings() {
         you approve each request and see exactly what's sent.
       </div>
 
+      <div className="set-h">Access</div>
       <label className="srow aicol">
         <span>OpenAI key</span>
         <input type="password" className="aikey" placeholder="sk-…" value={key} autoComplete="off"
@@ -390,8 +414,8 @@ function AiSettings() {
           : "Kept for this session only — you'll re-enter it next time."}
       </div>
 
+      <div className="set-h">Model</div>
       <div className="srow aicol">
-        <span>Model</span>
         <div className="seg aimodels">
           {MODELS.map((m) => (
             <button key={m.id} className={ai.model === m.id ? "on" : ""}
@@ -407,6 +431,7 @@ function AiSettings() {
         ${modelOf(ai.model).out} out per 1M tokens.
       </div>
 
+      <div className="set-h">Privacy</div>
       <label className="srow aicol">
         <span>Redact before sending</span>
         <textarea className="airedact" rows={2} placeholder="Ann Lee, Acme Corp, Springfield"
