@@ -20,6 +20,8 @@ function loadGeom(): Geom {
 export function VideoDock() {
   const pid = useStore((s) => s.active);
   const hasTranscript = useStore((s) => !!s.transcripts[s.active]);
+  // dock chrome scales with the sidebar text setting (video.css is em-based)
+  const fs = useStore((s) => s.ui.sidebarFontSize);
   const offset = useStore((s) => s.video[s.active]?.offset ?? 0);
   const setOffset = (v: number) =>
     useStore.setState((s) => ({ video: { ...s.video, [pid]: { ...s.video[pid], offset: v } } }));
@@ -28,8 +30,10 @@ export function VideoDock() {
   const [media, setMedia] = useState<Record<string, { url: string; name: string }>>({});
   const [playing, setPlaying] = useState(false);
   // anchor coords, not a boolean: the menu renders position:fixed at the button's
-  // corner because .vdock's overflow:hidden would clip a child that pokes above it
-  const [speedMenu, setSpeedMenu] = useState<{ x: number; y: number } | null>(null);
+  // corner because .vdock's overflow:hidden would clip a child that pokes above it.
+  // `up` picks the growth direction — a dock dragged near the top of the window
+  // would push an upward menu offscreen.
+  const [speedMenu, setSpeedMenu] = useState<{ x: number; y: number; up: boolean } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const speedRef = useRef<HTMLDivElement>(null);
@@ -205,7 +209,12 @@ export function VideoDock() {
 
   return (
     <div className={"vdock" + (geom.collapsed ? " collapsed" : "")}
-      style={{ width: cur ? geom.w : 260, ...pos }}>
+      style={{
+        // floor the width by the text size: magnified chrome in a 380px dock wraps
+        // into a three-row jumble. The user's dragged width still wins above the floor.
+        width: Math.min(Math.max(cur ? geom.w : 260, fs * 20), window.innerWidth - 48),
+        fontSize: fs, ...pos,
+      }}>
       {cur ? (
         <div className="vbody">
           {!geom.collapsed && (
@@ -214,7 +223,7 @@ export function VideoDock() {
                   The strip is also a drag handle (like vhead) — buttons/inputs opt out. */}
               <button className="vbtn accent" onClick={syncToLine}
                 title="Select the transcript line playing now, and scroll to it">
-                <Icon name="target" size={15} /> Jump to line
+                <Icon name="target" size={fs + 2} /> Jump to line
               </button>
               <span style={{ flex: 1 }} />
               <span className="vlabel">Offset</span>
@@ -226,7 +235,7 @@ export function VideoDock() {
               </div>
               <span className="unit">s</span>
               <button className="vbtn icononly" onClick={() => fileRef.current?.click()} title="Change media">
-                <Icon name="upload" size={15} />
+                <Icon name="upload" size={fs + 2} />
               </button>
             </div>
           )}
@@ -248,14 +257,14 @@ export function VideoDock() {
       ))}
 
       <div className="vhead" onMouseDown={startDrag}>
-        <span className="vgrip" aria-hidden="true"><Icon name="grip-horizontal" size={14} /></span>
+        <span className="vgrip" aria-hidden="true"><Icon name="grip-horizontal" size={fs + 1} /></span>
         <span className="vtitle">{cur ? cur.name : `video · ${pid}`}</span>
         <span style={{ flex: 1 }} />
         {cur && (
           <>
             <button className="vbtn playbtn" onClick={togglePlay} title="Play / pause"
               aria-label={playing ? "Pause" : "Play"}>
-              <Icon name={playing ? "pause" : "play"} size={13} />
+              <Icon name={playing ? "pause" : "play"} size={fs} />
             </button>
             {/* speed lives in a popover now — ten steps would not fit as pills */}
             <div className="vspeedwrap" ref={speedRef}>
@@ -264,7 +273,10 @@ export function VideoDock() {
                   // rect BEFORE setState: React nulls currentTarget after dispatch,
                   // and the functional updater may run later than the handler
                   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                  setSpeedMenu((m) => m ? null : { x: r.right, y: r.top - 6 });
+                  // ~1.9em per row + padding: enough headroom above, or open downward
+                  const menuH = SPEEDS.length * fs * 1.9 + 16;
+                  const up = r.top - 6 - menuH > 8;
+                  setSpeedMenu((m) => m ? null : { x: r.right, y: up ? r.top - 6 : r.bottom + 6, up });
                 }} title="Playback speed"
                 aria-haspopup="menu" aria-expanded={speedMenu !== null}>{geom.rate}×</button>
               {/* PORTALED to body: .vdock is overflow:hidden AND transformed, so a
@@ -272,12 +284,16 @@ export function VideoDock() {
                   get clipped at its top edge. The dismiss hook's ignore predicate
                   (above) covers the portal. */}
               {speedMenu && createPortal(
-                <div className="vspeedmenu" role="menu" aria-label="Playback speed"
-                  style={{ left: speedMenu.x, top: speedMenu.y }}>
+                <div className={"vspeedmenu" + (speedMenu.up ? "" : " down")}
+                  role="menu" aria-label="Playback speed"
+                  style={{ left: speedMenu.x, top: speedMenu.y, fontSize: fs }}>
                   {SPEEDS.map((s) => (
                     <button key={s} role="menuitemradio" aria-checked={geom.rate === s}
                       className={"vspeeditem" + (geom.rate === s ? " on" : "")}
-                      onClick={() => { setRate(s); setSpeedMenu(null); }}>{s}×</button>
+                      onClick={() => { setRate(s); setSpeedMenu(null); }}>
+                      {/* the ✓ is the non-colour cue for the current rate — the
+                          accent fill alone would be colour-only signalling */}
+                      {s}×{geom.rate === s ? " ✓" : ""}</button>
                   ))}
                 </div>, document.body)}
             </div>
@@ -285,7 +301,7 @@ export function VideoDock() {
         )}
         <button className="vbtn icononly" onClick={() => setGeom((g) => ({ ...g, collapsed: !g.collapsed }))}
           title={geom.collapsed ? "Expand" : "Collapse to audio"}>
-          <Icon name={geom.collapsed ? "chevron-up" : "chevron-down"} size={16} />
+          <Icon name={geom.collapsed ? "chevron-up" : "chevron-down"} size={fs + 3} />
         </button>
       </div>
       <input ref={fileRef} type="file" accept="video/*,audio/*" style={{ display: "none" }}
