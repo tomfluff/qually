@@ -9,7 +9,7 @@ import { AiMarkPopover } from "./AiMarkPopover";
 import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
-import { seekVideo, loopLine, hasVideo, setPlaybackRate } from "../video/seek";
+import { seekVideo, loopLine, hasVideo, setPlaybackRate, tsToSec } from "../video/seek";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
@@ -974,6 +974,14 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLane
 // not from memory. Enter saves, Esc cancels, blur saves (it's a typo fix, losing
 // it to a stray click would hurt more than keeping it).
 const LOOP_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
+// how long the looped clip is — same window loopLine plays (next line's start,
+// or a 6s fallback, never under 1s)
+function loopDur(ts: string, nextTs: string | null): string {
+  const s = tsToSec(ts);
+  if (s === null) return "";
+  const e = (nextTs !== null ? tsToSec(nextTs) : null) ?? s + 6;
+  return `${Math.round(Math.max(1, e - s))}s`;
+}
 function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | null; onDone: () => void }) {
   const [value, setValue] = useState(line.text);
   const sidebarFs = useStore((s) => s.ui.sidebarFontSize); // the edit bar is chrome — sidebar-sized
@@ -1034,7 +1042,7 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
             <button className={"editloop" + (loopOn ? " on" : "")} onMouseDown={(e) => e.preventDefault()}
               onClick={toggleLoop} aria-pressed={loopOn}
               title={loopOn ? "Stop looping this utterance" : "Loop this utterance while you edit"}>
-              {loopOn ? "⏸ stop loop" : "▶ loop"} {line.ts.split(".")[0]}
+              {loopOn ? "⏸ stop loop" : "▶ loop"} {loopDur(line.ts, nextTs)}
             </button>
             <button className="editloop editspeed" onMouseDown={(e) => e.preventDefault()}
               onClick={cycleSpeed} title="Loop speed (also in Settings → Transcript)">
