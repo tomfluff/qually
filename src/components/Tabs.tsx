@@ -35,7 +35,7 @@ export function Tabs() {
                 e.preventDefault(); openMenuAt(pid, e.currentTarget);
               }
             }}>
-            {pinnedTabs.includes(pid) && <Icon name="pin" size={11} />}
+            {pinnedTabs.includes(pid) && <Icon name="pin" size={fontSize} />}
             {pid}
           </button>
           <button className="x" aria-label={`Close ${pid}`}
