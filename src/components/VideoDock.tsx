@@ -13,7 +13,8 @@ import { Icon } from "./Icon";
 // (An older persisted geom stored the LEFT edge as `x`; it has no `r`, so those
 // users get one reset to the default corner.)
 interface Geom { r: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
-const DEFAULT: Geom = { r: null, bottom: null, w: 380, collapsed: true, rate: 1 };
+const DEFAULT: Geom = { r: null, bottom: null, w: 400, collapsed: true, rate: 1 };
+const MIN_W = 400; // expanded minimum (collapsed shrinks to its controls)
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
@@ -154,7 +155,7 @@ export function VideoDock() {
     let w = w0, raf = 0;
     const move = (ev: MouseEvent) => {
       // right edge is the anchor, so the handle rides the LEFT edge: drag left = wider
-      w = Math.max(220, Math.min(w0 - (ev.clientX - x0), window.innerWidth - 40));
+      w = Math.max(MIN_W, Math.min(w0 - (ev.clientX - x0), window.innerWidth - 40));
       if (!raf) raf = requestAnimationFrame(() => { raf = 0; el.style.width = `${w}px`; });
     };
     const up = () => {
@@ -222,7 +223,7 @@ export function VideoDock() {
         // expanded: floor the width by the text size — magnified chrome in a 380px
         // dock wraps into a three-row jumble. A dragged width wins above the floor.
         width: geom.collapsed ? "auto"
-          : Math.min(Math.max(cur ? geom.w : 260, fs * 20), window.innerWidth - 48),
+          : Math.min(Math.max(cur ? geom.w : MIN_W, fs * 20, MIN_W), window.innerWidth - 48),
         fontSize: fs, ...pos,
       }}>
       {cur ? (

@@ -3,7 +3,7 @@
 /* video dock */
 .vdock { position:fixed; z-index:50; background:var(--panel); border:1px solid var(--line);
   border-radius:12px; box-shadow:0 10px 34px rgba(0,0,0,.3); overflow:hidden;
-  min-width:220px;
+  min-width:400px; /* expanded floor; .vdock.collapsed overrides to 0 */
   /* Permanently composited. Toggling will-change per-drag destroyed the GPU layer on
      every drop: the browser re-rasterizes the panel (34px blur shadow and all) and its
      text snaps between grayscale and subpixel antialiasing — a one-frame flash that
