@@ -38,7 +38,7 @@
   background:var(--bg); border:1px solid var(--line); border-radius:10px 10px 0 0; color:var(--muted);
   cursor:pointer; }
 .noticetoggle:hover { color:var(--fg); border-color:var(--accent); }
-.noticemore { width:43px; height:26px; display:inline-flex; align-items:center; justify-content:center;
+.noticemore { width:43px; height:18px; display:inline-flex; align-items:center; justify-content:center;
   background:var(--bg); border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px;
   color:var(--muted); cursor:pointer; } /* ≥24px target (WCAG 2.5.8) */
 .noticemore:hover { color:var(--fg); border-color:var(--accent); }
