@@ -85,5 +85,7 @@
 .vctrl .stepper input::-webkit-inner-spin-button,
 .vctrl .stepper input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
 .vempty { padding:1.2em; text-align:center; font-size:1em; color:var(--muted); }
-.vresize { position:absolute; right:0; bottom:0; width:16px; height:16px;
-  cursor:ew-resize; background:linear-gradient(135deg, transparent 50%, var(--muted) 50%); }
+/* bottom-LEFT: the right edge is the anchor, so the left edge is the one that
+   moves when resizing — the handle rides it */
+.vresize { position:absolute; left:0; bottom:0; width:16px; height:16px;
+  cursor:ew-resize; background:linear-gradient(225deg, transparent 50%, var(--muted) 50%); }

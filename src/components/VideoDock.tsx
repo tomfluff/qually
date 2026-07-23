@@ -7,9 +7,13 @@ import { registerVideo, tsToSec } from "../video/seek";
 import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
 
-// bottom-anchored so expanding/collapsing grows and shrinks upward
-interface Geom { x: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
-const DEFAULT: Geom = { x: null, bottom: null, w: 380, collapsed: true, rate: 1 };
+// bottom-RIGHT-anchored: expanding/collapsing grows upward and LEFTWARD, so the
+// corner holding the expand/collapse button never moves out from under the
+// pointer. `r` is the distance from the window's right edge to the dock's.
+// (An older persisted geom stored the LEFT edge as `x`; it has no `r`, so those
+// users get one reset to the default corner.)
+interface Geom { r: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
+const DEFAULT: Geom = { r: null, bottom: null, w: 380, collapsed: true, rate: 1 };
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
@@ -106,21 +110,22 @@ export function VideoDock() {
     // If the dock has never been dragged it sits on the CSS default (right:24/bottom:24)
     // with no transform. Convert to transform positioning NOW, before any movement —
     // same place, so nothing visibly changes, and every later write is absolute.
-    if (geom.x === null || geom.bottom === null)
-      flushSync(() => setGeom((g) => ({ ...g, x: r.left, bottom: window.innerHeight - r.bottom })));
+    if (geom.r === null || geom.bottom === null)
+      flushSync(() => setGeom((g) => ({ ...g, r: window.innerWidth - r.right, bottom: window.innerHeight - r.bottom })));
     const x0 = e.clientX, y0 = e.clientY, w0 = r.width;
-    const bx = r.left, bb = window.innerHeight - r.bottom; // where this drag starts from
+    const br = window.innerWidth - r.right, bb = window.innerHeight - r.bottom; // where this drag starts from
     // Clamp DURING the drag, with the same bounds the render uses (keep a 60px grab
     // handle on screen) — an unclamped drag with a clamped commit relocated the dock
     // on edge drops.
-    let tx = bx, tb = bb, raf = 0;
+    let tr = br, tb = bb, raf = 0;
     const move = (ev: MouseEvent) => {
-      tx = Math.max(60 - w0, Math.min(bx + (ev.clientX - x0), window.innerWidth - 60));
+      // dragging right = a smaller right-offset
+      tr = Math.max(60 - w0, Math.min(br - (ev.clientX - x0), window.innerWidth - 60));
       tb = Math.max(0, Math.min(bb - (ev.clientY - y0), window.innerHeight - 40));
       // coalesce to one write per frame; a mouse can out-pace the display
       if (!raf) raf = requestAnimationFrame(() => {
         raf = 0;
-        el.style.transform = `translate3d(${tx}px, ${-tb}px, 0)`;
+        el.style.transform = `translate3d(${-tr}px, ${-tb}px, 0)`;
       });
     };
     const up = () => {
@@ -128,8 +133,8 @@ export function VideoDock() {
       // One task, so no paint can interleave: write the final transform imperatively
       // (a no-op if the last rAF already did), then commit the SAME numbers — React's
       // render re-writes the identical transform string. The compositor sees no change.
-      el.style.transform = `translate3d(${tx}px, ${-tb}px, 0)`;
-      flushSync(() => setGeom((g) => ({ ...g, x: tx, bottom: tb })));
+      el.style.transform = `translate3d(${-tr}px, ${-tb}px, 0)`;
+      flushSync(() => setGeom((g) => ({ ...g, r: tr, bottom: tb })));
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
     };
@@ -148,7 +153,8 @@ export function VideoDock() {
     const x0 = e.clientX, w0 = geom.w;
     let w = w0, raf = 0;
     const move = (ev: MouseEvent) => {
-      w = Math.max(220, Math.min(w0 + (ev.clientX - x0), window.innerWidth - 40));
+      // right edge is the anchor, so the handle rides the LEFT edge: drag left = wider
+      w = Math.max(220, Math.min(w0 - (ev.clientX - x0), window.innerWidth - 40));
       if (!raf) raf = requestAnimationFrame(() => { raf = 0; el.style.width = `${w}px`; });
     };
     const up = () => {
@@ -194,15 +200,16 @@ export function VideoDock() {
     st.scrollToLine(best);
   };
 
-  // Positioned by transform off a left:0/bottom:0 anchor — the same property the drag
-  // writes, so drag and rest are one rendering path (see startDrag). translateY is
-  // negative-up from the bottom anchor, which keeps the BOTTOM edge pinned when
-  // collapse/expand changes the height. Clamped so a drag (or a position persisted
-  // from a larger window) can't strand the dock offscreen with no way to grab it back.
-  const pos = geom.x !== null && geom.bottom !== null
+  // Positioned by transform off a right:0/bottom:0 anchor — the same property the
+  // drag writes, so drag and rest are one rendering path (see startDrag). The
+  // negative translate keeps the BOTTOM-RIGHT corner pinned when collapse/expand
+  // changes the height OR width (the corner is where the toggle button lives).
+  // Clamped so a drag (or a position persisted from a larger window) can't strand
+  // the dock offscreen with no way to grab it back.
+  const pos = geom.r !== null && geom.bottom !== null
     ? {
-        left: 0, bottom: 0, right: "auto" as const, top: "auto" as const,
-        transform: `translate3d(${Math.max(60 - geom.w, Math.min(geom.x, window.innerWidth - 60))}px, ${
+        right: 0, bottom: 0, left: "auto" as const, top: "auto" as const,
+        transform: `translate3d(${-Math.max(60 - geom.w, Math.min(geom.r, window.innerWidth - 60))}px, ${
           -Math.max(0, Math.min(geom.bottom, window.innerHeight - 40))}px, 0)`,
       }
     : { right: 24, bottom: 24 };
