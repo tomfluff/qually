@@ -9,7 +9,7 @@ import { AiMarkPopover } from "./AiMarkPopover";
 import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
-import { seekVideo, loopLine, hasVideo } from "../video/seek";
+import { seekVideo, loopLine, hasVideo, setPlaybackRate } from "../video/seek";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
@@ -787,7 +787,8 @@ export function TranscriptView() {
       </VList>
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: Math.max(44, Math.min(160, w)) })} />
       <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
-        closeCallSids={closeCallSids} detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims} />
+        closeCallSids={closeCallSids} flagsByLine={flagsByLine}
+        detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims} />
         {selOff && (
           <button className={`backtosel ${selOff}`} onClick={backToSelection}
             style={{ fontSize: ui.sidebarFontSize }} aria-label="Scroll back to your selected line(s)">
@@ -968,9 +969,11 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLane
 // stops it, the dock's speed control applies) so the fix is made against the audio,
 // not from memory. Enter saves, Esc cancels, blur saves (it's a typo fix, losing
 // it to a stray click would hurt more than keeping it).
+const LOOP_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
 function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | null; onDone: () => void }) {
   const [value, setValue] = useState(line.text);
   const sidebarFs = useStore((s) => s.ui.sidebarFontSize); // the edit bar is chrome — sidebar-sized
+  const loopSpeed = useStore((s) => s.ui.loopSpeed);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const looping = useRef<(() => void) | null>(null);
   const [loopOn, setLoopOn] = useState(false);
@@ -984,7 +987,7 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
     }
     // auto-loop is a Settings choice now; the editbar button starts it either way
     if (useStore.getState().ui.loopEdit) {
-      looping.current = loopLine(line.ts, nextTs);
+      looping.current = loopLine(line.ts, nextTs, useStore.getState().ui.loopSpeed);
       setLoopOn(looping.current !== null);
     }
     return () => { looping.current?.(); };
@@ -993,7 +996,15 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
 
   const toggleLoop = () => {
     if (looping.current) { looping.current(); looping.current = null; setLoopOn(false); }
-    else { looping.current = loopLine(line.ts, nextTs); setLoopOn(looping.current !== null); }
+    else { looping.current = loopLine(line.ts, nextTs, useStore.getState().ui.loopSpeed); setLoopOn(looping.current !== null); }
+  };
+  // cycle the loop speed; a running loop follows immediately, and the choice
+  // persists (it IS the Settings value)
+  const cycleSpeed = () => {
+    const i = LOOP_SPEEDS.indexOf(loopSpeed);
+    const next = LOOP_SPEEDS[(i + 1) % LOOP_SPEEDS.length] ?? 0.75;
+    useStore.getState().setUi({ loopSpeed: next });
+    if (looping.current) setPlaybackRate(next);
   };
 
   const save = (text: string) => {
@@ -1014,12 +1025,18 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
       <span className="editbar" style={{ fontSize: sidebarFs }}>
         <kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel
         {hasVideo() && (
-          // mousedown preventDefault: the textarea must NOT blur (blur saves + closes)
-          <button className={"editloop" + (loopOn ? " on" : "")} onMouseDown={(e) => e.preventDefault()}
-            onClick={toggleLoop} aria-pressed={loopOn}
-            title={loopOn ? "Stop looping this utterance" : "Loop this utterance while you edit"}>
-            {loopOn ? "⏸ stop loop" : "▶ loop"} {line.ts.split(".")[0]}
-          </button>
+          <>
+            {/* mousedown preventDefault: the textarea must NOT blur (blur saves + closes) */}
+            <button className={"editloop" + (loopOn ? " on" : "")} onMouseDown={(e) => e.preventDefault()}
+              onClick={toggleLoop} aria-pressed={loopOn}
+              title={loopOn ? "Stop looping this utterance" : "Loop this utterance while you edit"}>
+              {loopOn ? "⏸ stop loop" : "▶ loop"} {line.ts.split(".")[0]}
+            </button>
+            <button className="editloop editspeed" onMouseDown={(e) => e.preventDefault()}
+              onClick={cycleSpeed} title="Loop speed (also in Settings → Transcript)">
+              {loopSpeed}×
+            </button>
+          </>
         )}
         {line.orig !== undefined && (
           <button className="editrevert" onMouseDown={(e) => e.preventDefault()}

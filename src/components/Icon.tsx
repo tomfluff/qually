@@ -37,6 +37,7 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   "alert-triangle": { d: ["M12 9v4", "M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z", "M12 16h.01"] },
   "file-plus": { d: ["M14 3v4a1 1 0 0 0 1 1h4", "M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z", "M12 11l0 6", "M9 14l6 0"] },
   "grip-horizontal": { d: ["M5 9h.01", "M5 15h.01", "M12 9h.01", "M12 15h.01", "M19 9h.01", "M19 15h.01"] },
+  "arrows-exchange": { d: ["M7 10h14l-4 -4", "M17 14h-14l4 4"] },
 };
 
 export function Icon({ name, size = 18 }: { name: keyof typeof PATHS; size?: number }) {

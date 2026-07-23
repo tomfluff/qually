@@ -28,6 +28,9 @@
   font:inherit; line-height:1; cursor:pointer; white-space:nowrap; }
 .vbtn:hover { border-color:var(--accent); }
 .vbtn.icononly { width:2.35em; padding:0; justify-content:center; }
+/* panel affordances (collapse) — no frame, so they don't read as transport controls */
+.vbtn.ghost { border-color:transparent; background:none; color:var(--muted); }
+.vbtn.ghost:hover { color:var(--fg); background:var(--row-hover); border-color:transparent; }
 .vbtn.accent { background:var(--accent); color:#fff; border-color:var(--accent); }
 [data-theme=dark] .vbtn.accent { color:#12161a; }
 .vbtn.accent:hover { filter:brightness(1.08); }

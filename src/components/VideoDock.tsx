@@ -223,7 +223,7 @@ export function VideoDock() {
                   The strip is also a drag handle (like vhead) — buttons/inputs opt out. */}
               <button className="vbtn accent" onClick={syncToLine}
                 title="Select the transcript line playing now, and scroll to it">
-                <Icon name="target" size={fs + 2} /> Jump to line
+                <Icon name="target" size={fs + 2} /> Transcript
               </button>
               <span style={{ flex: 1 }} />
               <span className="vlabel">Offset</span>
@@ -235,17 +235,16 @@ export function VideoDock() {
               </div>
               <span className="unit">s</span>
               <button className="vbtn icononly" onClick={() => fileRef.current?.click()} title="Change media">
-                <Icon name="upload" size={fs + 2} />
+                <Icon name="arrows-exchange" size={fs + 2} />
               </button>
             </div>
           )}
           {/* stays mounted when collapsed (0x0) so audio keeps playing but the
               video's dimensions don't affect the collapsed bar's auto width */}
-          <video ref={videoRef} src={cur.url} controls aria-label={cur.name}
+          <video ref={videoRef} src={cur.url} controls disablePictureInPicture aria-label={cur.name}
             onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
             onTimeUpdate={onTimeUpdate} onLoadedMetadata={onLoaded}
             style={{ width: geom.collapsed ? 0 : "100%", height: geom.collapsed ? 0 : "auto", display: "block", background: "#000" }} />
-          {!geom.collapsed && <div className="vresize" onMouseDown={startResize} title="resize (keeps aspect)" />}
         </div>
       ) : (!geom.collapsed && (
         <div className="vbody">
@@ -299,11 +298,15 @@ export function VideoDock() {
             </div>
           </>
         )}
-        <button className="vbtn icononly" onClick={() => setGeom((g) => ({ ...g, collapsed: !g.collapsed }))}
+        {/* ghost, not a bordered pill: it's a panel affordance (collapse), and
+            looked like a sibling of the speed control when framed the same way */}
+        <button className="vbtn icononly ghost" onClick={() => setGeom((g) => ({ ...g, collapsed: !g.collapsed }))}
           title={geom.collapsed ? "Expand" : "Collapse to audio"}>
           <Icon name={geom.collapsed ? "chevron-up" : "chevron-down"} size={fs + 3} />
         </button>
       </div>
+      {/* resize lives on the BAR's corner, not over the video picture */}
+      {cur && !geom.collapsed && <div className="vresize" onMouseDown={startResize} title="Resize" />}
       <input ref={fileRef} type="file" accept="video/*,audio/*" style={{ display: "none" }}
         onChange={(e) => { pickMedia(e.target.files?.[0]); e.target.value = ""; }} />
     </div>

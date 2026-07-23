@@ -35,6 +35,7 @@ export function SettingsButton() {
   const smoothScroll = useStore((s) => s.ui.smoothScroll);
   const scrollSpeed = useStore((s) => s.ui.scrollSpeed);
   const loopEdit = useStore((s) => s.ui.loopEdit);
+  const loopSpeed = useStore((s) => s.ui.loopSpeed);
   const claimUnattributed = useStore((s) => s.claimUnattributed);
   const setUi = useStore((s) => s.setUi);
   const dark = useStore((s) => s.ui.dark);
@@ -160,12 +161,13 @@ export function SettingsButton() {
                 <div className="settings-note">Eases the mouse wheel, and animates Home/End, PageUp/PageDown and jumps to a line — so you can see where you moved to rather than arriving there. Overrides your system's reduced-motion setting, which otherwise turns all of it off.</div>
                 <label className="srow">
                   <span>Scroll distance</span>
-                  <input type="range" min={0.25} max={3} step={0.25} value={scrollSpeed}
-                    onChange={(e) => setUi({ scrollSpeed: +e.target.value })} />
-                  <span className="sval">{scrollSpeed}×</span>
-                  <button className="sreset" onClick={(e) => { e.preventDefault(); setUi({ scrollSpeed: 1 }); }} title="Reset to 1×">reset</button>
+                  {/* percent with 5% steps — the old 0.25× steps made the thumb jump */}
+                  <input type="range" min={25} max={300} step={5} value={Math.round(scrollSpeed * 100)}
+                    onChange={(e) => setUi({ scrollSpeed: +e.target.value / 100 })} />
+                  <span className="sval">{Math.round(scrollSpeed * 100)}%</span>
+                  <button className="sreset" onClick={(e) => { e.preventDefault(); setUi({ scrollSpeed: 1 }); }} title="Reset to 100%">reset</button>
                 </label>
-                <div className="settings-note">How far one wheel click moves the transcript. 1× is your device's default.</div>
+                <div className="settings-note">How far one wheel click moves the transcript. 100% is your device's default.</div>
                 <div className="srow">
                   <span>Loop audio on edit</span>
                   <div className="seg">
@@ -173,7 +175,16 @@ export function SettingsButton() {
                     <button className={loopEdit ? "on" : ""} onClick={() => setUi({ loopEdit: true })}>on</button>
                   </div>
                 </div>
-                <div className="settings-note">When editing a line, loop its utterance in the loaded media so you fix it against the audio. The edit bar can start/stop the loop either way; the video dock's speed control applies.</div>
+                <div className="srow">
+                  <span>Loop speed</span>
+                  <div className="seg loopseg">
+                    {[0.5, 0.75, 1, 1.25, 1.5].map((s) => (
+                      <button key={s} className={loopSpeed === s ? "on" : ""}
+                        onClick={() => setUi({ loopSpeed: s })}>{s}×</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-note">When editing a line, loop its utterance in the loaded media so you fix it against the audio. The edit bar can start/stop the loop and change this speed; the dock's own speed returns when the loop stops.</div>
                 <div className="srow">
                   <span>Minimap</span>
                   <div className="seg">
@@ -272,9 +283,10 @@ function SpeakerRows() {
         const w = weightOf(ui, sp);
         return (
           <div className="srow" key={sp}>
+            {/* native title, not data-tip: the custom bubble clipped over the modal */}
             <button className="spkswatch"
               style={{ background: speakerColor(ui, sp), color: inkOn(speakerColor(ui, sp)) }}
-              data-tip={`Recolour ${sp}`} aria-label={`Recolour ${sp}`}
+              title={`Recolour ${sp}`} aria-label={`Recolour ${sp}`}
               onClick={(e) => openColorPicker(speakerColor(ui, sp),
                 (v) => setUi({ speakerColors: { ...ui.speakerColors, [sp]: v } }), e.currentTarget)}>
               {sp.slice(0, 3)}

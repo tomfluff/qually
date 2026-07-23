@@ -20,8 +20,12 @@
 
 /* no right padding: the lane strip runs flush to the minimap (its own left edge is
    the divider + 1rem), rather than floating in a gap short of it */
-.lineRow { display:flex; align-items:center; gap:8px; padding:0 0 0 16px;
+/* top-aligned, not centered: on a wrapped utterance the timecode and speaker
+   chips sit with the FIRST line of text, where reading starts, instead of
+   floating mid-paragraph. The chips' margin-top mirrors .txt's padding-block. */
+.lineRow { display:flex; align-items:flex-start; gap:8px; padding:0 0 0 16px;
   cursor:pointer; user-select:none; }
+.lineRow .ts, .lineRow .spk, .lineRow .lid { margin-top:6px; }
 /* ponytail: same fractional-DPI seam as the lane strip, on the row's own opaque
    backgrounds (hover / selection). Bleed 1px into the next row so the highlight
    band reads continuous; border-box is unchanged so virtua doesn't re-open it. */
@@ -77,10 +81,12 @@
    font's own scale each way — and colour only reinforces the quiet end. */
 .lineRow.spk-quiet .txt { font-weight:300; color:var(--fg-dim); }
 .lineRow.spk-bold .txt { font-weight:600; }
-/* speaker focus: everyone else steps back — by COLOUR, never opacity (see base.css).
-   "collapse" additionally folds the row to one ellipsised line, keeping the
-   conversation's skeleton without its bulk. */
-.lineRow.spk-off-dim .txt, .lineRow.spk-off-collapse .txt { color:var(--fg-dim); font-weight:300; }
+/* speaker focus: everyone else steps back — the WHOLE row (chips, lanes, text)
+   drops via opacity. A deliberate exception to the no-opacity rule (base.css):
+   this is a user-chosen filter state, not resting chrome, and the owner asked
+   for the entire line to recede as one. "collapse" additionally folds the row
+   to one ellipsised line, keeping the conversation's skeleton without its bulk. */
+.lineRow.spk-off-dim, .lineRow.spk-off-collapse { opacity:.4; }
 .lineRow.spk-off-collapse .txt { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .lineRow .txt { flex:1; line-height:1.45; font-family:var(--read-font); }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
@@ -196,6 +202,10 @@
   padding:0 2px; cursor:pointer; border-radius:4px; }
 .editloop:hover { background:var(--sel); }
 .editloop.on { font-weight:600; }
+/* the loop-speed cycler: bordered so it reads as a control, not more hint text */
+.editloop.editspeed { border:1px solid var(--line); padding:.05em .4em;
+  font-variant-numeric:tabular-nums; }
+.editloop.editspeed:hover { border-color:var(--accent); }
 .editrevert { border:0; background:none; font:inherit; color:var(--muted); cursor:pointer;
   font-style:italic; padding:0; }
 .editrevert:hover { color:var(--accent); }

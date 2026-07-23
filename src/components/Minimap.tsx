@@ -5,6 +5,7 @@ import type { VListHandle } from "virtua";
 import { laneAssign, speakerColor, weightOf } from "../state/store";
 import type { Ui } from "../state/store";
 import type { Group } from "../merge";
+import { lensOf, spanLens, type Flag } from "../ai/flag";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 export interface MinimapHandle { setRange: (start: number, end: number) => void; }
@@ -20,11 +21,12 @@ export const Minimap = forwardRef<MinimapHandle, {
   cols: number;
   codebook: Record<string, { color: string }>;
   closeCallSids: Set<number>;
+  flagsByLine: Map<number, Flag[]>; // the transcript's VISIBLE marks (already lens-filtered)
   detail: "detailed" | "simplified";
   ui: Ui; // speaker colours + weights; the minimap was the LAST place still hardcoding "R"
   vref: RefObject<VListHandle | null>;
   onNav?: () => void; // stop the list's scroll animations before a scrub jump, or they overwrite it
-}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, detail, ui, vref, onNav }, ref) {
+}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, flagsByLine, detail, ui, vref, onNav }, ref) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -81,7 +83,12 @@ export const Minimap = forwardRef<MinimapHandle, {
       const laneAreaW = Math.min(w * (simple ? 0.6 : 0.5), cols * (simple ? 10 : 7));
       const laneX = w - laneAreaW - 2;
       const colW = laneAreaW / Math.max(1, cols);
-      const textX = railX + railW + 3;
+      // AI-mark channel: WHERE the machine noticed something, next to WHO said it.
+      // Its own thin strip in the lens's colour (amber = transcription error), so
+      // machine marks never share a column with human coding.
+      const noticeW = simple ? 5 : 3;
+      const noticeX = railX + railW + 2;
+      const textX = noticeX + noticeW + 3;
       // The rail costs the text bars width. At the narrowest minimap (44px, simplified)
       // textX runs PAST laneX and the bars would be drawn on top of the code lanes — so
       // below a usable width, drop the bars entirely: "who" and "which code" are worth
@@ -154,6 +161,25 @@ export const Minimap = forwardRef<MinimapHandle, {
         }
       }
 
+      // AI marks (the ticks mirror what the transcript currently SHOWS — the eye
+      // and per-lens filters apply here too, via flagsByLine). A group with marks
+      // from several lenses splits its tick vertically into their colours.
+      const noticeMinH = simple ? 5 : 2;
+      for (let i = 0; i < N; i++) {
+        const colors: string[] = [];
+        for (const id of groups[i].ids) for (const f of flagsByLine.get(id) ?? []) {
+          const c = lensOf(spanLens(f))?.color ?? WARN;
+          if (!colors.includes(c)) colors.push(c);
+        }
+        if (!colors.length) continue;
+        const y = (i / N) * h, bh = Math.max(noticeMinH, (h / N) * 0.85);
+        const seg = bh / Math.min(colors.length, 4);
+        colors.slice(0, 4).forEach((c, k) => {
+          ctx.globalAlpha = 1; ctx.fillStyle = c;
+          ctx.fillRect(noticeX, y + k * seg, noticeW, Math.max(1, seg - 0.5));
+        });
+      }
+
       // segment lanes + close-call markers in the left gutter
       for (const s of laned) {
         const gi0 = m.get(s.start) ?? 0;
@@ -175,7 +201,7 @@ export const Minimap = forwardRef<MinimapHandle, {
     const ro = new ResizeObserver(() => { draw(); syncFromList(); });
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [groups, laned, cols, codebook, closeCallSids, detail, N,
+  }, [groups, laned, cols, codebook, closeCallSids, flagsByLine, detail, N,
       ui.speakerColors, ui.speakerWeight, // recolour the rail when the speaker map changes
       ui.dark]); // repaint on theme flip so the muted amount-bars pick up the new --muted
 

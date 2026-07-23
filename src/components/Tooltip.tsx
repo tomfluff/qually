@@ -62,14 +62,18 @@ export function Tooltip() {
       const ov = document.querySelector(".pop, .ctxmenu, .clrpop");
       return !!ov && !ov.contains(el);
     };
+    // an EMPTY data-tip is an opt-out: it stops the closest() walk (so an inner
+    // element can suppress its row's tip in favour of a native title) without
+    // opening an empty bubble
+    const blank = (el: HTMLElement) => el.getAttribute("data-tip") === "" && !el.hasAttribute("data-tipdel");
     const onOver = (e: MouseEvent) => {
       const el = host(e.target);
       if (el === cur) return;
-      if (el && !covered(el)) openFor(el); else close();
+      if (el && !blank(el) && !covered(el)) openFor(el); else close();
     };
     const onFocus = (e: FocusEvent) => {
       const el = host(e.target);
-      if (el && el !== cur && !covered(el)) openFor(el);
+      if (el && el !== cur && !blank(el) && !covered(el)) openFor(el);
     };
     const onBlur = () => close();
     // a click means attention moved to whatever was clicked (often a popover

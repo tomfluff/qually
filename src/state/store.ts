@@ -45,6 +45,7 @@ export interface Ui {
   smoothScroll: boolean; // animate Home/End/PageUp/PageDown and jumps instead of teleporting
   scrollSpeed: number; // wheel distance multiplier for the transcript (1 = device default)
   loopEdit: boolean; // loop the utterance's audio while its line is being edited
+  loopSpeed: number; // playback rate while looping (independent of the dock's rate)
   speakerFocus: string | null; // isolate one speaker's dialogue (null = everyone)
   speakerFocusMode: "dim" | "collapse"; // how the OTHER speakers' lines step back
   speakerColors: Record<string, string>; // per-speaker overrides; unset = speakerColor()
@@ -288,7 +289,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, speakerFocus: null, speakerFocusMode: "dim",
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: null, speakerFocusMode: "dim",
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
@@ -982,6 +983,7 @@ export const useStore = create<State>()(
         s.ui.smoothScroll ??= false;
         s.ui.scrollSpeed ??= 1;
         s.ui.loopEdit ??= true;
+        s.ui.loopSpeed ??= 0.75;
         s.ui.speakerFocus ??= null;
         s.ui.speakerFocusMode ??= "dim";
         s.ui.speakerColors ??= {};

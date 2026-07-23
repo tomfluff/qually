@@ -29,15 +29,18 @@
    The wrap owns the old absolute spot; the eye keeps its size, a slim chevron
    below it opens the per-lens filter menu. */
 .noticewrap { position:absolute; top:8px; right:calc(16px + var(--mm-w) + 51px); z-index:60;
-  display:flex; flex-direction:column; align-items:stretch; gap:3px; }
+  display:flex; flex-direction:column; align-items:stretch;
+  border-radius:10px; box-shadow:0 8px 26px rgba(0,0,0,.28); }
   /* z 60, not 40: the lens menu must clear the video dock (z 50) wherever it's dragged */
+/* eye + chevron are ONE control group: shared shadow on the wrap, joined edge,
+   outer corners only */
 .noticetoggle { width:43px; height:43px; display:inline-flex; align-items:center; justify-content:center;
-  background:var(--bg); border:1px solid var(--line); border-radius:10px; color:var(--muted);
-  cursor:pointer; box-shadow:0 8px 26px rgba(0,0,0,.28); }
+  background:var(--bg); border:1px solid var(--line); border-radius:10px 10px 0 0; color:var(--muted);
+  cursor:pointer; }
 .noticetoggle:hover { color:var(--fg); border-color:var(--accent); }
 .noticemore { width:43px; height:26px; display:inline-flex; align-items:center; justify-content:center;
-  background:var(--bg); border:1px solid var(--line); border-radius:8px; color:var(--muted);
-  cursor:pointer; box-shadow:0 8px 26px rgba(0,0,0,.28); } /* ≥24px target (WCAG 2.5.8) */
+  background:var(--bg); border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px;
+  color:var(--muted); cursor:pointer; } /* ≥24px target (WCAG 2.5.8) */
 .noticemore:hover { color:var(--fg); border-color:var(--accent); }
 .noticemenu { position:absolute; top:0; right:calc(100% + 6px); min-width:14em;
   max-width:min(26em, calc(100vw - 140px)); /* magnified text can't push it off the left edge */

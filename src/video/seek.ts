@@ -15,6 +15,9 @@ export function registerVideo(v: HTMLVideoElement | null, off: number) {
 // whether any media is loaded — the line editor shows its loop button only then
 export const hasVideo = () => el !== null;
 
+// live rate change while a loop is running (the edit bar's speed button)
+export function setPlaybackRate(r: number) { if (el) el.playbackRate = r; }
+
 export function tsToSec(ts: string): number | null {
   const p = (ts || "").split(".")[0].split(":").map(Number);
   if (!p.length || p.some(isNaN)) return null;
@@ -32,10 +35,10 @@ export function seekVideo(ts: string): boolean {
 
 // Loop one utterance while its line is being retyped (transcript repair).
 // endTs is usually the next line's timestamp; without one, loop a 6s window.
-// Plays at the dock's current rate — its speed control (and play/pause) keep
-// working during the loop, so slowing down is a choice, not imposed.
+// Plays at `rate` (the ui.loopSpeed setting), restoring the dock's own rate on
+// stop — so the loop can run slow without the dock losing its speed.
 // Returns a stop function that pauses.
-export function loopLine(startTs: string, endTs: string | null): (() => void) | null {
+export function loopLine(startTs: string, endTs: string | null, rate: number): (() => void) | null {
   if (!el) return null;
   const s = tsToSec(startTs);
   if (s === null) return null;
@@ -43,12 +46,15 @@ export function loopLine(startTs: string, endTs: string | null): (() => void) | 
   const v = el;
   const from = Math.max(0, s + offset);
   const to = Math.max(from + 1, e + offset); // a sub-second range would stutter
+  const prevRate = v.playbackRate;
   const onTime = () => { if (v.currentTime >= to) v.currentTime = from; };
+  v.playbackRate = rate;
   v.currentTime = from;
   v.addEventListener("timeupdate", onTime);
   void v.play();
   return () => {
     v.removeEventListener("timeupdate", onTime);
+    v.playbackRate = prevRate;
     v.pause(); // ponytail: always pause on exit; resuming a pre-existing playback isn't tracked
   };
 }
