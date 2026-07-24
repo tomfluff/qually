@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
-import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { MODELS, modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { excerptOf } from "../contract/excerpt";
 import { chunksOfItems, renderGroundChunk, estimateGroundTokens, groundChunk, groundHash, type GroundItem } from "../ai/ground";
@@ -30,7 +30,9 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
   useEffect(() => () => abort.current?.abort(), []);
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
-  const model = modelOf(ai.model);
+  // per-run model override — starts at the Settings default, changes THIS run only
+  const [modelId, setModelId] = useState(ai.model);
+  const model = modelOf(modelId);
   // re-ground: ignore existing records and run everything again (e.g. after a
   // prompt change — old results don't invalidate by hash, only by content)
   const [reground, setReground] = useState(false);
@@ -74,11 +76,11 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
     try {
       for (let i = 0; i < chunks.length; i++) {
         const { recs, usage } = await groundChunk({
-          key, model: ai.model, items: chunks[i], redaction: red, signal: abort.current.signal,
+          key, model: model.id, items: chunks[i], redaction: red, signal: abort.current.signal,
         });
         st.addGrounds(recs);
         st.logAiCall({
-          at: new Date().toISOString(), model: ai.model, task: "ground", pid: pids.join("+"),
+          at: new Date().toISOString(), model: model.id, task: "ground", pid: pids.join("+"),
           lines: chunks[i].length, redactions: chunks[i].reduce((n, it) => n + red.count(it.excerpt), 0),
           inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
         });
@@ -131,6 +133,14 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                 as the reason the code applies — the evidence for <b>your</b> coding. It
                 proposes nothing.
               </p>
+              <div className="ai-sec">Model <span className="ai-sec-hint">this run only — the default lives in Settings → AI</span></div>
+              <div className="ai-models">
+                {MODELS.map((m) => (
+                  <button key={m.id} className={modelId === m.id ? "on" : ""}
+                    title={`${m.blurb} — $${m.in}/$${m.out} per 1M tokens in/out`}
+                    onClick={() => setModelId(m.id)}>{m.name}</button>
+                ))}
+              </div>
               {alreadyGrounded > 0 && (
                 <label className="ai-spk" style={{ marginBottom: 8 }}>
                   <input type="checkbox" checked={reground} onChange={() => setReground((v) => !v)} />

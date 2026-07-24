@@ -111,3 +111,14 @@
 .ai-facts b { color:var(--fg); font-variant-numeric:tabular-nums; }
 .ai-err { margin-top:10px; padding:8px 10px; border-radius:6px; line-height:1.45;
   background:color-mix(in srgb, #e0554f 12%, var(--bg)); border:1px solid #e0554f; }
+
+/* per-run model override inside the AI modals — the Settings default is the
+   starting value; picking here changes THIS run only */
+.ai-models { display:flex; border:1px solid var(--line); border-radius:7px; overflow:hidden;
+  width:max-content; margin-bottom:4px; }
+.ai-models button { border:none; background:var(--bg); color:var(--fg); font:inherit;
+  padding:6px 14px; cursor:pointer; }
+.ai-models button + button { border-left:1px solid var(--line); }
+.ai-models button:hover { background:var(--panel); }
+.ai-models button.on { background:var(--accent); color:#fff; }
+[data-theme=dark] .ai-models button.on { color:#12161a; }

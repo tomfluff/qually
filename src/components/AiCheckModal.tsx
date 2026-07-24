@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
-import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { MODELS, modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine } from "../ai/flag";
 import { announce } from "../announce";
@@ -48,7 +48,9 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
     });
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
-  const model = modelOf(ai.model);
+  // per-run model override — starts at the Settings default, changes THIS run only
+  const [modelId, setModelId] = useState(ai.model);
+  const model = modelOf(modelId);
 
   // Send only lines that need it: right speaker, and not already scanned under
   // every requested lens at their current text (edits invalidate by hash).
@@ -84,11 +86,11 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
     try {
       for (let i = 0; i < chunks.length; i++) {
         const { flags, usage } = await scanChunk({
-          key, model: ai.model, lines: chunks[i], lenses, redaction: red, signal: abort.current.signal,
+          key, model: model.id, lines: chunks[i], lenses, redaction: red, signal: abort.current.signal,
         });
         st.addFlags(pid, flags, chunks[i], lenses);
         st.logAiCall({
-          at: new Date().toISOString(), model: ai.model, task: `scan:${[...lenses].sort().join("+")}`, pid,
+          at: new Date().toISOString(), model: model.id, task: `scan:${[...lenses].sort().join("+")}`, pid,
           lines: chunks[i].length, redactions: chunks[i].reduce((n, l) => n + red.count(l.text), 0),
           inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
         });
@@ -156,6 +158,15 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
                     <span className="ai-lens-dot" style={{ background: l.color }} />
                     <span>{l.label} <em>{l.method}</em></span>
                   </label>
+                ))}
+              </div>
+
+              <div className="ai-sec">Model <span className="ai-sec-hint">this run only — the default lives in Settings → AI</span></div>
+              <div className="ai-models">
+                {MODELS.map((m) => (
+                  <button key={m.id} className={modelId === m.id ? "on" : ""}
+                    title={`${m.blurb} — $${m.in}/$${m.out} per 1M tokens in/out`}
+                    onClick={() => setModelId(m.id)}>{m.name}</button>
                 ))}
               </div>
 
