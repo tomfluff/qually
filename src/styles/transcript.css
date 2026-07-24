@@ -96,7 +96,11 @@
 
 /* the focus control: floating target button at the transcript's bottom right,
    menu opens UPWARD — the eye/lens-menu pattern mirrored to the bottom edge */
-.focuswrap { position:absolute; bottom:10px; right:calc(16px + var(--mm-w) + 8px); z-index:60;
+/* bottom:62 clears the collapsed video dock's default corner (the dock owns z 74
+   and covers whatever it lands on) — the two stack at the right edge instead of
+   the dock swallowing this button out of the box. Drag the dock anywhere and this
+   stays put. */
+.focuswrap { position:absolute; bottom:62px; right:calc(16px + var(--mm-w) + 8px); z-index:60;
   display:flex; flex-direction:column; align-items:flex-end; }
 .focustoggle { width:43px; height:43px; display:inline-flex; align-items:center; justify-content:center;
   background:var(--bg); border:1px solid var(--line); border-radius:10px; color:var(--muted);

@@ -31,7 +31,8 @@
 .noticewrap { position:absolute; top:8px; right:calc(16px + var(--mm-w) + 51px); z-index:60;
   display:flex; flex-direction:column; align-items:stretch;
   border-radius:10px; box-shadow:0 8px 26px rgba(0,0,0,.28); }
-  /* z 60, not 40: the lens menu must clear the video dock (z 50) wherever it's dragged */
+  /* z 60: above the transcript surface and its own search sibling. The video dock
+     (74) deliberately sits ABOVE this — it's a panel the user positioned. */
 /* eye + chevron are ONE control group: shared shadow on the wrap, joined edge,
    outer corners only */
 .noticetoggle { width:43px; height:43px; display:inline-flex; align-items:center; justify-content:center;

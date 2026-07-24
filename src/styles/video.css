@@ -1,7 +1,12 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
    Copyright (C) 2026 Yotam Sechayk */
 /* video dock */
-.vdock { position:fixed; z-index:50; background:var(--panel); border:1px solid var(--line);
+/* z 74: the dock floats over the whole transcript surface, including the eye and
+   focus toggles that sit at z 60 — it's a movable panel the user placed, not
+   another edge control, so nothing on that surface may cover it. Still under the
+   transient overlays that own the keyboard while open (ctxmenu 75, backdrops 90/95,
+   colour picker 120, tooltip 200). */
+.vdock { position:fixed; z-index:74; background:var(--panel); border:1px solid var(--line);
   border-radius:12px; box-shadow:0 10px 34px rgba(0,0,0,.3); overflow:hidden;
   min-width:400px; /* expanded floor — must match MIN_W in VideoDock.tsx; .vdock.collapsed overrides to 0 */
   /* Permanently composited. Toggling will-change per-drag destroyed the GPU layer on
@@ -18,9 +23,10 @@
 .vhead:hover { background:var(--sel); } /* says "grab me" before you commit to a drag */
 .vhead .vgrip { display:inline-flex; flex-shrink:0; } /* the visual drag affordance */
 .vhead .vtitle { max-width:12em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* minimised: just grip + transport + expand, shoulder to shoulder */
+/* minimised: just grip + transport + expand, shoulder to shoulder. The label is
+   dropped in JSX when media is loaded (the transport says what it is); with no
+   media the "Video" label stays, so the pill isn't an anonymous pair of glyphs. */
 .vdock.collapsed { min-width:0; }
-.vdock.collapsed .vtitle { display:none; }
 .vdock.collapsed .vhead { flex-wrap:nowrap; }
 .vbody { position:relative; }
 
@@ -54,7 +60,7 @@
    and an absolute menu poking above the dock's top edge gets clipped there.
    Anchored to the button's top-right corner, growing up-left. It is PORTALED to
    body, so its font-size comes inline from ui.sidebarFontSize too. */
-.vspeedmenu { position:fixed; transform:translate(-100%, -100%); z-index:60;
+.vspeedmenu { position:fixed; transform:translate(-100%, -100%); z-index:76; /* clears its own dock (74) */
   display:flex; flex-direction:column; padding:.3em; min-width:5em;
   background:var(--bg); border:1px solid var(--line); border-radius:.6em;
   box-shadow:0 8px 26px rgba(0,0,0,.28); }

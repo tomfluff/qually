@@ -334,8 +334,9 @@ export function VideoDock() {
       <div className="vhead" onMouseDown={startDrag}>
         <span className="vgrip" aria-hidden="true"><Icon name="grip-horizontal" size={fs + 1} /></span>
         {/* minimised with media: controls only — the filename returns on expand.
-            (The empty dock keeps its label; a bare grip+chevron pill says nothing.) */}
-        {!(geom.collapsed && cur) && <span className="vtitle">{cur ? cur.name : `video · ${pid}`}</span>}
+            With no media the pill keeps a plain "Video" label; a bare grip and
+            chevron says nothing about what it is. */}
+        {!(geom.collapsed && cur) && <span className="vtitle">{cur ? cur.name : "Video"}</span>}
         <span style={{ flex: 1 }} />
         {cur && (
           <>
