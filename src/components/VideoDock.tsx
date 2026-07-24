@@ -15,6 +15,10 @@ import { Icon } from "./Icon";
 interface Geom { r: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
 const DEFAULT: Geom = { r: null, bottom: null, w: 400, collapsed: true, rate: 1 };
 const MIN_W = 400; // expanded minimum (collapsed shrinks to its controls) — must match video.css .vdock min-width
+// Rest ABOVE the transcript's focus button (footer 32 + the button's 12px offset
+// + its 43px height + a gap): the dock is bottom-anchored and covers whatever it
+// lands on (z 74), so the untouched default has to leave that button reachable.
+const DEFAULT_BOTTOM = 96;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
@@ -278,7 +282,7 @@ export function VideoDock() {
         transform: `translate3d(${-Math.max(60 - effW, Math.min(geom.r, window.innerWidth - 60))}px, ${
           -Math.max(0, Math.min(geom.bottom, window.innerHeight - 40))}px, 0)`,
       }
-    : { right: 24, bottom: 24 };
+    : { right: 24, bottom: DEFAULT_BOTTOM };
 
   return (
     <div className={"vdock" + (geom.collapsed ? " collapsed" : "")}
