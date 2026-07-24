@@ -21,10 +21,10 @@ interface Notice {
   quote: string; reason: string; lens: string; codedAs: string | null;
 }
 
-// working state survives leaving the tab (the view unmounts on tab change).
-// proposals are ephemeral AI output — kept only while the tab is mounted.
-// The active panel lives in the store (ui.assistPanel) — the Assist tab's own
-// menu sets it, so it isn't lost when the view unmounts.
+// working state survives leaving the tab (the view unmounts on tab change) via
+// this module-level cache. proposals are AI output held in memory only — never
+// written to the project file, so they clear on reload. The active panel lives
+// in the store (ui.assistPanel) — the Assist tab's own menu sets it.
 const remembered = {
   lens: null as string | null,
   onlyUncoded: true,

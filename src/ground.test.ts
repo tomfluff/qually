@@ -22,6 +22,13 @@ test("valid quotes pass; hallucinated and empty ones drop; every item gets a rec
   expect(recs[99]).toBeUndefined();
 });
 
+test("an item with no quotes field gets an empty record, not a crash", () => {
+  const recs = sanitizeGroundReply([items[0]], [
+    { sid: 1 } as unknown as { sid: number; quotes: string[] },
+  ], red);
+  expect(recs[1].quotes).toEqual([]);
+});
+
 test("quotes cap at 3 and dedupe", () => {
   const recs = sanitizeGroundReply([items[0]], [
     { sid: 1, quotes: ["zoomed", "zoomed", "counted", "gridlines", "cope"] },

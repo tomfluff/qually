@@ -19,10 +19,19 @@ test("keeps proposals between known codes, drops invented names and self-merges"
   expect(out).toEqual([{ from: "annoyance", into: "frustration", rationale: "same feeling" }]);
 });
 
-test("dedupes unordered pairs — a→b and b→a queue once", () => {
+test("dedupes unordered pairs — a→b and b→a queue once, first wins", () => {
   const out = sanitizeMergeReply(codes, [
     { from: "annoyance", into: "frustration", rationale: "first" },
     { from: "frustration", into: "annoyance", rationale: "reverse" },
   ]);
-  expect(out).toHaveLength(1);
+  expect(out).toEqual([{ from: "annoyance", into: "frustration", rationale: "first" }]);
+});
+
+test("malformed proposals: missing name, blank name, and undefined rationale", () => {
+  const out = sanitizeMergeReply(codes, [
+    { into: "frustration" } as unknown as { from: string; into: string; rationale: string }, // no from -> drop
+    { from: " ", into: "frustration" } as unknown as { from: string; into: string; rationale: string }, // blank -> drop
+    { from: "annoyance", into: "frustration" } as unknown as { from: string; into: string; rationale: string }, // no rationale -> ""
+  ]);
+  expect(out).toEqual([{ from: "annoyance", into: "frustration", rationale: "" }]);
 });

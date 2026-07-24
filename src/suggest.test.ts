@@ -26,6 +26,16 @@ test("identical proposals dedupe", () => {
   expect(out).toHaveLength(1);
 });
 
+test("non-integer or missing endpoints are dropped; empty reply is empty", () => {
+  expect(sanitizeSuggestReply(codes, lines, [])).toEqual([]);
+  const out = sanitizeSuggestReply(codes, lines, [
+    { line_start: 1.5, line_end: 2, code: "magnification" },                        // non-integer -> drop
+    { line_start: 1, line_end: undefined as unknown as number, code: "magnification" }, // missing -> drop
+    { line_start: 1, line_end: 2, code: "magnification" },                          // valid
+  ]);
+  expect(out).toEqual([{ startLine: 1, endLine: 2, code: "magnification" }]);
+});
+
 test("overlapsExisting skips a range already carrying that code (any status)", () => {
   const segs = [{ pid: "P01", start: 2, end: 4, code: "magnification", status: "rejected" }];
   const p: SuggestProposal = { startLine: 3, endLine: 5, code: "magnification" };

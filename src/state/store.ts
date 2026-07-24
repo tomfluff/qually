@@ -930,7 +930,10 @@ export const useStore = create<State>()(
         const merged = s.segments
           .map((x) => norm(x.code) === norm(from) ? { ...x, code: into } : x)
           .filter((x) => {
-            const key = `${x.pid}|${x.start}|${x.end}|${norm(x.code)}`;
+            // include proposedBy + status: two coders at the same span, or an
+            // accepted vs a candidate, are distinct data — not duplicates the
+            // merge should collapse (matches addSegment's per-coder dedup)
+            const key = `${x.pid}|${x.start}|${x.end}|${norm(x.code)}|${x.proposedBy}|${x.status}`;
             if (seen.has(key)) return false;
             seen.add(key); return true;
           });

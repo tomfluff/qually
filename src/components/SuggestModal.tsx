@@ -19,7 +19,8 @@ import { Icon } from "./Icon";
 
 export function SuggestModal({ onClose }: { onClose: () => void }) {
   const pid = useStore((s) => s.active);
-  const lines = useStore((s) => s.transcripts[s.active]?.lines ?? []);
+  const transcripts = useStore((s) => s.transcripts);
+  const lines = transcripts[pid]?.lines ?? [];
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const ai = useStore((s) => s.ai);
@@ -38,20 +39,19 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
   // the codebook as the model sees it: name + def + up to N exemplar excerpts (from
   // this study's accepted segments), which anchor what each code actually means
   const codes = useMemo<SuggestCode[]>(() => {
-    const st = useStore.getState();
     return Object.keys(codebook).map((name) => {
       const excerpts: string[] = [];
       for (const s of segments) {
         if (excerpts.length >= SUGGEST_EXEMPLARS) break;
-        if (s.status !== "accepted" || s.code !== name || !st.transcripts[s.pid]) continue;
-        const ex = excerptOf(st.transcripts[s.pid].lines
+        if (s.status !== "accepted" || s.code !== name || !transcripts[s.pid]) continue;
+        const ex = excerptOf(transcripts[s.pid].lines
           .filter((l) => l.id >= s.start && l.id <= s.end)
           .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
         if (ex) excerpts.push(ex);
       }
       return { name, def: codebook[name]?.def ?? "", excerpts };
     });
-  }, [codebook, segments]);
+  }, [codebook, segments, transcripts]);
 
   const chunks = useMemo(() => chunksOf(lines), [lines]);
   const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, codes, red), 0), [chunks, codes, red]);
@@ -74,20 +74,20 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
     announce(`Suggesting codes for ${pid} across ${chunks.length} window${chunks.length === 1 ? "" : "s"}…`);
     abort.current = new AbortController();
     const by = `AI · ${model.name}`;
-    // grows as we add: a later proposal that overlaps an earlier accepted candidate
-    // for the same code is skipped too, not duplicated
-    const existing = useStore.getState().segments
-      .filter((s) => s.pid === pid).map((s) => ({ pid: s.pid, start: s.start, end: s.end, code: s.code, status: s.status }));
-    let added = 0, skipped = 0, cost = 0;
+    let added = 0, skipped = 0, cost = 0, pushed = false;
     try {
       for (let i = 0; i < chunks.length; i++) {
         const { proposals, usage } = await suggestChunk({
           key, model: model.id, lines: chunks[i], codes, redaction: red, signal: abort.current.signal,
         });
         for (const p of proposals) {
-          if (overlapsExisting(existing, pid, p)) { skipped++; continue; }
-          useStore.getState().addSegment(pid, p.startLine, p.endLine, p.code, by, "candidate");
-          existing.push({ pid, start: p.startLine, end: p.endLine, code: p.code, status: "candidate" });
+          // read live each time: catches candidates added earlier in THIS run and
+          // any the user accepted/added in another view during the async run
+          const st = useStore.getState();
+          if (!st.codebook[p.code]) { skipped++; continue; }              // code renamed/deleted mid-run
+          if (overlapsExisting(st.segments, pid, p)) { skipped++; continue; }
+          if (!pushed) { st.pushUndo(); pushed = true; }                  // one undo entry for the whole run
+          st.addSegment(pid, p.startLine, p.endLine, p.code, by, "candidate");
           added++;
         }
         useStore.getState().logAiCall({

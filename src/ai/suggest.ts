@@ -31,7 +31,7 @@ export const renderSuggestChunk = (lines: Line[], codes: SuggestCode[], r: Redac
     const ex = c.excerpts.map((e) => `    e.g. ${r.redact(e)}`).join("\n");
     return ex ? `${head}\n${ex}` : head;
   }).join("\n");
-  const window = lines.map((l) => `${l.id}\t${l.speaker}\t${r.redact(l.text)}`).join("\n");
+  const window = lines.map((l) => `${l.id}\t${r.redact(l.speaker)}\t${r.redact(l.text)}`).join("\n");
   return `CODEBOOK:\n${book}\n\nTRANSCRIPT:\n${window}`;
 };
 
