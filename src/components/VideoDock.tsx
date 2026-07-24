@@ -13,15 +13,15 @@ import { Icon } from "./Icon";
 // (An older persisted geom stored the LEFT edge as `x`; it has no `r`, so those
 // users get one reset to the default corner.)
 interface Geom { r: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
-const DEFAULT: Geom = { r: null, bottom: null, w: 400, collapsed: true, rate: 1 };
-const MIN_W = 400; // expanded minimum (collapsed shrinks to its controls) — must match video.css .vdock min-width
-// Where an untouched dock rests: directly ABOVE the transcript's focus button, in
-// the same column. The dock is bottom-anchored and covers whatever it lands on
-// (z 74), so the default has to clear both that button and the minimap.
-//   bottom = footer 32 + the button's 12px offset + its 43px height + a gap
-//   right  = the minimap's width + 24, the same offset .focuswrap uses
+const DEFAULT: Geom = { r: null, bottom: null, w: 426, collapsed: true, rate: 1 };
+const MIN_W = 426; // expanded minimum (collapsed shrinks to its controls) — must match video.css .vdock min-width
+// Where an untouched dock rests: bottom right of the transcript surface, clear of
+// the minimap and to the LEFT of the focus button's column (the dock is
+// bottom-anchored and covers whatever it lands on at z 74, so the default has to
+// leave both reachable).
 const DEFAULT_BOTTOM = 12;
 const DEFAULT_RIGHT = (minimapWidth: number) => minimapWidth + 64;
+const DOCK_FS = 16; // the general interface size (matches the Settings modal)
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
@@ -48,8 +48,10 @@ function loadGeom(): Geom {
 export function VideoDock() {
   const pid = useStore((s) => s.active);
   const hasTranscript = useStore((s) => !!s.transcripts[s.active]);
-  // dock chrome scales with the sidebar text setting (video.css is em-based)
-  const fs = useStore((s) => s.ui.sidebarFontSize);
+  // The dock reads at the interface size (16px), like the Settings modal — not the
+  // sidebar setting. video.css is em-based off this, so one number sizes the whole
+  // panel: rows, buttons, the speed menu, and the icons below.
+  const fs = DOCK_FS;
   const minimapWidth = useStore((s) => s.ui.minimapWidth); // the default rest spot clears it
   const offset = useStore((s) => s.video[s.active]?.offset ?? 0);
   const setOffset = (v: number) =>

@@ -8,18 +8,18 @@
    colour picker 120, tooltip 200). */
 .vdock { position:fixed; z-index:74; background:var(--panel); border:1px solid var(--line);
   border-radius:12px; box-shadow:0 10px 34px rgba(0,0,0,.3); overflow:hidden;
-  min-width:400px; /* expanded floor — must match MIN_W in VideoDock.tsx; .vdock.collapsed overrides to 0 */
+  min-width:426px; /* expanded floor — must match MIN_W in VideoDock.tsx; .vdock.collapsed overrides to 0 */
   /* Permanently composited. Toggling will-change per-drag destroyed the GPU layer on
      every drop: the browser re-rasterizes the panel (34px blur shadow and all) and its
      text snaps between grayscale and subpixel antialiasing — a one-frame flash that
      happens on the compositor thread, AFTER the drop's JS task, where flushSync can't
      reach. One small always-on layer is the cheaper price. */
   will-change:transform; }
-/* The dock's font-size comes inline from ui.sidebarFontSize (VideoDock.tsx), like
-   the popovers and menus — ACCESSIBILITY.md: panel chrome scales with the sidebar
-   setting. Everything below is em so the whole dock follows. */
+/* The dock's font-size comes inline from VideoDock's DOCK_FS (16px, the general
+   interface size — same call as the Settings modal). Everything below is em, so
+   that one number sizes the whole panel. */
 .vhead { display:flex; align-items:center; flex-wrap:wrap; gap:.45em; padding:.45em .6em;
-  cursor:move; font-size:.92em; color:var(--muted); user-select:none; }
+  cursor:move; color:var(--muted); user-select:none; } /* inherits the dock's 16px */
 .vhead:hover { background:var(--sel); } /* says "grab me" before you commit to a drag */
 .vhead .vgrip { display:inline-flex; flex-shrink:0; } /* the visual drag affordance */
 .vhead .vtitle { max-width:12em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -59,13 +59,13 @@
 /* fixed + translated, NOT absolute: .vdock is overflow:hidden (rounded corners),
    and an absolute menu poking above the dock's top edge gets clipped there.
    Anchored to the button's top-right corner, growing up-left. It is PORTALED to
-   body, so its font-size comes inline from ui.sidebarFontSize too. */
+   body, so it takes the dock's 16px inline too. */
 .vspeedmenu { position:fixed; transform:translate(-100%, -100%); z-index:76; /* clears its own dock (74) */
   display:flex; flex-direction:column; padding:.3em; min-width:5em;
   background:var(--bg); border:1px solid var(--line); border-radius:.6em;
   box-shadow:0 8px 26px rgba(0,0,0,.28); }
 .vspeedmenu.down { transform:translate(-100%, 0); } /* dock near the window top */
-.vspeeditem { border:none; background:none; color:var(--fg); font:inherit; font-size:.92em;
+.vspeeditem { border:none; background:none; color:var(--fg); font:inherit;
   padding:.4em .8em; border-radius:.4em; cursor:pointer; text-align:right; }
 .vspeeditem:hover { background:var(--sel); }
 .vspeeditem.on { background:var(--accent); color:#fff; }
@@ -73,7 +73,7 @@
 
 /* top control strip: the Jump-to-line action, offset stepper, change-media */
 .vctrl { display:flex; flex-wrap:wrap; gap:.65em; padding:.65em; align-items:center;
-  font-size:.92em; color:var(--muted);
+  color:var(--muted);
   cursor:move; user-select:none; } /* also a drag handle; its buttons/inputs opt out in startDrag */
 .vctrl:hover { background:var(--sel); } /* same "grab me" cue as .vhead — the two handles read alike */
 .vctrl button, .vctrl input { cursor:pointer; }
