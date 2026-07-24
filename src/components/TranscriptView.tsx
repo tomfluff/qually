@@ -733,9 +733,12 @@ export function TranscriptView() {
 
   // uniform column widths sized to the longest displayed label in this transcript
   const shorts = shortLabels([...new Set(transcript.lines.map((l) => l.speaker.trim()))]);
-  const spkLen = (s: string) => (speakerNames === "short" ? shorts[s.trim()] ?? s.trim() : s.trim()).length;
-  const spkChars = transcript.lines.reduce((m, l) => Math.max(m, spkLen(l.speaker)), 0);
-  const spkWidth = `${Math.max(2.5, spkChars)}ch`;
+  const spkLabel = (s: string) => speakerNames === "short" ? shorts[s.trim()] ?? s.trim() : s.trim();
+  // MEASURED, not counted in `ch`: the chip's font is proportional and bold, so
+  // "Interviewer" is far wider than 11 digit-widths — a ch-based min-width let the
+  // longest chips overflow and shove the text column right, one indent per name
+  // length. Measuring the real glyphs is what keeps every row's text on one edge.
+  const spkWidth = measureSpk(transcript.lines.map((l) => spkLabel(l.speaker)), fontSize);
   const lidChars = groups.reduce((m, g) => Math.max(m, lidLabel(g).length), 1);
   const lidWidth = `${Math.max(2, lidChars)}ch`;
 
@@ -989,6 +992,21 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLane
 // stops it, the dock's speed control applies) so the fix is made against the audio,
 // not from memory. Enter saves, Esc cancels, blur saves (it's a typo fix, losing
 // it to a stray click would hurt more than keeping it).
+// Widest speaker chip in this transcript, in px. Canvas measurement of the chip's
+// ACTUAL font (bold, .82em of the transcript size, the app's chrome family) —
+// counting characters can't align a proportional font. Capped so a runaway label
+// can't eat the reading column; the chip ellipsises past the cap.
+const spkCanvas = typeof document === "undefined" ? null : document.createElement("canvas");
+function measureSpk(labels: string[], fontSize: number): string {
+  const ctx = spkCanvas?.getContext("2d");
+  const chip = fontSize * 0.82; // .lineRow .spk font-size
+  if (!ctx) return `${Math.max(2.5, ...labels.map((l) => l.length))}ch`; // SSR/jsdom fallback
+  ctx.font = `700 ${chip}px system-ui, Segoe UI, Roboto, sans-serif`;
+  let w = chip * 2.5; // floor: a two-initial chip still reads as a chip
+  for (const l of labels) w = Math.max(w, ctx.measureText(l).width);
+  return `${Math.min(Math.ceil(w) + 13, chip * 14)}px`; // +13 = the chip's 6px side padding, +1 for rounding
+}
+
 // Focus one speaker's dialogue — a floating target button at the transcript's
 // bottom right (the eye-menu pattern, mirrored to the bottom). PER TRANSCRIPT:
 // focus is a lens on a study file, not a global. Only appears when the file

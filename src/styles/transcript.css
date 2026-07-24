@@ -67,7 +67,11 @@
    picker accepts anything, and pale yellow made the speaker's name vanish.
    Capped and ellipsised: --spk-w is sized to the LONGEST name in the transcript, so a
    100-character speaker label used to eat the reading column. */
-.lineRow .spk { min-width:var(--spk-w, 2.5ch); max-width:14ch; text-align:center;
+/* WIDTH, not min-width: every chip is exactly the measured column width, so the
+   text column starts on the same edge in every row (min-width let a long name
+   grow its own chip and indent that row's text). --spk-w is measured in px from
+   the real font — see measureSpk. */
+.lineRow .spk { width:var(--spk-w, 2.5ch); text-align:center;
   font-weight:700; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   background:var(--spk-c, var(--muted)); color:var(--spk-ink, #fff);
   border-radius:5px; padding:1px 6px; font-size:.82em; }
