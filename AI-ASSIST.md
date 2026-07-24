@@ -51,7 +51,20 @@ undoable `mergeCode`. Honesty copy (README + Settings → AI) updated to
   No persistent AI state; a rejected proposal is just closed.
 - **Guards:** needs ≥2 codes with segments; proposals only, never auto-merge.
 
-## F3 — Suggest codes from the researcher's own codebook (third)
+## F3 — Suggest codes from the researcher's own codebook (third) — SHIPPED
+
+Launched from a transcript's code sidebar ("Suggest codes", beside AI scan):
+ai/suggest.ts chunks the ACTIVE transcript into 40-line windows, each sent with
+the codebook (name + def + up to 2 exemplars). SuggestModal is the consent gate
+(payload preview, cost, per-run model picker, Terra hint — the priciest run).
+Proposals land as candidate segments (proposedBy "AI · <model>", status
+"candidate") via addSegment, skipping any range already carrying that code
+(overlapsExisting — accepted or rejected, model-independent = rejection memory).
+Reviewed in the Assist tab's "Suggest" worklist (Accept/Reject/open via setStatus)
+and striped in the transcript. sanitizeSuggestReply is the trust boundary
+(existing code + in-window range only). Unit-tested.
+
+### Original plan
 
 - **Call:** chunked windows (like the scan) with the codebook + a few
   exemplar excerpts per code → proposed segments `{ startLine, endLine,

@@ -4,12 +4,13 @@
 // observations (instances it marked, staged into codes) and merge (near-duplicate
 // code pairs to fold together). Code-suggestion lands here later.
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { useStore } from "../state/store";
+import { useStore, type Segment } from "../state/store";
 import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
 import { LENSES, hashLine, spanLens } from "../ai/flag";
 import { MergeModal } from "./MergeModal";
 import type { MergeProposal } from "../ai/dedupe";
+import { excerptOf } from "../contract/excerpt";
 import { Icon } from "./Icon";
 
 // One AI observation, resolved against the current text (a stale hash means the line
@@ -23,7 +24,7 @@ interface Notice {
 // working state survives leaving the tab (the view unmounts on tab change).
 // proposals are ephemeral AI output — kept only while the tab is mounted.
 const remembered = {
-  panel: "observations" as "observations" | "merge",
+  panel: "observations" as "observations" | "merge" | "suggest",
   lens: null as string | null,
   onlyUncoded: true,
   proposals: [] as MergeProposal[],
@@ -103,7 +104,8 @@ export function AssistView() {
         {/* Assist hosts more than one kind of AI proposal — a switch picks which */}
         <div className="aPanels">
           <button className={panel === "observations" ? "on" : ""} onClick={() => setPanel("observations")}>Observations</button>
-          <button className={panel === "merge" ? "on" : ""} onClick={() => setPanel("merge")}>Merge codes</button>
+          <button className={panel === "merge" ? "on" : ""} onClick={() => setPanel("merge")}>Merge</button>
+          <button className={panel === "suggest" ? "on" : ""} onClick={() => setPanel("suggest")}>Suggest</button>
         </div>
 
         {panel === "observations" ? (
@@ -122,7 +124,7 @@ export function AssistView() {
           }) : (
             <div className="bSideNote">No observations yet. Open a transcript and run an <b>AI scan</b> from its code sidebar.</div>
           )
-        ) : (
+        ) : panel === "merge" ? (
           <>
             <button className="btn groundBtn" onClick={() => setMergeOpen(true)} disabled={mergeableCount < 2}
               title="Ask the AI to propose near-duplicate codes to merge (sends the codebook to OpenAI after your approval)">
@@ -134,6 +136,12 @@ export function AssistView() {
                 : "The AI proposes pairs that look like the same concept. You accept each merge — nothing changes on its own."}
             </div>
           </>
+        ) : (
+          <div className="bSideNote">
+            Candidate codings the AI proposed from your codebook. Run <b>Suggest codes</b> from a
+            transcript's code sidebar; the candidates land here and striped in the transcript,
+            for you to accept or reject.
+          </div>
         )}
       </div>
 
@@ -155,9 +163,11 @@ export function AssistView() {
               it points, you decide what becomes a code.
             </div>
           )
-        ) : (
+        ) : panel === "merge" ? (
           <MergeList proposals={liveProposals} codebook={codebook} flipped={flipped}
             onAccept={accept} onSkip={skip} onFlip={toggleFlip} />
+        ) : (
+          <SuggestList segments={segments} transcripts={transcripts} codebook={codebook} tabs={tabs} />
         )}
       </div>
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
@@ -208,6 +218,64 @@ function MergeList({ proposals, codebook, flipped, onAccept, onSkip, onFlip }: {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// The AI's candidate codings (status "candidate"), grouped by transcript — a
+// worklist mirror of what's striped in the transcript itself. Accept/Reject use
+// the same setStatus the segment popover does, so a verdict here or there is the
+// same verdict. Only loaded transcripts show (an excerpt needs its lines).
+function SuggestList({ segments, transcripts, codebook, tabs }: {
+  segments: Segment[];
+  transcripts: Record<string, { lines: { id: number; speaker: string; text: string }[] }>;
+  codebook: Record<string, { color: string; def: string; status: string }>;
+  tabs: string[];
+}) {
+  const setStatus = useStore((s) => s.setStatus);
+  const jumpTo = useStore((s) => s.jumpTo);
+  const candidates = segments.filter((s) => s.status === "candidate" && transcripts[s.pid]);
+  if (!candidates.length) {
+    return (
+      <div className="empty">
+        No candidate codings. Run <b>Suggest codes</b> from a transcript's code sidebar and the
+        AI's proposals — existing codes applied to line ranges — show up here to accept or reject.
+      </div>
+    );
+  }
+  const excerptFor = (s: Segment): string => {
+    const t = transcripts[s.pid];
+    if (!t) return "";
+    return excerptOf(t.lines.filter((l) => l.id >= s.start && l.id <= s.end)
+      .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
+  };
+  return (
+    <div className="mList">
+      {tabs.filter((pid) => candidates.some((c) => c.pid === pid)).map((pid) => (
+        <div key={pid} className="bGroup">
+          <div className="nGrp">{pid}</div>
+          {candidates.filter((c) => c.pid === pid).map((s) => {
+            const range = `${s.start}${s.end !== s.start ? `-${s.end}` : ""}`;
+            return (
+              <div key={s.sid} className="nInst" style={{ "--lens-c": codebook[s.code]?.color ?? "#888" } as CSSProperties}>
+                <div className="mPair" style={{ marginBottom: 4 }}>
+                  <span className="mCode"><span className="mSw" style={{ background: codebook[s.code]?.color || "#999" }} />{s.code}</span>
+                  <span className="nRef">{s.proposedBy}</span>
+                </div>
+                <div className="nLine">{excerptFor(s) || "(excerpt unavailable)"}</div>
+                <div className="nFoot">
+                  <span className="nRef">{pid}:{range}</span>
+                  <span className="nActs">
+                    <button className="nBtn pri" onClick={() => setStatus(s.sid, "accepted")}>Accept</button>
+                    <button className="nBtn" onClick={() => setStatus(s.sid, "rejected")}>Reject</button>
+                    <button className="nBtn" onClick={() => jumpTo(s.pid, s.start)}>open</button>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

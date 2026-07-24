@@ -5,6 +5,7 @@ import { useStore, patternOf } from "../state/store";
 import { CodeMenu } from "./CodeMenu";
 import { CodeCombobox } from "./CodeCombobox";
 import { AiCheckModal } from "./AiCheckModal";
+import { SuggestModal } from "./SuggestModal";
 import { openColorPicker } from "../colorPicker";
 import { Icon } from "./Icon";
 
@@ -21,6 +22,8 @@ export function CodeSidebar() {
   const pinned = useStore((s) => s.hotbar.pinned);
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const hasCodes = Object.keys(codebook).length > 0;
 
   // keyboard/visible route to the same menu right-click opens, anchored to the row or ⋯ button
   const openMenuAt = (code: string, el: HTMLElement) => {
@@ -38,11 +41,20 @@ export function CodeSidebar() {
     <div id="sidebar" style={{ fontSize: sidebarFontSize, width: sidebarWidth }}>
       {/* AI scan sits above the codes: it acts on THIS transcript (the sidebar only
           renders for a transcript view), so its home is here, not the global toolbar. */}
-      <button className="btn iconlabel aibtn sidebarScan" onClick={() => setAiOpen(true)}
-        aria-haspopup="dialog" aria-expanded={aiOpen}
-        title="Scan this transcript with AI: transcription errors, plus observation lenses you choose (emotions, likes/dislikes, desires…)">
-        <Icon name="sparkle" size={15} /> AI scan
-      </button>
+      <div className="sidebarAi">
+        <button className="btn iconlabel aibtn sidebarScan" onClick={() => setAiOpen(true)}
+          aria-haspopup="dialog" aria-expanded={aiOpen}
+          title="Scan this transcript with AI: transcription errors, plus observation lenses you choose (emotions, likes/dislikes, desires…)">
+          <Icon name="sparkle" size={15} /> AI scan
+        </button>
+        {hasCodes && (
+          <button className="btn iconlabel aibtn sidebarScan" onClick={() => setSuggestOpen(true)}
+            aria-haspopup="dialog" aria-expanded={suggestOpen}
+            title="Suggest codes from your codebook for this transcript — the AI proposes candidate codings you accept or reject">
+            <Icon name="sparkle" size={15} /> Suggest codes
+          </button>
+        )}
+      </div>
       {/* + new code (top of list); fuzzy autocomplete. 0 opens the command palette. */}
       <CodeCombobox placeholder="+ new code" />
       <div className="codeList nicescroll">
@@ -91,6 +103,7 @@ export function CodeSidebar() {
       </div>
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
       {aiOpen && <AiCheckModal onClose={() => setAiOpen(false)} />}
+      {suggestOpen && <SuggestModal onClose={() => setSuggestOpen(false)} />}
     </div>
   );
 }
