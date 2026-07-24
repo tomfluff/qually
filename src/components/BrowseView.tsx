@@ -11,6 +11,7 @@ import { openColorPicker } from "../colorPicker";
 import { LENSES, hashLine, spanLens } from "../ai/flag";
 import { groundHash } from "../ai/ground";
 import { GroundModal } from "./GroundModal";
+import { Icon } from "./Icon";
 
 // Browse's working state (chosen codes, filter, toggles) survives leaving the tab —
 // the view unmounts, so plain useState would reset it on every visit.
@@ -163,7 +164,7 @@ export function BrowseView() {
           <>
         <button className="btn groundBtn" onClick={() => setGroundOpen(true)}
           title="Mark which words carry each assigned code (sends coded excerpts to OpenAI after your approval)">
-          ✨ Ground codes…
+          <Icon name="sparkle" size={15} /> AI ground codes…
         </button>
         <input type="search" placeholder="filter codes…" value={filter}
           onChange={(e) => setFilter(e.target.value)} />
@@ -299,7 +300,7 @@ function groundedText(
   }
   ranges.sort((a, b) => a[0] - b[0]);
   const st: CSSProperties = {};
-  if (ui.groundWash) st.background = `color-mix(in srgb, ${color} 22%, transparent)`;
+  if (ui.groundWash) st.background = `color-mix(in srgb, ${color} 32%, transparent)`;
   if (ui.groundUnderline) st.textDecorationColor = color;
   const cls = "ground" + (ui.groundBold ? " gbold" : "") + (ui.groundUnderline ? " gunder" : "");
   const out: ReactNode[] = [];

@@ -178,8 +178,8 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                   </div>
                   {model.id.includes("luna") && (
                     <div className="settings-note" style={{ marginTop: 6 }}>
-                      Grounding is interpretive — <b>Terra</b> (Settings → AI) usually reads
-                      coded excerpts better than Luna.
+                      Grounding is interpretive — <b>Terra</b> usually reads coded excerpts
+                      better than Luna. Pick it above for this run.
                     </div>
                   )}
                 </>
