@@ -21,7 +21,7 @@ const MIN_W = 220; // expanded minimum (collapsed shrinks to its controls) — m
 // leave both reachable).
 const DEFAULT_BOTTOM = 45;
 const DEFAULT_RIGHT = (minimapWidth: number) => minimapWidth + 84;
-const DOCK_FS = 12.5; // the dock's base size — video.css is em-based off this one number
+const DOCK_FS = 12.4; // the dock's base size — video.css is em-based off this one number
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
