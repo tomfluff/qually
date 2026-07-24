@@ -15,10 +15,13 @@ import { Icon } from "./Icon";
 interface Geom { r: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
 const DEFAULT: Geom = { r: null, bottom: null, w: 400, collapsed: true, rate: 1 };
 const MIN_W = 400; // expanded minimum (collapsed shrinks to its controls) — must match video.css .vdock min-width
-// Rest ABOVE the transcript's focus button (footer 32 + the button's 12px offset
-// + its 43px height + a gap): the dock is bottom-anchored and covers whatever it
-// lands on (z 74), so the untouched default has to leave that button reachable.
+// Where an untouched dock rests: directly ABOVE the transcript's focus button, in
+// the same column. The dock is bottom-anchored and covers whatever it lands on
+// (z 74), so the default has to clear both that button and the minimap.
+//   bottom = footer 32 + the button's 12px offset + its 43px height + a gap
+//   right  = the minimap's width + 24, the same offset .focuswrap uses
 const DEFAULT_BOTTOM = 96;
+const DEFAULT_RIGHT = (minimapWidth: number) => minimapWidth + 24;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
@@ -47,6 +50,7 @@ export function VideoDock() {
   const hasTranscript = useStore((s) => !!s.transcripts[s.active]);
   // dock chrome scales with the sidebar text setting (video.css is em-based)
   const fs = useStore((s) => s.ui.sidebarFontSize);
+  const minimapWidth = useStore((s) => s.ui.minimapWidth); // the default rest spot clears it
   const offset = useStore((s) => s.video[s.active]?.offset ?? 0);
   const setOffset = (v: number) =>
     useStore.setState((s) => ({ video: { ...s.video, [pid]: { ...s.video[pid], offset: v } } }));
@@ -282,7 +286,7 @@ export function VideoDock() {
         transform: `translate3d(${-Math.max(60 - effW, Math.min(geom.r, window.innerWidth - 60))}px, ${
           -Math.max(0, Math.min(geom.bottom, window.innerHeight - 40))}px, 0)`,
       }
-    : { right: 24, bottom: DEFAULT_BOTTOM };
+    : { right: DEFAULT_RIGHT(minimapWidth), bottom: DEFAULT_BOTTOM };
 
   return (
     <div className={"vdock" + (geom.collapsed ? " collapsed" : "")}
