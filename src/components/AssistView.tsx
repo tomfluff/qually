@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// The Assist tab: everything the AI proposes, in one place. Today that's the
-// observations — instances it marked across transcripts under each lens, staged
-// for you to turn into codes. Merge and code-suggestion land here later.
+// The Assist tab: everything the AI proposes, in one place. Two panels today —
+// observations (instances it marked, staged into codes) and merge (near-duplicate
+// code pairs to fold together). Code-suggestion lands here later.
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore } from "../state/store";
 import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
 import { LENSES, hashLine, spanLens } from "../ai/flag";
+import { MergeModal } from "./MergeModal";
+import type { MergeProposal } from "../ai/dedupe";
+import { Icon } from "./Icon";
 
 // One AI observation, resolved against the current text (a stale hash means the line
 // was edited since the scan — those don't appear) and against your segments (an
@@ -17,21 +20,54 @@ interface Notice {
   quote: string; reason: string; lens: string; codedAs: string | null;
 }
 
-// working state survives leaving the tab (the view unmounts on tab change)
-const remembered = { lens: null as string | null, onlyUncoded: true };
+// working state survives leaving the tab (the view unmounts on tab change).
+// proposals are ephemeral AI output — kept only while the tab is mounted.
+const remembered = {
+  panel: "observations" as "observations" | "merge",
+  lens: null as string | null,
+  onlyUncoded: true,
+  proposals: [] as MergeProposal[],
+  flipped: new Set<string>(),
+};
+// stable key for a proposal, direction-independent (NUL can't occur in a code name)
+const pairKey = (p: MergeProposal) => JSON.stringify([p.from, p.into].sort());
 
 export function AssistView() {
   const transcripts = useStore((s) => s.transcripts);
   const segments = useStore((s) => s.segments);
+  const codebook = useStore((s) => s.codebook);
   const aiFlags = useStore((s) => s.aiFlags);
   const tabs = useStore((s) => s.tabs);
   const fontSize = useStore((s) => s.ui.fontSize);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
   const setUi = useStore((s) => s.setUi);
+  const [panel, setPanel] = useState(remembered.panel);
   const [lens, setLens] = useState(remembered.lens);
   const [onlyUncoded, setOnlyUncoded] = useState(remembered.onlyUncoded);
-  useEffect(() => { Object.assign(remembered, { lens, onlyUncoded }); }, [lens, onlyUncoded]);
+  const [proposals, setProposals] = useState<MergeProposal[]>(remembered.proposals);
+  const [flipped, setFlipped] = useState<Set<string>>(remembered.flipped);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  useEffect(() => { Object.assign(remembered, { panel, lens, onlyUncoded, proposals, flipped }); },
+    [panel, lens, onlyUncoded, proposals, flipped]);
+
+  // codes with at least one accepted segment — merge needs two to compare
+  const mergeableCount = useMemo(() =>
+    new Set(segments.filter((s) => s.status === "accepted").map((s) => s.code)).size, [segments]);
+  // a proposal is live only while BOTH its codes still exist (accepting one merge
+  // can dissolve a code another proposal named — drop those rather than merge into a ghost)
+  const liveProposals = proposals.filter((p) => codebook[p.from] && codebook[p.into]);
+
+  const accept = (p: MergeProposal) => {
+    const swap = flipped.has(pairKey(p));
+    const from = swap ? p.into : p.from, into = swap ? p.from : p.into;
+    useStore.getState().mergeCode(from, into); // undoable (pushes its own undo)
+    setProposals((ps) => ps.filter((x) => x !== p));
+  };
+  const skip = (p: MergeProposal) => setProposals((ps) => ps.filter((x) => x !== p));
+  const toggleFlip = (p: MergeProposal) => setFlipped((f) => {
+    const n = new Set(f); const k = pairKey(p); n.has(k) ? n.delete(k) : n.add(k); return n;
+  });
 
   // every live observation across all open transcripts, in tab + line order
   const notices = useMemo(() => {
@@ -64,42 +100,114 @@ export function AssistView() {
   return (
     <div id="browse" style={{ fontSize }}>
       <div className="browse-left nicescroll" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
-        <div className="bSideHead">Observations</div>
-        {hasNotices ? observeLenses.map((l) => {
-          const st = lensStats(l.id);
-          return (
-            <div key={l.id} className={"nLens" + (curLens === l.id ? " sel" : "") + (st.n === 0 ? " none" : "")}
-              tabIndex={0} role="button" aria-pressed={curLens === l.id}
-              onClick={() => setLens(l.id)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLens(l.id); } }}>
-              <span className="nDot" style={{ background: l.color }} />
-              <span className="nName">{l.label}</span>
-              <span className="cnt">{st.n}·{st.pids}</span>
+        {/* Assist hosts more than one kind of AI proposal — a switch picks which */}
+        <div className="aPanels">
+          <button className={panel === "observations" ? "on" : ""} onClick={() => setPanel("observations")}>Observations</button>
+          <button className={panel === "merge" ? "on" : ""} onClick={() => setPanel("merge")}>Merge codes</button>
+        </div>
+
+        {panel === "observations" ? (
+          hasNotices ? observeLenses.map((l) => {
+            const st = lensStats(l.id);
+            return (
+              <div key={l.id} className={"nLens" + (curLens === l.id ? " sel" : "") + (st.n === 0 ? " none" : "")}
+                tabIndex={0} role="button" aria-pressed={curLens === l.id}
+                onClick={() => setLens(l.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLens(l.id); } }}>
+                <span className="nDot" style={{ background: l.color }} />
+                <span className="nName">{l.label}</span>
+                <span className="cnt">{st.n}·{st.pids}</span>
+              </div>
+            );
+          }) : (
+            <div className="bSideNote">No observations yet. Open a transcript and run an <b>AI scan</b> from its code sidebar.</div>
+          )
+        ) : (
+          <>
+            <button className="btn groundBtn" onClick={() => setMergeOpen(true)} disabled={mergeableCount < 2}
+              title="Ask the AI to propose near-duplicate codes to merge (sends the codebook to OpenAI after your approval)">
+              <Icon name="sparkle" size={15} /> Find duplicates…
+            </button>
+            <div className="bSideNote">
+              {mergeableCount < 2
+                ? "Code at least two different codes first, then the AI can look for duplicates."
+                : "The AI proposes pairs that look like the same concept. You accept each merge — nothing changes on its own."}
             </div>
-          );
-        }) : (
-          <div className="bSideNote">No observations yet. Open a transcript and run an <b>AI scan</b> from its code sidebar.</div>
+          </>
         )}
       </div>
 
       <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(160, Math.min(520, w)) })} />
 
       <div className="browse-right nicescroll">
-        {hasNotices ? (
-          <NoticeList
-            notices={notices.filter((n) => n.lens === curLens)}
-            lensColor={observeLenses.find((l) => l.id === curLens)?.color ?? "#888"}
-            onlyUncoded={onlyUncoded}
-            setOnlyUncoded={setOnlyUncoded}
-            tabs={tabs}
-          />
+        {panel === "observations" ? (
+          hasNotices ? (
+            <NoticeList
+              notices={notices.filter((n) => n.lens === curLens)}
+              lensColor={observeLenses.find((l) => l.id === curLens)?.color ?? "#888"}
+              onlyUncoded={onlyUncoded}
+              setOnlyUncoded={setOnlyUncoded}
+              tabs={tabs}
+            />
+          ) : (
+            <div className="empty">
+              Nothing to review yet. The AI's observations show up here after you run a scan —
+              it points, you decide what becomes a code.
+            </div>
+          )
         ) : (
-          <div className="empty">
-            Nothing to review yet. The AI's observations show up here after you run a scan —
-            it points, you decide what becomes a code.
-          </div>
+          <MergeList proposals={liveProposals} codebook={codebook} flipped={flipped}
+            onAccept={accept} onSkip={skip} onFlip={toggleFlip} />
         )}
       </div>
+      {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
+        onClose={() => setMergeOpen(false)} />}
+    </div>
+  );
+}
+
+// The merge proposals, each a pair the AI thinks is one concept. Accept runs the
+// undoable mergeCode; the swap flips which code survives before you commit.
+function MergeList({ proposals, codebook, flipped, onAccept, onSkip, onFlip }: {
+  proposals: MergeProposal[];
+  codebook: Record<string, { color: string; def: string; status: string }>;
+  flipped: Set<string>;
+  onAccept: (p: MergeProposal) => void;
+  onSkip: (p: MergeProposal) => void;
+  onFlip: (p: MergeProposal) => void;
+}) {
+  if (!proposals.length) {
+    return (
+      <div className="empty">
+        No merge proposals. Run <b>Find duplicates</b> on the left, and any near-duplicate
+        code pairs will show up here for you to accept or skip.
+      </div>
+    );
+  }
+  const swatch = (code: string) => (
+    <span className="mSw" style={{ background: codebook[code]?.color || "#999" }} />
+  );
+  return (
+    <div className="mList">
+      {proposals.map((p) => {
+        const swap = flipped.has(pairKey(p));
+        const from = swap ? p.into : p.from, into = swap ? p.from : p.into;
+        return (
+          <div key={`${p.from}|${p.into}`} className="mProp">
+            <div className="mPair">
+              <span className="mCode mDrop">{swatch(from)}{from}</span>
+              <button className="mSwap" onClick={() => onFlip(p)} aria-label="Swap which code is kept"
+                title="Swap which code is kept">→</button>
+              <span className="mCode mKeep">{swatch(into)}{into}<span className="mKeepTag">kept</span></span>
+            </div>
+            {p.rationale && <div className="mWhy">{p.rationale}</div>}
+            <div className="mActs">
+              <button className="nBtn pri" onClick={() => onAccept(p)}>Merge</button>
+              <button className="nBtn" onClick={() => onSkip(p)}>Skip</button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

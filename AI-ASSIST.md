@@ -32,7 +32,16 @@ What in a coded segment actually carries its code.
   segment popover shows them. The reading view is untouched.
 - **Cost:** small — excerpts only.
 
-## F2 — Merge near-duplicate codes (second)
+## F2 — Merge near-duplicate codes (second) — SHIPPED
+
+Built in the Assist tab (a "Merge codes" panel beside Observations): one-shot
+`dedupeCodes` over the codebook (name + def + up to 3 exemplar excerpts each),
+consent modal (MergeModal) with payload preview + per-run model picker, proposals
+rendered inline with a flippable direction, accept per pair via the existing
+undoable `mergeCode`. Honesty copy (README + Settings → AI) updated to
+"proposes… applies nothing without your decision".
+
+### Original plan
 
 - **Call:** one-shot — codebook (names, definitions) + up to N sample
   excerpts per code (token-capped) → merge proposals

@@ -57,6 +57,13 @@
 .bExcerpt .ref.open:hover .refspk { color:var(--accent); }
 
 /* ── Assist tab: the AI's observations side by side, staged to become codes ── */
+/* panel switch at the top of the Assist sidebar (Observations | Merge codes) */
+.aPanels { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden;
+  margin-bottom:10px; }
+.aPanels button { flex:1; border:0; padding:6px 0; background:var(--bg); color:var(--muted);
+  font:inherit; font-weight:500; cursor:pointer; }
+.aPanels button.on { background:var(--accent); color:#fff; font-weight:650; }
+[data-theme=dark] .aPanels button.on { color:#12161a; }
 .nLens { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
   cursor:pointer; }
 .nLens:hover { background:var(--panel); }
@@ -123,3 +130,20 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   border-radius:6px; cursor:pointer; color:var(--fg); }
 .groundStyleMenu label:hover { background:var(--sel); }
 .groundStyleMenu input[type=checkbox] { width:1em; height:1em; accent-color:var(--accent); }
+
+/* ── Assist tab: merge-duplicate-codes proposals ── */
+.mList { display:flex; flex-direction:column; gap:10px; }
+.mProp { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); }
+.mPair { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.mCode { display:inline-flex; align-items:center; gap:7px; font-weight:600; }
+.mSw { width:.8em; height:.8em; border-radius:3px; flex:none; }
+/* the folded-in code is de-emphasised (it disappears on merge); the kept one holds full weight */
+.mDrop { color:var(--fg-dim); text-decoration:line-through; text-decoration-color:var(--muted); }
+.mKeepTag { margin-left:6px; font-size:.68em; font-weight:700; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--ok, #3fa860); border:1px solid currentColor; border-radius:999px;
+  padding:1px 7px; background:color-mix(in srgb, #3fa860 10%, transparent); }
+.mSwap { border:1px solid var(--line); background:var(--bg); color:var(--muted); cursor:pointer;
+  border-radius:6px; width:1.9em; height:1.6em; line-height:1; font-size:1.05em; flex:none; }
+.mSwap:hover { color:var(--fg); border-color:var(--accent); }
+.mWhy { color:var(--muted); font-size:.9em; line-height:1.4; margin:6px 0 0; }
+.mActs { display:flex; gap:6px; margin-top:8px; }

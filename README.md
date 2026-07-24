@@ -41,10 +41,12 @@ support in particular is **not** there yet.
 - **Fast keyboard coding** — number keys apply codes to the selected line(s); a hotbar and
   command palette keep your codebook a keystroke away.
 - **Codebook view** — filter and read every excerpt for a code across all transcripts.
-- **AI that shows, never replaces** *(optional, off by default)* — with your own OpenAI key,
+- **AI that proposes, never decides** *(optional, off by default)* — with your own OpenAI key,
   it can flag likely mis-transcriptions (each dismissable, often with a suggested fix
-  you can apply in one click) and mark observations for your review (emotions,
-  likes/dislikes, desires…), each mapped to a first-cycle coding method. It marks; you code.
+  you can apply in one click), mark observations for your review (emotions,
+  likes/dislikes, desires…, each mapped to a first-cycle coding method), ground your codes
+  (which words carry each one), and propose near-duplicate codes to merge. Every one is a
+  proposal — it applies nothing without your decision.
 - **Merge partial lines**, line numbers, full/short speaker names, a resizable transcript
   minimap, and "near-balance" speaker warnings on mixed excerpts.
 - **Save & continue** — export a `.qually.json` project (transcripts + codebook + corrections)

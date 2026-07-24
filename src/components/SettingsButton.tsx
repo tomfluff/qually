@@ -375,7 +375,8 @@ function AiSettings() {
     <>
       <div className="settings-note">
         Off until you add a key. Anything you run sends transcript lines to OpenAI —
-        you approve each request and see exactly what's sent.
+        you approve each request and see exactly what's sent. The AI only proposes
+        (marks, grounds, suggests merges); nothing is applied without your decision.
       </div>
 
       <div className="set-h">Access</div>
