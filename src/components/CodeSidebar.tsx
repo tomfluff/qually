@@ -51,7 +51,7 @@ export function CodeSidebar() {
           <button className="btn iconlabel aibtn sidebarScan" onClick={() => setSuggestOpen(true)}
             aria-haspopup="dialog" aria-expanded={suggestOpen}
             title="Suggest codes from your codebook for this transcript — the AI proposes candidate codings you accept or reject">
-            <Icon name="sparkle" size={15} /> Suggest codes
+            <Icon name="sparkle" size={15} /> Suggest
           </button>
         )}
       </div>
