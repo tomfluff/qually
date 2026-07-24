@@ -30,6 +30,8 @@ const remembered = {
   onlyUncoded: true,
   proposals: [] as MergeProposal[],
   flipped: new Set<string>(),
+  suggestBy: "transcript" as "transcript" | "code",
+  suggestSel: null as string | null, // selected transcript/code, null = all
 };
 // stable key for a proposal, direction-independent (NUL can't occur in a code name)
 const pairKey = (p: MergeProposal) => JSON.stringify([p.from, p.into].sort());
@@ -50,8 +52,11 @@ export function AssistView() {
   const [proposals, setProposals] = useState<MergeProposal[]>(remembered.proposals);
   const [flipped, setFlipped] = useState<Set<string>>(remembered.flipped);
   const [mergeOpen, setMergeOpen] = useState(false);
-  useEffect(() => { Object.assign(remembered, { lens, onlyUncoded, proposals, flipped }); },
-    [lens, onlyUncoded, proposals, flipped]);
+  const [suggestBy, setSuggestBy] = useState(remembered.suggestBy);
+  const [suggestSel, setSuggestSel] = useState(remembered.suggestSel);
+  useEffect(() => { Object.assign(remembered, { lens, onlyUncoded, proposals, flipped, suggestBy, suggestSel }); },
+    [lens, onlyUncoded, proposals, flipped, suggestBy, suggestSel]);
+  const pickSuggestBy = (by: "transcript" | "code") => { setSuggestBy(by); setSuggestSel(null); };
 
   // codes with at least one accepted segment — merge needs two to compare
   const mergeableCount = useMemo(() =>
@@ -59,6 +64,22 @@ export function AssistView() {
   // a proposal is live only while BOTH its codes still exist (accepting one merge
   // can dissolve a code another proposal named — drop those rather than merge into a ghost)
   const liveProposals = proposals.filter((p) => codebook[p.from] && codebook[p.into]);
+
+  // candidate codings (F3) for the Suggest panel — only loaded transcripts (an
+  // excerpt needs its lines). Grouped either by transcript or by code for navigation.
+  const candidates = useMemo(() =>
+    segments.filter((s) => s.status === "candidate" && transcripts[s.pid]), [segments, transcripts]);
+  const suggestGroups = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const c of candidates) {
+      const k = suggestBy === "transcript" ? c.pid : c.code;
+      n.set(k, (n.get(k) ?? 0) + 1);
+    }
+    const keys = suggestBy === "transcript" ? tabs.filter((p) => n.has(p)) : [...n.keys()].sort();
+    return keys.map((key) => ({ key, n: n.get(key)! }));
+  }, [candidates, suggestBy, tabs]);
+  const shownCandidates = suggestSel == null ? candidates
+    : candidates.filter((c) => (suggestBy === "transcript" ? c.pid : c.code) === suggestSel);
 
   const accept = (p: MergeProposal) => {
     const swap = flipped.has(pairKey(p));
@@ -135,11 +156,40 @@ export function AssistView() {
             </div>
           </>
         ) : (
-          <div className="bSideNote">
-            Candidate codings the AI proposed from your codebook. Run <b>Suggest codes</b> from a
-            transcript's code sidebar; the candidates land here and striped in the transcript,
-            for you to accept or reject.
-          </div>
+          <>
+            <div className="nPills aSuggestBy">
+              <button className={"nPill" + (suggestBy === "transcript" ? " on" : "")}
+                onClick={() => pickSuggestBy("transcript")}>By transcript</button>
+              <button className={"nPill" + (suggestBy === "code" ? " on" : "")}
+                onClick={() => pickSuggestBy("code")}>By code</button>
+            </div>
+            {suggestGroups.length === 0 ? (
+              <div className="bSideNote">
+                No candidate codings yet. Run <b>Suggest codes</b> from a transcript's code
+                sidebar; they land here and striped in the transcript.
+              </div>
+            ) : (
+              <>
+                <div className={"nLens" + (suggestSel === null ? " sel" : "")}
+                  tabIndex={0} role="button" aria-pressed={suggestSel === null}
+                  onClick={() => setSuggestSel(null)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSuggestSel(null); } }}>
+                  <span className="nName">All</span>
+                  <span className="cnt">{candidates.length}</span>
+                </div>
+                {suggestGroups.map((g) => (
+                  <div key={g.key} className={"nLens" + (suggestSel === g.key ? " sel" : "")}
+                    tabIndex={0} role="button" aria-pressed={suggestSel === g.key}
+                    onClick={() => setSuggestSel(g.key)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSuggestSel(g.key); } }}>
+                    {suggestBy === "code" && <span className="nDot" style={{ background: codebook[g.key]?.color ?? "#888" }} />}
+                    <span className="nName">{g.key}</span>
+                    <span className="cnt">{g.n}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
         )}
       </div>
 
@@ -165,7 +215,8 @@ export function AssistView() {
           <MergeList proposals={liveProposals} codebook={codebook} flipped={flipped}
             onAccept={accept} onSkip={skip} onFlip={toggleFlip} />
         ) : (
-          <SuggestList segments={segments} transcripts={transcripts} codebook={codebook} tabs={tabs} />
+          <SuggestList candidates={shownCandidates} groupBy={suggestBy}
+            transcripts={transcripts} codebook={codebook} tabs={tabs} />
         )}
       </div>
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
@@ -220,23 +271,23 @@ function MergeList({ proposals, codebook, flipped, onAccept, onSkip, onFlip }: {
   );
 }
 
-// The AI's candidate codings (status "candidate"), grouped by transcript — a
-// worklist mirror of what's striped in the transcript itself. Accept/Reject use
-// the same setStatus the segment popover does, so a verdict here or there is the
-// same verdict. Only loaded transcripts show (an excerpt needs its lines).
-function SuggestList({ segments, transcripts, codebook, tabs }: {
-  segments: Segment[];
+// The AI's candidate codings (status "candidate"), grouped by transcript OR by
+// code (the sidebar picks which) — a worklist mirror of what's striped in the
+// transcript. Accept/Reject use the same setStatus the segment popover does, so a
+// verdict here or there is the same verdict. Candidates come pre-filtered.
+function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
+  candidates: Segment[];
+  groupBy: "transcript" | "code";
   transcripts: Record<string, { lines: { id: number; speaker: string; text: string }[] }>;
   codebook: Record<string, { color: string; def: string; status: string }>;
   tabs: string[];
 }) {
   const setStatus = useStore((s) => s.setStatus);
   const jumpTo = useStore((s) => s.jumpTo);
-  const candidates = segments.filter((s) => s.status === "candidate" && transcripts[s.pid]);
   if (!candidates.length) {
     return (
       <div className="empty">
-        No candidate codings. Run <b>Suggest codes</b> from a transcript's code sidebar and the
+        No candidate codings here. Run <b>Suggest codes</b> from a transcript's code sidebar and the
         AI's proposals — existing codes applied to line ranges — show up here to accept or reject.
       </div>
     );
@@ -247,31 +298,40 @@ function SuggestList({ segments, transcripts, codebook, tabs }: {
     return excerptOf(t.lines.filter((l) => l.id >= s.start && l.id <= s.end)
       .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
   };
+  const row = (s: Segment) => {
+    const range = `${s.start}${s.end !== s.start ? `-${s.end}` : ""}`;
+    return (
+      <div key={s.sid} className="nInst" style={{ "--lens-c": codebook[s.code]?.color ?? "#888" } as CSSProperties}>
+        <div className="mPair" style={{ marginBottom: 4 }}>
+          <span className="mCode"><span className="mSw" style={{ background: codebook[s.code]?.color || "#999" }} />{s.code}</span>
+          <span className="nRef">{s.proposedBy}</span>
+        </div>
+        <div className="nLine">{excerptFor(s) || "(excerpt unavailable)"}</div>
+        <div className="nFoot">
+          <span className="nRef">{s.pid}:{range}</span>
+          <span className="nActs">
+            <button className="nBtn pri" onClick={() => setStatus(s.sid, "accepted")}>Accept</button>
+            <button className="nBtn" onClick={() => setStatus(s.sid, "rejected")}>Reject</button>
+            <button className="nBtn" onClick={() => jumpTo(s.pid, s.start)}>open</button>
+          </span>
+        </div>
+      </div>
+    );
+  };
+  // group headers: transcripts in tab order, codes alphabetically
+  const groups = groupBy === "transcript"
+    ? tabs.filter((pid) => candidates.some((c) => c.pid === pid))
+    : [...new Set(candidates.map((c) => c.code))].sort();
+  const inGroup = (g: string) => candidates.filter((c) => (groupBy === "transcript" ? c.pid : c.code) === g);
   return (
     <div className="mList">
-      {tabs.filter((pid) => candidates.some((c) => c.pid === pid)).map((pid) => (
-        <div key={pid} className="bGroup">
-          <div className="nGrp">{pid}</div>
-          {candidates.filter((c) => c.pid === pid).map((s) => {
-            const range = `${s.start}${s.end !== s.start ? `-${s.end}` : ""}`;
-            return (
-              <div key={s.sid} className="nInst" style={{ "--lens-c": codebook[s.code]?.color ?? "#888" } as CSSProperties}>
-                <div className="mPair" style={{ marginBottom: 4 }}>
-                  <span className="mCode"><span className="mSw" style={{ background: codebook[s.code]?.color || "#999" }} />{s.code}</span>
-                  <span className="nRef">{s.proposedBy}</span>
-                </div>
-                <div className="nLine">{excerptFor(s) || "(excerpt unavailable)"}</div>
-                <div className="nFoot">
-                  <span className="nRef">{pid}:{range}</span>
-                  <span className="nActs">
-                    <button className="nBtn pri" onClick={() => setStatus(s.sid, "accepted")}>Accept</button>
-                    <button className="nBtn" onClick={() => setStatus(s.sid, "rejected")}>Reject</button>
-                    <button className="nBtn" onClick={() => jumpTo(s.pid, s.start)}>open</button>
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+      {groups.map((g) => (
+        <div key={g} className="bGroup">
+          <div className="nGrp">
+            {groupBy === "code" && <span className="mSw" style={{ background: codebook[g]?.color || "#999", marginRight: 6 }} />}
+            {g}
+          </div>
+          {inGroup(g).map(row)}
         </div>
       ))}
     </div>

@@ -129,7 +129,8 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .mProp { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); }
 .mPair { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .mCode { display:inline-flex; align-items:center; gap:7px; font-weight:600; }
-.mSw { width:.8em; height:.8em; border-radius:3px; flex:none; }
+.mSw { display:inline-block; vertical-align:middle; width:.8em; height:.8em; border-radius:3px; flex:none; }
+.aSuggestBy { margin-bottom:10px; }
 /* the folded-in code is de-emphasised (it disappears on merge); the kept one holds full weight */
 .mDrop { color:var(--fg-dim); text-decoration:line-through; text-decoration-color:var(--muted); }
 .mKeepTag { margin-left:6px; font-size:.68em; font-weight:700; text-transform:uppercase;
