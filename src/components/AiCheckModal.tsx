@@ -3,12 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
-import { MODELS, modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine } from "../ai/flag";
 import { announce } from "../announce";
-import { useDialogFocus } from "../useDialogFocus";
-import { Icon } from "./Icon";
+import { AiModal, ModelPicker } from "./AiModal";
 
 // The consent gate. Choose what to look for (lenses) and whose speech to scan
 // (speakers — no naming convention assumed), then see the ACTUAL redacted lines
@@ -25,7 +24,6 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const abort = useRef<AbortController | null>(null);
-  const dialogRef = useDialogFocus();
   useEffect(() => () => abort.current?.abort(), []);
 
   const lenses = ai.lenses; // persisted: the ticked scans are remembered across runs
@@ -124,21 +122,7 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="about-backdrop" onMouseDown={() => !busy && onClose()}>
-      {/* ai-check: wider than the import/project dialogs (two-column lens grid) and a
-          THREE-region layout — fixed head, scrolling body, pinned footer — so the
-          consent buttons are always reachable no matter how tall the payload preview
-          and lens/speaker lists get. Without the scroll region the footer clipped
-          below 84vh and "Cancel" fell off the bottom. */}
-      <div className="about imp ai-check" ref={dialogRef} role="dialog" aria-modal="true"
-        aria-labelledby="ai-check-title" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="about-head">
-          <h2 id="ai-check-title">Scan “{pid}” with AI</h2>
-          <button className="btn iconbtn" onClick={onClose} disabled={busy} title="Close">
-            <Icon name="x" size={16} />
-          </button>
-        </div>
-
+    <AiModal title={<>Scan “{pid}” with AI</>} busy={busy} onClose={onClose}>
         {done ? (
           <>
             <div className="ai-body">
@@ -161,14 +145,7 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
 
-              <div className="ai-sec">Model <span className="ai-sec-hint">this run only — the default lives in Settings → AI</span></div>
-              <div className="ai-models">
-                {MODELS.map((m) => (
-                  <button key={m.id} className={modelId === m.id ? "on" : ""}
-                    title={`${m.blurb} — $${m.in}/$${m.out} per 1M tokens in/out`}
-                    onClick={() => setModelId(m.id)}>{m.name}</button>
-                ))}
-              </div>
+              <ModelPicker modelId={modelId} onPick={setModelId} />
 
               <div className="ai-sec">Whose speech</div>
               <div className="ai-spks">
@@ -237,7 +214,6 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
             )}
           </>
         )}
-      </div>
-    </div>
+    </AiModal>
   );
 }

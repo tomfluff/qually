@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useStore, patternOf } from "../state/store";
 import { CodeMenu } from "./CodeMenu";
 import { CodeCombobox } from "./CodeCombobox";
 import { AiCheckModal } from "./AiCheckModal";
 import { SuggestModal } from "./SuggestModal";
 import { openColorPicker } from "../colorPicker";
-import { useDismiss } from "../usePopover";
+import { useToggleMenu } from "../usePopover";
 import { Icon } from "./Icon";
 
 export function CodeSidebar() {
@@ -24,14 +24,8 @@ export function CodeSidebar() {
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
-  const [aiMenu, setAiMenu] = useState(false);
   const hasCodes = Object.keys(codebook).length > 0;
-  const aiBtnRef = useRef<HTMLButtonElement>(null);
-  const aiMenuRef = useRef<HTMLDivElement>(null);
-  // close on outside click, but not on the toggle button itself (that would reopen)
-  useDismiss(aiMenuRef, () => setAiMenu(false), {
-    enabled: aiMenu, ignore: (e) => !!aiBtnRef.current?.contains(e.target as Node),
-  });
+  const { open: aiMenu, setOpen: setAiMenu, btnRef: aiBtnRef, menuRef: aiMenuRef } = useToggleMenu();
 
   // keyboard/visible route to the same menu right-click opens, anchored to the row or ⋯ button
   const openMenuAt = (code: string, el: HTMLElement) => {

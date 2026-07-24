@@ -7,13 +7,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
-import { MODELS, modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { excerptOf } from "../contract/excerpt";
 import { chunksOfItems, renderGroundChunk, estimateGroundTokens, groundChunk, groundHash, type GroundItem } from "../ai/ground";
 import { announce } from "../announce";
-import { useDialogFocus } from "../useDialogFocus";
-import { Icon } from "./Icon";
+import { AiModal, ModelPicker } from "./AiModal";
 
 export function GroundModal({ onClose }: { onClose: () => void }) {
   const segments = useStore((s) => s.segments);
@@ -26,7 +25,6 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const abort = useRef<AbortController | null>(null);
-  const dialogRef = useDialogFocus();
   useEffect(() => () => abort.current?.abort(), []);
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
@@ -101,16 +99,7 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="about-backdrop" onMouseDown={() => !busy && onClose()}>
-      <div className="about imp ai-check" ref={dialogRef} role="dialog" aria-modal="true"
-        aria-labelledby="ground-title" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="about-head">
-          <h2 id="ground-title">Ground assigned codes</h2>
-          <button className="btn iconbtn" onClick={onClose} disabled={busy} title="Close">
-            <Icon name="x" size={16} />
-          </button>
-        </div>
-
+    <AiModal title="Ground assigned codes" busy={busy} onClose={onClose}>
         {done ? (
           <>
             <div className="ai-body">
@@ -133,14 +122,7 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                 as the reason the code applies — the evidence for <b>your</b> coding. It
                 proposes nothing.
               </p>
-              <div className="ai-sec">Model <span className="ai-sec-hint">this run only — the default lives in Settings → AI</span></div>
-              <div className="ai-models">
-                {MODELS.map((m) => (
-                  <button key={m.id} className={modelId === m.id ? "on" : ""}
-                    title={`${m.blurb} — $${m.in}/$${m.out} per 1M tokens in/out`}
-                    onClick={() => setModelId(m.id)}>{m.name}</button>
-                ))}
-              </div>
+              <ModelPicker modelId={modelId} onPick={setModelId} />
               {alreadyGrounded > 0 && (
                 <label className="ai-spk" style={{ marginBottom: 8 }}>
                   <input type="checkbox" checked={reground} onChange={() => setReground((v) => !v)} />
@@ -202,7 +184,6 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
             )}
           </>
         )}
-      </div>
-    </div>
+    </AiModal>
   );
 }

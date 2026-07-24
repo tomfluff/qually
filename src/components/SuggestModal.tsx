@@ -8,14 +8,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
-import { MODELS, modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { excerptOf } from "../contract/excerpt";
 import { chunksOf, renderSuggestChunk, estimateSuggestTokens, suggestChunk, overlapsExisting,
   SUGGEST_EXEMPLARS, type SuggestCode } from "../ai/suggest";
 import { announce } from "../announce";
-import { useDialogFocus } from "../useDialogFocus";
-import { Icon } from "./Icon";
+import { AiModal, ModelPicker } from "./AiModal";
 
 export function SuggestModal({ onClose }: { onClose: () => void }) {
   const pid = useStore((s) => s.active);
@@ -29,7 +28,6 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const abort = useRef<AbortController | null>(null);
-  const dialogRef = useDialogFocus();
   useEffect(() => () => abort.current?.abort(), []);
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
@@ -111,15 +109,7 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="about-backdrop" onMouseDown={() => !busy && onClose()}>
-      <div className="about imp ai-check" ref={dialogRef} role="dialog" aria-modal="true"
-        aria-labelledby="suggest-title" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="about-head">
-          <h2 id="suggest-title">Suggest codes for “{pid}”</h2>
-          <button className="btn iconbtn" onClick={onClose} disabled={busy} title="Close">
-            <Icon name="x" size={16} />
-          </button>
-        </div>
+    <AiModal title={<>Suggest codes for “{pid}”</>} busy={busy} onClose={onClose}>
 
         {done ? (
           <>
@@ -143,14 +133,7 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
                 existing code might apply. They arrive as <b>candidate codings</b> for you
                 to accept or reject — it never invents a code.
               </p>
-              <div className="ai-sec">Model <span className="ai-sec-hint">this run only — the default lives in Settings → AI</span></div>
-              <div className="ai-models">
-                {MODELS.map((m) => (
-                  <button key={m.id} className={modelId === m.id ? "on" : ""}
-                    title={`${m.blurb} — $${m.in}/$${m.out} per 1M tokens in/out`}
-                    onClick={() => setModelId(m.id)}>{m.name}</button>
-                ))}
-              </div>
+              <ModelPicker modelId={modelId} onPick={setModelId} />
               {!ready ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   {codes.length === 0
@@ -205,7 +188,6 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
             )}
           </>
         )}
-      </div>
-    </div>
+    </AiModal>
   );
 }

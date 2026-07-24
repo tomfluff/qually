@@ -7,14 +7,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
-import { MODELS, modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { excerptOf } from "../contract/excerpt";
 import { dedupeCodes, renderMergePayload, estimateMergeTokens, MERGE_EXEMPLARS,
   type MergeCodeInput, type MergeProposal } from "../ai/dedupe";
 import { announce } from "../announce";
-import { useDialogFocus } from "../useDialogFocus";
-import { Icon } from "./Icon";
+import { AiModal, ModelPicker } from "./AiModal";
 
 export function MergeModal({ onProposals, onClose }: {
   onProposals: (p: MergeProposal[]) => void;
@@ -28,7 +27,6 @@ export function MergeModal({ onProposals, onClose }: {
   const [done, setDone] = useState<{ found: number; cost: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
-  const dialogRef = useDialogFocus();
   useEffect(() => () => abort.current?.abort(), []);
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
@@ -94,15 +92,7 @@ export function MergeModal({ onProposals, onClose }: {
   };
 
   return (
-    <div className="about-backdrop" onMouseDown={() => !busy && onClose()}>
-      <div className="about imp ai-check" ref={dialogRef} role="dialog" aria-modal="true"
-        aria-labelledby="merge-title" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="about-head">
-          <h2 id="merge-title">Merge duplicate codes</h2>
-          <button className="btn iconbtn" onClick={onClose} disabled={busy} title="Close">
-            <Icon name="x" size={16} />
-          </button>
-        </div>
+    <AiModal title="Merge duplicate codes" busy={busy} onClose={onClose}>
 
         {done ? (
           <>
@@ -125,14 +115,7 @@ export function MergeModal({ onProposals, onClose }: {
                 excerpts you coded with it — and proposes pairs that look like the same
                 concept under two labels. You accept each merge yourself; it proposes nothing else.
               </p>
-              <div className="ai-sec">Model <span className="ai-sec-hint">this run only — the default lives in Settings → AI</span></div>
-              <div className="ai-models">
-                {MODELS.map((m) => (
-                  <button key={m.id} className={modelId === m.id ? "on" : ""}
-                    title={`${m.blurb} — $${m.in}/$${m.out} per 1M tokens in/out`}
-                    onClick={() => setModelId(m.id)}>{m.name}</button>
-                ))}
-              </div>
+              <ModelPicker modelId={modelId} onPick={setModelId} />
               {!enough ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   Merge needs at least two codes that have coded segments. Code a bit
@@ -185,7 +168,6 @@ export function MergeModal({ onProposals, onClose }: {
             )}
           </>
         )}
-      </div>
-    </div>
+    </AiModal>
   );
 }

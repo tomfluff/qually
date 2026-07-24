@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useLayoutEffect, type DependencyList, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type DependencyList, type RefObject } from "react";
 
 // The two halves every popover repeats (SegmentPopover, AiMarkPopover, the
 // color picker, CodeMenu) — extracted so the conventions live in one place.
@@ -44,6 +44,21 @@ export function useDismiss(
       document.removeEventListener("keydown", esc, true);
     };
   }, [ref, onClose, onEscape, capture, enabled, ignore]);
+}
+
+// A button that toggles a menu next to it: open state, the two refs, and the
+// dismiss wiring (outside-click closes, but a click on the toggle button is
+// ignored so it toggles instead of close-then-reopen). Used by the sidebar AI
+// menu and the Codebook AI/View menus — the same three lines each had inline.
+export function useToggleMenu() {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useDismiss(menuRef, () => setOpen(false), {
+    enabled: open,
+    ignore: (e) => !!btnRef.current?.contains(e.target as Node),
+  });
+  return { open, setOpen, btnRef, menuRef };
 }
 
 // Clamp: the popovers are em-sized and scale with the sidebar text setting, so

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 // The Codebook tab: go over your coding. Codes on the left, their excerpts on the
 // right. The AI's observations moved out to the Assist tab; this view is yours.
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, type Segment } from "../state/store";
 import { norm } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
@@ -11,7 +11,7 @@ import { CodeMenu } from "./CodeMenu";
 import { openColorPicker } from "../colorPicker";
 import { groundHash } from "../ai/ground";
 import { GroundModal } from "./GroundModal";
-import { useDismiss } from "../usePopover";
+import { useToggleMenu } from "../usePopover";
 import { Icon } from "./Icon";
 
 // Codebook working state (chosen codes, filter, show-rejected) survives leaving the
@@ -196,12 +196,7 @@ export function BrowseView() {
 // The codebook's AI action, in a sparkle menu that mirrors the transcript
 // sidebar's AI menu (same icon + chevron). One item today — grounding.
 function CbAiMenu({ onGround, fontSize }: { onGround: () => void; fontSize: number }) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useDismiss(menuRef, () => setOpen(false), {
-    enabled: open, ignore: (e) => !!btnRef.current?.contains(e.target as Node),
-  });
+  const { open, setOpen, btnRef, menuRef } = useToggleMenu();
   return (
     <div className="cbMenuWrap">
       <button className="btn aibtn cbMenuBtn" ref={btnRef} aria-haspopup="menu" aria-expanded={open}
@@ -231,12 +226,7 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
   hasGrounds: boolean;
   fontSize: number;
 }) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useDismiss(menuRef, () => setOpen(false), {
-    enabled: open, ignore: (e) => !!btnRef.current?.contains(e.target as Node),
-  });
+  const { open, setOpen, btnRef, menuRef } = useToggleMenu();
   // defaults: rejected off, bold on, wash on, underline off
   const nonDefault = showRejected || !ui.groundBold || !ui.groundWash || ui.groundUnderline;
   return (
