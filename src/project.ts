@@ -20,6 +20,7 @@
 // colleague opening the file should see the same people marked the same way. Optional,
 // so a v1 file written before this existed still loads (openProject re-guesses).
 import type { Ai, AiCall, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
+import type { GroundRec } from "./ai/ground";
 
 export const FORMAT = "qually-project";
 export const VERSION = 1;
@@ -38,6 +39,7 @@ export interface Project {
   video: Record<string, { name?: string; offset: number }>;
   ai: Ai;
   aiFlags: Record<string, LineFlags>;
+  aiGrounds?: Record<number, GroundRec>; // optional: absent in files written before F1
   aiLog: AiCall[];
   speakers?: { // optional: absent in files written before this existed
     colors: Record<string, string>;
@@ -91,6 +93,7 @@ export function parseProject(text: string): Project {
     video: p.video ?? {},
     ai: p.ai ?? { model: "gpt-5.6-luna", redactTerms: [], lenses: ["transcription"] },
     aiFlags: p.aiFlags ?? {},
+    aiGrounds: p.aiGrounds ?? {},
     aiLog: p.aiLog ?? [],
     speakers: p.speakers, // may be absent — openProject re-guesses the interviewer
   };

@@ -100,3 +100,14 @@
 .nBtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
 [data-theme=dark] .nBtn.pri { color:#12161a; }
 .nCode { margin-top:6px; max-width:340px; }
+
+/* F1 grounding — quotes that carry the code, emphasised inside excerpts. The
+   channels are combinable user choices (bold / code-colour wash / underline);
+   wash + underline colours come inline (per-code). */
+mark.ground { background:none; color:inherit; border-radius:3px; padding:0 1px; }
+mark.ground.gbold { font-weight:700; }
+mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px; }
+.groundOpts { display:inline-flex; align-items:center; gap:.7em; margin-left:auto; color:var(--muted); }
+.groundOpts label { display:inline-flex; align-items:center; gap:.3em; cursor:pointer; color:var(--fg); }
+.groundOpts input[type=checkbox] { width:1em; height:1em; accent-color:var(--accent); }
+.browse-left .groundBtn { width:100%; justify-content:center; margin-bottom:8px; }

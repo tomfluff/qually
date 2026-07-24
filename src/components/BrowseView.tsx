@@ -9,6 +9,8 @@ import { CodeMenu } from "./CodeMenu";
 import { CodeCombobox } from "./CodeCombobox";
 import { openColorPicker } from "../colorPicker";
 import { LENSES, hashLine, spanLens } from "../ai/flag";
+import { groundHash } from "../ai/ground";
+import { GroundModal } from "./GroundModal";
 
 // Browse's working state (chosen codes, filter, toggles) survives leaving the tab —
 // the view unmounts, so plain useState would reset it on every visit.
@@ -38,6 +40,10 @@ export function BrowseView() {
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
   const setUi = useStore((s) => s.setUi);
+  const aiGrounds = useStore((s) => s.aiGrounds);
+  const ui = useStore((s) => s.ui);
+  const [groundOpen, setGroundOpen] = useState(false);
+  const hasGrounds = Object.keys(aiGrounds).length > 0;
   const setColor = useStore((s) => s.setColor);
   const jumpTo = useStore((s) => s.jumpTo);
   const aiFlags = useStore((s) => s.aiFlags);
@@ -87,6 +93,13 @@ export function BrowseView() {
     const r = excerptOf(t.lines.filter((l) => l.id >= s.start && l.id <= s.end)
       .map((l) => ({ text: l.text, speaker: l.speaker })));
     return { text: r.excerpt.replace(/^\[R:\] /, ""), speaker: r.speaker };
+  };
+
+  // a segment's grounding quotes, but only while the hash still matches what the
+  // model saw (recode/resize/edit invalidates — same trick as the scan marks)
+  const groundsFor = (seg: Segment, excerpt: string): string[] => {
+    const g = aiGrounds[seg.sid];
+    return g && g.hash === groundHash(seg.code, excerpt) ? g.quotes : [];
   };
 
   const allCodes = Object.keys(codebook).sort();
@@ -148,6 +161,10 @@ export function BrowseView() {
           })
         ) : (
           <>
+        <button className="btn groundBtn" onClick={() => setGroundOpen(true)}
+          title="Mark which words carry each assigned code (sends coded excerpts to OpenAI after your approval)">
+          ✨ Ground codes…
+        </button>
         <input type="search" placeholder="filter codes…" value={filter}
           onChange={(e) => setFilter(e.target.value)} />
         {listed.map((c) => (
@@ -206,6 +223,17 @@ export function BrowseView() {
                 <span className={"switch" + (showRejected ? " on" : "")}><span className="knob" /></span>
                 <span className="switchLabel">Show rejected excerpts</span>
               </button>
+              {hasGrounds && (
+                <span className="groundOpts">
+                  <span className="groundOptsLabel">grounding:</span>
+                  <label><input type="checkbox" checked={ui.groundBold}
+                    onChange={() => setUi({ groundBold: !ui.groundBold })} /> bold</label>
+                  <label><input type="checkbox" checked={ui.groundWash}
+                    onChange={() => setUi({ groundWash: !ui.groundWash })} /> wash</label>
+                  <label><input type="checkbox" checked={ui.groundUnderline}
+                    onChange={() => setUi({ groundUnderline: !ui.groundUnderline })} /> underline</label>
+                </span>
+              )}
             </div>
             {chosen.map((code) => {
               const segs = segments.filter((s) => norm(s.code) === norm(code) &&
@@ -225,7 +253,11 @@ export function BrowseView() {
                     return (
                       <div key={s.sid} className={"bExcerpt" + (rej ? " rejected" : "")}
                         style={{ borderLeftColor: codebook[code].color || "var(--line)" }}>
-                        <div>{rej && <span className="rejtag">rejected</span>}{ex?.text || "(excerpt in coded-segments.csv)"}</div>
+                        <div>{rej && <span className="rejtag">rejected</span>}{
+                          ex?.text
+                            ? groundedText(ex.text, groundsFor(s, ex.text), codebook[code].color, ui)
+                            : "(excerpt in coded-segments.csv)"
+                        }</div>
                         {s.notes && <div className="bNote">{s.notes}</div>}
                         <div className={"ref" + (loaded ? " open" : "")}
                           tabIndex={loaded ? 0 : undefined} role={loaded ? "button" : undefined}
@@ -247,8 +279,39 @@ export function BrowseView() {
         )}
       </div>
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
+      {groundOpen && <GroundModal onClose={() => setGroundOpen(false)} />}
     </div>
   );
+}
+
+// Excerpt text with its grounding quotes emphasised. Emphasis channels are the
+// user's combinable choices (bold / code-colour wash / underline — D6); with all
+// three off, or no quotes, the text renders plain.
+function groundedText(
+  text: string, quotes: string[], color: string,
+  ui: { groundBold: boolean; groundWash: boolean; groundUnderline: boolean },
+): ReactNode {
+  if (!quotes.length || (!ui.groundBold && !ui.groundWash && !ui.groundUnderline)) return text;
+  const ranges: [number, number][] = [];
+  for (const q of quotes) {
+    const i = text.indexOf(q); // first occurrence — the model saw this exact text
+    if (i >= 0) ranges.push([i, i + q.length]);
+  }
+  ranges.sort((a, b) => a[0] - b[0]);
+  const st: CSSProperties = {};
+  if (ui.groundWash) st.background = `color-mix(in srgb, ${color} 22%, transparent)`;
+  if (ui.groundUnderline) st.textDecorationColor = color;
+  const cls = "ground" + (ui.groundBold ? " gbold" : "") + (ui.groundUnderline ? " gunder" : "");
+  const out: ReactNode[] = [];
+  let at = 0;
+  ranges.forEach(([s0, e0], k) => {
+    if (s0 < at) return; // overlapping quote — first one wins
+    out.push(text.slice(at, s0));
+    out.push(<mark key={k} className={cls} style={st}>{text.slice(s0, e0)}</mark>);
+    at = e0;
+  });
+  out.push(text.slice(at));
+  return out;
 }
 
 // the quoted span highlighted inside its full line, in the lens color

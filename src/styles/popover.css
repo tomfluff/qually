@@ -28,3 +28,8 @@
 .aipop .aipop-head strong { flex:1; }
 .aipop .aipop-quote { margin-top:8px; color:var(--muted); font-style:italic; user-select:text; }
 .aipop .aipop-reason { margin-top:4px; line-height:1.45; user-select:text; }
+
+/* F1 grounding quotes in the segment popover */
+.pop-grounds { color:var(--muted); line-height:1.45; }
+.pop-grounds .pop-grounds-label { font-weight:600; color:var(--fg); }
+.pop-grounds .pop-ground { margin-right:.5em; font-style:italic; }

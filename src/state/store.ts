@@ -9,6 +9,7 @@ import { mergeGroups, type Group } from "../merge";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, spanLens, type Flag } from "../ai/flag";
+import type { GroundRec } from "../ai/ground";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll } from "../scrollMemory";
@@ -49,6 +50,8 @@ export interface Ui {
   // isolate one speaker's dialogue, PER TRANSCRIPT (focus is a lens on a study
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
+  // grounding emphasis in Browse excerpts — independent, combinable (D6)
+  groundBold: boolean; groundWash: boolean; groundUnderline: boolean;
   // how the OTHER speakers' rows step back — independent, combinable effects
   focusDim: boolean;      // whole row drops via opacity
   focusCollapse: boolean; // row folds to one ellipsised line
@@ -119,6 +122,7 @@ interface State {
   ui: Ui;
   ai: Ai;
   aiFlags: Record<string, LineFlags>; // "pid:lineId" -> flags, valid while the hash matches
+  aiGrounds: Record<number, GroundRec>; // sid -> grounding quotes, valid while the hash matches
   aiLog: AiCall[];
   // transient (not persisted)
   selection: Selection;
@@ -170,6 +174,7 @@ interface State {
   exportEdits: () => string;
   setAi: (patch: Partial<Ai>) => void;
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
+  addGrounds: (recs: Record<number, GroundRec>) => void;
   clearFlags: (pid: string) => void;
   dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
   applyFix: (pid: string, id: number, quote: string, fix: string) => void;
@@ -311,9 +316,9 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
@@ -326,7 +331,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiLog: [],
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [],
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
           ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {} },
@@ -713,6 +718,8 @@ export const useStore = create<State>()(
         }
         set({ aiFlags: next, redoStack: [] }); // line-entry redo snapshots hold flags — invalidate
       },
+      // grounding results merge in; a deleted segment's record goes with it (below)
+      addGrounds: (recs) => set({ aiGrounds: { ...get().aiGrounds, ...recs } }),
       clearFlags: (pid) => {
         const next: Record<string, LineFlags> = {};
         for (const [k, v] of Object.entries(get().aiFlags)) if (!k.startsWith(`${pid}:`)) next[k] = v;
@@ -808,7 +815,7 @@ export const useStore = create<State>()(
           transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
           extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
           hotbar: s.hotbar, video: s.video,
-          ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog,
+          ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog,
           // the speaker map rides along even though it lives in `ui`: who the
           // interviewer is belongs to the study, not to my font size (see project.ts)
           speakers: { colors: s.ui.speakerColors, weight: s.ui.speakerWeight },
@@ -838,7 +845,7 @@ export const useStore = create<State>()(
           ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {} },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: [], active: p.active,
-          hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiLog: p.aiLog,
+          hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
@@ -866,7 +873,9 @@ export const useStore = create<State>()(
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x), redoStack: [] }),
       deleteSegment: (sid) => {
         get().pushUndo();
-        set({ segments: get().segments.filter((x) => x.sid !== sid) });
+        const grounds = { ...get().aiGrounds };
+        delete grounds[sid]; // its grounding dies with it
+        set({ segments: get().segments.filter((x) => x.sid !== sid), aiGrounds: grounds });
         announce("Segment deleted");
       },
       setStatus: (sid, status) => {
@@ -1053,7 +1062,7 @@ export const useStore = create<State>()(
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
-        ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
+        ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
@@ -1062,6 +1071,10 @@ export const useStore = create<State>()(
         // fields added after a persisted state was written (persist merges shallowly)
         s.ai.lenses ??= ["transcription"];
         s.pinnedTabs ??= [];
+        s.aiGrounds ??= {};
+        s.ui.groundBold ??= true;
+        s.ui.groundWash ??= true;
+        s.ui.groundUnderline ??= false;
         s.ui.showNotices ??= true;
         s.ui.hiddenLenses ??= [];
         s.ui.lanePattern ??= false;
