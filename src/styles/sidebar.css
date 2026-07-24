@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
    Copyright (C) 2026 Yotam Sechayk */
-#sidebar h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
-  color:var(--muted); margin:14px 0 6px; }
 /* + new code with the transcript's AI actions in a menu button beside it */
 #sidebar .sidebarNewRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:8px; }
 /* the row owns the bottom spacing; the wrap's own margin would inflate the flex

@@ -122,11 +122,13 @@ export function AssistView() {
 
   return (
     <div id="browse" style={{ fontSize }}>
-      <div className="browse-left nicescroll" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
+      <div className="browse-left cbSide" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
         {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
-            own menu — this heading just names what's showing */}
+            own menu — this heading just names what's showing. It stays fixed; the
+            list below scrolls inside cbList so the scrollbar clears the drag divider. */}
         <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "suggest" ? "Suggest codes" : "Observations"}</div>
 
+        <div className="cbList nicescroll">
         {panel === "observations" ? (
           hasNotices ? observeLenses.map((l) => {
             const st = lensStats(l.id);
@@ -191,6 +193,7 @@ export function AssistView() {
             )}
           </>
         )}
+        </div>
       </div>
 
       <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(160, Math.min(520, w)) })} />

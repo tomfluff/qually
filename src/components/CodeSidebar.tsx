@@ -67,7 +67,6 @@ export function CodeSidebar() {
         )}
       </div>
       <div className="codeList nicescroll">
-      <h3>all codes</h3>
       {Object.keys(codebook).sort().map((code) => {
         const slot = hotbarCache.indexOf(code);
         const c = counts[code];
