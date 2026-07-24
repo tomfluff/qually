@@ -23,16 +23,18 @@
 /* The dock's font-size comes inline from VideoDock's DOCK_FS (16px, the general
    interface size — same call as the Settings modal). Everything below is em, so
    that one number sizes the whole panel. */
-.vhead { display:flex; align-items:center; flex-wrap:wrap; gap:.45em; padding:.45em .6em;
-  cursor:move; color:var(--muted); user-select:none; } /* inherits the dock's 16px */
+.vhead { display:flex; align-items:center; flex-wrap:nowrap; gap:.45em; padding:.45em .6em;
+  cursor:move; color:var(--muted); user-select:none; }
 .vhead:hover { background:var(--sel); } /* says "grab me" before you commit to a drag */
 .vhead .vgrip { display:inline-flex; flex-shrink:0; } /* the visual drag affordance */
-.vhead .vtitle { max-width:12em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* the title is the ONE flexible item on the bar: min-width:0 lets it ellipsise
+   all the way down on a narrow dock instead of wrapping or pushing controls out */
+.vhead .vtitle { flex:0 1 auto; min-width:0; max-width:12em;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* minimised: just grip + transport + expand, shoulder to shoulder. The label is
    dropped in JSX when media is loaded (the transport says what it is); with no
    media the "Video" label stays, so the pill isn't an anonymous pair of glyphs. */
 .vdock.collapsed { min-width:0; }
-.vdock.collapsed .vhead { flex-wrap:nowrap; }
 .vbody { position:relative; }
 
 /* One control family across the dock: every button is 2.35em tall so the head and
@@ -40,7 +42,8 @@
    .speed shows the current rate and opens the popover. */
 .vbtn { height:2.35em; display:inline-flex; align-items:center; gap:.4em; padding:0 .75em;
   border:1px solid var(--line); border-radius:.6em; background:var(--bg); color:var(--fg);
-  font:inherit; line-height:1; cursor:pointer; white-space:nowrap; }
+  font:inherit; line-height:1; cursor:pointer; white-space:nowrap;
+  flex-shrink:0; } /* controls hold their size — the TITLE is the bar's only flexible item */
 .vbtn:hover { border-color:var(--accent); }
 .vbtn.icononly { width:2.35em; padding:0; justify-content:center; }
 /* panel affordances (collapse) — no frame, so they don't read as transport controls */
@@ -57,7 +60,7 @@
 [data-theme=dark] .vbtn.playbtn { color:#12161a; }
 /* playback speed: one button showing the current rate, a popover with the steps
    (0.5×–4×). Opens UPWARD — the dock is bottom-anchored. */
-.vspeedwrap { position:relative; display:inline-flex; }
+.vspeedwrap { position:relative; display:inline-flex; flex-shrink:0; }
 .vspeedwrap .vbtn.speed { padding:0 .6em; min-width:3.4em; justify-content:center; }
 .vspeedwrap .vbtn.speed.on { background:var(--accent); color:#fff; border-color:var(--accent); }
 [data-theme=dark] .vspeedwrap .vbtn.speed.on { color:#12161a; }
@@ -101,12 +104,13 @@
 .vresize { position:absolute; left:0; bottom:0; width:16px; height:16px;
   cursor:ew-resize; background:linear-gradient(225deg, transparent 50%, var(--muted) 50%); }
 
-/* Narrow dock: under 320px the offset controls and the filename come off — the
-   transport is what matters at that size. A container query, not a JS flag: the
-   resize drag writes width imperatively per frame, so only CSS reacts live.
-   (The collapsed pill isn't a container, so its "Video" label is untouched.)
+/* Narrow dock: under 320px the offset controls come off — the transport is what
+   matters at that size (the filename stays and ellipsises instead, see .vtitle).
+   A container query, not a JS flag: the resize drag writes width imperatively
+   per frame, so only CSS reacts live. (The collapsed pill isn't a container, so
+   its "Video" label is untouched.)
    LAST in the file: these tie the base rules on specificity, so order decides. */
 @container (max-width: 319px) {
-  .vtitle { display:none; }
+  /* the filename stays — it just ellipsises as far as it must (see .vtitle) */
   .vctrl .vlabel, .vctrl .stepper, .vctrl .unit { display:none; }
 }
