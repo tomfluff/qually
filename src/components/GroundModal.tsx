@@ -31,8 +31,11 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
   const model = modelOf(ai.model);
+  // re-ground: ignore existing records and run everything again (e.g. after a
+  // prompt change — old results don't invalidate by hash, only by content)
+  const [reground, setReground] = useState(false);
 
-  const todo = useMemo<GroundItem[]>(() => segments
+  const eligible = useMemo<GroundItem[]>(() => segments
     .filter((s) => s.status === "accepted" && transcripts[s.pid])
     .map((s) => {
       const excerpt = excerptOf(transcripts[s.pid].lines
@@ -40,8 +43,14 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
         .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
       return { sid: s.sid, code: s.code, def: codebook[s.code]?.def ?? "", excerpt };
     })
-    .filter((it) => it.excerpt && aiGrounds[it.sid]?.hash !== groundHash(it.code, it.excerpt)),
-  [segments, transcripts, codebook, aiGrounds]);
+    .filter((it) => !!it.excerpt),
+  [segments, transcripts, codebook]);
+  const alreadyGrounded = useMemo(
+    () => eligible.filter((it) => aiGrounds[it.sid]?.hash === groundHash(it.code, it.excerpt)).length,
+    [eligible, aiGrounds]);
+  const todo = useMemo<GroundItem[]>(() => reground ? eligible
+    : eligible.filter((it) => aiGrounds[it.sid]?.hash !== groundHash(it.code, it.excerpt)),
+  [eligible, aiGrounds, reground]);
 
   const chunks = useMemo(() => chunksOfItems(todo), [todo]);
   const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateGroundTokens(c, red), 0), [chunks, red]);
@@ -122,10 +131,19 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                 as the reason the code applies — the evidence for <b>your</b> coding. It
                 proposes nothing.
               </p>
+              {alreadyGrounded > 0 && (
+                <label className="ai-spk" style={{ marginBottom: 8 }}>
+                  <input type="checkbox" checked={reground} onChange={() => setReground((v) => !v)} />
+                  <span>Re-ground the {alreadyGrounded} segment{alreadyGrounded === 1 ? "" : "s"} that
+                  already {alreadyGrounded === 1 ? "has" : "have"} a grounding{" "}
+                  <em>replaces the current quotes</em></span>
+                </label>
+              )}
               {todo.length === 0 ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   Every accepted segment of the loaded transcripts already has a current
-                  grounding. Recode, resize, or edit a segment to make it eligible again.
+                  grounding. Tick re-ground above to run them again anyway — or recode,
+                  resize, or edit a segment to make it eligible.
                 </p>
               ) : (
                 <>
