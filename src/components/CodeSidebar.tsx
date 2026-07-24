@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStore, patternOf } from "../state/store";
 import { CodeMenu } from "./CodeMenu";
 import { CodeCombobox } from "./CodeCombobox";
 import { AiCheckModal } from "./AiCheckModal";
 import { SuggestModal } from "./SuggestModal";
 import { openColorPicker } from "../colorPicker";
+import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
 
 export function CodeSidebar() {
@@ -23,7 +24,14 @@ export function CodeSidebar() {
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [aiMenu, setAiMenu] = useState(false);
   const hasCodes = Object.keys(codebook).length > 0;
+  const aiBtnRef = useRef<HTMLButtonElement>(null);
+  const aiMenuRef = useRef<HTMLDivElement>(null);
+  // close on outside click, but not on the toggle button itself (that would reopen)
+  useDismiss(aiMenuRef, () => setAiMenu(false), {
+    enabled: aiMenu, ignore: (e) => !!aiBtnRef.current?.contains(e.target as Node),
+  });
 
   // keyboard/visible route to the same menu right-click opens, anchored to the row or ⋯ button
   const openMenuAt = (code: string, el: HTMLElement) => {
@@ -39,24 +47,31 @@ export function CodeSidebar() {
 
   return (
     <div id="sidebar" style={{ fontSize: sidebarFontSize, width: sidebarWidth }}>
-      {/* AI scan sits above the codes: it acts on THIS transcript (the sidebar only
-          renders for a transcript view), so its home is here, not the global toolbar. */}
-      <div className="sidebarAi">
-        <button className="btn iconlabel aibtn sidebarScan" onClick={() => setAiOpen(true)}
-          aria-haspopup="dialog" aria-expanded={aiOpen}
-          title="Scan this transcript with AI: transcription errors, plus observation lenses you choose (emotions, likes/dislikes, desires…)">
-          <Icon name="sparkle" size={15} /> AI scan
+      {/* + new code, with the transcript's AI actions in a menu beside it. The AI
+          acts on THIS transcript (the sidebar only renders for a transcript view),
+          so its home is here, not the global toolbar. */}
+      <div className="sidebarNewRow">
+        <CodeCombobox placeholder="+ new code" />
+        <button className="btn aibtn aiMenuBtn" ref={aiBtnRef}
+          aria-haspopup="menu" aria-expanded={aiMenu}
+          title="AI for this transcript" aria-label="AI for this transcript"
+          onClick={() => setAiMenu((v) => !v)}>
+          <Icon name="sparkle" size={15} /> <Icon name={aiMenu ? "chevron-up" : "chevron-down"} size={12} />
         </button>
-        {hasCodes && (
-          <button className="btn iconlabel aibtn sidebarScan" onClick={() => setSuggestOpen(true)}
-            aria-haspopup="dialog" aria-expanded={suggestOpen}
-            title="Suggest codes from your codebook for this transcript — the AI proposes candidate codings you accept or reject">
-            <Icon name="sparkle" size={15} /> Suggest
-          </button>
+        {aiMenu && (
+          <div className="ctxmenu aiMenu" ref={aiMenuRef} role="menu" aria-label="AI for this transcript"
+            style={{ fontSize: sidebarFontSize }}>
+            <button role="menuitem" onClick={() => { setAiOpen(true); setAiMenu(false); }}>
+              <Icon name="sparkle" size={sidebarFontSize} /> AI observation scan
+            </button>
+            <button role="menuitem" disabled={!hasCodes}
+              title={hasCodes ? undefined : "Add a code first — suggestions apply your existing codes"}
+              onClick={() => { if (hasCodes) { setSuggestOpen(true); setAiMenu(false); } }}>
+              <Icon name="sparkle" size={sidebarFontSize} /> AI code suggestion
+            </button>
+          </div>
         )}
       </div>
-      {/* + new code (top of list); fuzzy autocomplete. 0 opens the command palette. */}
-      <CodeCombobox placeholder="+ new code" />
       <div className="codeList nicescroll">
       <h3>all codes</h3>
       {Object.keys(codebook).sort().map((code) => {

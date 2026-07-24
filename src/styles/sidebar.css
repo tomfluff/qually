@@ -2,10 +2,12 @@
    Copyright (C) 2026 Yotam Sechayk */
 #sidebar h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
   color:var(--muted); margin:14px 0 6px; }
-/* AI actions, pinned above the code list — side by side, sharing the row width */
-#sidebar .sidebarAi { display:flex; gap:6px; margin-bottom:8px; }
-#sidebar .sidebarScan { flex:1; min-width:0; display:inline-flex; align-items:center;
-  justify-content:center; gap:6px; }
+/* + new code with the transcript's AI actions in a menu button beside it */
+#sidebar .sidebarNewRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:8px; }
+#sidebar .sidebarNewRow .newCodeWrap { flex:1; min-width:0; }
+#sidebar .aiMenuBtn { flex:none; display:inline-flex; align-items:center; gap:2px; padding:0 8px; }
+/* anchor the menu under the button (the shared .ctxmenu is position:fixed by default) */
+#sidebar .sidebarNewRow .aiMenu { position:absolute; left:auto; right:0; top:calc(100% + 4px); }
 /* Truncate + tooltip, coherent with the Browse code list: the name stays on one
    line (ellipsised) so the key/count/⋯ never wrap, and the full name is one hover
    away (the shared Tooltip reads the row's data-tip). */
