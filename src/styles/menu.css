@@ -5,7 +5,10 @@
 .ctxmenu { position:fixed; z-index:75; min-width:214px; max-width:min(340px, 92vw);
   background:var(--bg);
   border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 34px rgba(0,0,0,.3);
-  padding:6px; display:flex; flex-direction:column; gap:1px; font-size:13px; }
+  padding:6px; display:flex; flex-direction:column; gap:1px; font-size:13px;
+  /* at a big sidebar font the menu can outgrow the screen — the clamp can only
+     slide it, so cap it and scroll rather than let items fall off the bottom */
+  max-height:calc(100vh - 16px); overflow-y:auto; }
 .ctxmenu .ctxhead { font-weight:700; color:var(--fg); padding:5px 8px 3px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ctxmenu button { text-align:left; background:transparent; border:none; color:var(--fg);
