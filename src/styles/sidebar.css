@@ -4,7 +4,9 @@
   color:var(--muted); margin:14px 0 6px; }
 /* + new code with the transcript's AI actions in a menu button beside it */
 #sidebar .sidebarNewRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:8px; }
-#sidebar .sidebarNewRow .newCodeWrap { flex:1; min-width:0; }
+/* the row owns the bottom spacing; the wrap's own margin would inflate the flex
+   cross-axis and leave the menu button taller than the input */
+#sidebar .sidebarNewRow .newCodeWrap { flex:1; min-width:0; margin-bottom:0; }
 #sidebar .aiMenuBtn { flex:none; display:inline-flex; align-items:center; gap:2px; padding:0 8px; }
 /* anchor the menu under the button (the shared .ctxmenu is position:fixed by default) */
 #sidebar .sidebarNewRow .aiMenu { position:absolute; left:auto; right:0; top:calc(100% + 4px); }
