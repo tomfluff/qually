@@ -8,7 +8,8 @@
    colour picker 120, tooltip 200). */
 .vdock { position:fixed; z-index:74; background:var(--panel); border:1px solid var(--line);
   border-radius:12px; box-shadow:0 10px 34px rgba(0,0,0,.3); overflow:hidden;
-  min-width:426px; /* expanded floor — must match MIN_W in VideoDock.tsx; .vdock.collapsed overrides to 0 */
+  /* NO min-width here: MIN_W in VideoDock.tsx is the ONLY width floor (a px
+     literal here silently overrode it — the "can't change the width" trap) */
   /* Permanently composited. Toggling will-change per-drag destroyed the GPU layer on
      every drop: the browser re-rasterizes the panel (34px blur shadow and all) and its
      text snaps between grayscale and subpixel antialiasing — a one-frame flash that

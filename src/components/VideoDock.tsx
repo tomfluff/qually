@@ -13,15 +13,15 @@ import { Icon } from "./Icon";
 // (An older persisted geom stored the LEFT edge as `x`; it has no `r`, so those
 // users get one reset to the default corner.)
 interface Geom { r: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
-const DEFAULT: Geom = { r: null, bottom: null, w: 426, collapsed: true, rate: 1 };
-const MIN_W = 426; // expanded minimum (collapsed shrinks to its controls) — must match video.css .vdock min-width
+const DEFAULT: Geom = { r: null, bottom: null, w: 220, collapsed: true, rate: 1 };
+const MIN_W = 220; // expanded minimum (collapsed shrinks to its controls) — must match video.css .vdock min-width
 // Where an untouched dock rests: bottom right of the transcript surface, clear of
 // the minimap and to the LEFT of the focus button's column (the dock is
 // bottom-anchored and covers whatever it lands on at z 74, so the default has to
 // leave both reachable).
-const DEFAULT_BOTTOM = 12;
-const DEFAULT_RIGHT = (minimapWidth: number) => minimapWidth + 64;
-const DOCK_FS = 16; // the general interface size (matches the Settings modal)
+const DEFAULT_BOTTOM = 45;
+const DEFAULT_RIGHT = (minimapWidth: number) => minimapWidth + 84;
+const DOCK_FS = 12.5; // the dock's base size — video.css is em-based off this one number
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
@@ -48,9 +48,8 @@ function loadGeom(): Geom {
 export function VideoDock() {
   const pid = useStore((s) => s.active);
   const hasTranscript = useStore((s) => !!s.transcripts[s.active]);
-  // The dock reads at the interface size (16px), like the Settings modal — not the
-  // sidebar setting. video.css is em-based off this, so one number sizes the whole
-  // panel: rows, buttons, the speed menu, and the icons below.
+  // Fixed size, not the sidebar setting — DOCK_FS sizes the whole panel: rows,
+  // buttons, the speed menu, and the icons below.
   const fs = DOCK_FS;
   const minimapWidth = useStore((s) => s.ui.minimapWidth); // the default rest spot clears it
   const offset = useStore((s) => s.video[s.active]?.offset ?? 0);
@@ -298,7 +297,7 @@ export function VideoDock() {
         // expanded: floor the width by the text size — magnified chrome in a 380px
         // dock wraps into a three-row jumble. A dragged width wins above the floor.
         width: geom.collapsed ? "auto"
-          : Math.min(Math.max(cur ? geom.w : MIN_W, fs * 20, MIN_W), window.innerWidth - 48),
+          : Math.min(Math.max(cur ? geom.w : MIN_W, MIN_W), window.innerWidth - 48),
         fontSize: fs, ...pos,
       }}>
       {cur ? (
