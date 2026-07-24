@@ -118,8 +118,9 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
           <>
             <div className="ai-body nicescroll">
               <p className="about-lede">
-                For each coded excerpt, the AI marks the words that most directly carry the
-                code you assigned. It annotates <b>your</b> coding — it proposes nothing.
+                For each coded excerpt, the AI quotes the passages a coder would point to
+                as the reason the code applies — the evidence for <b>your</b> coding. It
+                proposes nothing.
               </p>
               {todo.length === 0 ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>

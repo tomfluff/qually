@@ -16,7 +16,11 @@ export const groundHash = (code: string, excerpt: string) => hashLine(code + "\u
 
 export interface GroundItem { sid: number; code: string; def: string; excerpt: string }
 
-const SYSTEM = `You are reviewing coded excerpts from research interview transcripts. For each item the researcher assigned the CODE to the EXCERPT. Mark the minimal verbatim quotes — exact substrings of that item's excerpt — that most directly ground the code: the words that made it apply. One to three quotes per item, each as short as it can be while staying meaningful on its own. If the whole excerpt carries the code equally, or nothing clearly does, return no quotes for that item. Text like [REDACTED_1] is a removed identifier; never include it in a quote.`;
+const SYSTEM = `You are reviewing coded excerpts from research transcripts. For each item the researcher assigned the CODE to the EXCERPT. Quote the passage or passages that would lead a qualitative coder to assign that code — the textual evidence FOR the code, copied verbatim as exact substrings of that item's excerpt. A passage is a complete clause or statement that stands on its own as the reason for the code, not isolated keywords: prefer the full evidential stretch over a fragment of it. One to three passages per item. If nothing in the excerpt would specifically lead a coder to that code, return no passages for that item.
+
+Example — excerpt: "I like our current plan, but I do think your first item in terms of the persona evaluation is a good justification for your probe study. So that one still, it's your exploration of the feedback. Right. But when you try to probe people about how to design things, we are thinking about the input adaptation and output adaptation, which justify the two probes you provide really well." with the code "framing the narrative" grounds as: "I do think your first item in terms of the persona evaluation is a good justification for your probe study" and "we are thinking about the input adaptation and output adaptation, which justify the two probes".
+
+Text like [REDACTED_1] is a removed identifier; never include it in a passage.`;
 
 export const chunksOfItems = (items: GroundItem[]): GroundItem[][] => {
   const out: GroundItem[][] = [];
@@ -43,7 +47,8 @@ const SCHEMA = {
         properties: {
           sid: { type: "integer", description: "the #id of the item" },
           quotes: {
-            type: "array", description: "0-3 exact substrings of that item's excerpt",
+            type: "array",
+            description: "0-3 evidence passages, each an exact substring of that item's excerpt — complete clauses a coder would point to as the reason for the code",
             items: { type: "string" },
           },
         },
