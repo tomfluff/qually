@@ -84,9 +84,11 @@
 .imp-note { color:var(--muted); font-size:.86em; text-align:center; margin-top:10px; }
 
 /* AI consent gate — lens + speaker choices */
-.ai-sec { font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
-  font-weight:700; margin:10px 0 6px; padding-bottom:3px; border-bottom:1px solid var(--line); }
-.ai-sec-hint { font-weight:400; text-transform:none; letter-spacing:0; font-size:1.05em; }
+.ai-sec { font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
+  font-weight:700; margin:12px 0 6px; padding-bottom:3px; border-bottom:1px solid var(--line); }
+/* the hint is a full sentence, not an eyebrow — read it back up toward body size
+   so it isn't the tiniest text in the dialog (low-vision at magnification) */
+.ai-sec-hint { font-weight:400; text-transform:none; letter-spacing:0; font-size:1.15em; }
 .ai-lenses { display:grid; grid-template-columns:1fr 1fr; gap:3px 14px; }
 .ai-lens, .ai-spk { display:flex; align-items:center; gap:7px; cursor:pointer;
   font-size:.92em; line-height:1.9; }
