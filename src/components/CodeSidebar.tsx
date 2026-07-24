@@ -85,6 +85,13 @@ export function CodeSidebar() {
             }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
             data-tip={code}>
+            {/* the keycap leads the row so the number reads before the colour;
+                hotkey + count are already in the row's aria-label, so the badge
+                is decorative. Codes without a hotkey keep the slot (hidden) —
+                otherwise every swatch below one would shift left. */}
+            <span className={"key" + (slot >= 0 && slot < 9 ? "" : " ghost")} aria-hidden="true">
+              {slot >= 0 && slot < 9 ? slot + 1 : "0"}
+            </span>
             {/* right-click only: a left-click on the swatch is almost always a missed
                 click on the row (apply code) — let it fall through. Keyboard and
                 screen-reader users recolor via the ⋯ menu's "Change color…". */}
@@ -99,9 +106,6 @@ export function CodeSidebar() {
               }} />
             <span className="cname">{code}</span>
             {pinned.includes(code) && <span className="pindot" title="pinned">●</span>}
-            {/* hotkey + count are already in the row's aria-label — hide the visual
-                badges so they don't double-speak */}
-            {slot >= 0 && slot < 9 && <span className="key" aria-hidden="true">{slot + 1}</span>}
             <span className="cnt" aria-hidden="true">{c ? `${c.segs}·${c.pids.size}` : "0"}</span>
             <button className="rowMenu" aria-label={`Options for ${code}`}
               onClick={(e) => { e.stopPropagation(); openMenuAt(code, e.currentTarget); }}>⋯</button>
