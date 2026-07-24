@@ -110,5 +110,4 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .groundOpts { display:inline-flex; align-items:center; gap:.7em; margin-left:auto; color:var(--muted); }
 .groundOpts label { display:inline-flex; align-items:center; gap:.3em; cursor:pointer; color:var(--fg); }
 .groundOpts input[type=checkbox] { width:1em; height:1em; accent-color:var(--accent); }
-.browse-left .groundBtn { width:100%; display:inline-flex; align-items:center;
-  justify-content:center; gap:6px; margin-bottom:8px; }
+.browse-left .groundBtn { width:100%; justify-content:center; margin-bottom:8px; }

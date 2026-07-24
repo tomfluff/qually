@@ -87,9 +87,7 @@
 .ai-sec { font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
   font-weight:700; margin:10px 0 6px; padding-bottom:3px; border-bottom:1px solid var(--line); }
 .ai-sec-hint { font-weight:400; text-transform:none; letter-spacing:0; font-size:1.05em; }
-/* single column: at magnification a straight vertical scan beats a 2-col grid
-   (designer consult 2026-07-24) */
-.ai-lenses { display:grid; grid-template-columns:1fr; gap:3px 14px; }
+.ai-lenses { display:grid; grid-template-columns:1fr 1fr; gap:3px 14px; }
 .ai-lens, .ai-spk { display:flex; align-items:center; gap:7px; cursor:pointer;
   font-size:.92em; line-height:1.9; }
 .ai-lens input, .ai-spk input { margin:0; }
