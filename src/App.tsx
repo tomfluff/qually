@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useState } from "react";
-import { useStore } from "./state/store";
+import { useStore, isTranscriptView } from "./state/store";
 import { Toolbar } from "./components/Toolbar";
 import { Tabs } from "./components/Tabs";
 import { CodeSidebar } from "./components/CodeSidebar";
 import { Resizer } from "./components/Resizer";
 import { TranscriptView } from "./components/TranscriptView";
 import { BrowseView } from "./components/BrowseView";
+import { AssistView } from "./components/AssistView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
@@ -58,17 +59,17 @@ function NoticeToggle() {
   return (
     <div className="noticewrap" ref={ref}>
       <button className="noticetoggle" onClick={() => useStore.getState().setUi({ showNotices: !show })}
-        aria-label={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}
-        title={show ? "Hide AI noticing highlights (read blind)" : "Show AI noticing highlights"}>
+        aria-label={show ? "Hide AI observations (read blind)" : "Show AI observations"}
+        title={show ? "Hide AI observations (read blind)" : "Show AI observations"}>
         <Icon name={show ? "eye" : "eye-off"} size={17} />
       </button>
       <button className="noticemore" onClick={() => setMenu((m) => !m)}
         aria-expanded={menu} aria-haspopup="menu"
-        aria-label="Choose which noticings are shown" title="Choose which noticings are shown">
+        aria-label="Choose which observations are shown" title="Choose which observations are shown">
         <Icon name={menu ? "chevron-up" : "chevron-down"} size={13} />
       </button>
       {menu && (
-        <div className="noticemenu" role="group" aria-label="Noticings shown"
+        <div className="noticemenu" role="group" aria-label="Observations shown"
           style={{ fontSize: sidebarFontSize }}>
           {presentLenses.map((l) => {
             // transcription errors ignore the eye (it hides NOTICINGS) — their
@@ -87,7 +88,7 @@ function NoticeToggle() {
               </label>
             );
           })}
-          {!show && <div className="noticemenu-note">Noticings are hidden (the eye)</div>}
+          {!show && <div className="noticemenu-note">Observations are hidden (the eye)</div>}
         </div>
       )}
     </div>
@@ -113,6 +114,8 @@ export function App() {
   const zen = useStore((s) => s.ui.zen);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const searchOpen = useStore((s) => s.search.open);
+  // Codebook and Assist are non-transcript views; transcript-only chrome hides on both.
+  const onTranscript = isTranscriptView(active);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "";
@@ -152,7 +155,7 @@ export function App() {
       }
       // Ctrl+F opens transcript search (works from anywhere, incl. inputs)
       if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
-        if (s.active !== "browse") { e.preventDefault(); s.openSearch(); }
+        if (isTranscriptView(s.active)) { e.preventDefault(); s.openSearch(); }
         return;
       }
       const t = e.target as HTMLElement;
@@ -184,7 +187,7 @@ export function App() {
         return;
       }
       // arrow nav: plain jumps to the adjacent line, Shift moves the head (W2 item 7)
-      if ((e.key === "ArrowUp" || e.key === "ArrowDown") && s.active !== "browse"
+      if ((e.key === "ArrowUp" || e.key === "ArrowDown") && isTranscriptView(s.active)
         && s.selection.pid === s.active && s.selection.lines.size) {
         e.preventDefault();
         s.moveSelection(e.key === "ArrowDown" ? 1 : -1, e.shiftKey);
@@ -212,7 +215,7 @@ export function App() {
       if (window.getSelection()?.toString().trim()) return; // let a real text selection copy itself
       if (document.querySelector(".pop")) return; // an open segment popover copies itself
       const s = useStore.getState();
-      if (s.active === "browse" || s.selection.pid !== s.active || !s.selection.lines.size) return;
+      if (!isTranscriptView(s.active) || s.selection.pid !== s.active || !s.selection.lines.size) return;
       const tr = s.transcripts[s.active];
       if (!tr) return;
       const sel = tr.lines.filter((l) => s.selection.lines.has(l.id));
@@ -229,22 +232,25 @@ export function App() {
       <Toolbar />
       {hasData && <Tabs />}
       <div id="main">
-        {hasData && active !== "browse" && (
+        {hasData && onTranscript && (
           <>
             <CodeSidebar />
             <Resizer onWidth={(w) => useStore.getState().setUi({ sidebarWidth: Math.max(160, Math.min(560, w)) })} />
           </>
         )}
         <div id="content">
-          {hasData && active !== "browse" && !searchOpen && (
+          {hasData && onTranscript && !searchOpen && (
             <button className="searchtoggle" title="Search (Ctrl+F)"
               onClick={() => useStore.getState().openSearch()}>
               <Icon name="search" size={17} />
             </button>
           )}
-          {hasData && active !== "browse" && !searchOpen && <NoticeToggle />}
-          {hasData && active !== "browse" && <SearchBar />}
-          {!hasData ? <Welcome /> : (active === "browse" ? <BrowseView /> : <TranscriptView />)}
+          {hasData && onTranscript && !searchOpen && <NoticeToggle />}
+          {hasData && onTranscript && <SearchBar />}
+          {!hasData ? <Welcome />
+            : active === "browse" ? <BrowseView />
+            : active === "assist" ? <AssistView />
+            : <TranscriptView />}
         </div>
       </div>
       <footer id="footer">
@@ -255,7 +261,7 @@ export function App() {
         </a>
         <span>— reach out with any questions.</span>
       </footer>
-      {active !== "browse" && <HotbarDock />}
+      {onTranscript && <HotbarDock />}
       <VideoDock />
       {zen && (
         <button className="zenexit" style={{ fontSize: sidebarFontSize }}

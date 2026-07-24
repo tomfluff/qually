@@ -2,6 +2,9 @@
    Copyright (C) 2026 Yotam Sechayk */
 #sidebar h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
   color:var(--muted); margin:14px 0 6px; }
+/* AI scan, pinned above the code list — full-width so it reads as a section action */
+#sidebar .sidebarScan { width:100%; display:inline-flex; align-items:center;
+  justify-content:center; gap:6px; margin-bottom:8px; }
 /* Truncate + tooltip, coherent with the Browse code list: the name stays on one
    line (ellipsised) so the key/count/⋯ never wrap, and the full name is one hover
    away (the shared Tooltip reads the row's data-tip). */

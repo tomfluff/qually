@@ -102,7 +102,7 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
       setDone({ errors, notices, cost });
       announce(errors + notices === 0
         ? "AI scan complete. Nothing marked."
-        : `AI scan complete: ${errors} possible transcription error${errors === 1 ? "" : "s"}, ${notices} noticing${notices === 1 ? "" : "s"}.`);
+        : `AI scan complete: ${errors} possible transcription error${errors === 1 ? "" : "s"}, ${notices} observation${notices === 1 ? "" : "s"}.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
@@ -119,7 +119,7 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
       return <>Nothing marked. That's a fine result — the scans only mark what's clearly there.</>;
     return <>
       {done.errors > 0 && <>Flagged <b>{done.errors} possible transcription error{done.errors === 1 ? "" : "s"}</b> (amber, dotted) — double-click a line to fix it against the audio. </>}
-      {done.notices > 0 && <>Highlighted <b>{done.notices} instance{done.notices === 1 ? "" : "s"}</b> for your review — hover for the lens, Alt-click to dismiss, or hide them all with the eye button to read blind.</>}
+      {done.notices > 0 && <>Marked <b>{done.notices} observation{done.notices === 1 ? "" : "s"}</b> for your review — hover for the lens, Alt-click to dismiss, or hide them all with the eye button to read blind. Go over them together in the <b>Assist</b> tab.</>}
     </>;
   };
 

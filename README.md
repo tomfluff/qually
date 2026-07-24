@@ -24,7 +24,7 @@ install, and no data ever leaving your machine.
   Appearance, alongside system and serif. It ships inside the app, so it works offline.
 - **Code without a mouse.** `Tab` into the transcript, `↓` to select a line, `1`–`9` to apply
   a code, `0` for the searchable palette. Every control has a visible focus ring.
-- **Don't depend on colour.** A selected line gets a rail, not just a tint; AI noticings differ
+- **Don't depend on colour.** A selected line gets a rail, not just a tint; AI observations differ
   by underline style; rejected segments are striped and outlined. And if similar code colours
   are hard to tell apart, switch on **code patterns** (Settings → Codes) to give every code a
   texture as well as a hue — the sidebar swatch shows the same one, so it stays learnable.
@@ -40,10 +40,10 @@ support in particular is **not** there yet.
 
 - **Fast keyboard coding** — number keys apply codes to the selected line(s); a hotbar and
   command palette keep your codebook a keystroke away.
-- **Browse by code** — filter and read every excerpt for a code across all transcripts.
+- **Codebook view** — filter and read every excerpt for a code across all transcripts.
 - **AI that shows, never replaces** *(optional, off by default)* — with your own OpenAI key,
   it can flag likely mis-transcriptions (each dismissable, often with a suggested fix
-  you can apply in one click) and highlight instances for your review (emotions,
+  you can apply in one click) and mark observations for your review (emotions,
   likes/dislikes, desires…), each mapped to a first-cycle coding method. It marks; you code.
 - **Merge partial lines**, line numbers, full/short speaker names, a resizable transcript
   minimap, and "near-balance" speaker warnings on mixed excerpts.

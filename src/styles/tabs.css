@@ -19,10 +19,14 @@
 /* Browse is a different kind of view (cross-transcript code browser): same tab
    shape but filled with the primary color + contrasting text, set apart from the
    participant transcript tabs */
-.tab.browsetab { display:inline-flex; align-items:center; gap:5px; margin-left:8px;
-  padding:6px 12px 6px 10px; font-size:inherit; /* it's a <button> now: UA size loses */
-  background:var(--accent); color:#fff; border-color:var(--accent); }
-.tab.browsetab svg { opacity:.9; width:1.15em; height:1.15em; }
-/* the lighter dark-theme accent needs dark text to stay legible */
-[data-theme=dark] .tab.browsetab { color:#12161a; }
+.tab.browsetab, .tab.assisttab { display:inline-flex; align-items:center; gap:5px;
+  padding:6px 12px 6px 10px; font-size:inherit; /* it's a <button> now: UA size loses */ }
+.tab.browsetab svg, .tab.assisttab svg { opacity:.9; width:1.15em; height:1.15em; }
+/* Codebook: filled accent, set apart from the participant transcript tabs */
+.tab.browsetab { margin-left:8px; background:var(--accent); color:#fff; border-color:var(--accent); }
+[data-theme=dark] .tab.browsetab { color:#12161a; } /* the lighter dark accent needs dark text */
+/* Assist: outlined accent — a sibling AI surface, distinct from filled Codebook */
+.tab.assisttab { margin-left:4px; color:var(--accent); border-color:var(--accent); }
+.tab.assisttab.active { background:var(--accent); color:#fff; }
+[data-theme=dark] .tab.assisttab.active { color:#12161a; }
 

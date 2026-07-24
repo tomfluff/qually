@@ -90,7 +90,7 @@ codebook.csv          codes: color, definition, status
 transcripts/*.csv     one per transcript, with your corrections applied
                       ("original" holds the pre-correction text, where edited)
 transcript-edits.csv  every transcription correction (original vs corrected)
-ai-noticings.csv      instances the AI marked for review (not codes)
+ai-observations.csv   instances the AI marked for review (not codes)
 ai-provenance.csv     every AI request made: model, lines sent, cost
 
 These CSVs are for pipelines, co-authors, and appendices.
@@ -111,7 +111,7 @@ it round-trips everything, including corrections and AI marks.
       seen.add(f.name);
     }
     if (editCount) files.push({ name: "transcript-edits.csv", text: st.exportEdits() });
-    if (noticeCount) files.push({ name: "ai-noticings.csv", text: st.exportNotices() });
+    if (noticeCount) files.push({ name: "ai-observations.csv", text: st.exportNotices() });
     if (aiCalls) files.push({ name: "ai-provenance.csv", text: st.exportAiLog() });
     save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
       new Date()), `${base}-csv.zip`);
@@ -142,8 +142,8 @@ it round-trips everything, including corrections and AI marks.
           {item("Codebook (.csv)", "Codes with colors, definitions, status.", () => { saveText(s().exportCodebook(), "codebook.csv"); setOpen(false); })}
           {editCount > 0 && item(`Transcript edits (.csv) · ${editCount}`, "Every correction: original vs corrected.",
             () => { saveText(s().exportEdits(), "transcript-edits.csv"); setOpen(false); })}
-          {noticeCount > 0 && item(`AI noticings (.csv) · ${noticeCount}`, "Instances the AI marked for review.",
-            () => { saveText(s().exportNotices(), "ai-noticings.csv"); setOpen(false); })}
+          {noticeCount > 0 && item(`AI observations (.csv) · ${noticeCount}`, "Instances the AI marked for review.",
+            () => { saveText(s().exportNotices(), "ai-observations.csv"); setOpen(false); })}
           {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost — your methods appendix.",
             () => { saveText(s().exportAiLog(), "ai-provenance.csv"); setOpen(false); })}
         </div>

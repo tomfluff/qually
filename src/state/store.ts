@@ -18,6 +18,12 @@ import { announce } from "../announce";
 export const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
 
+// `active` is a transcript pid or one of these reserved view keys (Codebook / Assist).
+// Both are non-transcript surfaces, so transcript-only chrome and selection bookkeeping
+// gate on isTranscriptView.
+export const RESERVED_VIEWS = ["browse", "assist"] as const;
+export const isTranscriptView = (active: string) => !RESERVED_VIEWS.includes(active as typeof RESERVED_VIEWS[number]);
+
 // orig = the imported text, present only while an in-app correction differs from it
 export interface Line { id: number; ts: string; speaker: string; text: string; orig?: string; }
 export interface Segment {
@@ -281,7 +287,7 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
   // applyCode trusts selection.pid and the digit hotkeys only check lines.size, so a live
   // selection on a closed tab writes segments onto a transcript that isn't on screen.
   if (sel.pid && !cur.tabs.includes(sel.pid)) sel = emptySel();
-  const active = o.active && (o.active === "browse" || cur.tabs.includes(o.active))
+  const active = o.active && (!isTranscriptView(o.active) || cur.tabs.includes(o.active))
     ? o.active : cur.active;
 
   // Crossing tabs here bypasses setActive(), which is what stashes the outgoing tab's
@@ -289,7 +295,7 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
   // goes stale and reappears next time you visit that tab.
   const saved = { ...cur.savedSelections };
   if (active !== cur.active) saved[cur.active] = cur.selection; // park what we leave
-  if (active !== "browse") saved[active] = sel;                 // and what we restore, EMPTY OR NOT
+  if (isTranscriptView(active)) saved[active] = sel;            // and what we restore, EMPTY OR NOT
 
   set({
     segments: o.segments, codebook: o.codebook, hotbar: o.hotbar,
@@ -594,7 +600,7 @@ export const useStore = create<State>()(
         // Browse and all-transcripts search offer every LOADED transcript, tab or no
         // tab. Landing on a closed one must reopen its tab: active∉tabs is otherwise a
         // ghost state — no tab highlighted, no ×, and undo refuses to restore it.
-        const tabs = pid !== "browse" && !s.tabs.includes(pid) && s.transcripts[pid]
+        const tabs = isTranscriptView(pid) && !s.tabs.includes(pid) && s.transcripts[pid]
           ? [...s.tabs, pid] : s.tabs;
         set({ active: pid, tabs, selection: saved[pid] ?? emptySel(), savedSelections: saved, jump: { pid, line } });
       },
@@ -639,7 +645,7 @@ export const useStore = create<State>()(
         if (!s.transcripts[from]) return "unknown transcript";
         if (!to) return "the name can't be empty";
         if (to === from) return null;
-        if (to === "browse") return "that name is reserved";
+        if (!isTranscriptView(to)) return "that name is reserved";
         if (to.includes(":")) return "no “:” — segment refs use it (P01:2-4)";
         if (s.transcripts[to]) return "a transcript with that name already exists";
         const transcripts = { ...s.transcripts, [to]: s.transcripts[from] };

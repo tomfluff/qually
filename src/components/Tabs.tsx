@@ -44,7 +44,12 @@ export function Tabs() {
       ))}
       <button className={"tab browsetab" + (active === "browse" ? " active" : "")}
         role="tab" aria-selected={active === "browse"} onClick={() => setActive("browse")}>
-        <Icon name="list" size={14} /> Browse
+        <Icon name="list" size={14} /> Codebook
+      </button>
+      <button className={"tab assisttab" + (active === "assist" ? " active" : "")}
+        role="tab" aria-selected={active === "assist"} onClick={() => setActive("assist")}
+        title="AI assistance: observations, and (soon) merge and code suggestions">
+        <Icon name="sparkle" size={14} /> Assist
       </button>
       {menu && <TabMenu pid={menu.pid} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
     </div>
