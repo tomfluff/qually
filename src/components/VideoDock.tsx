@@ -20,8 +20,8 @@ const MIN_W = 400; // expanded minimum (collapsed shrinks to its controls) — m
 // (z 74), so the default has to clear both that button and the minimap.
 //   bottom = footer 32 + the button's 12px offset + its 43px height + a gap
 //   right  = the minimap's width + 24, the same offset .focuswrap uses
-const DEFAULT_BOTTOM = 96;
-const DEFAULT_RIGHT = (minimapWidth: number) => minimapWidth + 24;
+const DEFAULT_BOTTOM = 12;
+const DEFAULT_RIGHT = (minimapWidth: number) => minimapWidth + 64;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 function loadGeom(): Geom {
