@@ -23,8 +23,9 @@ interface Notice {
 
 // working state survives leaving the tab (the view unmounts on tab change).
 // proposals are ephemeral AI output — kept only while the tab is mounted.
+// The active panel lives in the store (ui.assistPanel) — the Assist tab's own
+// menu sets it, so it isn't lost when the view unmounts.
 const remembered = {
-  panel: "observations" as "observations" | "merge" | "suggest",
   lens: null as string | null,
   onlyUncoded: true,
   proposals: [] as MergeProposal[],
@@ -43,14 +44,14 @@ export function AssistView() {
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
   const setUi = useStore((s) => s.setUi);
-  const [panel, setPanel] = useState(remembered.panel);
+  const panel = useStore((s) => s.ui.assistPanel);
   const [lens, setLens] = useState(remembered.lens);
   const [onlyUncoded, setOnlyUncoded] = useState(remembered.onlyUncoded);
   const [proposals, setProposals] = useState<MergeProposal[]>(remembered.proposals);
   const [flipped, setFlipped] = useState<Set<string>>(remembered.flipped);
   const [mergeOpen, setMergeOpen] = useState(false);
-  useEffect(() => { Object.assign(remembered, { panel, lens, onlyUncoded, proposals, flipped }); },
-    [panel, lens, onlyUncoded, proposals, flipped]);
+  useEffect(() => { Object.assign(remembered, { lens, onlyUncoded, proposals, flipped }); },
+    [lens, onlyUncoded, proposals, flipped]);
 
   // codes with at least one accepted segment — merge needs two to compare
   const mergeableCount = useMemo(() =>
@@ -101,12 +102,9 @@ export function AssistView() {
   return (
     <div id="browse" style={{ fontSize }}>
       <div className="browse-left nicescroll" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
-        {/* Assist hosts more than one kind of AI proposal — a switch picks which */}
-        <div className="aPanels">
-          <button className={panel === "observations" ? "on" : ""} onClick={() => setPanel("observations")}>Observations</button>
-          <button className={panel === "merge" ? "on" : ""} onClick={() => setPanel("merge")}>Merge</button>
-          <button className={panel === "suggest" ? "on" : ""} onClick={() => setPanel("suggest")}>Suggest</button>
-        </div>
+        {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
+            own menu — this heading just names what's showing */}
+        <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "suggest" ? "Suggest codes" : "Observations"}</div>
 
         {panel === "observations" ? (
           hasNotices ? observeLenses.map((l) => {

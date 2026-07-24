@@ -13,9 +13,14 @@ export function Tabs() {
   const setActive = useStore((s) => s.setActive);
   const closeTab = useStore((s) => s.closeTab);
   const [menu, setMenu] = useState<{ pid: string; x: number; y: number } | null>(null);
+  const [assistMenu, setAssistMenu] = useState<{ x: number; y: number } | null>(null);
   const openMenuAt = (pid: string, el: HTMLElement) => {
     const r = el.getBoundingClientRect();
     setMenu({ pid, x: r.left, y: r.bottom + 4 });
+  };
+  const openAssistMenu = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    setAssistMenu({ x: r.left, y: r.bottom + 4 });
   };
 
   return (
@@ -46,12 +51,24 @@ export function Tabs() {
         role="tab" aria-selected={active === "browse"} onClick={() => setActive("browse")}>
         <Icon name="list" size={14} /> Codebook
       </button>
-      <button className={"tab assisttab" + (active === "assist" ? " active" : "")}
-        role="tab" aria-selected={active === "assist"} onClick={() => setActive("assist")}
-        title="AI assistance: observations, and (soon) merge and code suggestions">
-        <Icon name="sparkle" size={14} /> Assist
-      </button>
+      {/* Assist tab: click to open, the chevron opens a menu to pick which panel
+          (Observations / Merge / Suggest) shows. Right-click opens it too. */}
+      <div className={"tab assisttab" + (active === "assist" ? " active" : "")}
+        role="presentation"
+        onContextMenu={(e) => { e.preventDefault(); setAssistMenu({ x: e.clientX, y: e.clientY }); }}>
+        <button className="assistname" role="tab" aria-selected={active === "assist"}
+          onClick={() => setActive("assist")}
+          title="AI assistance: observations, merge duplicate codes, suggest codes">
+          <Icon name="sparkle" size={14} /> Assist
+        </button>
+        <button className="assistcaret" aria-haspopup="menu" aria-expanded={!!assistMenu}
+          aria-label="Choose Assist panel" title="Choose panel"
+          onClick={(e) => { e.stopPropagation(); openAssistMenu(e.currentTarget); }}>
+          <Icon name={assistMenu ? "chevron-up" : "chevron-down"} size={12} />
+        </button>
+      </div>
       {menu && <TabMenu pid={menu.pid} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
+      {assistMenu && <AssistMenu x={assistMenu.x} y={assistMenu.y} onClose={() => setAssistMenu(null)} />}
     </div>
   );
 }
@@ -97,6 +114,39 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Picks which Assist panel shows (Observations / Merge / Suggest). Lives on the
+// Assist tab rather than inside the view, so switching panels is one click from
+// anywhere and the choice persists (ui.assistPanel). Selecting also opens the tab.
+const ASSIST_PANELS = [
+  { id: "observations", label: "Observations", hint: "AI marks to triage into codes" },
+  { id: "merge", label: "Merge codes", hint: "near-duplicate codes to fold together" },
+  { id: "suggest", label: "Suggest codes", hint: "candidate codings from your codebook" },
+] as const;
+
+function AssistMenu({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const current = useStore((s) => s.ui.assistPanel);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(ref, onClose);
+  const pick = (id: (typeof ASSIST_PANELS)[number]["id"]) => {
+    useStore.getState().setUi({ assistPanel: id });
+    useStore.getState().setActive("assist");
+    onClose();
+  };
+  return (
+    <div className="ctxmenu assistmenu" ref={ref} role="menu" aria-label="Assist panel"
+      style={{ left: Math.min(x, window.innerWidth - 240), top: y, fontSize: fs }}>
+      {ASSIST_PANELS.map((p) => (
+        <button key={p.id} role="menuitemradio" aria-checked={current === p.id}
+          className={current === p.id ? "on" : ""} onClick={() => pick(p.id)}>
+          <span className="assistmenu-check"><Icon name="check" size={fs} /></span>
+          <span className="assistmenu-label">{p.label}<em>{p.hint}</em></span>
+        </button>
+      ))}
     </div>
   );
 }

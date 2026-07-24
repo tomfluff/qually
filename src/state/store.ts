@@ -56,6 +56,8 @@ export interface Ui {
   // isolate one speaker's dialogue, PER TRANSCRIPT (focus is a lens on a study
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
+  // which Assist-tab panel is showing — chosen from the tab's own menu
+  assistPanel: "observations" | "merge" | "suggest";
   // grounding emphasis in Browse excerpts — independent, combinable (D6)
   groundBold: boolean; groundWash: boolean; groundUnderline: boolean;
   // how the OTHER speakers' rows step back — independent, combinable effects
@@ -322,7 +324,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
@@ -1078,6 +1080,7 @@ export const useStore = create<State>()(
         s.ai.lenses ??= ["transcription"];
         s.pinnedTabs ??= [];
         s.aiGrounds ??= {};
+        s.ui.assistPanel ??= "observations";
         s.ui.groundBold ??= true;
         s.ui.groundWash ??= true;
         s.ui.groundUnderline ??= false;

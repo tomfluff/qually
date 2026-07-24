@@ -57,13 +57,6 @@
 .bExcerpt .ref.open:hover .refspk { color:var(--accent); }
 
 /* ── Assist tab: the AI's observations side by side, staged to become codes ── */
-/* panel switch at the top of the Assist sidebar (Observations | Merge codes) */
-.aPanels { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden;
-  margin-bottom:10px; }
-.aPanels button { flex:1; border:0; padding:6px 0; background:var(--bg); color:var(--muted);
-  font:inherit; font-weight:500; cursor:pointer; }
-.aPanels button.on { background:var(--accent); color:#fff; font-weight:650; }
-[data-theme=dark] .aPanels button.on { color:#12161a; }
 .nLens { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
   cursor:pointer; }
 .nLens:hover { background:var(--panel); }
