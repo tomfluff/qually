@@ -97,20 +97,15 @@ export function BrowseView() {
   return (
     <div id="browse" style={{ fontSize }}>
       <div className="browse-left nicescroll" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
-        <button className="btn groundBtn" onClick={() => setGroundOpen(true)}
-          title="Mark which words carry each assigned code (sends coded excerpts to OpenAI after your approval)">
-          <Icon name="sparkle" size={15} /> Ground codes…
-        </button>
-        <div className="bSideRow">
-          <button className="switchRow" role="switch" aria-checked={showRejected}
-            onClick={() => setShowRejected((v) => !v)}>
-            <span className={"switch" + (showRejected ? " on" : "")}><span className="knob" /></span>
-            <span className="switchLabel">Show rejected</span>
-          </button>
-          {hasGrounds && <GroundingStyleMenu ui={ui} setUi={setUi} fontSize={sidebarFontSize} />}
+        {/* filter + the codebook's AI action (sparkle menu, mirroring the transcript
+            sidebar) + a View menu for the display settings (kept out of the AI menu) */}
+        <div className="cbFilterRow">
+          <input type="search" placeholder="filter codes…" value={filter}
+            onChange={(e) => setFilter(e.target.value)} />
+          <CbAiMenu onGround={() => setGroundOpen(true)} fontSize={sidebarFontSize} />
+          <CbViewMenu showRejected={showRejected} setShowRejected={setShowRejected}
+            ui={ui} setUi={setUi} hasGrounds={hasGrounds} fontSize={sidebarFontSize} />
         </div>
-        <input type="search" placeholder="filter codes…" value={filter}
-          onChange={(e) => setFilter(e.target.value)} />
         {listed.map((c) => (
           <div key={c} className={"bCode" + (selected.has(c) ? " sel" : "")} tabIndex={0} role="button"
             aria-label={`Show excerpts for ${c}, ${counts[c]?.segs || 0} segment${counts[c]?.segs === 1 ? "" : "s"}`}
@@ -198,34 +193,78 @@ export function BrowseView() {
   );
 }
 
-// How AI grounding quotes are emphasised inside the excerpts — bold / code-colour
-// wash / underline, combinable. A small menu off the sidebar so the toggles don't
-// crowd the excerpt list (they used to sit in a bar above it).
-function GroundingStyleMenu({ ui, setUi, fontSize }: {
+// The codebook's AI action, in a sparkle menu that mirrors the transcript
+// sidebar's AI menu (same icon + chevron). One item today — grounding.
+function CbAiMenu({ onGround, fontSize }: { onGround: () => void; fontSize: number }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useDismiss(menuRef, () => setOpen(false), {
+    enabled: open, ignore: (e) => !!btnRef.current?.contains(e.target as Node),
+  });
+  return (
+    <div className="cbMenuWrap">
+      <button className="btn aibtn cbMenuBtn" ref={btnRef} aria-haspopup="menu" aria-expanded={open}
+        title="AI for the codebook" aria-label="AI for the codebook" onClick={() => setOpen((v) => !v)}>
+        <Icon name="sparkle" size={15} /> <Icon name={open ? "chevron-up" : "chevron-down"} size={12} />
+      </button>
+      {open && (
+        <div className="ctxmenu cbMenu" ref={menuRef} role="menu" aria-label="Codebook AI"
+          style={{ fontSize }}>
+          <button role="menuitem" onClick={() => { onGround(); setOpen(false); }}>
+            <Icon name="sparkle" size={fontSize} /> Ground codes…
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// View settings for the excerpt list — a rejected filter and grounding emphasis,
+// kept out of the AI menu because they're display prefs, not an action. A dot on
+// the button flags any non-default setting.
+function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, fontSize }: {
+  showRejected: boolean;
+  setShowRejected: (f: (v: boolean) => boolean) => void;
   ui: { groundBold: boolean; groundWash: boolean; groundUnderline: boolean };
   setUi: (u: Partial<{ groundBold: boolean; groundWash: boolean; groundUnderline: boolean }>) => void;
+  hasGrounds: boolean;
   fontSize: number;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const closeIt = () => setOpen(false);
-  useDismiss(ref, closeIt, { enabled: open });
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useDismiss(menuRef, () => setOpen(false), {
+    enabled: open, ignore: (e) => !!btnRef.current?.contains(e.target as Node),
+  });
+  // defaults: rejected off, bold on, wash on, underline off
+  const nonDefault = showRejected || !ui.groundBold || !ui.groundWash || ui.groundUnderline;
   return (
-    <div className="groundStyleWrap" ref={ref}>
-      <button className="btn groundStyleBtn" onClick={() => setOpen((v) => !v)}
-        aria-expanded={open} aria-haspopup="menu"
-        title="How AI grounding is emphasised in the excerpts">
-        Grounding <Icon name={open ? "chevron-up" : "chevron-down"} size={13} />
+    <div className="cbMenuWrap">
+      <button className="btn cbMenuBtn cbViewBtn" ref={btnRef} aria-haspopup="menu" aria-expanded={open}
+        title="View settings" onClick={() => setOpen((v) => !v)}>
+        View <Icon name={open ? "chevron-up" : "chevron-down"} size={12} />
+        {nonDefault && <span className="cbDot" aria-hidden="true" />}
       </button>
       {open && (
-        <div className="groundStyleMenu" role="group" aria-label="Grounding emphasis"
+        <div className="ctxmenu cbMenu cbViewMenu" ref={menuRef} role="group" aria-label="View settings"
           style={{ fontSize }}>
-          <label><input type="checkbox" checked={ui.groundBold}
-            onChange={() => setUi({ groundBold: !ui.groundBold })} /> Bold</label>
-          <label><input type="checkbox" checked={ui.groundWash}
-            onChange={() => setUi({ groundWash: !ui.groundWash })} /> Wash</label>
-          <label><input type="checkbox" checked={ui.groundUnderline}
-            onChange={() => setUi({ groundUnderline: !ui.groundUnderline })} /> Underline</label>
+          <button className="cbSwitch" role="switch" aria-checked={showRejected}
+            onClick={() => setShowRejected((v) => !v)}>
+            <span className={"switch" + (showRejected ? " on" : "")}><span className="knob" /></span>
+            <span>Show rejected</span>
+          </button>
+          {hasGrounds && (
+            <>
+              <div className="cbMenuGrp">Grounding emphasis</div>
+              <label className="cbChk"><input type="checkbox" checked={ui.groundBold}
+                onChange={() => setUi({ groundBold: !ui.groundBold })} /> Bold</label>
+              <label className="cbChk"><input type="checkbox" checked={ui.groundWash}
+                onChange={() => setUi({ groundWash: !ui.groundWash })} /> Wash</label>
+              <label className="cbChk"><input type="checkbox" checked={ui.groundUnderline}
+                onChange={() => setUi({ groundUnderline: !ui.groundUnderline })} /> Underline</label>
+            </>
+          )}
         </div>
       )}
     </div>

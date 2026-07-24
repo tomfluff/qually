@@ -101,28 +101,31 @@
 mark.ground { background:none; color:inherit; border-radius:3px; padding:0 1px; }
 mark.ground.gbold { font-weight:700; }
 mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px; }
-.browse-left .groundBtn { width:100%; display:inline-flex; align-items:center;
-  justify-content:center; gap:6px; margin-bottom:8px; }
-
-/* Codebook sidebar controls: show-rejected + grounding-style menu on one row,
-   under Ground codes. Moved here from a bar that used to sit above the excerpts. */
+/* Assist panel headings/notes + its full-width action button (Find duplicates…) */
 .bSideHead { font-size:.72em; text-transform:uppercase; letter-spacing:.09em;
   color:var(--muted); font-weight:700; margin:2px 0 8px; }
 .bSideNote { color:var(--muted); font-size:.85em; line-height:1.45; padding:2px; }
-.bSideRow { display:flex; align-items:center; justify-content:space-between;
-  gap:8px; margin-bottom:8px; }
-.bSideRow .switchLabel { font-weight:500; }
-.groundStyleWrap { position:relative; }
-.groundStyleBtn { display:inline-flex; align-items:center; gap:4px; padding:4px 8px;
-  font-size:.9em; color:var(--muted); }
-.groundStyleMenu { position:absolute; right:0; top:calc(100% + 4px); z-index:20;
-  background:var(--bg); border:1px solid var(--line); border-radius:8px;
-  box-shadow:0 8px 24px rgba(0,0,0,.28); padding:6px; min-width:130px;
-  display:flex; flex-direction:column; gap:2px; }
-.groundStyleMenu label { display:flex; align-items:center; gap:7px; padding:4px 6px;
-  border-radius:6px; cursor:pointer; color:var(--fg); }
-.groundStyleMenu label:hover { background:var(--sel); }
-.groundStyleMenu input[type=checkbox] { width:1em; height:1em; accent-color:var(--accent); }
+.browse-left .groundBtn { width:100%; display:inline-flex; align-items:center;
+  justify-content:center; gap:6px; margin-bottom:8px; }
+
+/* Codebook sidebar: filter with the AI action (sparkle menu) and a View menu
+   beside it — the transcript-sidebar pattern (input + compact menu buttons). */
+.cbFilterRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:10px; }
+.cbFilterRow input[type=search] { flex:1; min-width:0; margin-bottom:0; }
+.cbMenuWrap { position:relative; flex:none; display:flex; }
+.cbMenuBtn { display:inline-flex; align-items:center; gap:3px; padding:0 8px; position:relative; }
+.cbViewBtn { color:var(--muted); }
+.cbDot { position:absolute; top:4px; right:4px; width:6px; height:6px;
+  border-radius:50%; background:var(--accent); }
+/* both menus anchor under their button (the shared .ctxmenu is position:fixed) */
+.cbMenuWrap .cbMenu { position:absolute; left:auto; right:0; top:calc(100% + 4px); min-width:180px; }
+.cbMenu .cbMenuGrp { font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); font-weight:700; margin:8px 8px 3px; padding-top:7px; border-top:1px solid var(--line); }
+.cbMenu .cbSwitch { display:flex; align-items:center; gap:9px; width:100%; background:none;
+  border:0; font:inherit; color:var(--fg); cursor:pointer; padding:7px 8px; }
+.cbMenu .cbChk { display:flex; align-items:center; gap:8px; padding:5px 8px; cursor:pointer; color:var(--fg); }
+.cbMenu .cbChk:hover, .cbMenu .cbSwitch:hover { background:var(--sel); border-radius:6px; }
+.cbMenu .cbChk input[type=checkbox] { width:1em; height:1em; accent-color:var(--accent); }
 
 /* ── Assist tab: merge-duplicate-codes proposals ── */
 .mList { display:flex; flex-direction:column; gap:10px; }
