@@ -23,7 +23,7 @@ export function Welcome() {
           don't depend on colour alone. Everything stays in your browser: no account, and nothing
           is uploaded unless you add your own OpenAI key and approve a request.</p>
         <button className="btn primary welcome-import" onClick={() => fileRef.current?.click()}>
-          <Icon name="upload" size={17} /> Import a transcript…
+          <Icon name="upload" size={17} /> Import file(s)…
         </button>
         <input ref={fileRef} type="file" multiple accept=".csv,.json" style={{ display: "none" }}
           onChange={(e) => {

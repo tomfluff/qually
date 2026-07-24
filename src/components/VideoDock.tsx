@@ -311,7 +311,7 @@ export function VideoDock() {
               </div>
               <span className="unit">s</span>
               <button className="vbtn icononly" onClick={() => fileRef.current?.click()} title="Change media">
-                <Icon name="arrows-exchange" size={fs + 2} />
+                <Icon name="reload" size={fs + 2} />
               </button>
             </div>
           )}
