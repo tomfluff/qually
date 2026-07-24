@@ -96,9 +96,11 @@ export function BrowseView() {
 
   return (
     <div id="browse" style={{ fontSize }}>
-      <div className="browse-left nicescroll" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
+      <div className="browse-left cbSide" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
         {/* filter + the codebook's AI action (sparkle menu, mirroring the transcript
-            sidebar) + a View menu for the display settings (kept out of the AI menu) */}
+            sidebar) + a View menu for the display settings (kept out of the AI menu).
+            The row stays fixed; only the code list scrolls (like the transcript sidebar),
+            so the scrollbar sits inset from the drag divider instead of against it. */}
         <div className="cbFilterRow">
           <input type="search" placeholder="filter codes…" value={filter}
             onChange={(e) => setFilter(e.target.value)} />
@@ -106,6 +108,7 @@ export function BrowseView() {
           <CbViewMenu showRejected={showRejected} setShowRejected={setShowRejected}
             ui={ui} setUi={setUi} hasGrounds={hasGrounds} fontSize={sidebarFontSize} />
         </div>
+        <div className="cbList nicescroll">
         {listed.map((c) => (
           <div key={c} className={"bCode" + (selected.has(c) ? " sel" : "")} tabIndex={0} role="button"
             aria-label={`Show excerpts for ${c}, ${counts[c]?.segs || 0} segment${counts[c]?.segs === 1 ? "" : "s"}`}
@@ -137,6 +140,7 @@ export function BrowseView() {
             {codebook[c].def && <div className="bCodeDef">{codebook[c].def}</div>}
           </div>
         ))}
+        </div>
       </div>
 
       <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(160, Math.min(520, w)) })} />
