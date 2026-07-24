@@ -16,6 +16,10 @@
      happens on the compositor thread, AFTER the drop's JS task, where flushSync can't
      reach. One small always-on layer is the cheaper price. */
   will-change:transform; }
+/* Only the EXPANDED dock is a size container (its width is always explicit).
+   inline-size containment on the collapsed pill would break its width:auto —
+   containment makes width ignore content, and the pill collapsed to nothing. */
+.vdock:not(.collapsed) { container-type:inline-size; } /* queried at the END of this file */
 /* The dock's font-size comes inline from VideoDock's DOCK_FS (16px, the general
    interface size — same call as the Settings modal). Everything below is em, so
    that one number sizes the whole panel. */
@@ -96,3 +100,13 @@
    moves when resizing — the handle rides it */
 .vresize { position:absolute; left:0; bottom:0; width:16px; height:16px;
   cursor:ew-resize; background:linear-gradient(225deg, transparent 50%, var(--muted) 50%); }
+
+/* Narrow dock: under 320px the offset controls and the filename come off — the
+   transport is what matters at that size. A container query, not a JS flag: the
+   resize drag writes width imperatively per frame, so only CSS reacts live.
+   (The collapsed pill isn't a container, so its "Video" label is untouched.)
+   LAST in the file: these tie the base rules on specificity, so order decides. */
+@container (max-width: 319px) {
+  .vtitle { display:none; }
+  .vctrl .vlabel, .vctrl .stepper, .vctrl .unit { display:none; }
+}
