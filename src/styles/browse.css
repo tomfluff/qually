@@ -69,6 +69,14 @@
 .nDot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
 .nName { flex:1; font-weight:500; }
 .nLens .cnt { font-variant-numeric:tabular-nums; color:var(--muted); font-size:.85em; }
+/* per-transcript run button in the Suggest sidebar. Always rendered, never
+   hover-revealed: a control that appears on hover is unfindable at magnification
+   and unreachable by keyboard. */
+.nLens .rowRun { display:inline-flex; align-items:center; flex:none; margin-left:2px;
+  border:1px solid var(--line); background:var(--bg); color:var(--muted);
+  border-radius:6px; padding:2px 6px; cursor:pointer; }
+.nLens .rowRun:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
+.nLens .rowRun:disabled { cursor:default; color:var(--muted); } /* muted, not faded — see .ctxmenu */
 
 .nOpts { display:flex; align-items:center; gap:12px; }
 .nPills { display:flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }

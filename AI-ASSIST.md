@@ -53,10 +53,13 @@ undoable `mergeCode`. Honesty copy (README + Settings → AI) updated to
 
 ## F3 — Suggest codes from the researcher's own codebook (third) — SHIPPED
 
-Launched from a transcript's code sidebar ("Suggest codes", beside AI scan):
-ai/suggest.ts chunks the ACTIVE transcript into 40-line windows, each sent with
-the codebook (name + def + up to 2 exemplars). SuggestModal is the consent gate
-(payload preview, cost, per-run model picker, Terra hint — the priciest run).
+Two launch surfaces, one modal: a transcript's code sidebar (scope locked to that
+transcript) and the Assist tab's Suggest panel — its "AI code suggestion…" button
+(nothing preselected) or the sparkle on any transcript row (that one preselected).
+ai/suggest.ts chunks ONE transcript into 40-line windows, each sent with the
+codebook (name + def + up to 2 exemplars). SuggestModal is the consent gate
+(transcript picker when launched from Assist — lines, last run and candidates per
+row from aiLog; payload preview, cost, per-run model picker, Terra hint).
 Proposals land as candidate segments (proposedBy "AI · <model>", status
 "candidate") via addSegment, skipping any range already carrying that code
 (overlapsExisting — accepted or rejected, model-independent = rejection memory).

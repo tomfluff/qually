@@ -9,6 +9,7 @@ import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
 import { LENSES, hashLine, spanLens } from "../ai/flag";
 import { MergeModal } from "./MergeModal";
+import { SuggestModal } from "./SuggestModal";
 import type { MergeProposal } from "../ai/dedupe";
 import { excerptOf } from "../contract/excerpt";
 import { Icon } from "./Icon";
@@ -52,6 +53,8 @@ export function AssistView() {
   const [proposals, setProposals] = useState<MergeProposal[]>(remembered.proposals);
   const [flipped, setFlipped] = useState<Set<string>>(remembered.flipped);
   const [mergeOpen, setMergeOpen] = useState(false);
+  // null = closed; "" = open with nothing picked; a pid = open on that transcript
+  const [suggestFor, setSuggestFor] = useState<string | null>(null);
   const [suggestBy, setSuggestBy] = useState(remembered.suggestBy);
   const [suggestSel, setSuggestSel] = useState(remembered.suggestSel);
   useEffect(() => { Object.assign(remembered, { lens, onlyUncoded, proposals, flipped, suggestBy, suggestSel }); },
@@ -75,9 +78,15 @@ export function AssistView() {
       const k = suggestBy === "transcript" ? c.pid : c.code;
       n.set(k, (n.get(k) ?? 0) + 1);
     }
-    const keys = suggestBy === "transcript" ? tabs.filter((p) => n.has(p)) : [...n.keys()].sort();
-    return keys.map((key) => ({ key, n: n.get(key)! }));
-  }, [candidates, suggestBy, tabs]);
+    // Grouped by transcript the list is the CORPUS, not just what already has
+    // candidates: the row is also where a run starts, so a transcript nobody has
+    // run yet has to be on it. Open tabs first, then the rest of what's loaded.
+    const keys = suggestBy === "transcript"
+      ? [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))]
+      : [...n.keys()].sort();
+    return keys.map((key) => ({ key, n: n.get(key) ?? 0 }));
+  }, [candidates, suggestBy, tabs, transcripts]);
+  const hasCodes = Object.keys(codebook).length > 0;
   const shownCandidates = suggestSel == null ? candidates
     : candidates.filter((c) => (suggestBy === "transcript" ? c.pid : c.code) === suggestSel);
 
@@ -159,6 +168,16 @@ export function AssistView() {
           </>
         ) : (
           <>
+            {/* Two ways in, one modal. The button is the one that works in every
+                state (the per-row sparkles below only exist while grouping by
+                transcript); a row's sparkle just opens the same dialog on that
+                transcript, where the model, the payload and the price still are. */}
+            <button className="btn groundBtn" onClick={() => setSuggestFor("")} disabled={!hasCodes}
+              title={hasCodes
+                ? "Pick a transcript and let the AI propose where your codes apply (sends it to OpenAI after your approval)"
+                : "Add a code first — suggestions apply your existing codes"}>
+              <Icon name="sparkle" size={15} /> AI code suggestion…
+            </button>
             {/* two equal halves rather than the pill pair that sized to its own
                 text and left a dead rail on the right; the label says GROUPING,
                 which the bare pair read as filtering */}
@@ -173,8 +192,9 @@ export function AssistView() {
             </div>
             {suggestGroups.length === 0 ? (
               <div className="bSideNote">
-                No candidate codings yet. Run <b>Suggest codes</b> from a transcript's code
-                sidebar; they land here and striped in the transcript.
+                {suggestBy === "transcript"
+                  ? "No transcripts loaded yet — import one and it can be sent for suggestions from here."
+                  : "No candidate codings yet. Run AI code suggestion on a transcript; they land here and striped in the transcript."}
               </div>
             ) : (
               <>
@@ -186,13 +206,26 @@ export function AssistView() {
                   <span className="cnt">{candidates.length}</span>
                 </div>
                 {suggestGroups.map((g) => (
-                  <div key={g.key} className={"nLens" + (suggestSel === g.key ? " sel" : "")}
+                  <div key={g.key} className={"nLens" + (suggestSel === g.key ? " sel" : "") + (g.n === 0 ? " none" : "")}
                     tabIndex={0} role="button" aria-pressed={suggestSel === g.key}
                     onClick={() => setSuggestSel(g.key)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSuggestSel(g.key); } }}>
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return; // the run button's keys are its own
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSuggestSel(g.key); }
+                    }}>
                     {suggestBy === "code" && <span className="nDot" style={{ background: codebook[g.key]?.color ?? "#888" }} />}
                     <span className="nName">{g.key}</span>
-                    <span className="cnt">{g.n}</span>
+                    {/* an em dash, not 0: the row is a launcher too, and "0 candidates"
+                        reads as a result where "never run" is the actual state */}
+                    <span className="cnt">{g.n || "—"}</span>
+                    {suggestBy === "transcript" && (
+                      <button className="rowRun" aria-label={`AI code suggestion for ${g.key}`}
+                        title={hasCodes ? `AI code suggestion for ${g.key}` : "Add a code first — suggestions apply your existing codes"}
+                        disabled={!hasCodes}
+                        onClick={(e) => { e.stopPropagation(); setSuggestFor(g.key); }}>
+                        <Icon name="sparkle" size={14} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </>
@@ -230,6 +263,8 @@ export function AssistView() {
       </div>
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
         onClose={() => setMergeOpen(false)} />}
+      {suggestFor !== null && <SuggestModal pid={suggestFor} choose
+        onClose={() => setSuggestFor(null)} />}
     </div>
   );
 }
@@ -296,8 +331,9 @@ function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
   if (!candidates.length) {
     return (
       <div className="empty">
-        No candidate codings here. Run <b>Suggest codes</b> from a transcript's code sidebar and the
-        AI's proposals — existing codes applied to line ranges — show up here to accept or reject.
+        No candidate codings here. Run <b>AI code suggestion</b> on a transcript — the button on the
+        left, or the sparkle on any transcript row — and the AI's proposals (existing codes applied
+        to line ranges) show up here to accept or reject.
       </div>
     );
   }
