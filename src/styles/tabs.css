@@ -22,9 +22,12 @@
 .tab.browsetab { display:inline-flex; align-items:center; gap:5px;
   padding:6px 12px 6px 10px; font-size:inherit; /* it's a <button> now: UA size loses */ }
 .tab.browsetab svg, .tab.assisttab svg { opacity:.9; width:1.15em; height:1.15em; }
-/* Codebook: filled accent, set apart from the participant transcript tabs */
-.tab.browsetab { margin-left:8px; background:var(--accent); color:#fff; border-color:var(--accent); }
-[data-theme=dark] .tab.browsetab { color:#12161a; } /* the lighter dark accent needs dark text */
+/* Codebook: outlined accent, filling in only when it's the open view — the
+   permanent fill read as "selected" next to transcript tabs that go quiet. Same
+   treatment as Assist beside it. */
+.tab.browsetab { margin-left:8px; color:var(--accent); border-color:var(--accent); }
+.tab.browsetab.active { background:var(--accent); color:#fff; }
+[data-theme=dark] .tab.browsetab.active { color:#12161a; } /* the lighter dark accent needs dark text */
 /* Assist: outlined accent — a sibling AI surface. It's a wrapper div (label + a
    panel-picker chevron), so the inner buttons carry the padding, not the pill. */
 .tab.assisttab { margin-left:4px; padding:0; display:inline-flex; align-items:center;
