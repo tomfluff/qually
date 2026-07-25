@@ -66,7 +66,10 @@
 .nLens:hover { background:var(--panel); }
 .nLens.sel { background:color-mix(in srgb, var(--accent) 14%, transparent); }
 .nLens.none { color:var(--muted); } /* quiet empty lenses by colour, not opacity */
-.nDot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+/* inline-block, not inline: outside a flex row (the lens group header in the
+   worklist) width/height on an inline box collapse to nothing */
+.nDot { display:inline-block; vertical-align:middle; width:10px; height:10px;
+  border-radius:3px; flex-shrink:0; }
 .nName { flex:1; font-weight:500; }
 .nLens .cnt { font-variant-numeric:tabular-nums; color:var(--muted); font-size:.85em; }
 /* per-transcript run button in the Suggest sidebar. Always rendered, never

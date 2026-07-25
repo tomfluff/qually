@@ -115,7 +115,7 @@ export function CodeSidebar() {
       })}
       </div>
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
-      {aiOpen && <AiCheckModal onClose={() => setAiOpen(false)} />}
+      {aiOpen && <AiCheckModal pid={active} onClose={() => setAiOpen(false)} />}
       {suggestOpen && <SuggestModal pid={active} onClose={() => setSuggestOpen(false)} />}
     </div>
   );

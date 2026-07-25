@@ -18,6 +18,17 @@ Build order: **F1 → F2 → F3** (as originally listed).
   candidate lanes render striped; Accept/Reject lives in the segment popover
   and Browse. Exports carry `proposed_by` (the intercoder column).
 
+## Where runs start (Assist tab)
+
+Observations and Suggest both group by **transcript** or by their own axis (lens /
+code), and both start their run from the same two places: a full-width button above
+the list, and a sparkle on each transcript row. The row's sparkle preselects that
+transcript; the button preselects nothing and the consent gate's primary action
+stays disabled until you pick. AiCheckModal and SuggestModal each take `pid` +
+`choose`: a transcript's own code sidebar passes `pid` alone and keeps the scope
+locked, Assist passes `choose` and shows the picker (lines, last run, what it
+yielded — read from `aiLog` + the live marks/candidates).
+
 ## F1 — Grounding highlights (first)
 
 What in a coded segment actually carries its code.
