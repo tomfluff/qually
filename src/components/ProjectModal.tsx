@@ -36,7 +36,7 @@ export function ProjectModal() {
           <div><b>{st.transcripts}</b> transcript{st.transcripts === 1 ? "" : "s"} · <b>{st.lines.toLocaleString()}</b> lines</div>
           <div><b>{st.segments}</b> coded segment{st.segments === 1 ? "" : "s"} · <b>{st.codes}</b> code{st.codes === 1 ? "" : "s"}</div>
           {st.edits > 0 && <div><b>{st.edits}</b> transcription correction{st.edits === 1 ? "" : "s"}</div>}
-          {st.notices > 0 && <div><b>{st.notices}</b> AI noticing{st.notices === 1 ? "" : "s"}</div>}
+          {st.notices > 0 && <div><b>{st.notices}</b> AI observation{st.notices === 1 ? "" : "s"}</div>}
         </div>
 
         {hasWork && (

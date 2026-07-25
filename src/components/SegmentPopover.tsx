@@ -6,6 +6,7 @@ import { speakerGroupedText } from "../format";
 import { excerptOf } from "../contract/excerpt";
 import { useDialogFocus } from "../useDialogFocus";
 import { useDismiss, useClampToViewport } from "../usePopover";
+import { groundHash } from "../ai/ground";
 import { Icon } from "./Icon";
 
 export function SegmentPopover({ sid, x, y, onClose }: {
@@ -62,9 +63,14 @@ export function SegmentPopover({ sid, x, y, onClose }: {
   const range = seg.start === seg.end ? `${seg.start}` : `${seg.start}-${seg.end}`;
   // read-only transcript, no need to subscribe
   const tr = useStore.getState().transcripts[seg.pid];
-  const closeCall = tr
-    ? excerptOf(tr.lines.filter((l) => l.id >= seg.start && l.id <= seg.end).map((l) => ({ text: l.text, speaker: l.speaker }))).closeCall
-    : false;
+  const ex = tr
+    ? excerptOf(tr.lines.filter((l) => l.id >= seg.start && l.id <= seg.end).map((l) => ({ text: l.text, speaker: l.speaker })))
+    : null;
+  const closeCall = ex?.closeCall ?? false;
+  // AI grounding for this segment, valid only while its hash matches (F1)
+  const g = useStore.getState().aiGrounds[sid];
+  const excerptText = ex?.excerpt.replace(/^\[R:\] /, "") ?? "";
+  const grounds = g && excerptText && g.hash === groundHash(seg.code, excerptText) ? g.quotes : [];
 
   return (
     <div className="pop" ref={setRef} role="dialog" tabIndex={-1}
@@ -77,6 +83,12 @@ export function SegmentPopover({ sid, x, y, onClose }: {
       </div>
       {closeCall && (
         <div className="pop-warn">⚠ Near-balanced speakers — the excerpt keeps only the dominant speaker's lines, so the other speaker's substance drops out. Check this segment.</div>
+      )}
+      {grounds.length > 0 && (
+        <div className="pop-grounds">
+          <span className="pop-grounds-label">AI grounding:</span>{" "}
+          {grounds.map((q, i) => <span key={i} className="pop-ground">“{q}”</span>)}
+        </div>
       )}
       <textarea value={seg.notes} placeholder="notes" onChange={(e) => setNotes(sid, e.target.value)} />
       <div className="row">

@@ -6,7 +6,6 @@ import { useDialogFocus } from "../useDialogFocus";
 import { SettingsButton } from "./SettingsButton";
 import { AboutButton } from "./AboutButton";
 import { DataFormatButton } from "./DataFormatButton";
-import { AiCheckModal } from "./AiCheckModal";
 import { ExportMenu } from "./ExportMenu";
 import { NewProjectButton } from "./NewProjectButton";
 import { ProjectError } from "../project";
@@ -101,10 +100,8 @@ export function Toolbar() {
   const redo = useStore((s) => s.redo);
   const canUndo = useStore((s) => s.undoStack.length > 0);
   const canRedo = useStore((s) => s.redoStack.length > 0);
-  const onTranscript = useStore((s) => s.active !== "browse" && !!s.transcripts[s.active]);
   const fileRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState("");
-  const [aiOpen, setAiOpen] = useState(false);
 
   // files parked behind a confirmation modal (project open, coded re-import)
   const pendingCount = useStore(countPending);
@@ -152,16 +149,6 @@ export function Toolbar() {
       </button>
       <ExportMenu />
       <span className="tbdiv" />
-      {onTranscript && (
-        <>
-          <button className="btn iconlabel aibtn" onClick={() => setAiOpen(true)}
-            aria-haspopup="dialog" aria-expanded={aiOpen}
-            title="Scan this transcript with AI: transcription errors, plus noticing lenses you choose (emotions, likes/dislikes, desires…)">
-            <Icon name="sparkle" size={15} /> <span className="blabel">AI scan</span>
-          </button>
-          <span className="tbdiv" />
-        </>
-      )}
       <button className="btn iconbtn" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
         <Icon name="undo" size={16} />
       </button>
@@ -182,7 +169,6 @@ export function Toolbar() {
       <SettingsButton />
       <input ref={fileRef} type="file" multiple accept=".csv,.json" style={{ display: "none" }}
         onChange={(e) => { doImport(e.target.files); e.target.value = ""; }} />
-      {aiOpen && <AiCheckModal onClose={() => setAiOpen(false)} />}
       <CoderPrompt />
     </div>
   );

@@ -6,7 +6,9 @@
 .tab { display:inline-flex; align-items:stretch; border:1px solid var(--line); border-bottom:none;
   border-radius:8px 8px 0 0; cursor:pointer; background:var(--bg);
   color:var(--muted); font-weight:600; user-select:none; }
-.tab.active { color:var(--fg); border-color:var(--accent); }
+/* the open transcript outlines itself in its own text colour — the accent border
+   is the Codebook/Assist signature, and those override this below */
+.tab.active { color:var(--fg); border-color:currentColor; }
 /* the label and × inside are real buttons (focusable, base focus ring) — strip the
    UA chrome so they read as one tab; the old 6px 14px padding is split between them */
 .tab .tabname, .tab .x { background:none; border:none; color:inherit; font:inherit;
@@ -19,10 +21,31 @@
 /* Browse is a different kind of view (cross-transcript code browser): same tab
    shape but filled with the primary color + contrasting text, set apart from the
    participant transcript tabs */
-.tab.browsetab { display:inline-flex; align-items:center; gap:5px; margin-left:8px;
-  padding:6px 12px 6px 10px; font-size:inherit; /* it's a <button> now: UA size loses */
-  background:var(--accent); color:#fff; border-color:var(--accent); }
-.tab.browsetab svg { opacity:.9; width:1.15em; height:1.15em; }
-/* the lighter dark-theme accent needs dark text to stay legible */
-[data-theme=dark] .tab.browsetab { color:#12161a; }
+.tab.browsetab { display:inline-flex; align-items:center; gap:5px;
+  padding:6px 12px 6px 10px; font-size:inherit; /* it's a <button> now: UA size loses */ }
+.tab.browsetab svg, .tab.assisttab svg { opacity:.9; width:1.15em; height:1.15em; }
+/* Codebook: outlined accent, filling in only when it's the open view — the
+   permanent fill read as "selected" next to transcript tabs that go quiet. Same
+   treatment as Assist beside it. */
+.tab.browsetab { margin-left:8px; color:var(--accent); border-color:var(--accent); }
+.tab.browsetab.active { background:var(--accent); color:#fff; }
+[data-theme=dark] .tab.browsetab.active { color:#12161a; } /* the lighter dark accent needs dark text */
+/* Assist: outlined accent — a sibling AI surface. It's a wrapper div (label + a
+   panel-picker chevron), so the inner buttons carry the padding, not the pill. */
+.tab.assisttab { margin-left:4px; padding:0; display:inline-flex; align-items:center;
+  color:var(--accent); border-color:var(--accent); font-size:inherit; }
+.tab.assisttab.active { background:var(--accent); color:#fff; }
+[data-theme=dark] .tab.assisttab.active { color:#12161a; }
+.assistname, .assistcaret { background:none; border:0; color:inherit; font:inherit;
+  cursor:pointer; display:inline-flex; align-items:center; }
+.assistname { gap:5px; padding:6px 4px 6px 10px; }
+.assistcaret { padding:6px 8px; opacity:.85; }
+.assistcaret:hover { opacity:1; }
+
+/* Assist panel picker: a radio menu of the three panels */
+.assistmenu button { display:flex; align-items:center; gap:8px; width:100%; text-align:left; }
+.assistmenu .assistmenu-check { width:1.1em; display:inline-flex; justify-content:center; opacity:0; flex:none; }
+.assistmenu button.on .assistmenu-check { opacity:1; color:var(--accent); }
+.assistmenu-label { display:flex; flex-direction:column; line-height:1.25; }
+.assistmenu-label em { font-style:normal; color:var(--muted); font-size:.82em; }
 

@@ -1,7 +1,13 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
    Copyright (C) 2026 Yotam Sechayk */
-#sidebar h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
-  color:var(--muted); margin:14px 0 6px; }
+/* + new code with the transcript's AI actions in a menu button beside it */
+#sidebar .sidebarNewRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:8px; }
+/* the row owns the bottom spacing; the wrap's own margin would inflate the flex
+   cross-axis and leave the menu button taller than the input */
+#sidebar .sidebarNewRow .newCodeWrap { flex:1; min-width:0; margin-bottom:0; }
+#sidebar .aiMenuBtn { flex:none; display:inline-flex; align-items:center; gap:2px; padding:0 8px; }
+/* anchor the menu under the button (the shared .ctxmenu is position:fixed by default) */
+#sidebar .sidebarNewRow .aiMenu { position:absolute; left:auto; right:0; top:calc(100% + 4px); }
 /* Truncate + tooltip, coherent with the Browse code list: the name stays on one
    line (ellipsised) so the key/count/⋯ never wrap, and the full name is one hover
    away (the shared Tooltip reads the row's data-tip). */
@@ -13,17 +19,21 @@
   position:relative; } /* anchors the .lp* pattern overlay — same one the lane bars use */
 .codeItem .cname { flex:1 1 10ch; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .codeItem .cnt { margin-left:auto; color:var(--muted); font-size:.8em; flex-shrink:0; }
-/* when a key is present it takes the gap; the count sits right next to it */
-.codeItem .key ~ .cnt { margin-left:0; }
-/* shortcut number: keycap style, flushed all the way right next to the count */
-.codeItem .key { margin-left:auto; flex-shrink:0; font-size:.72em; font-weight:700;
+/* shortcut number: keycap style, leading the row ahead of the colour swatch.
+   .ghost keeps the box (so swatches line up) for codes with no hotkey */
+.codeItem .key { flex-shrink:0; font-size:.72em; font-weight:700;
   font-family:ui-monospace, SFMono-Regular, Menlo, monospace; min-width:1.5em; text-align:center;
   border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 3px;
   color:var(--muted); background:var(--panel); line-height:1.5; }
+.codeItem .key.ghost { visibility:hidden; }
 .newCodeWrap { position:relative; flex-shrink:0; margin-bottom:8px; }
 .newCode { width:100%; padding:5px 7px;
   border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg);
   font-family:inherit; font-size:inherit; }
+/* the transcript sidebar's new-code field matches the Codebook filter box shape
+   (roomier padding, 8px radius); bg stays --bg so it contrasts on the grey panel,
+   the way the Codebook box contrasts on its white pane */
+#sidebar .newCode { padding:7px 10px; border-radius:8px; }
 .acList { position:absolute; top:calc(100% + 2px); left:0; right:0; z-index:20;
   background:var(--bg); border:1px solid var(--line); border-radius:8px;
   box-shadow:0 8px 24px rgba(0,0,0,.25); max-height:240px; overflow-y:auto; padding:4px;

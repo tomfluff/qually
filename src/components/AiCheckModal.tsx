@@ -7,8 +7,7 @@ import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine } from "../ai/flag";
 import { announce } from "../announce";
-import { useDialogFocus } from "../useDialogFocus";
-import { Icon } from "./Icon";
+import { AiModal, ModelPicker } from "./AiModal";
 
 // The consent gate. Choose what to look for (lenses) and whose speech to scan
 // (speakers — no naming convention assumed), then see the ACTUAL redacted lines
@@ -25,7 +24,6 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const abort = useRef<AbortController | null>(null);
-  const dialogRef = useDialogFocus();
   useEffect(() => () => abort.current?.abort(), []);
 
   const lenses = ai.lenses; // persisted: the ticked scans are remembered across runs
@@ -48,7 +46,9 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
     });
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
-  const model = modelOf(ai.model);
+  // per-run model override — starts at the Settings default, changes THIS run only
+  const [modelId, setModelId] = useState(ai.model);
+  const model = modelOf(modelId);
 
   // Send only lines that need it: right speaker, and not already scanned under
   // every requested lens at their current text (edits invalidate by hash).
@@ -84,11 +84,11 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
     try {
       for (let i = 0; i < chunks.length; i++) {
         const { flags, usage } = await scanChunk({
-          key, model: ai.model, lines: chunks[i], lenses, redaction: red, signal: abort.current.signal,
+          key, model: model.id, lines: chunks[i], lenses, redaction: red, signal: abort.current.signal,
         });
         st.addFlags(pid, flags, chunks[i], lenses);
         st.logAiCall({
-          at: new Date().toISOString(), model: ai.model, task: `scan:${[...lenses].sort().join("+")}`, pid,
+          at: new Date().toISOString(), model: model.id, task: `scan:${[...lenses].sort().join("+")}`, pid,
           lines: chunks[i].length, redactions: chunks[i].reduce((n, l) => n + red.count(l.text), 0),
           inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
         });
@@ -100,7 +100,7 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
       setDone({ errors, notices, cost });
       announce(errors + notices === 0
         ? "AI scan complete. Nothing marked."
-        : `AI scan complete: ${errors} possible transcription error${errors === 1 ? "" : "s"}, ${notices} noticing${notices === 1 ? "" : "s"}.`);
+        : `AI scan complete: ${errors} possible transcription error${errors === 1 ? "" : "s"}, ${notices} observation${notices === 1 ? "" : "s"}.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
@@ -117,26 +117,12 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
       return <>Nothing marked. That's a fine result — the scans only mark what's clearly there.</>;
     return <>
       {done.errors > 0 && <>Flagged <b>{done.errors} possible transcription error{done.errors === 1 ? "" : "s"}</b> (amber, dotted) — double-click a line to fix it against the audio. </>}
-      {done.notices > 0 && <>Highlighted <b>{done.notices} instance{done.notices === 1 ? "" : "s"}</b> for your review — hover for the lens, Alt-click to dismiss, or hide them all with the eye button to read blind.</>}
+      {done.notices > 0 && <>Marked <b>{done.notices} observation{done.notices === 1 ? "" : "s"}</b> for your review — hover for the lens, Alt-click to dismiss, or hide them all with the eye button to read blind. Go over them together in the <b>Assist</b> tab.</>}
     </>;
   };
 
   return (
-    <div className="about-backdrop" onMouseDown={() => !busy && onClose()}>
-      {/* ai-check: wider than the import/project dialogs (two-column lens grid) and a
-          THREE-region layout — fixed head, scrolling body, pinned footer — so the
-          consent buttons are always reachable no matter how tall the payload preview
-          and lens/speaker lists get. Without the scroll region the footer clipped
-          below 84vh and "Cancel" fell off the bottom. */}
-      <div className="about imp ai-check" ref={dialogRef} role="dialog" aria-modal="true"
-        aria-labelledby="ai-check-title" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="about-head">
-          <h2 id="ai-check-title">Scan “{pid}” with AI</h2>
-          <button className="btn iconbtn" onClick={onClose} disabled={busy} title="Close">
-            <Icon name="x" size={16} />
-          </button>
-        </div>
-
+    <AiModal title={<>Scan “{pid}” with AI</>} busy={busy} onClose={onClose}>
         {done ? (
           <>
             <div className="ai-body">
@@ -158,6 +144,8 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
                   </label>
                 ))}
               </div>
+
+              <ModelPicker modelId={modelId} onPick={setModelId} />
 
               <div className="ai-sec">Whose speech</div>
               <div className="ai-spks">
@@ -226,7 +214,6 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
             )}
           </>
         )}
-      </div>
-    </div>
+    </AiModal>
   );
 }

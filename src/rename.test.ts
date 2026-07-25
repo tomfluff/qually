@@ -28,6 +28,7 @@ test("invalid names bounce with a message", () => {
   const st = useStore.getState();
   expect(st.renameTranscript("P01", "")).toMatch(/empty/);
   expect(st.renameTranscript("P01", "browse")).toMatch(/reserved/);
+  expect(st.renameTranscript("P01", "assist")).toMatch(/reserved/);
   expect(st.renameTranscript("P01", "a:b")).toMatch(/:/);
   expect(st.renameTranscript("nope", "X")).toMatch(/unknown/);
   expect(st.renameTranscript("P01", "P01")).toBeNull(); // no-op, not an error

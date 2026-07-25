@@ -9,6 +9,7 @@ import { mergeGroups, type Group } from "../merge";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, spanLens, type Flag } from "../ai/flag";
+import type { GroundRec } from "../ai/ground";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll } from "../scrollMemory";
@@ -16,6 +17,12 @@ import { announce } from "../announce";
 
 export const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
   "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
+
+// `active` is a transcript pid or one of these reserved view keys (Codebook / Assist).
+// Both are non-transcript surfaces, so transcript-only chrome and selection bookkeeping
+// gate on isTranscriptView.
+export const RESERVED_VIEWS = ["browse", "assist"] as const;
+export const isTranscriptView = (active: string) => !RESERVED_VIEWS.includes(active as typeof RESERVED_VIEWS[number]);
 
 // orig = the imported text, present only while an in-app correction differs from it
 export interface Line { id: number; ts: string; speaker: string; text: string; orig?: string; }
@@ -49,6 +56,10 @@ export interface Ui {
   // isolate one speaker's dialogue, PER TRANSCRIPT (focus is a lens on a study
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
+  // which Assist-tab panel is showing — chosen from the tab's own menu
+  assistPanel: "observations" | "merge" | "suggest";
+  // grounding emphasis in Browse excerpts — independent, combinable (D6)
+  groundBold: boolean; groundWash: boolean; groundUnderline: boolean;
   // how the OTHER speakers' rows step back — independent, combinable effects
   focusDim: boolean;      // whole row drops via opacity
   focusCollapse: boolean; // row folds to one ellipsised line
@@ -119,6 +130,7 @@ interface State {
   ui: Ui;
   ai: Ai;
   aiFlags: Record<string, LineFlags>; // "pid:lineId" -> flags, valid while the hash matches
+  aiGrounds: Record<number, GroundRec>; // sid -> grounding quotes, valid while the hash matches
   aiLog: AiCall[];
   // transient (not persisted)
   selection: Selection;
@@ -170,6 +182,7 @@ interface State {
   exportEdits: () => string;
   setAi: (patch: Partial<Ai>) => void;
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
+  addGrounds: (recs: Record<number, GroundRec>) => void;
   clearFlags: (pid: string) => void;
   dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
   applyFix: (pid: string, id: number, quote: string, fix: string) => void;
@@ -276,7 +289,7 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
   // applyCode trusts selection.pid and the digit hotkeys only check lines.size, so a live
   // selection on a closed tab writes segments onto a transcript that isn't on screen.
   if (sel.pid && !cur.tabs.includes(sel.pid)) sel = emptySel();
-  const active = o.active && (o.active === "browse" || cur.tabs.includes(o.active))
+  const active = o.active && (!isTranscriptView(o.active) || cur.tabs.includes(o.active))
     ? o.active : cur.active;
 
   // Crossing tabs here bypasses setActive(), which is what stashes the outgoing tab's
@@ -284,7 +297,7 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
   // goes stale and reappears next time you visit that tab.
   const saved = { ...cur.savedSelections };
   if (active !== cur.active) saved[cur.active] = cur.selection; // park what we leave
-  if (active !== "browse") saved[active] = sel;                 // and what we restore, EMPTY OR NOT
+  if (isTranscriptView(active)) saved[active] = sel;            // and what we restore, EMPTY OR NOT
 
   set({
     segments: o.segments, codebook: o.codebook, hotbar: o.hotbar,
@@ -311,9 +324,9 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiLog: [],
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
@@ -326,7 +339,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiLog: [],
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [],
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
           ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {} },
@@ -589,7 +602,7 @@ export const useStore = create<State>()(
         // Browse and all-transcripts search offer every LOADED transcript, tab or no
         // tab. Landing on a closed one must reopen its tab: active∉tabs is otherwise a
         // ghost state — no tab highlighted, no ×, and undo refuses to restore it.
-        const tabs = pid !== "browse" && !s.tabs.includes(pid) && s.transcripts[pid]
+        const tabs = isTranscriptView(pid) && !s.tabs.includes(pid) && s.transcripts[pid]
           ? [...s.tabs, pid] : s.tabs;
         set({ active: pid, tabs, selection: saved[pid] ?? emptySel(), savedSelections: saved, jump: { pid, line } });
       },
@@ -634,7 +647,7 @@ export const useStore = create<State>()(
         if (!s.transcripts[from]) return "unknown transcript";
         if (!to) return "the name can't be empty";
         if (to === from) return null;
-        if (to === "browse") return "that name is reserved";
+        if (!isTranscriptView(to)) return "that name is reserved";
         if (to.includes(":")) return "no “:” — segment refs use it (P01:2-4)";
         if (s.transcripts[to]) return "a transcript with that name already exists";
         const transcripts = { ...s.transcripts, [to]: s.transcripts[from] };
@@ -713,6 +726,8 @@ export const useStore = create<State>()(
         }
         set({ aiFlags: next, redoStack: [] }); // line-entry redo snapshots hold flags — invalidate
       },
+      // grounding results merge in; a deleted segment's record goes with it (below)
+      addGrounds: (recs) => set({ aiGrounds: { ...get().aiGrounds, ...recs } }),
       clearFlags: (pid) => {
         const next: Record<string, LineFlags> = {};
         for (const [k, v] of Object.entries(get().aiFlags)) if (!k.startsWith(`${pid}:`)) next[k] = v;
@@ -808,7 +823,7 @@ export const useStore = create<State>()(
           transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
           extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
           hotbar: s.hotbar, video: s.video,
-          ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog,
+          ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog,
           // the speaker map rides along even though it lives in `ui`: who the
           // interviewer is belongs to the study, not to my font size (see project.ts)
           speakers: { colors: s.ui.speakerColors, weight: s.ui.speakerWeight },
@@ -838,7 +853,7 @@ export const useStore = create<State>()(
           ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {} },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: [], active: p.active,
-          hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiLog: p.aiLog,
+          hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
@@ -866,7 +881,9 @@ export const useStore = create<State>()(
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x), redoStack: [] }),
       deleteSegment: (sid) => {
         get().pushUndo();
-        set({ segments: get().segments.filter((x) => x.sid !== sid) });
+        const grounds = { ...get().aiGrounds };
+        delete grounds[sid]; // its grounding dies with it
+        set({ segments: get().segments.filter((x) => x.sid !== sid), aiGrounds: grounds });
         announce("Segment deleted");
       },
       setStatus: (sid, status) => {
@@ -913,7 +930,10 @@ export const useStore = create<State>()(
         const merged = s.segments
           .map((x) => norm(x.code) === norm(from) ? { ...x, code: into } : x)
           .filter((x) => {
-            const key = `${x.pid}|${x.start}|${x.end}|${norm(x.code)}`;
+            // include proposedBy + status: two coders at the same span, or an
+            // accepted vs a candidate, are distinct data — not duplicates the
+            // merge should collapse (matches addSegment's per-coder dedup)
+            const key = `${x.pid}|${x.start}|${x.end}|${norm(x.code)}|${x.proposedBy}|${x.status}`;
             if (seen.has(key)) return false;
             seen.add(key); return true;
           });
@@ -1053,7 +1073,7 @@ export const useStore = create<State>()(
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
-        ai: s.ai, aiFlags: s.aiFlags, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
+        ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
@@ -1062,6 +1082,11 @@ export const useStore = create<State>()(
         // fields added after a persisted state was written (persist merges shallowly)
         s.ai.lenses ??= ["transcription"];
         s.pinnedTabs ??= [];
+        s.aiGrounds ??= {};
+        s.ui.assistPanel ??= "observations";
+        s.ui.groundBold ??= true;
+        s.ui.groundWash ??= true;
+        s.ui.groundUnderline ??= false;
         s.ui.showNotices ??= true;
         s.ui.hiddenLenses ??= [];
         s.ui.lanePattern ??= false;

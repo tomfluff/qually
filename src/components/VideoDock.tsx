@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { useStore } from "../state/store";
+import { useStore, isTranscriptView } from "../state/store";
 import { registerVideo, tsToSec, isLooping } from "../video/seek";
 import { useDismiss, OVERLAY_SELECTOR } from "../usePopover";
 import { Icon } from "./Icon";
@@ -152,7 +152,7 @@ export function VideoDock() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  if (pid === "browse" || !hasTranscript) return null;
+  if (!isTranscriptView(pid) || !hasTranscript) return null;
 
   const pickMedia = (f: File | undefined) => {
     if (!f) return;

@@ -5,7 +5,7 @@ import { useStore } from "../state/store";
 import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
 import { openColorPicker } from "../colorPicker";
-import { useDismiss } from "../usePopover";
+import { useDismiss, useClampToViewport } from "../usePopover";
 
 export function CodeMenu({ code, x, y, onClose }: {
   code: string; x: number; y: number; onClose: () => void;
@@ -40,6 +40,10 @@ export function CodeMenu({ code, x, y, onClose }: {
   // closes outright whatever the mode
   const back = useCallback(() => { mode === "menu" ? onClose() : setMode("menu"); }, [mode, onClose]);
   useDismiss(ref, onClose, { onEscape: back });
+  // measure, don't guess: the old hardcoded 280px clamp was shorter than the real
+  // menu (worse at a big sidebar font), so opening from the hotbar clipped the
+  // bottom items off. Re-runs per mode — the forms are a different height.
+  useClampToViewport(ref, [mode, x, y, sidebarFontSize]);
 
   // anchor at the menu's own position (the code row), not the menu item — the
   // menu is gone by the time the popover shows
@@ -63,7 +67,7 @@ export function CodeMenu({ code, x, y, onClose }: {
     // dialog, not menu: two of its modes are text-input forms
     <div className="ctxmenu" ref={ref} onKeyDown={onArrows}
       role="dialog" aria-label={`Options for code ${code}`}
-      style={{ left: Math.min(x, window.innerWidth - 230), top: Math.min(y, window.innerHeight - 280), fontSize: sidebarFontSize }}>
+      style={{ left: x, top: y, fontSize: sidebarFontSize }}>
       {mode === "menu" && (
         <>
           <div className="ctxhead">{code}</div>

@@ -116,9 +116,11 @@ export const chunksOf = (lines: Line[]): Line[][] => {
   return out;
 };
 
-// exactly what gets sent for one chunk — also what the preview shows the user
+// exactly what gets sent for one chunk — also what the preview shows the user.
+// the speaker label is redacted too: transcripts often carry real names in that
+// column, and a name the researcher listed must not leak just because it's a label.
 export const renderChunk = (lines: Line[], r: Redaction): string =>
-  lines.map((l) => `${l.id}\t${l.speaker}\t${r.redact(l.text)}`).join("\n");
+  lines.map((l) => `${l.id}\t${r.redact(l.speaker)}\t${r.redact(l.text)}`).join("\n");
 
 export const estimateChunkTokens = (lines: Line[], r: Redaction, lensIds: string[]) =>
   estimateTokens(buildSystem(lensIds)) + estimateTokens(renderChunk(lines, r));

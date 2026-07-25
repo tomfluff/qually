@@ -3,6 +3,10 @@
 /* browse view — two panes: codes (left) | excerpts (right) */
 #browse { display:flex; height:100%; overflow:hidden; }
 .browse-left { width:264px; flex-shrink:0; overflow-y:auto; padding:12px; }
+/* Codebook sidebar: the filter row stays put and only the code list scrolls, so
+   the scrollbar sits inset from the drag divider (matches the transcript sidebar). */
+.browse-left.cbSide { overflow:hidden; display:flex; flex-direction:column; }
+.cbSide .cbList { flex:1; min-height:0; overflow-y:auto; padding-right:6px; }
 .browse-right { flex:1; min-width:0; overflow-y:auto; padding:16px 22px; }
 .browse-left input[type=search] { width:100%; padding:7px 10px; margin-bottom:8px;
   border:1px solid var(--line); border-radius:8px; background:var(--panel);
@@ -56,13 +60,7 @@
 .bExcerpt .ref.open:hover { color:var(--accent); }
 .bExcerpt .ref.open:hover .refspk { color:var(--accent); }
 
-/* ── Noticings mode: the AI's marks side by side, staged to become codes ── */
-.bMode { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden;
-  margin-bottom:8px; }
-.bMode button { flex:1; border:0; padding:6px 0; background:var(--bg); color:var(--muted);
-  font:inherit; font-weight:500; cursor:pointer; }
-.bMode button.on { background:var(--accent); color:#fff; font-weight:650; }
-[data-theme=dark] .bMode button.on { color:#12161a; } /* dark text on the lighter dark accent */
+/* ── Assist tab: the AI's observations side by side, staged to become codes ── */
 .nLens { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
   cursor:pointer; }
 .nLens:hover { background:var(--panel); }
@@ -100,3 +98,67 @@
 .nBtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
 [data-theme=dark] .nBtn.pri { color:#12161a; }
 .nCode { margin-top:6px; max-width:340px; }
+
+/* F1 grounding — quotes that carry the code, emphasised inside excerpts. The
+   channels are combinable user choices (bold / code-colour wash / underline);
+   wash + underline colours come inline (per-code). */
+mark.ground { background:none; color:inherit; border-radius:3px; padding:0 1px; }
+mark.ground.gbold { font-weight:700; }
+mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-decoration-thickness:2px; }
+/* Assist panel headings/notes + its full-width action button (Find duplicates…) */
+.bSideHead { font-size:.72em; text-transform:uppercase; letter-spacing:.09em;
+  color:var(--muted); font-weight:700; margin:2px 0 8px; }
+.bSideNote { color:var(--muted); font-size:.85em; line-height:1.45; padding:2px; }
+.browse-left .groundBtn { width:100%; display:inline-flex; align-items:center;
+  justify-content:center; gap:6px; margin-bottom:8px; }
+
+/* Codebook sidebar: filter with the AI action (sparkle menu) and a View menu
+   beside it — the transcript-sidebar pattern (input + compact menu buttons). */
+.cbFilterRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:10px; }
+.cbFilterRow input[type=search] { flex:1; min-width:0; margin-bottom:0; }
+.cbMenuWrap { position:relative; flex:none; display:flex; }
+.cbMenuBtn { display:inline-flex; align-items:center; gap:3px; padding:0 8px; position:relative; }
+.cbViewBtn { color:var(--muted); }
+.cbDot { position:absolute; top:4px; right:4px; width:6px; height:6px;
+  border-radius:50%; background:var(--accent); }
+/* both menus anchor under their button (the shared .ctxmenu is position:fixed) */
+.cbMenuWrap .cbMenu { position:absolute; left:auto; right:0; top:calc(100% + 4px); min-width:180px; }
+.cbMenu .cbMenuGrp { font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); font-weight:700; margin:8px 8px 3px; padding-top:7px; border-top:1px solid var(--line); }
+.cbMenu .cbSwitch { display:flex; align-items:center; gap:9px; width:100%; background:none;
+  border:0; font:inherit; color:var(--fg); cursor:pointer; padding:7px 8px; }
+.cbMenu .cbChk { display:flex; align-items:center; gap:8px; padding:5px 8px; cursor:pointer; color:var(--fg); }
+.cbMenu .cbChk:hover, .cbMenu .cbSwitch:hover { background:var(--sel); border-radius:6px; }
+.cbMenu .cbChk input[type=checkbox] { width:1em; height:1em; accent-color:var(--accent); }
+
+/* ── Assist tab: merge-duplicate-codes proposals ── */
+.mList { display:flex; flex-direction:column; gap:10px; }
+.mProp { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); }
+.mPair { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.mCode { display:inline-flex; align-items:center; gap:7px; font-weight:600; }
+.mSw { display:inline-block; vertical-align:middle; width:.8em; height:.8em; border-radius:3px; flex:none; }
+/* group-by control in the Suggest sidebar: halves that split the full width, so
+   the selected block is a fixed size and the row has no dead tail. Bigger target
+   than the .nPill pair it replaces — it's the first thing the panel asks you. */
+.aByLabel { font-size:.8em; color:var(--muted); margin:2px 0 5px; }
+.segmented { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.segmented .seg { flex:1 1 0; min-width:0; border:0; background:var(--bg); color:var(--muted);
+  font:inherit; padding:4px 2px; cursor:pointer; }
+.segmented .seg + .seg { border-left:1px solid var(--line); }
+.segmented .seg:hover { color:var(--fg); }
+/* the selected half takes its ink from the theme's accent, not a fixed white:
+   dark's --accent is a light lavender, where near-black reads ~6.7:1 and white
+   only ~2.7:1 (same treatment as .nPill / .nBtn.pri) */
+.segmented .seg.on { background:var(--accent); color:#fff; font-weight:600; }
+[data-theme=dark] .segmented .seg.on { color:#12161a; }
+.aSuggestBy { margin-bottom:10px; }
+/* the folded-in code is de-emphasised (it disappears on merge); the kept one holds full weight */
+.mDrop { color:var(--fg-dim); text-decoration:line-through; text-decoration-color:var(--muted); }
+.mKeepTag { margin-left:6px; font-size:.68em; font-weight:700; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--ok, #3fa860); border:1px solid currentColor; border-radius:999px;
+  padding:1px 7px; background:color-mix(in srgb, #3fa860 10%, transparent); }
+.mSwap { border:1px solid var(--line); background:var(--bg); color:var(--muted); cursor:pointer;
+  border-radius:6px; width:1.9em; height:1.6em; line-height:1; font-size:1.05em; flex:none; }
+.mSwap:hover { color:var(--fg); border-color:var(--accent); }
+.mWhy { color:var(--muted); font-size:.9em; line-height:1.4; margin:6px 0 0; }
+.mActs { display:flex; gap:6px; margin-top:8px; }

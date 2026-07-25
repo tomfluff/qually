@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useStore, patternOf } from "../state/store";
 import { CodeMenu } from "./CodeMenu";
 import { CodeCombobox } from "./CodeCombobox";
+import { AiCheckModal } from "./AiCheckModal";
+import { SuggestModal } from "./SuggestModal";
 import { openColorPicker } from "../colorPicker";
+import { useToggleMenu } from "../usePopover";
+import { Icon } from "./Icon";
 
 export function CodeSidebar() {
   const lanePattern = useStore((s) => s.ui.lanePattern);
@@ -18,6 +22,10 @@ export function CodeSidebar() {
   const setColor = useStore((s) => s.setColor);
   const pinned = useStore((s) => s.hotbar.pinned);
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const hasCodes = Object.keys(codebook).length > 0;
+  const { open: aiMenu, setOpen: setAiMenu, btnRef: aiBtnRef, menuRef: aiMenuRef } = useToggleMenu();
 
   // keyboard/visible route to the same menu right-click opens, anchored to the row or ⋯ button
   const openMenuAt = (code: string, el: HTMLElement) => {
@@ -33,10 +41,32 @@ export function CodeSidebar() {
 
   return (
     <div id="sidebar" style={{ fontSize: sidebarFontSize, width: sidebarWidth }}>
-      {/* + new code (top of list); fuzzy autocomplete. 0 opens the command palette. */}
-      <CodeCombobox placeholder="+ new code" />
+      {/* + new code, with the transcript's AI actions in a menu beside it. The AI
+          acts on THIS transcript (the sidebar only renders for a transcript view),
+          so its home is here, not the global toolbar. */}
+      <div className="sidebarNewRow">
+        <CodeCombobox placeholder="+ new code" />
+        <button className="btn aibtn aiMenuBtn" ref={aiBtnRef}
+          aria-haspopup="menu" aria-expanded={aiMenu}
+          title="AI for this transcript" aria-label="AI for this transcript"
+          onClick={() => setAiMenu((v) => !v)}>
+          <Icon name="sparkle" size={15} /> <Icon name={aiMenu ? "chevron-up" : "chevron-down"} size={12} />
+        </button>
+        {aiMenu && (
+          <div className="ctxmenu aiMenu" ref={aiMenuRef} role="menu" aria-label="AI for this transcript"
+            style={{ fontSize: sidebarFontSize }}>
+            <button role="menuitem" onClick={() => { setAiOpen(true); setAiMenu(false); }}>
+              <Icon name="sparkle" size={sidebarFontSize} /> AI observation scan
+            </button>
+            <button role="menuitem" disabled={!hasCodes}
+              title={hasCodes ? undefined : "Add a code first — suggestions apply your existing codes"}
+              onClick={() => { if (hasCodes) { setSuggestOpen(true); setAiMenu(false); } }}>
+              <Icon name="sparkle" size={sidebarFontSize} /> AI code suggestion
+            </button>
+          </div>
+        )}
+      </div>
       <div className="codeList nicescroll">
-      <h3>all codes</h3>
       {Object.keys(codebook).sort().map((code) => {
         const slot = hotbarCache.indexOf(code);
         const c = counts[code];
@@ -55,6 +85,13 @@ export function CodeSidebar() {
             }}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY }); }}
             data-tip={code}>
+            {/* the keycap leads the row so the number reads before the colour;
+                hotkey + count are already in the row's aria-label, so the badge
+                is decorative. Codes without a hotkey keep the slot (hidden) —
+                otherwise every swatch below one would shift left. */}
+            <span className={"key" + (slot >= 0 && slot < 9 ? "" : " ghost")} aria-hidden="true">
+              {slot >= 0 && slot < 9 ? slot + 1 : "0"}
+            </span>
             {/* right-click only: a left-click on the swatch is almost always a missed
                 click on the row (apply code) — let it fall through. Keyboard and
                 screen-reader users recolor via the ⋯ menu's "Change color…". */}
@@ -69,9 +106,6 @@ export function CodeSidebar() {
               }} />
             <span className="cname">{code}</span>
             {pinned.includes(code) && <span className="pindot" title="pinned">●</span>}
-            {/* hotkey + count are already in the row's aria-label — hide the visual
-                badges so they don't double-speak */}
-            {slot >= 0 && slot < 9 && <span className="key" aria-hidden="true">{slot + 1}</span>}
             <span className="cnt" aria-hidden="true">{c ? `${c.segs}·${c.pids.size}` : "0"}</span>
             <button className="rowMenu" aria-label={`Options for ${code}`}
               onClick={(e) => { e.stopPropagation(); openMenuAt(code, e.currentTarget); }}>⋯</button>
@@ -80,6 +114,8 @@ export function CodeSidebar() {
       })}
       </div>
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
+      {aiOpen && <AiCheckModal onClose={() => setAiOpen(false)} />}
+      {suggestOpen && <SuggestModal onClose={() => setSuggestOpen(false)} />}
     </div>
   );
 }

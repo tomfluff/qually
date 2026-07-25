@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
+// F2 of AI-ASSIST.md: find near-duplicate codes. One shot over the whole codebook
+// (name + definition + a few sample excerpts each) → merge proposals. The AI only
+// PROPOSES pairs; the researcher accepts each one, and the merge itself runs
+// through the existing (undoable) mergeCode. Nothing is applied here.
+import { callJson, estimateTokens, type Usage } from "./openai";
+import type { Redaction } from "./redact";
+
+export const MERGE_EXEMPLARS = 3; // sample coded excerpts sent per code
+
+// What the model sees for one code. Names stay raw — they're the identifiers the
+// proposals map back to, and redacting one would break that link; the definition
+// and excerpts (the free text that could carry a participant term) are redacted.
+export interface MergeCodeInput { name: string; def: string; excerpts: string[] }
+export interface MergeProposal { from: string; into: string; rationale: string }
+
+const SYSTEM = `You are reviewing a qualitative-analysis codebook. Each entry has a code name, an optional definition, and a few sample excerpts the researcher coded with it. Identify pairs of codes that are near-duplicates: the same underlying concept under two labels, redundant enough that the analysis would be cleaner if they were one code. Judge by how the codes were actually USED (the excerpts), not only by similar names or wording — two codes can share a word yet mean different things, and two differently-named codes can do the same work.
+
+For each duplicate pair, propose a merge: "into" is the code to keep, "from" is the one to fold into it. Prefer keeping the code with the clearer definition or the broader, better-supported meaning. Give a one-sentence rationale naming the shared concept. Use the exact code names given. Do NOT propose merging codes that are merely related, adjacent, or hierarchically linked (a sub-type of a broader code is not a duplicate). If nothing is a genuine duplicate, return an empty list — that is a good answer.
+
+Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
+
+// exactly what gets sent — also what the consent preview shows
+export const renderMergePayload = (codes: MergeCodeInput[], r: Redaction): string =>
+  codes.map((c) => {
+    const head = `CODE: ${c.name}${c.def ? ` — ${r.redact(c.def)}` : ""}`;
+    const ex = c.excerpts.map((e) => `  - ${r.redact(e)}`).join("\n");
+    return ex ? `${head}\n${ex}` : head;
+  }).join("\n\n");
+
+export const estimateMergeTokens = (codes: MergeCodeInput[], r: Redaction) =>
+  estimateTokens(SYSTEM) + estimateTokens(renderMergePayload(codes, r));
+
+const SCHEMA = {
+  type: "object",
+  properties: {
+    proposals: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          from: { type: "string", description: "exact name of the code to fold in (removed after merge)" },
+          into: { type: "string", description: "exact name of the code to keep" },
+          rationale: { type: "string", description: "one sentence: the shared concept" },
+        },
+        required: ["from", "into", "rationale"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["proposals"],
+  additionalProperties: false,
+} as const;
+
+export async function dedupeCodes(opts: {
+  key: string; model: string; codes: MergeCodeInput[]; redaction: Redaction; signal?: AbortSignal;
+}): Promise<{ proposals: MergeProposal[]; usage: Usage }> {
+  const { data, usage } = await callJson<{ proposals: MergeProposal[] }>({
+    key: opts.key,
+    model: opts.model,
+    system: SYSTEM,
+    user: renderMergePayload(opts.codes, opts.redaction),
+    schemaName: "merge_codes",
+    schema: SCHEMA,
+    signal: opts.signal,
+  });
+  return { proposals: sanitizeMergeReply(opts.codes, data.proposals ?? []), usage };
+}
+
+// The trust boundary, separated so it's testable without the network. A proposal
+// is only actionable if BOTH names are real codes we sent and they differ; an
+// invented name would merge nothing (or worse, the wrong thing). Unordered-pair
+// dedupe so "a→b" and "b→a" (or a repeat) can't queue the same merge twice.
+export function sanitizeMergeReply(
+  codes: MergeCodeInput[],
+  reply: MergeProposal[],
+): MergeProposal[] {
+  const known = new Set(codes.map((c) => c.name));
+  const seen = new Set<string>();
+  const out: MergeProposal[] = [];
+  for (const p of reply) {
+    const from = (p.from ?? "").trim(), into = (p.into ?? "").trim();
+    if (!known.has(from) || !known.has(into) || from === into) continue;
+    const key = JSON.stringify([from, into].sort()); // unordered: a|b === b|a
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ from, into, rationale: (p.rationale ?? "").trim() });
+  }
+  return out;
+}
