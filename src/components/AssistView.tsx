@@ -159,11 +159,17 @@ export function AssistView() {
           </>
         ) : (
           <>
-            <div className="nPills aSuggestBy">
-              <button className={"nPill" + (suggestBy === "transcript" ? " on" : "")}
-                onClick={() => pickSuggestBy("transcript")}>By transcript</button>
-              <button className={"nPill" + (suggestBy === "code" ? " on" : "")}
-                onClick={() => pickSuggestBy("code")}>By code</button>
+            {/* two equal halves rather than the pill pair that sized to its own
+                text and left a dead rail on the right; the label says GROUPING,
+                which the bare pair read as filtering */}
+            <div className="aByLabel" id="suggestByLabel">Group by</div>
+            <div className="segmented aSuggestBy" role="group" aria-labelledby="suggestByLabel">
+              <button className={"seg" + (suggestBy === "transcript" ? " on" : "")}
+                aria-pressed={suggestBy === "transcript"}
+                onClick={() => pickSuggestBy("transcript")}>Transcript</button>
+              <button className={"seg" + (suggestBy === "code" ? " on" : "")}
+                aria-pressed={suggestBy === "code"}
+                onClick={() => pickSuggestBy("code")}>Code</button>
             </div>
             {suggestGroups.length === 0 ? (
               <div className="bSideNote">

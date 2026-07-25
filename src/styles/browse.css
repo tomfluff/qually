@@ -137,6 +137,18 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .mPair { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .mCode { display:inline-flex; align-items:center; gap:7px; font-weight:600; }
 .mSw { display:inline-block; vertical-align:middle; width:.8em; height:.8em; border-radius:3px; flex:none; }
+/* group-by control in the Suggest sidebar: halves that split the full width, so
+   the selected block is a fixed size and the row has no dead tail. Bigger target
+   than the .nPill pair it replaces — it's the first thing the panel asks you. */
+.aByLabel { font-size:.8em; color:var(--muted); margin:2px 0 5px; }
+.segmented { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.segmented .seg { flex:1 1 0; min-width:0; border:0; background:var(--bg); color:var(--muted);
+  font:inherit; padding:7px 4px; cursor:pointer; }
+.segmented .seg + .seg { border-left:1px solid var(--line); }
+.segmented .seg:hover { color:var(--fg); }
+/* white ink both themes: --accent stays a deep purple in dark, so the dark-ink
+   treatment the .nPill pair uses would land at ~2:1 here */
+.segmented .seg.on { background:var(--accent); color:#fff; font-weight:600; }
 .aSuggestBy { margin-bottom:10px; }
 /* the folded-in code is de-emphasised (it disappears on merge); the kept one holds full weight */
 .mDrop { color:var(--fg-dim); text-decoration:line-through; text-decoration-color:var(--muted); }
