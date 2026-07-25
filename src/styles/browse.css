@@ -146,9 +146,11 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   font:inherit; padding:7px 4px; cursor:pointer; }
 .segmented .seg + .seg { border-left:1px solid var(--line); }
 .segmented .seg:hover { color:var(--fg); }
-/* white ink both themes: --accent stays a deep purple in dark, so the dark-ink
-   treatment the .nPill pair uses would land at ~2:1 here */
+/* the selected half takes its ink from the theme's accent, not a fixed white:
+   dark's --accent is a light lavender, where near-black reads ~6.7:1 and white
+   only ~2.7:1 (same treatment as .nPill / .nBtn.pri) */
 .segmented .seg.on { background:var(--accent); color:#fff; font-weight:600; }
+[data-theme=dark] .segmented .seg.on { color:#12161a; }
 .aSuggestBy { margin-bottom:10px; }
 /* the folded-in code is de-emphasised (it disappears on merge); the kept one holds full weight */
 .mDrop { color:var(--fg-dim); text-decoration:line-through; text-decoration-color:var(--muted); }
