@@ -6,7 +6,9 @@
 .tab { display:inline-flex; align-items:stretch; border:1px solid var(--line); border-bottom:none;
   border-radius:8px 8px 0 0; cursor:pointer; background:var(--bg);
   color:var(--muted); font-weight:600; user-select:none; }
-.tab.active { color:var(--fg); border-color:var(--accent); }
+/* the open transcript outlines itself in its own text colour — the accent border
+   is the Codebook/Assist signature, and those override this below */
+.tab.active { color:var(--fg); border-color:currentColor; }
 /* the label and × inside are real buttons (focusable, base focus ring) — strip the
    UA chrome so they read as one tab; the old 6px 14px padding is split between them */
 .tab .tabname, .tab .x { background:none; border:none; color:inherit; font:inherit;
