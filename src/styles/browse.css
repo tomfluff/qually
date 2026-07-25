@@ -143,7 +143,7 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .aByLabel { font-size:.8em; color:var(--muted); margin:2px 0 5px; }
 .segmented { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
 .segmented .seg { flex:1 1 0; min-width:0; border:0; background:var(--bg); color:var(--muted);
-  font:inherit; padding:7px 4px; cursor:pointer; }
+  font:inherit; padding:4px 2px; cursor:pointer; }
 .segmented .seg + .seg { border-left:1px solid var(--line); }
 .segmented .seg:hover { color:var(--fg); }
 /* the selected half takes its ink from the theme's accent, not a fixed white:
