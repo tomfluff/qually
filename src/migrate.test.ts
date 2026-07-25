@@ -46,7 +46,6 @@ test("old persisted state rehydrates into today's shape", () => {
   expect(ui.speakerFocus).toEqual({});  // pre-per-transcript scalar resets to everyone
   expect(ui.focusDim).toBe(true);
   expect(ui.focusCollapse).toBe(false);
-  expect(ui.smoothScroll).toBe(false);
   expect(ui.speakerColors).toEqual({});
   expect(useStore.getState().ai.lenses).toEqual(["transcription"]);
 });

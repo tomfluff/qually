@@ -49,7 +49,6 @@ export interface Ui {
   showNotices: boolean; // AI noticing highlights visible (hide to read/code blind)
   hiddenLenses: string[]; // noticing lenses filtered out while showNotices is on
   lanePattern: boolean; // give each code a pattern as well as a colour (see patternOf)
-  smoothScroll: boolean; // animate Home/End/PageUp/PageDown and jumps instead of teleporting
   scrollSpeed: number; // wheel distance multiplier for the transcript (1 = device default)
   loopEdit: boolean; // loop the utterance's audio while its line is being edited
   loopSpeed: number; // playback rate while looping (independent of the dock's rate)
@@ -324,7 +323,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, smoothScroll: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [],
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
@@ -1090,7 +1089,6 @@ export const useStore = create<State>()(
         s.ui.showNotices ??= true;
         s.ui.hiddenLenses ??= [];
         s.ui.lanePattern ??= false;
-        s.ui.smoothScroll ??= false;
         s.ui.scrollSpeed ??= 1;
         s.ui.loopEdit ??= true;
         s.ui.loopSpeed ??= 0.75;
