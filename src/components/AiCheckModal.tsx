@@ -5,7 +5,7 @@ import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine } from "../ai/flag";
+import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine, spanLens } from "../ai/flag";
 import { announce } from "../announce";
 import { AiModal, ModelPicker } from "./AiModal";
 
@@ -13,9 +13,18 @@ import { AiModal, ModelPicker } from "./AiModal";
 // (speakers — no naming convention assumed), then see the ACTUAL redacted lines
 // before a single byte is sent. A privacy policy is unreadable; four lines of
 // your own transcript are not.
-export function AiCheckModal({ onClose }: { onClose: () => void }) {
-  const pid = useStore((s) => s.active);
-  const lines = useStore((s) => s.transcripts[s.active]?.lines ?? []);
+// Two callers, two scopes (same split as SuggestModal): a transcript's own code
+// sidebar locks the scope to that transcript, while the Assist tab passes `choose`
+// and picks from the corpus in here — Assist has no active transcript.
+export function AiCheckModal({ pid: initial, choose, onClose }: {
+  pid?: string; choose?: boolean; onClose: () => void;
+}) {
+  const transcripts = useStore((s) => s.transcripts);
+  const tabs = useStore((s) => s.tabs);
+  const aiLog = useStore((s) => s.aiLog);
+  const [picked, setPicked] = useState(initial ?? ""); // "" = nothing picked yet
+  const pid = picked;
+  const lines = transcripts[pid]?.lines ?? [];
   const ai = useStore((s) => s.ai);
   const setAi = useStore((s) => s.setAi);
   const aiFlags = useStore((s) => s.aiFlags);
@@ -38,6 +47,28 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
     return [...m.entries()];
   }, [lines]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  // Speaker names are per-transcript, so an exclusion carried across a change of
+  // transcript would silently skip a speaker you never looked at.
+  const pick = (p: string) => { setPicked(p); setExcluded(new Set()); };
+
+  // What you pick between when the caller didn't decide: every LOADED transcript
+  // (open tabs first), with what decides the pick — size, whether it's been scanned,
+  // and how many live observations it already carries.
+  const choices = useMemo(() => {
+    if (!choose) return [];
+    const pids = [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))];
+    return pids.filter((p) => transcripts[p]).map((p) => {
+      const last = aiLog.filter((c) => c.task.startsWith("scan") && c.pid === p).at(-1);
+      let obs = 0;
+      for (const l of transcripts[p].lines) {
+        const f = aiFlags[`${p}:${l.id}`];
+        if (!f || f.hash !== hashLine(l.text)) continue; // stale marks aren't shown, don't count them
+        obs += f.spans.filter((sp) => spanLens(sp) !== "transcription").length;
+      }
+      return { pid: p, n: transcripts[p].lines.length, at: last?.at.slice(0, 10) ?? null, obs };
+    });
+  }, [choose, tabs, transcripts, aiLog, aiFlags]);
+
   const toggleSpeaker = (sp: string) =>
     setExcluded((prev) => {
       const n = new Set(prev);
@@ -122,7 +153,7 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <AiModal title={<>Scan “{pid}” with AI</>} busy={busy} onClose={onClose}>
+    <AiModal title={pid ? <>Scan “{pid}” with AI</> : <>AI observation scan</>} busy={busy} onClose={onClose}>
         {done ? (
           <>
             <div className="ai-body">
@@ -134,6 +165,25 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <div className="ai-body nicescroll">
+              {choose && (
+                <>
+                  {/* Nothing preselected: the primary stays disabled until you pick, so a
+                      reflex click can't scan the wrong participant. */}
+                  <div className="ai-sec">Transcript <span className="ai-sec-hint">the scan reads this one, start to end</span></div>
+                  <div className="ai-tlist" role="radiogroup" aria-label="Transcript to scan">
+                    {choices.map((c) => (
+                      <label key={c.pid} className={"ai-trow" + (picked === c.pid ? " on" : "")}>
+                        <input type="radio" name="scan-pid" checked={picked === c.pid}
+                          onChange={() => pick(c.pid)} disabled={busy} />
+                        <span className="tName">{c.pid}</span>
+                        <em>{c.n} lines
+                          {c.at ? ` · scanned ${c.at}` : " · not scanned yet"}
+                          {c.obs > 0 ? ` · ${c.obs} observation${c.obs === 1 ? "" : "s"}` : ""}</em>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
               <div className="ai-sec">Look for <span className="ai-sec-hint">marks instances only — coding stays yours</span></div>
               <div className="ai-lenses">
                 {LENSES.map((l) => (
@@ -147,21 +197,29 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
 
               <ModelPicker modelId={modelId} onPick={setModelId} />
 
-              <div className="ai-sec">Whose speech</div>
-              <div className="ai-spks">
-                {speakers.map(([sp, n]) => (
-                  <label key={sp} className="ai-spk">
-                    <input type="checkbox" checked={!excluded.has(sp)} onChange={() => toggleSpeaker(sp)} />
-                    <span>{sp} <em>{n}</em></span>
-                  </label>
-                ))}
-              </div>
+              {/* the speaker list is this transcript's own — there's nothing to show
+                  until one is picked */}
+              {pid && (
+                <>
+                  <div className="ai-sec">Whose speech</div>
+                  <div className="ai-spks">
+                    {speakers.map(([sp, n]) => (
+                      <label key={sp} className="ai-spk">
+                        <input type="checkbox" checked={!excluded.has(sp)} onChange={() => toggleSpeaker(sp)} />
+                        <span>{sp} <em>{n}</em></span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
 
               {todo.length === 0 ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   {lenses.length === 0
                     ? "Tick at least one scan."
-                    : "Every included line has already been scanned with these lenses at its current text. Edit a line, add a lens, or include another speaker to scan more."}
+                    : !pid
+                      ? "Pick a transcript above and the payload, the token count and the price appear here."
+                      : "Every included line has already been scanned with these lenses at its current text. Edit a line, add a lens, or include another speaker to scan more."}
                 </p>
               ) : (
                 <>
@@ -201,7 +259,10 @@ export function AiCheckModal({ onClose }: { onClose: () => void }) {
             {err && <div className="ai-err">{err}</div>}
 
             {todo.length === 0 ? (
-              <div className="imp-actions"><button className="btn" onClick={onClose}>Close</button></div>
+              <div className="imp-actions">
+                {lenses.length > 0 && !pid && <button className="btn primary" disabled>Pick a transcript</button>}
+                <button className="btn" onClick={onClose}>Close</button>
+              </div>
             ) : (
               <div className="imp-actions">
                 <button className="btn primary" onClick={run} disabled={busy}>

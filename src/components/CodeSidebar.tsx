@@ -11,6 +11,7 @@ import { useToggleMenu } from "../usePopover";
 import { Icon } from "./Icon";
 
 export function CodeSidebar() {
+  const active = useStore((s) => s.active); // the sidebar only renders for a transcript view
   const lanePattern = useStore((s) => s.ui.lanePattern);
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
@@ -114,8 +115,8 @@ export function CodeSidebar() {
       })}
       </div>
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
-      {aiOpen && <AiCheckModal onClose={() => setAiOpen(false)} />}
-      {suggestOpen && <SuggestModal onClose={() => setSuggestOpen(false)} />}
+      {aiOpen && <AiCheckModal pid={active} onClose={() => setAiOpen(false)} />}
+      {suggestOpen && <SuggestModal pid={active} onClose={() => setSuggestOpen(false)} />}
     </div>
   );
 }

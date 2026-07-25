@@ -80,6 +80,12 @@
 .segdiff-k { flex:0 0 3.9em; text-align:right; font-size:.82em; font-weight:700;
   text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
 .imp-actions { display:flex; flex-direction:column; gap:6px; margin-top:14px; }
+/* a disabled primary must not still read as the filled call to action ("Pick a
+   transcript", "Suggesting…"): drop the accent fill, keep AA-legible ink */
+.imp-actions .btn.primary:disabled { background:var(--panel); border-color:var(--line);
+  color:var(--muted); cursor:default; }
+[data-theme=dark] .imp-actions .btn.primary:disabled { color:var(--muted); }
+.imp-actions .btn.primary:disabled:hover { filter:none; border-color:var(--line); }
 .imp-actions .btn { width:100%; justify-content:center; }
 .imp-note { color:var(--muted); font-size:.86em; text-align:center; margin-top:10px; }
 
@@ -96,6 +102,17 @@
 .ai-lens em, .ai-spk em { font-style:normal; color:var(--muted); font-size:.85em; }
 .ai-lens-dot { width:9px; height:9px; border-radius:3px; flex:none; }
 .ai-spks { display:flex; flex-wrap:wrap; gap:2px 18px; }
+/* the transcript picker (Suggest, launched from Assist): one row per loaded
+   transcript, its size and what a previous run left, so the pick is informed */
+.ai-tlist { display:flex; flex-direction:column; gap:2px; margin-bottom:4px; }
+.ai-trow { display:flex; align-items:center; gap:9px; padding:6px 8px; border-radius:7px;
+  cursor:pointer; line-height:1.35; }
+.ai-trow:hover { background:var(--panel); }
+.ai-trow.on { background:color-mix(in srgb, var(--accent) 14%, transparent); }
+.ai-trow input { margin:0; accent-color:var(--accent); }
+.ai-trow .tName { font-weight:600; }
+.ai-trow em { font-style:normal; color:var(--muted); font-size:.86em; margin-left:auto;
+  font-variant-numeric:tabular-nums; }
 
 /* AI consent gate — the payload preview */
 .ai-warn { background:color-mix(in srgb, #e0a020 14%, var(--bg)); border:1px solid #e0a020;

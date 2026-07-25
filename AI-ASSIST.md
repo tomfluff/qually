@@ -18,6 +18,17 @@ Build order: **F1 → F2 → F3** (as originally listed).
   candidate lanes render striped; Accept/Reject lives in the segment popover
   and Browse. Exports carry `proposed_by` (the intercoder column).
 
+## Where runs start (Assist tab)
+
+Observations and Suggest both group by **transcript** or by their own axis (lens /
+code), and both start their run from the same two places: a full-width button above
+the list, and a sparkle on each transcript row. The row's sparkle preselects that
+transcript; the button preselects nothing and the consent gate's primary action
+stays disabled until you pick. AiCheckModal and SuggestModal each take `pid` +
+`choose`: a transcript's own code sidebar passes `pid` alone and keeps the scope
+locked, Assist passes `choose` and shows the picker (lines, last run, what it
+yielded — read from `aiLog` + the live marks/candidates).
+
 ## F1 — Grounding highlights (first)
 
 What in a coded segment actually carries its code.
@@ -53,10 +64,13 @@ undoable `mergeCode`. Honesty copy (README + Settings → AI) updated to
 
 ## F3 — Suggest codes from the researcher's own codebook (third) — SHIPPED
 
-Launched from a transcript's code sidebar ("Suggest codes", beside AI scan):
-ai/suggest.ts chunks the ACTIVE transcript into 40-line windows, each sent with
-the codebook (name + def + up to 2 exemplars). SuggestModal is the consent gate
-(payload preview, cost, per-run model picker, Terra hint — the priciest run).
+Two launch surfaces, one modal: a transcript's code sidebar (scope locked to that
+transcript) and the Assist tab's Suggest panel — its "AI code suggestion…" button
+(nothing preselected) or the sparkle on any transcript row (that one preselected).
+ai/suggest.ts chunks ONE transcript into 40-line windows, each sent with the
+codebook (name + def + up to 2 exemplars). SuggestModal is the consent gate
+(transcript picker when launched from Assist — lines, last run and candidates per
+row from aiLog; payload preview, cost, per-run model picker, Terra hint).
 Proposals land as candidate segments (proposedBy "AI · <model>", status
 "candidate") via addSegment, skipping any range already carrying that code
 (overlapsExisting — accepted or rejected, model-independent = rejection memory).

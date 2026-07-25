@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// The Assist tab: everything the AI proposes, in one place. Two panels today —
-// observations (instances it marked, staged into codes) and merge (near-duplicate
-// code pairs to fold together). Code-suggestion lands here later.
+// The Assist tab: everything the AI proposes, in one place. Three panels —
+// observations (instances it marked, staged into codes), merge (near-duplicate
+// code pairs to fold together) and suggest (candidate codings). Observations and
+// suggest are also where their runs START: each groups by transcript or by its own
+// axis, and a transcript row carries the sparkle that opens that run's consent gate.
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, type Segment } from "../state/store";
 import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
-import { LENSES, hashLine, spanLens } from "../ai/flag";
+import { LENSES, hashLine, spanLens, lensOf } from "../ai/flag";
 import { MergeModal } from "./MergeModal";
+import { SuggestModal } from "./SuggestModal";
+import { AiCheckModal } from "./AiCheckModal";
 import type { MergeProposal } from "../ai/dedupe";
 import { excerptOf } from "../contract/excerpt";
 import { Icon } from "./Icon";
@@ -26,7 +30,8 @@ interface Notice {
 // written to the project file, so they clear on reload. The active panel lives
 // in the store (ui.assistPanel) — the Assist tab's own menu sets it.
 const remembered = {
-  lens: null as string | null,
+  obsBy: "lens" as "lens" | "transcript",
+  obsSel: null as string | null, // selected lens/transcript, null = all
   onlyUncoded: true,
   proposals: [] as MergeProposal[],
   flipped: new Set<string>(),
@@ -47,16 +52,25 @@ export function AssistView() {
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
   const setUi = useStore((s) => s.setUi);
   const panel = useStore((s) => s.ui.assistPanel);
-  const [lens, setLens] = useState(remembered.lens);
+  const [obsBy, setObsBy] = useState(remembered.obsBy);
+  const [obsSel, setObsSel] = useState(remembered.obsSel);
   const [onlyUncoded, setOnlyUncoded] = useState(remembered.onlyUncoded);
   const [proposals, setProposals] = useState<MergeProposal[]>(remembered.proposals);
   const [flipped, setFlipped] = useState<Set<string>>(remembered.flipped);
   const [mergeOpen, setMergeOpen] = useState(false);
+  // null = closed; "" = open with nothing picked; a pid = open on that transcript
+  const [suggestFor, setSuggestFor] = useState<string | null>(null);
+  const [scanFor, setScanFor] = useState<string | null>(null);
   const [suggestBy, setSuggestBy] = useState(remembered.suggestBy);
   const [suggestSel, setSuggestSel] = useState(remembered.suggestSel);
-  useEffect(() => { Object.assign(remembered, { lens, onlyUncoded, proposals, flipped, suggestBy, suggestSel }); },
-    [lens, onlyUncoded, proposals, flipped, suggestBy, suggestSel]);
+  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel }); },
+    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel]);
   const pickSuggestBy = (by: "transcript" | "code") => { setSuggestBy(by); setSuggestSel(null); };
+  const pickObsBy = (by: "lens" | "transcript") => { setObsBy(by); setObsSel(null); };
+  // open tabs first, then the rest of what's loaded — the order both panels list in
+  const allPids = useMemo(() =>
+    [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))].filter((p) => transcripts[p]),
+    [tabs, transcripts]);
 
   // codes with at least one accepted segment — merge needs two to compare
   const mergeableCount = useMemo(() =>
@@ -75,9 +89,13 @@ export function AssistView() {
       const k = suggestBy === "transcript" ? c.pid : c.code;
       n.set(k, (n.get(k) ?? 0) + 1);
     }
-    const keys = suggestBy === "transcript" ? tabs.filter((p) => n.has(p)) : [...n.keys()].sort();
-    return keys.map((key) => ({ key, n: n.get(key)! }));
-  }, [candidates, suggestBy, tabs]);
+    // Grouped by transcript the list is the CORPUS, not just what already has
+    // candidates: the row is also where a run starts, so a transcript nobody has
+    // run yet has to be on it. Open tabs first, then the rest of what's loaded.
+    const keys = suggestBy === "transcript" ? allPids : [...n.keys()].sort();
+    return keys.map((key) => ({ key, n: n.get(key) ?? 0 }));
+  }, [candidates, suggestBy, allPids]);
+  const hasCodes = Object.keys(codebook).length > 0;
   const shownCandidates = suggestSel == null ? candidates
     : candidates.filter((c) => (suggestBy === "transcript" ? c.pid : c.code) === suggestSel);
 
@@ -92,10 +110,12 @@ export function AssistView() {
     const n = new Set(f); const k = pairKey(p); n.has(k) ? n.delete(k) : n.add(k); return n;
   });
 
-  // every live observation across all open transcripts, in tab + line order
+  // every live observation across all LOADED transcripts (not just open tabs — a
+  // closed tab's marks are still project data, the same rule the export follows),
+  // in tab + line order
   const notices = useMemo(() => {
     const out: Notice[] = [];
-    for (const pid of tabs) {
+    for (const pid of allPids) {
       const t = transcripts[pid];
       if (!t) continue;
       for (const l of t.lines) {
@@ -109,7 +129,7 @@ export function AssistView() {
       }
     }
     return out;
-  }, [aiFlags, tabs, transcripts, segments]);
+  }, [aiFlags, allPids, transcripts, segments]);
   const hasNotices = notices.length > 0;
 
   const observeLenses = LENSES.filter((l) => l.id !== "transcription");
@@ -117,8 +137,12 @@ export function AssistView() {
     const of = notices.filter((n) => n.lens === id);
     return { n: of.length, pids: new Set(of.map((x) => x.pid)).size };
   };
-  // the selected lens, defaulting to the first that actually has instances
-  const curLens = lens ?? observeLenses.find((l) => lensStats(l.id).n > 0)?.id ?? observeLenses[0].id;
+  // What the observation list is sliced by. null = all of it; otherwise a lens id
+  // or a pid, depending on the grouping. The worklist below then groups by the OTHER
+  // axis, which is what makes "one lens across transcripts" and "one transcript
+  // across lenses" both reachable.
+  const shownNotices = obsSel == null ? notices
+    : notices.filter((n) => (obsBy === "lens" ? n.lens : n.pid) === obsSel);
 
   return (
     <div id="browse" style={{ fontSize }}>
@@ -130,21 +154,72 @@ export function AssistView() {
 
         <div className="cbList nicescroll">
         {panel === "observations" ? (
-          hasNotices ? observeLenses.map((l) => {
-            const st = lensStats(l.id);
-            return (
-              <div key={l.id} className={"nLens" + (curLens === l.id ? " sel" : "") + (st.n === 0 ? " none" : "")}
-                tabIndex={0} role="button" aria-pressed={curLens === l.id}
-                onClick={() => setLens(l.id)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLens(l.id); } }}>
-                <span className="nDot" style={{ background: l.color }} />
-                <span className="nName">{l.label}</span>
-                <span className="cnt">{st.n}·{st.pids}</span>
-              </div>
-            );
-          }) : (
-            <div className="bSideNote">No observations yet. Open a transcript and run an <b>AI scan</b> from its code sidebar.</div>
-          )
+          <>
+            {/* Same two ways in as the Suggest panel: a button that works in every
+                state, and a sparkle on each transcript row (grouped by transcript). */}
+            <button className="btn groundBtn" onClick={() => setScanFor("")} disabled={allPids.length === 0}
+              title={allPids.length
+                ? "Pick a transcript and let the AI mark instances under the lenses you tick (sends those lines to OpenAI after your approval)"
+                : "Import a transcript first"}>
+              <Icon name="sparkle" size={15} /> AI observation scan…
+            </button>
+            <div className="aByLabel" id="obsByLabel">Group by</div>
+            <div className="segmented aSuggestBy" role="group" aria-labelledby="obsByLabel">
+              <button className={"seg" + (obsBy === "transcript" ? " on" : "")}
+                aria-pressed={obsBy === "transcript"}
+                onClick={() => pickObsBy("transcript")}>Transcript</button>
+              <button className={"seg" + (obsBy === "lens" ? " on" : "")}
+                aria-pressed={obsBy === "lens"}
+                onClick={() => pickObsBy("lens")}>Lens</button>
+            </div>
+            {obsBy === "transcript" && allPids.length === 0 ? (
+              <div className="bSideNote">No transcripts loaded yet — import one and the AI can scan it from here.</div>
+            ) : (
+              <>
+                <div className={"nLens" + (obsSel === null ? " sel" : "")}
+                  tabIndex={0} role="button" aria-pressed={obsSel === null}
+                  onClick={() => setObsSel(null)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setObsSel(null); } }}>
+                  <span className="nName">All</span>
+                  <span className="cnt">{notices.length}</span>
+                </div>
+                {obsBy === "lens" ? observeLenses.map((l) => {
+                  const st = lensStats(l.id);
+                  return (
+                    <div key={l.id} className={"nLens" + (obsSel === l.id ? " sel" : "") + (st.n === 0 ? " none" : "")}
+                      tabIndex={0} role="button" aria-pressed={obsSel === l.id}
+                      onClick={() => setObsSel(l.id)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setObsSel(l.id); } }}>
+                      <span className="nDot" style={{ background: l.color }} />
+                      <span className="nName">{l.label}</span>
+                      <span className="cnt">{st.n}·{st.pids}</span>
+                    </div>
+                  );
+                }) : allPids.map((p) => {
+                  const n = notices.filter((x) => x.pid === p).length;
+                  return (
+                    <div key={p} className={"nLens" + (obsSel === p ? " sel" : "") + (n === 0 ? " none" : "")}
+                      tabIndex={0} role="button" aria-pressed={obsSel === p}
+                      onClick={() => setObsSel(p)}
+                      onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return; // the run button's keys are its own
+                        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setObsSel(p); }
+                      }}>
+                      <span className="nName">{p}</span>
+                      {/* an em dash, not 0: the row is a launcher too, and "0 observations"
+                          reads as a result where "never scanned" is the actual state */}
+                      <span className="cnt">{n || "—"}</span>
+                      <button className="rowRun" aria-label={`AI observation scan for ${p}`}
+                        title={`AI observation scan for ${p}`}
+                        onClick={(e) => { e.stopPropagation(); setScanFor(p); }}>
+                        <Icon name="sparkle" size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </>
         ) : panel === "merge" ? (
           <>
             <button className="btn groundBtn" onClick={() => setMergeOpen(true)} disabled={mergeableCount < 2}
@@ -159,6 +234,16 @@ export function AssistView() {
           </>
         ) : (
           <>
+            {/* Two ways in, one modal. The button is the one that works in every
+                state (the per-row sparkles below only exist while grouping by
+                transcript); a row's sparkle just opens the same dialog on that
+                transcript, where the model, the payload and the price still are. */}
+            <button className="btn groundBtn" onClick={() => setSuggestFor("")} disabled={!hasCodes}
+              title={hasCodes
+                ? "Pick a transcript and let the AI propose where your codes apply (sends it to OpenAI after your approval)"
+                : "Add a code first — suggestions apply your existing codes"}>
+              <Icon name="sparkle" size={15} /> AI code suggestion…
+            </button>
             {/* two equal halves rather than the pill pair that sized to its own
                 text and left a dead rail on the right; the label says GROUPING,
                 which the bare pair read as filtering */}
@@ -173,8 +258,9 @@ export function AssistView() {
             </div>
             {suggestGroups.length === 0 ? (
               <div className="bSideNote">
-                No candidate codings yet. Run <b>Suggest codes</b> from a transcript's code
-                sidebar; they land here and striped in the transcript.
+                {suggestBy === "transcript"
+                  ? "No transcripts loaded yet — import one and it can be sent for suggestions from here."
+                  : "No candidate codings yet. Run AI code suggestion on a transcript; they land here and striped in the transcript."}
               </div>
             ) : (
               <>
@@ -186,13 +272,26 @@ export function AssistView() {
                   <span className="cnt">{candidates.length}</span>
                 </div>
                 {suggestGroups.map((g) => (
-                  <div key={g.key} className={"nLens" + (suggestSel === g.key ? " sel" : "")}
+                  <div key={g.key} className={"nLens" + (suggestSel === g.key ? " sel" : "") + (g.n === 0 ? " none" : "")}
                     tabIndex={0} role="button" aria-pressed={suggestSel === g.key}
                     onClick={() => setSuggestSel(g.key)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSuggestSel(g.key); } }}>
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return; // the run button's keys are its own
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSuggestSel(g.key); }
+                    }}>
                     {suggestBy === "code" && <span className="nDot" style={{ background: codebook[g.key]?.color ?? "#888" }} />}
                     <span className="nName">{g.key}</span>
-                    <span className="cnt">{g.n}</span>
+                    {/* an em dash, not 0: the row is a launcher too, and "0 candidates"
+                        reads as a result where "never run" is the actual state */}
+                    <span className="cnt">{g.n || "—"}</span>
+                    {suggestBy === "transcript" && (
+                      <button className="rowRun" aria-label={`AI code suggestion for ${g.key}`}
+                        title={hasCodes ? `AI code suggestion for ${g.key}` : "Add a code first — suggestions apply your existing codes"}
+                        disabled={!hasCodes}
+                        onClick={(e) => { e.stopPropagation(); setSuggestFor(g.key); }}>
+                        <Icon name="sparkle" size={14} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </>
@@ -208,16 +307,17 @@ export function AssistView() {
         {panel === "observations" ? (
           hasNotices ? (
             <NoticeList
-              notices={notices.filter((n) => n.lens === curLens)}
-              lensColor={observeLenses.find((l) => l.id === curLens)?.color ?? "#888"}
+              notices={shownNotices}
+              groupBy={obsBy === "lens" ? "transcript" : "lens"}
+              pidOrder={allPids}
               onlyUncoded={onlyUncoded}
               setOnlyUncoded={setOnlyUncoded}
-              tabs={tabs}
             />
           ) : (
             <div className="empty">
-              Nothing to review yet. The AI's observations show up here after you run a scan —
-              it points, you decide what becomes a code.
+              Nothing to review yet. Run an <b>AI observation scan</b> on a transcript — the button
+              on the left, or the sparkle on any transcript row — and its marks show up here.
+              It points, you decide what becomes a code.
             </div>
           )
         ) : panel === "merge" ? (
@@ -230,6 +330,10 @@ export function AssistView() {
       </div>
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
         onClose={() => setMergeOpen(false)} />}
+      {suggestFor !== null && <SuggestModal pid={suggestFor} choose
+        onClose={() => setSuggestFor(null)} />}
+      {scanFor !== null && <AiCheckModal pid={scanFor} choose
+        onClose={() => setScanFor(null)} />}
     </div>
   );
 }
@@ -296,8 +400,9 @@ function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
   if (!candidates.length) {
     return (
       <div className="empty">
-        No candidate codings here. Run <b>Suggest codes</b> from a transcript's code sidebar and the
-        AI's proposals — existing codes applied to line ranges — show up here to accept or reject.
+        No candidate codings here. Run <b>AI code suggestion</b> on a transcript — the button on the
+        left, or the sparkle on any transcript row — and the AI's proposals (existing codes applied
+        to line ranges) show up here to accept or reject.
       </div>
     );
   }
@@ -360,17 +465,19 @@ function lineWithQuote(text: string, quote: string, color: string): ReactNode {
   );
 }
 
-// Instances of one lens, grouped by participant. The staging area for the move
-// from observation to code: "code…" writes a segment for the instance's LINE (your
-// unit of analysis), authored by you — the AI pointed, you named it. Coded
-// instances stay visible with a badge (hiding them would misreport what the AI
-// found); the Only-uncoded filter is what turns the list into a worklist.
-function NoticeList({ notices, lensColor, onlyUncoded, setOnlyUncoded, tabs }: {
+// The instances the sidebar's slice let through, grouped by the axis the sidebar
+// ISN'T slicing by (pick a lens, read it across transcripts; pick a transcript,
+// read it across lenses). The staging area for the move from observation to code:
+// "code…" writes a segment for the instance's LINE (your unit of analysis),
+// authored by you — the AI pointed, you named it. Coded instances stay visible with
+// a badge (hiding them would misreport what the AI found); the Only-uncoded filter
+// is what turns the list into a worklist.
+function NoticeList({ notices, groupBy, pidOrder, onlyUncoded, setOnlyUncoded }: {
   notices: Notice[];
-  lensColor: string;
+  groupBy: "transcript" | "lens";
+  pidOrder: string[];
   onlyUncoded: boolean;
   setOnlyUncoded: (v: boolean) => void;
-  tabs: string[];
 }) {
   const jumpTo = useStore((s) => s.jumpTo);
   const [coding, setCoding] = useState<string | null>(null); // "pid:id:quote" of the open combobox
@@ -384,6 +491,12 @@ function NoticeList({ notices, lensColor, onlyUncoded, setOnlyUncoded, tabs }: {
     setCoding(null);
   };
 
+  // group headers: transcripts in tab order, lenses in the order the scan lists them
+  const groups = (groupBy === "transcript"
+    ? pidOrder
+    : LENSES.filter((l) => l.id !== "transcription").map((l) => l.id)
+  ).filter((k) => shown.some((n) => (groupBy === "transcript" ? n.pid : n.lens) === k));
+
   return (
     <>
       <div className="bOptions nOpts">
@@ -396,18 +509,24 @@ function NoticeList({ notices, lensColor, onlyUncoded, setOnlyUncoded, tabs }: {
       {shown.length === 0 && (
         <div className="empty">
           {notices.length === 0
-            ? "Nothing under this lens yet — run an AI scan with it ticked."
-            : "No uncoded instances left under this lens — you've been through everything it found."}
+            ? "Nothing here yet — scan a transcript with the lens you're after ticked."
+            : "No uncoded instances left here — you've been through everything the AI found."}
         </div>
       )}
-      {tabs.filter((pid) => shown.some((n) => n.pid === pid)).map((pid) => (
-        <div key={pid} className="bGroup">
-          <div className="nGrp">{pid}</div>
-          {shown.filter((n) => n.pid === pid).map((n) => {
+      {groups.map((g) => (
+        <div key={g} className="bGroup">
+          <div className="nGrp">
+            {groupBy === "lens" && <span className="nDot" style={{ background: lensOf(g)?.color ?? "#888", marginRight: 6 }} />}
+            {groupBy === "lens" ? lensOf(g)?.label ?? g : g}
+          </div>
+          {shown.filter((n) => (groupBy === "transcript" ? n.pid : n.lens) === g).map((n) => {
             const key = `${n.pid}:${n.id}:${n.quote}`;
+            // colour comes from the instance's OWN lens: a group can hold several
+            // (grouped by transcript) and one shared colour would misattribute them
+            const c = lensOf(n.lens)?.color ?? "#888";
             return (
-              <div key={key} className="nInst" style={{ "--lens-c": lensColor } as CSSProperties}>
-                <div className="nLine">{lineWithQuote(n.text, n.quote, lensColor)}</div>
+              <div key={key} className="nInst" style={{ "--lens-c": c } as CSSProperties}>
+                <div className="nLine">{lineWithQuote(n.text, n.quote, c)}</div>
                 <div className="nWhy">{n.reason}</div>
                 {coding === key ? (
                   <div className="nCode">
@@ -416,7 +535,8 @@ function NoticeList({ notices, lensColor, onlyUncoded, setOnlyUncoded, tabs }: {
                   </div>
                 ) : (
                   <div className="nFoot">
-                    <span className="nRef">{n.pid}:{n.id} · {n.speaker}</span>
+                    <span className="nRef">{n.pid}:{n.id} · {n.speaker}
+                      {groupBy === "transcript" && ` · ${lensOf(n.lens)?.label ?? n.lens}`}</span>
                     {n.codedAs && <span className="nCoded">coded · {n.codedAs}</span>}
                     <span className="nActs">
                       {!n.codedAs && <button className="nBtn pri" onClick={() => setCoding(key)}>code…</button>}

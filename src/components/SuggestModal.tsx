@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 // Consent gate for the code-suggestion run (F3 of AI-ASSIST.md) — same contract
-// as the scan/ground/merge modals. Scope: the ACTIVE transcript, chunked into
-// windows, each sent with the codebook (name + def + a couple of exemplars).
+// as the scan/ground/merge modals. Scope: ONE transcript, chunked into windows,
+// each sent with the codebook (name + def + a couple of exemplars).
 // Applies proposals as CANDIDATE segments (proposedBy "AI · <model>") for review;
 // skips any range already carrying that code (accepted or rejected).
+// Two callers, two scopes: the transcript's own code sidebar locks the scope to that
+// transcript (its menu says "AI for this transcript"), while the Assist tab passes
+// `choose` and picks from the corpus in here — Assist has no active transcript.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
@@ -16,9 +19,16 @@ import { chunksOf, renderSuggestChunk, estimateSuggestTokens, suggestChunk, over
 import { announce } from "../announce";
 import { AiModal, ModelPicker } from "./AiModal";
 
-export function SuggestModal({ onClose }: { onClose: () => void }) {
-  const pid = useStore((s) => s.active);
+export function SuggestModal({ pid: initial, choose, onClose }: {
+  pid?: string; choose?: boolean; onClose: () => void;
+}) {
   const transcripts = useStore((s) => s.transcripts);
+  const tabs = useStore((s) => s.tabs);
+  const aiLog = useStore((s) => s.aiLog);
+  // `choose` shows the picker (Assist); without it the scope is whatever the caller
+  // passed and can't be changed here. "" means nothing picked yet.
+  const [picked, setPicked] = useState(initial ?? "");
+  const pid = picked;
   const lines = transcripts[pid]?.lines ?? [];
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
@@ -50,6 +60,21 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
       return { name, def: codebook[name]?.def ?? "", excerpts };
     });
   }, [codebook, segments, transcripts]);
+
+  // What you pick between, when the caller didn't decide: every LOADED transcript
+  // (open tabs first, the store's own order for "all transcripts"), each with what
+  // decides the pick — its size, whether a run already happened, and what it yielded.
+  const choices = useMemo(() => {
+    if (!choose) return [];
+    const pids = [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))];
+    return pids.filter((p) => transcripts[p]).map((p) => {
+      const last = aiLog.filter((c) => c.task === "suggest" && c.pid === p).at(-1);
+      return {
+        pid: p, n: transcripts[p].lines.length, at: last?.at.slice(0, 10) ?? null,
+        cands: segments.filter((s) => s.pid === p && s.status === "candidate").length,
+      };
+    });
+  }, [choose, tabs, transcripts, aiLog, segments]);
 
   const chunks = useMemo(() => chunksOf(lines), [lines]);
   const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, codes, red), 0), [chunks, codes, red]);
@@ -109,7 +134,7 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <AiModal title={<>Suggest codes for “{pid}”</>} busy={busy} onClose={onClose}>
+    <AiModal title={pid ? <>Suggest codes for “{pid}”</> : <>Suggest codes</>} busy={busy} onClose={onClose}>
 
         {done ? (
           <>
@@ -129,16 +154,38 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
           <>
             <div className="ai-body nicescroll">
               <p className="about-lede">
-                The AI reads <b>{pid}</b> against your codebook and proposes where each
-                existing code might apply. They arrive as <b>candidate codings</b> for you
-                to accept or reject — it never invents a code.
+                The AI reads {pid ? <b>{pid}</b> : "one transcript"} against your codebook and
+                proposes where each existing code might apply. They arrive as <b>candidate
+                codings</b> for you to accept or reject — it never invents a code.
               </p>
+              {choose && (
+                <>
+                  {/* Nothing is preselected when the caller didn't name a transcript: the
+                      primary button stays disabled until you pick, so a reflex click can't
+                      spend money sending the wrong participant's speech. */}
+                  <div className="ai-sec">Transcript <span className="ai-sec-hint">the run reads this one, start to end</span></div>
+                  <div className="ai-tlist" role="radiogroup" aria-label="Transcript to suggest codes for">
+                    {choices.map((c) => (
+                      <label key={c.pid} className={"ai-trow" + (picked === c.pid ? " on" : "")}>
+                        <input type="radio" name="suggest-pid" checked={picked === c.pid}
+                          onChange={() => setPicked(c.pid)} disabled={busy} />
+                        <span className="tName">{c.pid}</span>
+                        <em>{c.n} lines
+                          {c.at ? ` · run ${c.at}` : " · not run yet"}
+                          {c.cands > 0 ? ` · ${c.cands} candidate${c.cands === 1 ? "" : "s"}` : ""}</em>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
               {!ready ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   {codes.length === 0
                     ? "Your codebook is empty — add some codes first, and the AI can suggest where they apply."
-                    : "This transcript has no lines to scan."}
+                    : !pid
+                      ? "Pick a transcript above and the payload, the token count and the price appear here."
+                      : "This transcript has no lines to scan."}
                 </p>
               ) : (
                 <>
@@ -175,7 +222,10 @@ export function SuggestModal({ onClose }: { onClose: () => void }) {
             {err && <div className="ai-err">{err}</div>}
 
             {!ready ? (
-              <div className="imp-actions"><button className="btn" onClick={onClose}>Close</button></div>
+              <div className="imp-actions">
+                {codes.length > 0 && !pid && <button className="btn primary" disabled>Pick a transcript</button>}
+                <button className="btn" onClick={onClose}>Close</button>
+              </div>
             ) : (
               <div className="imp-actions">
                 <button className="btn primary" onClick={run} disabled={busy}>
