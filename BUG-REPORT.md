@@ -1,0 +1,1 @@
+- When we hover an empty lane of a transcript segment the cursor is still a hand pointer, but it makes it seem like the content there can be clicked or the line can be selected even though it can't.

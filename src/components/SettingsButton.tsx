@@ -39,7 +39,6 @@ export function SettingsButton() {
   const coderName = useStore((s) => s.ui.coderName);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
-  const smoothScroll = useStore((s) => s.ui.smoothScroll);
   const scrollSpeed = useStore((s) => s.ui.scrollSpeed);
   const loopEdit = useStore((s) => s.ui.loopEdit);
   const loopSpeed = useStore((s) => s.ui.loopSpeed);
@@ -173,14 +172,6 @@ export function SettingsButton() {
                 </div>
                 <div className="settings-note">Simple uses bigger, blockier marks. Drag the minimap's edge to widen it.</div>
                 <div className="set-h">Scrolling</div>
-                <div className="srow">
-                  <span>Smooth scrolling</span>
-                  <div className="seg">
-                    <button className={!smoothScroll ? "on" : ""} onClick={() => setUi({ smoothScroll: false })}>off</button>
-                    <button className={smoothScroll ? "on" : ""} onClick={() => setUi({ smoothScroll: true })}>on</button>
-                  </div>
-                </div>
-                <div className="settings-note">Eases the wheel and animates jumps so you see where you moved. Overrides the system's reduced-motion setting.</div>
                 <label className="srow">
                   <span>Scroll distance</span>
                   {/* percent with 5% steps (the old 0.25× steps made the thumb jump);
