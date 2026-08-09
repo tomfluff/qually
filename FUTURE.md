@@ -16,6 +16,26 @@ Shipped items get moved to the "Done" list with the commit.
 
 ## Done
 
+- **(5) Session event logs — SHIPPED 2026-08-09.** A recorder's events CSV
+  (markers + field notes) loads per transcript from the tab's right-click menu;
+  events interleave with the lines by time on the video clock (they follow the
+  dock's offset), render as their own rows, and land in a resizable sidebar
+  Events list and a minimap lane. Events are editable/deletable/addable in-app
+  (right-click a line or E), types are renameable and recolourable, and
+  everything round-trips through events.csv and the project file.
+
+- **(4) AI assistance suite — SHIPPED 2026-07 (multiple commits).** The
+  "Probably YAGNI" verdict below was overturned: observation scan (7 Saldaña
+  first-cycle lenses incl. transcription repair), code suggestion from the
+  researcher's own codebook (candidate segments, accept/reject), near-duplicate
+  code merge, and per-code grounding — all behind the Assist tab / sidebar AI
+  menu, key-in-browser, redaction before send, per-call provenance log.
+
+- **(3) Density minimap — SHIPPED 2026-07-05** (`Minimap.tsx`). Zoomed-out
+  lane mirror down the right edge: segment density, speaker rail, AI-mark and
+  event lanes, close-call gutter, accent viewport box, click/drag navigation.
+  Replaces the native transcript scrollbar; detailed + simplified modes.
+
 - **(2) Multi-coder foundation — SHIPPED 2026-07-15** (branch `feat/multi-coder`).
   The coder name is a setting (Settings → Codes, `ui.coderName`, default `tom`)
   instead of a hardcoded `proposedBy`; segment dedup is per coder, so importing a
@@ -55,11 +75,13 @@ Shipped items get moved to the "Done" list with the commit.
 - **Filter the transcript view**: show only lines carrying code X, or only
   speaker P. Search is substring-only today; a code/speaker filter is a different,
   high-use axis.
-- ~~**Density minimap**~~ — **SHIPPED 2026-07-05.** Lane-mirror strip on the right
-  edge (`Minimap.tsx`, canvas): zoomed-out segment density, accent viewport box,
-  click/drag to navigate; replaces the native transcript scrollbar.
+- ~~**Density minimap**~~ — shipped 2026-07-05 (Done above).
 
 ### AI assistance
+- **Per-speaker scope for the suggest pass.** The observation scan lets you
+  untick speakers before sending; suggest sends every line. A modal option so
+  researcher lines ride along as context but are never themselves coded
+  (tagged in the window + a sanitize-side guard).
 - **AI-drafted code definitions.** Many codes never get a written definition,
   which weakens both the codebook as an artifact and the AI suggest pass (it
   falls back to name + exemplars). Propose a definition per code from its
@@ -87,10 +109,11 @@ Shipped items get moved to the "Done" list with the commit.
 
 ## Probably YAGNI (flagged deliberately)
 
-- **In-app AI code suggestions.** Tempting given the paper's about AI, and
-  `proposedBy` hints at it — but it's a large build and the Python side
-  (`refresh_themes_draft.py`) already owns draft generation. Don't pull it into
-  the app speculatively.
+- ~~**In-app AI code suggestions.**~~ — **overturned; shipped 2026-07 (Done
+  above).** The original worry (large build, Python owns drafting) gave way once
+  the Assist tab existed: suggestions land as *candidate* segments the
+  researcher verdicts, so the researcher-owns-coding line held. Kept here as a
+  record that a YAGNI call can expire.
 - **Hierarchical codes / themes in the sidebar.** Themes live in Python today.
   A second grouping model in the app is a lot of surface for unclear gain unless
   coding actually stalls on flat codes.
