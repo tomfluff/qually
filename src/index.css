@@ -15,6 +15,7 @@
 @import "./styles/palette.css";     /* command palette (0) */
 @import "./styles/search.css";      /* transcript search + <mark> */
 @import "./styles/transcript.css";  /* rows, lanes, minimap, close-call badge */
+@import "./styles/events.css";      /* session event rows + the sidebar index */
 @import "./styles/browse.css";      /* browse view */
 @import "./styles/settings.css";
 @import "./styles/zen.css";

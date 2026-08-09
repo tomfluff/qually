@@ -11,6 +11,7 @@ import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, spanLens, type Flag } from "../ai/flag";
 import type { GroundRec } from "../ai/ground";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
+import { isMarkerRows, markerIdent, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll } from "../scrollMemory";
 import { announce } from "../announce";
@@ -57,6 +58,14 @@ export interface Ui {
   speakerFocus: Record<string, string>;
   // which Assist-tab panel is showing — chosen from the tab's own menu
   assistPanel: "observations" | "merge" | "suggest";
+  // the sidebar's session-events list: how tall (px, dragged) and how ordered.
+  // "type" groups by event/code (what kinds of things happened); "time" is one flat
+  // run down the session (what happened next) — the two ways anyone reads a log.
+  eventListHeight: number;
+  eventSort: "type" | "time";
+  // chosen colours per event type (right-click the type). Unset = the stable hash
+  // colour from markers.ts, so this stays empty until someone actually picks one.
+  markerColors: Record<string, string>;
   // grounding emphasis in Browse excerpts — independent, combinable (D6)
   groundBold: boolean; groundWash: boolean; groundUnderline: boolean;
   // how the OTHER speakers' rows step back — independent, combinable effects
@@ -75,6 +84,9 @@ const UNDO_CAP = 80; // one cap for BOTH push sites (pushUndo and editLine)
 // minimap width bounds — used by the Resizer clamp AND the rehydrate migration
 export const clampMinimapWidth = (w: number) =>
   Number.isFinite(w) ? Math.max(64, Math.min(256, w)) : 66; // NaN slips through ?? — catch it here
+// events list height bounds — the drag handle and the rehydrate default share them
+export const clampEventHeight = (h: number) =>
+  Number.isFinite(h) ? Math.max(72, Math.min(720, h)) : 200;
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
   current: { line: number; occ: number } | null; // the emphasized occurrence
@@ -131,6 +143,9 @@ interface State {
   aiFlags: Record<string, LineFlags>; // "pid:lineId" -> flags, valid while the hash matches
   aiGrounds: Record<number, GroundRec>; // sid -> grounding quotes, valid while the hash matches
   aiLog: AiCall[];
+  // session event log (see markers.ts): imported per transcript from the tab menu.
+  // Positions are derived from the time, never stored — so they follow the video offset.
+  markers: Marker[];
   // transient (not persisted)
   selection: Selection;
   savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
@@ -138,6 +153,7 @@ interface State {
   redoStack: string[];
   selRun: boolean; // top undo entry already captures the state before this run of selection-only changes
   nextSid: number;
+  nextMid: number;
   jump: { pid: string; line: number } | null;
   paletteOpen: boolean;
   formatOpen: boolean;
@@ -189,6 +205,12 @@ interface State {
   exportAiLog: () => string;
   exportCodebook: () => string;
   exportTranscript: (pid: string) => string;
+  // events: imported against ONE transcript (the tab you right-clicked), never guessed
+  importMarkers: (pid: string, rows: Record<string, string>[]) => { added: number; skipped: number };
+  editMarker: (mid: number, label: string) => void;
+  setMarkerColor: (key: string, color: string) => void;
+  deleteMarker: (mid: number) => void;
+  exportMarkers: () => string;
   exportNotices: () => string;
   exportProject: () => string;
   openProject: (p: Project) => void;
@@ -247,6 +269,7 @@ function idsBetween(gs: Group[], i: number, j: number): number[] {
 function snapshot(s: State): string {
   return JSON.stringify({
     segments: s.segments, codebook: s.codebook, hotbar: s.hotbar, active: s.active,
+    markers: s.markers,
     sel: { ...s.selection, lines: [...s.selection.lines] },
   });
 }
@@ -300,6 +323,9 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
 
   set({
     segments: o.segments, codebook: o.codebook, hotbar: o.hotbar,
+    // a snapshot from before events existed carries none — keep what's on screen
+    // rather than wiping the transcript's markers on an old undo entry
+    markers: o.markers ?? cur.markers,
     hotbarCache: hotbarCodes(next), selection: sel, active, savedSelections: saved,
     // One cache must own the scroll after a tab change, or the tab's remembered anchor
     // (restored in a rAF) races the selection-follow (synchronous) and wins -- landing you
@@ -323,10 +349,10 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", markerColors: {}, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [],
-      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, jump: null, paletteOpen: false, formatOpen: false,
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [],
+      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
 
@@ -338,14 +364,14 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [],
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [],
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
-          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {} },
+          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {} },
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
-          nextSid: 1,
+          nextSid: 1, nextMid: 1,
         });
         forgetScroll();
       },
@@ -394,6 +420,11 @@ export const useStore = create<State>()(
               } else {
                 mark(); importTranscript(get, set, pid, rows);
               }
+            } else if (isMarkerRows(rows)) {
+              // Events belong to ONE transcript and this entry point can't know which:
+              // send the user to the door that does, rather than calling their file
+              // unrecognized when we recognized it perfectly well.
+              skipped.push(`${f.name} is a session events file — load it from the transcript tab's right-click menu (Load events…), so it attaches to the right participant`);
             } else {
               // an unrecognized file must say so, not vanish without a trace
               skipped.push(rows.length
@@ -664,6 +695,7 @@ export const useStore = create<State>()(
         set({
           transcripts,
           segments: s.segments.map((x) => x.pid === from ? { ...x, pid: to } : x),
+          markers: s.markers.map((x) => x.pid === from ? { ...x, pid: to } : x),
           extSegRows: s.extSegRows.map((r) => r.pid === from
             ? { ...r, pid: to, segment_ref: r.segment_ref.startsWith(`${from}:`) ? to + r.segment_ref.slice(from.length) : r.segment_ref }
             : r),
@@ -793,6 +825,52 @@ export const useStore = create<State>()(
         return toCSV(rows, ["line_id", "timestamp", "speaker", "text", "original"]);
       },
 
+      // Events for ONE transcript, from that tab's own "Load events…". Additive and
+      // idempotent: a row already held (same time, event, code, text) is skipped, so
+      // re-dropping the same file is a no-op while a second file merges in. Rows with
+      // no readable time are counted as skipped, not silently lost.
+      importMarkers: (pid, rows) => {
+        const s = get();
+        const parsed = parseMarkers(rows, pid, s.nextMid);
+        const seen = new Set(s.markers.map(markerIdent));
+        const fresh = parsed.filter((m) => !seen.has(markerIdent(m)));
+        if (fresh.length) {
+          get().pushUndo(); // an import is an edit: undoable, and it invalidates redo
+          // re-number from nextMid: the parse numbered every row, dupes included
+          const added = fresh.map((m, i) => ({ ...m, mid: s.nextMid + i }));
+          set({ markers: [...get().markers, ...added], nextMid: s.nextMid + added.length });
+        }
+        return { added: fresh.length, skipped: rows.length - fresh.length };
+      },
+      editMarker: (mid, label) => {
+        const cur = get().markers.find((m) => m.mid === mid);
+        if (!cur || cur.label === label) return; // no change, no undo entry
+        get().pushUndo();
+        set({ markers: get().markers.map((m) => m.mid === mid ? { ...m, label } : m) });
+      },
+      // Recolour one event type. Like setColor for a code: no undo entry (it's a
+      // display choice, not coding), but redo must go — a stale redo snapshot
+      // would otherwise walk back over it.
+      setMarkerColor: (key, color) =>
+        set({ ui: { ...get().ui, markerColors: { ...get().ui.markerColors, [key]: color } }, redoStack: [] }),
+
+      deleteMarker: (mid) => {
+        if (!get().markers.some((m) => m.mid === mid)) return;
+        get().pushUndo();
+        set({ markers: get().markers.filter((m) => m.mid !== mid) });
+        announce("Event deleted");
+      },
+      // Round-trip: every column the source file carried, edits applied. Ordered by
+      // transcript then time, so a multi-session export reads like the sessions ran.
+      exportMarkers: () => {
+        const s = get();
+        const order = [...s.tabs, ...Object.keys(s.transcripts).filter((p) => !s.tabs.includes(p))];
+        const rank = (pid: string) => { const i = order.indexOf(pid); return i < 0 ? order.length : i; };
+        const sorted = [...s.markers].sort((a, b) => rank(a.pid) - rank(b.pid) || a.t - b.t);
+        const { rows, fields } = markerRows(sorted);
+        return toCSV(rows, fields);
+      },
+
       exportNotices: () => {
         const s = get();
         const rows: Record<string, string>[] = [];
@@ -823,6 +901,8 @@ export const useStore = create<State>()(
           extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
           hotbar: s.hotbar, video: s.video,
           ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog,
+          markers: s.markers, // session events + field notes: study data, not a preference
+          markerColors: s.ui.markerColors,
           // the speaker map rides along even though it lives in `ui`: who the
           // interviewer is belongs to the study, not to my font size (see project.ts)
           speakers: { colors: s.ui.speakerColors, weight: s.ui.speakerWeight },
@@ -849,15 +929,18 @@ export const useStore = create<State>()(
         set({
           // speakerFocus doesn't travel between studies — a stale name matching a
           // speaker in the loaded project would silently dim everyone else
-          ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {} },
+          ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {},
+            markerColors: p.markerColors ?? {} },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: [], active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
+          markers: p.markers ?? [],
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
           nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
+          nextMid: Math.max(0, ...(p.markers ?? []).map((x) => x.mid)) + 1,
         });
         set({ hotbarCache: hotbarCodes(get()) });
         forgetScroll(); // every pid in the new project is a different transcript
@@ -1073,16 +1156,22 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
+        markers: s.markers,
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
         s.nextSid = Math.max(0, ...s.segments.map((x) => x.sid)) + 1;
+        s.markers ??= [];
+        s.nextMid = Math.max(0, ...s.markers.map((x) => x.mid)) + 1;
         s.hotbarCache = hotbarCodes(s as State);
         // fields added after a persisted state was written (persist merges shallowly)
         s.ai.lenses ??= ["transcription"];
         s.pinnedTabs ??= [];
         s.aiGrounds ??= {};
         s.ui.assistPanel ??= "observations";
+        s.ui.eventSort ??= "type";
+        s.ui.markerColors ??= {};
+        s.ui.eventListHeight = clampEventHeight(s.ui.eventListHeight ?? 200);
         s.ui.groundBold ??= true;
         s.ui.groundWash ??= true;
         s.ui.groundUnderline ??= false;

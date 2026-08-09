@@ -49,13 +49,16 @@
    peripheral vision while reading. Text stays --fg on a light wash, so it is legible
    whatever the speaker colour is (a fully saturated chip here would have to solve
    contrast per hue). */
-.lineRow .ts { font-size:0.8em; color:var(--fg); flex-shrink:0; cursor:pointer;
+/* The event rows (styles/events.css) carry the SAME chip — one rule, so the two
+   clocks can't drift apart visually. They tint it by pointing --spk-c at the event
+   colour, exactly as a line row points it at the speaker's. */
+.lineRow .ts, .markerRow .ts { font-size:0.8em; color:var(--fg); flex-shrink:0; cursor:pointer;
   background:color-mix(in srgb, var(--spk-c, var(--muted)) 20%, var(--bg));
   border:1px solid color-mix(in srgb, var(--spk-c, var(--muted)) 45%, var(--bg));
   border-radius:999px; padding:0 9px; line-height:1.4; }
 /* hover deepens the speaker's OWN tint rather than jumping to the accent — the chip
    shouldn't change identity just because the pointer is over it */
-.lineRow .ts:hover { background:color-mix(in srgb, var(--spk-c, var(--muted)) 42%, var(--bg));
+.lineRow .ts:hover, .markerRow .ts:hover { background:color-mix(in srgb, var(--spk-c, var(--muted)) 42%, var(--bg));
   border-color:var(--spk-c, var(--muted)); }
 
 /* Speaker: a filled chip in the speaker's colour, with the NAME inside it. The label

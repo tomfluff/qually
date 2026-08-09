@@ -112,6 +112,24 @@ export function DataFormatButton() {
               </section>
 
               <section>
+                <h3>Session events (optional)</h3>
+                <p>A separate CSV of markers and field notes recorded while the session ran.
+                  Load it from the <b>transcript tab's right-click menu → Load events…</b>, so it
+                  attaches to the participant you picked rather than to a guess from the filename.</p>
+                <p className="fmt-note">Only three things are needed: an <code>event</code> column,
+                  a time (<code>video_time_s</code>, <code>rec_offset_s</code>, or
+                  <code> video_time_hms</code>), and whatever text the row carries in
+                  <code> label</code>. A <code>code</code> column groups and colours the events.
+                  Every other column you send is kept and written back out on export.</p>
+                <p className="fmt-note">Times are read on the <b>video</b> clock, so events follow
+                  the offset you set in the video dock. Each one appears as its own row in the
+                  transcript, in the sidebar's <b>Events</b> list (drag its top edge to resize;
+                  switch between by-type and by-time), and as a coloured rule across the minimap.
+                  The text is editable (double-click), any event can be deleted, and right-clicking
+                  an event's type recolours every event of that type.</p>
+              </section>
+
+              <section>
                 <h3>Working with your data</h3>
                 <ul>
                   <li><b>Autosave:</b> everything (transcripts, codes, segments) is saved in this browser automatically — no accounts, no server.</li>

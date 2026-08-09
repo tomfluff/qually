@@ -6,6 +6,7 @@ import { CodeMenu } from "./CodeMenu";
 import { CodeCombobox } from "./CodeCombobox";
 import { AiCheckModal } from "./AiCheckModal";
 import { SuggestModal } from "./SuggestModal";
+import { EventList } from "./EventList";
 import { openColorPicker } from "../colorPicker";
 import { useToggleMenu } from "../usePopover";
 import { Icon } from "./Icon";
@@ -114,6 +115,9 @@ export function CodeSidebar() {
         );
       })}
       </div>
+      {/* below the codes: this transcript's session events, if it has any (see
+          EventList — it renders nothing at all when there are none) */}
+      <EventList pid={active} />
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
       {aiOpen && <AiCheckModal pid={active} onClose={() => setAiOpen(false)} />}
       {suggestOpen && <SuggestModal pid={active} onClose={() => setSuggestOpen(false)} />}

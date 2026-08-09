@@ -39,6 +39,7 @@ export function ExportMenu() {
   const aiCalls = useStore((s) => s.aiLog.length);
   const noticeCount = useStore((s) => Object.values(s.aiFlags)
     .reduce((n, f) => n + f.spans.filter((x) => (x.lens ?? "transcription") !== "transcription").length, 0));
+  const eventCount = useStore((s) => s.markers.length);
 
   useEffect(() => {
     if (!open) return;
@@ -90,6 +91,7 @@ codebook.csv          codes: color, definition, status
 transcripts/*.csv     one per transcript, with your corrections applied
                       ("original" holds the pre-correction text, where edited)
 transcript-edits.csv  every transcription correction (original vs corrected)
+events.csv            session events and field notes, as loaded (with your edits)
 ai-observations.csv   instances the AI marked for review (not codes)
 ai-provenance.csv     every AI request made: model, lines sent, cost
 
@@ -111,6 +113,7 @@ it round-trips everything, including corrections and AI marks.
       seen.add(f.name);
     }
     if (editCount) files.push({ name: "transcript-edits.csv", text: st.exportEdits() });
+    if (eventCount) files.push({ name: "events.csv", text: st.exportMarkers() });
     if (noticeCount) files.push({ name: "ai-observations.csv", text: st.exportNotices() });
     if (aiCalls) files.push({ name: "ai-provenance.csv", text: st.exportAiLog() });
     save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
@@ -142,6 +145,8 @@ it round-trips everything, including corrections and AI marks.
           {item("Codebook (.csv)", "Codes with colors, definitions, status.", () => { saveText(s().exportCodebook(), "codebook.csv"); setOpen(false); })}
           {editCount > 0 && item(`Transcript edits (.csv) · ${editCount}`, "Every correction: original vs corrected.",
             () => { saveText(s().exportEdits(), "transcript-edits.csv"); setOpen(false); })}
+          {eventCount > 0 && item(`Session events (.csv) · ${eventCount}`, "Markers and field notes, with your edits — the columns you loaded.",
+            () => { saveText(s().exportMarkers(), "events.csv"); setOpen(false); })}
           {noticeCount > 0 && item(`AI observations (.csv) · ${noticeCount}`, "Instances the AI marked for review.",
             () => { saveText(s().exportNotices(), "ai-observations.csv"); setOpen(false); })}
           {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost — your methods appendix.",

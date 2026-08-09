@@ -4,6 +4,9 @@ import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "reac
 import { useStore } from "../state/store";
 import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
+import { parseCSV } from "../contract/csv";
+import { isMarkerRows } from "../markers";
+import { announce } from "../announce";
 
 export function Tabs() {
   const tabs = useStore((s) => s.tabs);
@@ -73,19 +76,50 @@ export function Tabs() {
   );
 }
 
-// Right-click menu for a transcript tab: pin to the front of the list, or
-// rename the file (renameTranscript remaps every pid-keyed slice).
+// Right-click menu for a transcript tab: pin to the front of the list, rename the
+// file (renameTranscript remaps every pid-keyed slice), or load this session's
+// event log.
+//
+// Events load from HERE, per tab, rather than through the global Import: which
+// participant a recorder's events belong to is a guess from a filename or a
+// `session` column, and a wrong guess writes another participant's notes into this
+// transcript. The tab you right-clicked is not a guess.
 function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; onClose: () => void }) {
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const pinned = useStore((s) => s.pinnedTabs.includes(pid));
+  const evCount = useStore((s) => s.markers.filter((m) => m.pid === pid).length);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(pid);
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const evRef = useRef<HTMLInputElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose);
   const commit = () => {
     const e = useStore.getState().renameTranscript(pid, name);
     if (e) setErr(e); else onClose();
+  };
+
+  const loadEvents = async (files: FileList | null) => {
+    const f = files?.[0];
+    if (!f) return;
+    setErr(null); setNote(null);
+    try {
+      const rows = parseCSV(await f.text());
+      if (!isMarkerRows(rows)) {
+        setErr("Not an events CSV — it needs an “event” column and a time (video_time_s, rec_offset_s, or video_time_hms).");
+        return;
+      }
+      const { added, skipped } = useStore.getState().importMarkers(pid, rows);
+      // "skipped" is honest about both causes: rows already held, and rows with no
+      // readable time. Silence there would read as "all 39 imported" when it wasn't.
+      const msg = `${added} event${added === 1 ? "" : "s"} loaded onto ${pid}`
+        + (skipped ? `; ${skipped} skipped (already loaded, or no usable time)` : "");
+      announce(msg);
+      if (added) onClose(); else setNote(msg);
+    } catch (e) {
+      setErr(`Couldn't read that file: ${(e as Error).message}`);
+    }
   };
   return (
     <div className="ctxmenu" ref={ref} role="menu" aria-label={`Tab ${pid}`}
@@ -95,6 +129,16 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
         onClick={() => { useStore.getState().togglePinTab(pid); onClose(); }}>
         <Icon name="pin" size={fs + 2} /> {pinned ? "Unpin" : "Pin to front"}
       </button>
+      <button role="menuitem" onClick={() => evRef.current?.click()}>
+        <Icon name="upload" size={fs + 2} /> Load events…
+        {evCount > 0 && <span className="ctxcount">{evCount}</span>}
+      </button>
+      <input ref={evRef} type="file" accept=".csv,text/csv" hidden
+        aria-hidden="true" tabIndex={-1}
+        onChange={(e) => { void loadEvents(e.target.files); e.target.value = ""; }} />
+      {note && <div className="ctxnote">{note}</div>}
+      {/* the rename form shows its own errors inline; this is the events one */}
+      {err && !renaming && <div className="ctxerr">{err}</div>}
       {!renaming ? (
         <button role="menuitem" onClick={() => setRenaming(true)}>
           <Icon name="pencil" size={fs + 2} /> Rename…

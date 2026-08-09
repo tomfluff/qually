@@ -1,0 +1,92 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
+/* Session events (markers.ts): rows inside the transcript, and the sidebar index.
+   The colour is per event/code (--mk-c, set inline) and is deliberately NOT one of
+   the codebook hues — an event is an observation from the session, not coding. */
+
+/* ── the row between the lines ─────────────────────────────────────────────── */
+/* Reads as an annotation ON the transcript rather than a line in it: full-width
+   rule, tinted band, no speaker chip, no lane strip. Cursor stays default — this
+   row is not selectable and clicking it must not look like it should be. */
+/* One line in the transcript's own rhythm: timecode chip, note, delete. The chip
+   sits on the SAME left edge as the line rows': they carry a transparent 4px
+   selection rail + 16px padding, this row a 4px colour bar + 16px padding — the
+   colour bar occupies the rail's slot, so the chips line up exactly. The lid
+   spacer matches theirs when line numbers are on. Padding is symmetric (the same
+   band above and below the text). The note sizes with the transcript (the row
+   inherits the list's font-size); user-select:text makes it real, copyable text —
+   App's Ctrl+C handler defers to any live selection. */
+.markerRow { display:flex; align-items:center; gap:8px;
+  margin:3px 0; padding:5px 10px 5px 16px; cursor:context-menu; user-select:text;
+  border-left:4px solid var(--mk-c);
+  border-top:1px solid color-mix(in srgb, var(--mk-c) 35%, transparent);
+  border-bottom:1px solid color-mix(in srgb, var(--mk-c) 35%, transparent);
+  background:color-mix(in srgb, var(--mk-c) 9%, var(--bg)); }
+/* the lid spacer keeps the chip column aligned when line numbers are shown */
+.markerRow .lid { width:var(--lid-w, 4ch); flex-shrink:0; }
+/* the timecode chip itself is the transcript's (styles/transcript.css), tinted via
+   --spk-c — only the line row's top margin, replaced by the row's centring, is undone */
+.markerRow .ts { margin-top:0; }
+/* the type, standing in for a missing note — the same voice as the colour bar */
+.markerRow .mkkey { font-weight:700; font-size:.85em; letter-spacing:.02em;
+  text-transform:uppercase; color:var(--mk-c); }
+.markerRow .mklabel { flex:1; min-width:0; line-height:1.4; color:var(--fg); }
+.markerRow .mkempty { color:var(--muted); }
+.markerRow .mkedit { flex:1; min-width:0; font:inherit; line-height:1.4;
+  resize:none; overflow:hidden; padding:3px 6px; color:var(--fg);
+  background:var(--bg); border:1px solid var(--mk-c); border-radius:5px; }
+/* delete stays visible on touch/keyboard, quiet until the row is under the pointer */
+.markerRow .mkdel { flex-shrink:0; margin-left:auto; display:flex; align-items:center;
+  justify-content:center; width:1.7em; height:1.7em; border:none; background:none;
+  color:var(--muted); border-radius:5px; cursor:pointer; opacity:.35; }
+.markerRow:hover .mkdel, .markerRow:focus-within .mkdel { opacity:1; }
+.markerRow .mkdel:hover { background:#e0554f; color:#fff; }
+
+/* ── the sidebar index ─────────────────────────────────────────────────────── */
+/* Sits under the code list at a height you drag (ui.eventListHeight, clamped in the
+   store). Collapsed, it shrinks to its own header and gives every pixel back. */
+.eventList { flex:none; min-height:0; display:flex; flex-direction:column;
+  position:relative; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
+/* the drag handle IS the top border's hit area — 9px tall, straddling the rule */
+.eventList .evgrip { position:absolute; left:0; right:0; top:-5px; height:9px;
+  cursor:row-resize; z-index:2; }
+.eventList .evgrip:hover, .eventList .evgrip:active { background:var(--accent); opacity:.5; }
+.eventList .evgrip:focus-visible { outline:2px solid var(--accent); outline-offset:0; }
+.eventList .evhead { display:flex; align-items:center; gap:4px; }
+.eventList .evheadmain, .eventList .evgrouphead, .eventList .evitem {
+  display:flex; align-items:center; gap:6px; width:100%; text-align:left;
+  background:none; border:none; font:inherit; color:var(--fg); cursor:pointer;
+  padding:3px 4px; border-radius:6px; }
+.eventList .evheadmain { font-weight:600; }
+.eventList .evheadmain:hover, .eventList .evgrouphead:hover, .eventList .evitem:hover { background:var(--sel); }
+.eventList .evheadmain svg, .eventList .evgrouphead svg { color:var(--muted); flex-shrink:0; }
+/* the order switch: a quiet chip, because it says what you're looking at as much
+   as it offers to change it */
+.eventList .evsort { flex:none; background:none; border:1px solid var(--line);
+  border-radius:999px; color:var(--muted); font:inherit; font-size:.85em;
+  padding:1px 8px; cursor:pointer; white-space:nowrap; }
+.eventList .evsort:hover { color:var(--fg); border-color:var(--muted); }
+.eventList .evtitle { flex:1; min-width:0; }
+.eventList .cnt { margin-left:auto; color:var(--muted); font-size:.8em; flex-shrink:0; }
+.eventList .evgroups { flex:1; min-height:0; overflow-y:auto; padding-right:4px; }
+.eventList .evgrouphead { font-size:.95em; }
+.eventList .evdot { width:.7em; height:.7em; border-radius:.2em; flex-shrink:0; }
+.eventList .evname { flex:1 1 8ch; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* one line per note: the time leads (it's what you scan), the text is clipped and
+   the whole of it is one hover away (the shared Tooltip reads data-tip) */
+/* time and text sit on one BASELINE — the mono time runs smaller than the text, so
+   box-centring left it floating above the words; the dot keeps centring itself */
+.eventList .evitem { padding-left:22px; font-size:.9em; color:var(--muted);
+  align-items:baseline; }
+.eventList .evitem .evdot { align-self:center; }
+/* flat (time-ordered) rows carry the colour themselves — there's no group head
+   above them to say which kind of event this is */
+.eventList .evitem.flat { padding-left:6px; }
+.eventList .evitem:hover { color:var(--fg); }
+.eventList .evtime { flex-shrink:0; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size:.9em; }
+.eventList .evtext { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* the tab menu's "Load events…" count + result note */
+.ctxmenu .ctxcount { margin-left:auto; color:var(--muted); font-size:.85em; }
+.ctxmenu .ctxnote { color:var(--muted); font-size:.9em; padding:2px 4px; }

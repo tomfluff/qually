@@ -21,6 +21,7 @@
 // so a v1 file written before this existed still loads (openProject re-guesses).
 import type { Ai, AiCall, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
 import type { GroundRec } from "./ai/ground";
+import type { Marker } from "./markers";
 
 export const FORMAT = "qually-project";
 export const VERSION = 1;
@@ -41,6 +42,10 @@ export interface Project {
   aiFlags: Record<string, LineFlags>;
   aiGrounds?: Record<number, GroundRec>; // optional: absent in files written before F1
   aiLog: AiCall[];
+  markers?: Marker[]; // optional: absent in files written before session events existed
+  // event-type colours, for the same reason the speaker map travels: which colour
+  // "BREAK" is, is a fact about the study, not about my screen
+  markerColors?: Record<string, string>;
   speakers?: { // optional: absent in files written before this existed
     colors: Record<string, string>;
     weight: Record<string, SpeakerWeight>;
@@ -49,7 +54,7 @@ export interface Project {
 
 export interface ProjectStats {
   transcripts: number; lines: number; segments: number; codes: number;
-  edits: number; notices: number; savedAt: string;
+  edits: number; notices: number; events: number; savedAt: string;
 }
 
 export function statsOf(p: Project): ProjectStats {
@@ -61,7 +66,7 @@ export function statsOf(p: Project): ProjectStats {
   return {
     transcripts: Object.keys(p.transcripts).length,
     lines, segments: p.segments.length, codes: Object.keys(p.codebook).length,
-    edits, notices, savedAt: p.savedAt,
+    edits, notices, events: (p.markers ?? []).length, savedAt: p.savedAt,
   };
 }
 
@@ -95,6 +100,8 @@ export function parseProject(text: string): Project {
     aiFlags: p.aiFlags ?? {},
     aiGrounds: p.aiGrounds ?? {},
     aiLog: p.aiLog ?? [],
+    markers: p.markers ?? [],
+    markerColors: p.markerColors ?? {},
     speakers: p.speakers, // may be absent — openProject re-guesses the interviewer
   };
 }

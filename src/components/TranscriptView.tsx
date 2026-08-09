@@ -18,9 +18,19 @@ import { excerptOf } from "../contract/excerpt";
 import { savedScroll, positioned } from "../scrollMemory";
 import { announce } from "../announce";
 import { tinyDiff } from "../diff";
+import { useMarkers } from "../useMarkers";
+import { fmtLike, markerColor, markerKey, type Marker } from "../markers";
+import { openColorPicker } from "../colorPicker";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
+
+// What the virtualized list actually holds. Session events get their OWN rows
+// rather than riding inside a line: a note is not an utterance, and the two must
+// never be mistaken for each other while reading. Everything downstream (scroll
+// restore, jumps, keep-in-view, the minimap) indexes THIS array — one axis, so a
+// marker between two lines can't push the two views out of step.
+export type Item = { kind: "g"; g: Group } | { kind: "m"; m: Marker };
 
 // text with search matches wrapped in <mark>; the occ == curOcc match is emphasized
 function renderText(text: string, query: string, curOcc: number): ReactNode {
@@ -175,8 +185,8 @@ export function TranscriptView() {
   const offscreenDir = (v: VListHandle): "up" | "down" | null => {
     const b = selBounds.current;
     if (!b || !v.viewportSize) return null;
-    const gi = groupsRef.current.findIndex((g) => g.endId >= b.first);
-    const gj = groupsRef.current.findIndex((g) => g.endId >= b.last);
+    const gi = itemIdxRef.current.get(b.first) ?? -1;
+    const gj = itemIdxRef.current.get(b.last) ?? gi;
     if (gi < 0) return null;
     const top = v.findItemIndex(v.scrollOffset), bot = v.findItemIndex(v.scrollOffset + v.viewportSize);
     if (gj + 1 < top) return "up";
@@ -184,7 +194,9 @@ export function TranscriptView() {
     return null;
   };
   const [selOff, setSelOff] = useState<"up" | "down" | null>(null);
-  const groupsRef = useRef<Group[]>([]);
+  // line id -> its row's index in `items`. Read from handlers that run outside
+  // render (scroll, keep-in-view), so it lives in a ref as well as a memo.
+  const itemIdxRef = useRef<Map<number, number>>(new Map());
   const selBounds = useRef<{ first: number; last: number } | null>(null);
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
   const [aiPop, setAiPop] = useState<{ line: number; span: Flag; x: number; y: number } | null>(null);
@@ -208,7 +220,33 @@ export function TranscriptView() {
   const focusActive = useMemo(
     () => focusName && groups.some((g) => g.speaker.trim() === focusName) ? focusName : null,
     [groups, focusName]);
-  groupsRef.current = groups; // syncMinimap runs outside render and needs the current groups
+
+  // Session events, interleaved BY TIME (see markers.ts / useMarkers): each one
+  // renders immediately before the first line that starts after it, so reading down
+  // the transcript the clock only goes forwards. Several at once stack in time
+  // order; markers past the last line go at the end. A marker landing inside a
+  // merged group goes before the whole group — a group is one row and can't be split.
+  const { placed, offset: mkOffset } = useMarkers(active);
+  // A real line's timecode, so an event's time is printed in the transcript's own
+  // shape ("01:20", not "0:01:20") — the two clocks must look like one clock.
+  const tsSample = useMemo(
+    () => transcript?.lines.find((l) => l.ts.trim())?.ts, [transcript]);
+  const items = useMemo<Item[]>(() => {
+    if (!placed.before.size && !placed.tail.length) return groups.map((g) => ({ kind: "g", g }));
+    const out: Item[] = [];
+    for (const g of groups) {
+      for (const id of g.ids) for (const m of placed.before.get(id) ?? []) out.push({ kind: "m", m });
+      out.push({ kind: "g", g });
+    }
+    for (const m of placed.tail) out.push({ kind: "m", m });
+    return out;
+  }, [groups, placed]);
+  const itemIdx = useMemo(() => {
+    const m = new Map<number, number>();
+    items.forEach((it, i) => { if (it.kind === "g") for (const id of it.g.ids) m.set(id, i); });
+    return m;
+  }, [items]);
+  itemIdxRef.current = itemIdx; // syncMinimap and keep-in-view run outside render
 
   // min/max of the selection, walked ONCE when it changes rather than on every scroll
   useEffect(() => {
@@ -265,8 +303,8 @@ export function TranscriptView() {
     const st = useStore.getState();
     if (st.selection.pid !== active || !st.selection.lines.size) return;
     const first = Math.min(...st.selection.lines);
-    const gi = groups.findIndex((g) => g.endId >= first);
-    if (gi < 0) return;
+    const gi = itemIdx.get(first);
+    if (gi === undefined) return;
     stopAnims();
     vref.current?.scrollToIndex(gi + 1, { align: "center" }); // +1 for the top vpad
   };
@@ -380,7 +418,7 @@ export function TranscriptView() {
   const toBottom = () => {
     const dock = document.querySelector(".hotbar")?.getBoundingClientRect().height ?? 64;
     stopAnims();
-    vref.current?.scrollToIndex(groups.length, { align: "end", offset: dock + 8 });
+    vref.current?.scrollToIndex(items.length, { align: "end", offset: dock + 8 });
   };
 
   // Open the selected line's AI-mark popover; called again (M — from the list or
@@ -440,16 +478,21 @@ export function TranscriptView() {
     const s = useStore.getState();
     if (s.selection.pid === active && s.selection.lines.size) return; // App moves it from here
     const v = vref.current;
-    if (!v || !groups.length) return;
+    if (!v || !items.length) return;
     e.preventDefault();
     // App's window handler also listens for arrows. It runs AFTER this one (window is
     // above the list in the bubble path) and would see the selection we just made and
     // immediately advance it — so the first press would silently skip a line. This
     // keypress seeds; the next one moves.
     e.stopPropagation();
-    const gi = Math.min(groups.length - 1, Math.max(0, v.findItemIndex(v.scrollOffset) - 1)); // -1: the top vpad is item 0
+    // -1: the top vpad is item 0. The top row may be a marker, which has no line to
+    // select — walk down to the first real one (and back up if the list ends in markers).
+    const at = Math.min(items.length - 1, Math.max(0, v.findItemIndex(v.scrollOffset) - 1));
+    const seed = items.slice(at).find((it) => it.kind === "g")
+      ?? [...items.slice(0, at)].reverse().find((it) => it.kind === "g");
+    if (!seed || seed.kind !== "g") return;
     s.pushSelUndo(); // coalesces with a run of arrow presses
-    s.startSelection(groups[gi].startId);
+    s.startSelection(seed.g.startId);
   };
 
   // Browse -> jump: scroll the virtualized list to the unit containing the line.
@@ -458,11 +501,11 @@ export function TranscriptView() {
   // shoves the content down under an unchanged scrollTop.
   useEffect(() => {
     if (pad === null || !jump || jump.pid !== active || !transcript) return;
-    const idx = groups.findIndex((g) => jump.line >= g.startId && jump.line <= g.endId);
-    if (idx >= 0) { stopAnims(); vref.current?.scrollToIndex(idx + 1, { align: "center" }); } // +1 for the top vpad
+    const idx = itemIdx.get(jump.line);
+    if (idx !== undefined) { stopAnims(); vref.current?.scrollToIndex(idx + 1, { align: "center" }); } // +1 for the top vpad
     positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
     clearJump();
-  }, [jump, active, transcript, groups, clearJump, pad]);
+  }, [jump, active, transcript, itemIdx, clearJump, pad]);
 
   // Keep the moving end of the selection on screen. Without this, arrowing past the
   // viewport edge walks the selection off-screen and the keyboard user is coding
@@ -475,8 +518,8 @@ export function TranscriptView() {
     // want to own the scroll position. Following the selection head on top of either
     // would yank the list straight back off the target.
     if (jump || !positioned.has(active)) return;
-    const gi = groupsRef.current.findIndex((g) => headId >= g.startId && headId <= g.endId);
-    if (gi < 0) return;
+    const gi = itemIdxRef.current.get(headId);
+    if (gi === undefined) return;
     const idx = gi + 1; // +1 for the top vpad
     const first = v.findItemIndex(v.scrollOffset);
     const last = v.findItemIndex(v.scrollOffset + v.viewportSize);
@@ -672,18 +715,21 @@ export function TranscriptView() {
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line
-          ...groups.map((g) => (
+          ...items.map((it) => it.kind === "m" ? (
+            <MarkerRow key={`m${it.m.mid}`} marker={it.m} offset={mkOffset}
+              tsSample={tsSample} colors={ui.markerColors} showLid={showLineNumbers} />
+          ) : (
             <Row
-              key={g.startId}
-              group={g}
-              selected={g.ids.some((id) => selLines?.has(id))}
-              spkOff={focusActive && focusActive !== g.speaker.trim()
+              key={`g${it.g.startId}`}
+              group={it.g}
+              selected={it.g.ids.some((id) => selLines?.has(id))}
+              spkOff={focusActive && focusActive !== it.g.speaker.trim()
                 ? (ui.focusDim ? " spk-off-dim" : "") + (ui.focusCollapse ? " spk-off-collapse" : "")
                 : ""}
               cols={cols}
               laned={laned}
               codebook={codebook}
-              onRowDown={(e) => onRowDown(e, g.startId)}
+              onRowDown={(e) => onRowDown(e, it.g.startId)}
               onLaneClick={(seg, e) =>
                 // clicking the segment's own lane while its popover is open closes it
                 // (useDismiss ignores this lane, so the mousedown doesn't close-then-reopen)
@@ -694,11 +740,11 @@ export function TranscriptView() {
               closeCallSids={closeCallSids}
               warnCls={warnCls}
               lanePattern={lanePattern}
-              spkColor={speakerColor(ui, g.speaker)}
-              weight={weightOf(ui, g.speaker)}
+              spkColor={speakerColor(ui, it.g.speaker)}
+              weight={weightOf(ui, it.g.speaker)}
               showLid={showLineNumbers}
               speakerNames={speakerNames}
-              shortName={shorts[g.speaker.trim()] ?? g.speaker.trim()}
+              shortName={shorts[it.g.speaker.trim()] ?? it.g.speaker.trim()}
               searchQuery={search.query}
               current={search.current}
               editingId={editingId}
@@ -716,7 +762,7 @@ export function TranscriptView() {
         ]}
       </VList>
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: clampMinimapWidth(w) })} />
-      <Minimap ref={mmRef} groups={groups} laned={laned} cols={cols} codebook={codebook}
+      <Minimap ref={mmRef} items={items} laned={laned} cols={cols} codebook={codebook}
         closeCallSids={closeCallSids} flagsByLine={flagsByLine}
         detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims} />
         {selOff && (
@@ -731,6 +777,83 @@ export function TranscriptView() {
       {aiPop && <AiMarkPopover pid={active} line={aiPop.line} span={aiPop.span}
         x={aiPop.x} y={aiPop.y} onClose={() => setAiPop(null)} onCycle={cycleMarkPopover} />}
     </>
+  );
+}
+
+// A session event, in its own row between the lines. It reads in the transcript's
+// own column order — timecode, then who/what it is, then the words — so the eye
+// keeps its two anchors while the row itself stays unmistakably not-an-utterance:
+// full width, its own colour, no speaker chip and no lane strip. The text sizes
+// with the transcript (it IS reading matter), the chrome around it does not.
+//
+// The text is editable in place (a field note is a first draft), and the row can be
+// deleted; both go through the undo stack.
+//
+// The timecode plays from the moment the note was made: the marker's time is on the
+// video clock, so it goes back through the dock's offset to reach a line time — the
+// same conversion anchorMarkers uses, in the same direction.
+function MarkerRow({ marker, offset, tsSample, colors, showLid }: {
+  marker: Marker; offset: number;
+  tsSample: string | undefined;          // a real line's timecode, to copy its shape
+  colors: Record<string, string>;        // chosen event-type colours (ui.markerColors)
+  showLid: boolean;                      // line numbers on: pad so the chips still line up
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(marker.label);
+  const key = markerKey(marker);
+  const color = markerColor(key, colors);
+  const lineTs = fmtLike(marker.t - offset, tsSample);
+  const save = () => {
+    useStore.getState().editMarker(marker.mid, value.trim());
+    setEditing(false);
+  };
+  return (
+    // --spk-c is what the transcript's timecode chip tints itself from; pointing it
+    // at the event colour gives this row the SAME chip, in its own hue, for free.
+    // One line, in the transcript's own column rhythm — timecode, then words — with
+    // the chip on the SAME left edge as the line rows' (the 4px colour bar plus
+    // padding add up to the line rows' indent, and the lid spacer matches theirs
+    // when line numbers are on). The type only shows when there's no note to show:
+    // colour carries the type the rest of the time. The row is real selectable text
+    // (user-select in the CSS), so Ctrl+C copies the note like anything else.
+    //
+    // Right-click anywhere on the row recolours the TYPE (every event of it) — the
+    // gesture the codebook swatches use; the textarea keeps its native menu.
+    <div className="markerRow" style={{ "--mk-c": color, "--spk-c": color } as CSSProperties}
+      onContextMenu={(e) => {
+        if ((e.target as HTMLElement).closest(".mkedit")) return;
+        e.preventDefault(); e.stopPropagation();
+        openColorPicker(color, (v) => useStore.getState().setMarkerColor(key, v),
+          { x: e.clientX, y: e.clientY });
+      }}>
+      {showLid && <span className="lid" aria-hidden="true" />}
+      <button className="ts" tabIndex={-1} title="play from here"
+        onClick={() => seekVideo(lineTs)}>{lineTs}</button>
+      {editing ? (
+        <textarea className="mkedit" rows={1} autoFocus value={value}
+          aria-label={`Edit event note at ${lineTs}`}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); }
+            // Esc restores the stored text: an event note is a record of what was
+            // observed, so an abandoned edit must leave no trace
+            else if (e.key === "Escape") { e.stopPropagation(); setValue(marker.label); setEditing(false); }
+          }}
+          onBlur={save} />
+      ) : (
+        <span className="mklabel" onDoubleClick={() => { setValue(marker.label); setEditing(true); }}
+          title="Double-click to edit">
+          {/* no note yet: the TYPE stands in as the text, not a "(no text)" shrug —
+              it's what the hotkey recorded, and the only honest thing to show.
+              Bracketed italics say "stand-in", not the note's own words. */}
+          {marker.label || <em className="mkkey">({key})</em>}
+        </span>
+      )}
+      <button className="mkdel" aria-label={`Delete event at ${lineTs}${marker.label ? `: ${marker.label}` : `: ${key}`}`}
+        title="Delete this event" onClick={() => useStore.getState().deleteMarker(marker.mid)}>
+        <Icon name="trash" size={14} />
+      </button>
+    </div>
   );
 }
 

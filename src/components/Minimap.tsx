@@ -4,8 +4,9 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, type MouseEvent as 
 import type { VListHandle } from "virtua";
 import { laneAssign, speakerColor, weightOf } from "../state/store";
 import type { Ui } from "../state/store";
-import type { Group } from "../merge";
 import { lensOf, spanLens, type Flag } from "../ai/flag";
+import { markerColor, markerKey } from "../markers";
+import type { Item } from "./TranscriptView";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 export interface MinimapHandle { setRange: (start: number, end: number) => void; }
@@ -16,7 +17,9 @@ const WARN = "#e0a020";
 // scroll so the big list never re-renders. Everything maps by group index — the
 // same axis virtua scrolls — so nav is exact regardless of row-height variation.
 export const Minimap = forwardRef<MinimapHandle, {
-  groups: Group[];
+  // the SAME rows the list holds (lines and session events), so an index here and
+  // an index there mean the same place
+  items: Item[];
   laned: LanedSeg[];
   cols: number;
   codebook: Record<string, { color: string }>;
@@ -26,14 +29,14 @@ export const Minimap = forwardRef<MinimapHandle, {
   ui: Ui; // speaker colours + weights; the minimap was the LAST place still hardcoding "R"
   vref: RefObject<VListHandle | null>;
   onNav?: () => void; // stop the list's scroll animations before a scrub jump, or they overwrite it
-}>(function Minimap({ groups, laned, cols, codebook, closeCallSids, flagsByLine, detail, ui, vref, onNav }, ref) {
+}>(function Minimap({ items, laned, cols, codebook, closeCallSids, flagsByLine, detail, ui, vref, onNav }, ref) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const drawRef = useRef<(() => void) | null>(null); // latest draw closure, for the mount-only observer
   const syncRef = useRef<(() => void) | null>(null); // ditto — syncFromList closes over N
   const lineToGi = useRef(new Map<number, number>());
-  const N = groups.length;
+  const N = items.length;
 
   // virtua child indices include the top vpad (index 0), so groups start at 1
   const applyBox = (start: number, end: number) => {
@@ -54,9 +57,9 @@ export const Minimap = forwardRef<MinimapHandle, {
 
   useEffect(() => {
     const m = new Map<number, number>();
-    groups.forEach((g, i) => g.ids.forEach((id) => m.set(id, i)));
+    items.forEach((it, i) => { if (it.kind === "g") it.g.ids.forEach((id) => m.set(id, i)); });
     lineToGi.current = m;
-  }, [groups]);
+  }, [items]);
 
   // draw the lane-mirror density map (redraws on data / size / theme change)
   useEffect(() => {
@@ -77,11 +80,16 @@ export const Minimap = forwardRef<MinimapHandle, {
       // columns: [0..warnW] warnings gutter · text · lane columns (flush right).
       // simplified widens everything and enforces min sizes so marks stay obvious.
       const warnW = simple ? 6 : 4;
+      // session events: their own thin lane, before the speaker rail — a tick in the
+      // event's colour, exactly how every other kind of mark here claims a column.
+      // (It replaced a full-width rule, which shouted over everything else.)
+      const mkW = simple ? 5 : 3;
+      const mkX = warnW + 2;
       // speaker rail: WHO is talking, as its own channel. Deliberately a separate strip
       // rather than tinting the text bars — the text bars stay a pure "how much was
       // said" signal, and the two colour systems (speaker, code) never share a column.
       const railW = simple ? 6 : 4;
-      const railX = warnW + 2;
+      const railX = mkX + mkW + 2;
       const laneAreaW = Math.min(w * (simple ? 0.6 : 0.5), cols * (simple ? 10 : 7));
       const laneX = w - laneAreaW - 2;
       const colW = laneAreaW / Math.max(1, cols);
@@ -116,7 +124,9 @@ export const Minimap = forwardRef<MinimapHandle, {
           chars: 0, n: 0, by: new Map<string, number>(),
         }));
         for (let i = 0; i < N; i++) {
-          const g = groups[i];
+          const it = items[i];
+          if (it.kind !== "g") continue; // event rows draw their own full-width mark below
+          const g = it.g;
           const k = Math.min(nb - 1, Math.floor(((i / N) * h) / bh));
           const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
           const b = buckets[k];
@@ -148,7 +158,9 @@ export const Minimap = forwardRef<MinimapHandle, {
         // longer dims for the interviewer; the bar carries that now.)
         const CAP = 80;
         for (let i = 0; i < N; i++) {
-          const g = groups[i];
+          const it = items[i];
+          if (it.kind !== "g") continue; // ditto
+          const g = it.g;
           const w = weightOf(ui, g.speaker);
           const y = (i / N) * h, bh = Math.max(0.6, (h / N) * 0.7);
           ctx.globalAlpha = 0.95; // rail = pure speaker identity
@@ -168,8 +180,10 @@ export const Minimap = forwardRef<MinimapHandle, {
       // from several lenses splits its tick vertically into their colours.
       const noticeMinH = simple ? 5 : 2;
       for (let i = 0; i < N; i++) {
+        const it = items[i];
+        if (it.kind !== "g") continue;
         const colors: string[] = [];
-        for (const id of groups[i].ids) for (const f of flagsByLine.get(id) ?? []) {
+        for (const id of it.g.ids) for (const f of flagsByLine.get(id) ?? []) {
           const c = lensOf(spanLens(f))?.color ?? WARN;
           if (!colors.includes(c)) colors.push(c);
         }
@@ -196,13 +210,25 @@ export const Minimap = forwardRef<MinimapHandle, {
           ctx.fillRect(0, y0, warnW, Math.max(warnMinH, y1 - y0));
         }
       }
+
+      // session events, as ticks in their own lane (mkX) — sized like the AI-notice
+      // ticks so a single event stays findable at any transcript length
+      const mkMinH = simple ? 5 : 3;
+      for (let i = 0; i < N; i++) {
+        const it = items[i];
+        if (it.kind !== "m") continue;
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = markerColor(markerKey(it.m), ui.markerColors);
+        ctx.fillRect(mkX, (i / N) * h, mkW, Math.max(mkMinH, (h / N) * 0.85));
+      }
       ctx.globalAlpha = 1;
     };
     draw();
     syncFromList();
     drawRef.current = draw; syncRef.current = syncFromList; // the mount-only observer calls through these
-  }, [groups, laned, cols, codebook, closeCallSids, flagsByLine, detail, N,
+  }, [items, laned, cols, codebook, closeCallSids, flagsByLine, detail, N,
       ui.speakerColors, ui.speakerWeight, // recolour the rail when the speaker map changes
+      ui.markerColors, // and the event lane when a type is recoloured
       ui.dark]); // repaint on theme flip so the muted amount-bars pick up the new --muted
 
   // ONE observer for the component's lifetime: re-creating it on every data-dep

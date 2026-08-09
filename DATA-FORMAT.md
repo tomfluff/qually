@@ -29,6 +29,48 @@ line_id,timestamp,speaker,text,codes
 3,00:00:12,P,Then I lose track of where the axis labels are.,
 ```
 
+## Session events (optional)
+
+Markers and field notes captured *while the session ran* — hotkey presses, break
+flags, free-text observations — import as their own CSV, **per transcript**, from
+the tab's right-click menu → *Load events…*. It attaches to the tab you clicked,
+so a recorder's file is never guessed onto the wrong participant.
+
+The format is deliberately loose. Only three things are required:
+
+| Column | Meaning |
+|---|---|
+| `event` | What kind of row this is (`marker`, `recording_start`, anything else). **Required** — it's how an events CSV is recognised. |
+| a time | `video_time_s` (preferred), else `rec_offset_s`, else `video_time_hms`. **Required**; a row with no readable time is skipped. |
+| `label` | The note itself. Editable in the app. |
+| `code` | Groups and colours the events (`MAKE_PROGRESS`, `custom`, …). Optional — rows without one group under their `event`. |
+| `detail` | The recorder's own annotations (`slot=1;via=hotkey`). Shown on hover. |
+
+Every other column (`epoch_ms`, `session`, `local_time`, whatever your recorder
+writes) is kept verbatim and written back out by *Export session events*.
+
+Times are read on the **video** clock, so events follow the offset set in the
+video dock: correcting the offset re-places every event rather than stranding it.
+Each event sits immediately before the first line that starts after it, so the
+times still run downwards, and it prints its timecode in the transcript's own
+shape (`24:32` next to `24:16`, not `0:24:32`).
+
+An event shows up three ways — its own row in the transcript, an entry in the
+sidebar's *Events* list (click to jump; drag its top edge to resize, and switch
+between grouped-by-type and time order), and a coloured rule across the minimap.
+Notes are editable in place (double-click) and any event can be deleted; both are
+undoable. Right-click an event's type — in the transcript row or on the sidebar
+dot — to recolour every event of that type; the choice travels in the project file.
+
+Example:
+
+```csv
+event,code,label,rec_offset_s,video_time_s,video_time_hms,session,detail
+recording_start,,,0.000,0.000,00:00:00.000,P01,anchor_err_ms=16.7
+marker,MAKE_PROGRESS,Progress,1207.793,1206.767,00:20:06.767,P01,slot=1;via=hotkey
+marker,custom,"Clicks the chart to see what each colour means",1473.218,1472.195,00:24:32.195,P01,slot=custom;via=hotkey
+```
+
 ## Working with your data
 
 - **Autosave:** transcripts, codes, and segments are stored in the browser
@@ -41,6 +83,9 @@ line_id,timestamp,speaker,text,codes
   loaded pass through untouched on the next export.
 - **Multiple transcripts:** import several CSVs — each becomes a tab; the Browse
   tab reads codes across all of them.
+- **Session events:** ride in the project file, and export as `events.csv`
+  (alone or in the CSV bundle) with your edits applied. Re-importing that export
+  is a no-op — events already loaded are recognised and skipped.
 
 ## Convert any transcript with AI
 

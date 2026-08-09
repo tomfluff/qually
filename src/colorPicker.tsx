@@ -54,11 +54,13 @@ export function ColorPickerHost() {
         ))}
       </div>
       <label className="clrcustom">
-        {/* uncontrolled: onInput live-previews while the native picker is open,
-            onChange (commit) closes the popover */}
+        {/* uncontrolled, live: every change applies immediately. Deliberately NO
+            auto-close — React's onChange fires per input event (not on the native
+            dialog's OK), so closing there unmounted the input after the FIRST
+            value and every later pick landed on a dead element. The popover
+            closes the way it opened: click anywhere else (useDismiss). */}
         <input type="color" defaultValue={req.value}
-          onInput={(e) => req.onPick((e.target as HTMLInputElement).value)}
-          onChange={() => setReq(null)} />
+          onChange={(e) => req.onPick((e.target as HTMLInputElement).value)} />
         custom…
       </label>
     </div>
