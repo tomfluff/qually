@@ -8,11 +8,12 @@
 // happened, and how often) and BY TIME (what happened next). The choice and the
 // list's height persist; which groups you had folded does not — that belongs to the
 // transcript you were reading, not to the next study.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { clampEventHeight, useStore } from "../state/store";
 import { useMarkers } from "../useMarkers";
 import { fmtLike, markerColor, markerKey, type Marker } from "../markers";
 import { openColorPicker } from "../colorPicker";
+import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
 
 export function EventList({ pid }: { pid: string }) {
@@ -24,6 +25,7 @@ export function EventList({ pid }: { pid: string }) {
   const setUi = useStore((s) => s.setUi);
   const [open, setOpen] = useState(true);
   const [shut, setShut] = useState<string[]>([]); // groups explicitly collapsed
+  const [menu, setMenu] = useState<{ key: string; x: number; y: number } | null>(null);
 
   // by event/code, in first-appearance (i.e. time) order — the order the session ran
   const groups = useMemo(() => {
@@ -82,7 +84,10 @@ export function EventList({ pid }: { pid: string }) {
               return (
                 <div key={key} className="evgroup">
                   <button className="evgrouphead" aria-expanded={!closed}
-                    onClick={() => setShut((c) => closed ? c.filter((k) => k !== key) : [...c, key])}>
+                    onClick={() => setShut((c) => closed ? c.filter((k) => k !== key) : [...c, key])}
+                    // right-click the TYPE: rename / recolor — the codebook's code
+                    // menu, for event types (the dot keeps its direct recolor too)
+                    onContextMenu={(e) => { e.preventDefault(); setMenu({ key, x: e.clientX, y: e.clientY }); }}>
                     {/* right = folded shut, down = spilled open — the file-tree convention */}
                     <Icon name={closed ? "chevron-right" : "chevron-down"} size={fs - 1} />
                     <span className="evdot" style={{ background: markerColor(key, colors) }}
@@ -101,6 +106,55 @@ export function EventList({ pid }: { pid: string }) {
             })}
         </div>
       )}
+      {menu && <TypeMenu evkey={menu.key} x={menu.x} y={menu.y} colors={colors}
+        onClose={() => setMenu(null)} />}
+    </div>
+  );
+}
+
+// Right-click menu for an event type: rename every event of the type, or recolor
+// it — the tab menu's shape, the codebook menu's verbs.
+function TypeMenu({ evkey, x, y, colors, onClose }: {
+  evkey: string; x: number; y: number; colors: Record<string, string>; onClose: () => void;
+}) {
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(evkey);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(ref, onClose);
+  const commit = () => {
+    useStore.getState().renameMarkerType(evkey, name);
+    onClose();
+  };
+  return (
+    <div className="ctxmenu" ref={ref} role="menu" aria-label={`Event type ${evkey}`}
+      style={{ left: Math.min(x, window.innerWidth - 240), top: y, fontSize: fs }}>
+      <div className="ctxhead">{evkey}</div>
+      {!renaming ? (
+        <button role="menuitem" onClick={() => setRenaming(true)}>
+          <Icon name="pencil" size={fs + 2} /> Rename…
+        </button>
+      ) : (
+        <div className="ctxform">
+          <input value={name} autoFocus aria-label={`New name for ${evkey}`}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              else if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+            }} />
+          <div className="ctxrow">
+            <button className="btn" onClick={commit}>Rename</button>
+            <button className="btn" onClick={onClose}>Cancel</button>
+          </div>
+        </div>
+      )}
+      <button role="menuitem" onClick={(e) => {
+        onClose();
+        openColorPicker(markerColor(evkey, colors),
+          (v) => useStore.getState().setMarkerColor(evkey, v), { x: e.clientX, y: e.clientY });
+      }}>
+        <span className="evdot" style={{ background: markerColor(evkey, colors) }} /> Change color…
+      </button>
     </div>
   );
 }

@@ -203,8 +203,9 @@ export function TranscriptView() {
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
   const [aiPop, setAiPop] = useState<{ line: number; span: Flag; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
-  const [addEvT, setAddEvT] = useState<number | null>(null); // add-event modal, prefilled time (transcript clock)
-  useEffect(() => { setEditingId(null); setAiPop(null); setAddEvT(null); }, [active]);
+  // add/edit-event modal: a prefilled time (new event) or the marker being edited
+  const [addEv, setAddEv] = useState<{ t: number } | { m: Marker } | null>(null);
+  useEffect(() => { setEditingId(null); setAiPop(null); setAddEv(null); }, [active]);
 
   // "After this line" as a default time: the next timed line's start − 1s, clamped
   // to the line's own start so a rapid-fire transcript can't push it before the
@@ -215,7 +216,7 @@ export function TranscriptView() {
     const i = ls.findIndex((l) => l.id === g.endId);
     const next = i >= 0 ? ls.slice(i + 1).find((l) => l.ts.trim()) : undefined;
     const nextSec = next ? tsToSec(next.ts) : null;
-    setAddEvT(nextSec !== null && nextSec !== undefined ? Math.max(start, nextSec - 1) : start + 5);
+    setAddEv({ t: nextSec !== null && nextSec !== undefined ? Math.max(start, nextSec - 1) : start + 5 });
   };
   const [hoverSid, setHoverSid] = useState<number | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -744,7 +745,8 @@ export function TranscriptView() {
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line
           ...items.map((it) => it.kind === "m" ? (
             <MarkerRow key={`m${it.m.mid}`} marker={it.m} offset={mkOffset}
-              tsSample={tsSample} colors={ui.markerColors} showLid={showLineNumbers} />
+              tsSample={tsSample} colors={ui.markerColors} showLid={showLineNumbers}
+              onEdit={() => setAddEv({ m: it.m })} />
           ) : (
             <Row
               key={`g${it.g.startId}`}
@@ -801,8 +803,9 @@ export function TranscriptView() {
         )}
       <SpeakerFocus active={active} groups={groups} />
       </div>
-      {addEvT !== null && <AddEventModal pid={active} defaultT={addEvT} tsSample={tsSample}
-        onClose={() => setAddEvT(null)} />}
+      {addEv && <AddEventModal pid={active} defaultT={"t" in addEv ? addEv.t : 0}
+        marker={"m" in addEv ? addEv.m : undefined} tsSample={tsSample}
+        onClose={() => setAddEv(null)} />}
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
       {aiPop && <AiMarkPopover pid={active} line={aiPop.line} span={aiPop.span}
         x={aiPop.x} y={aiPop.y} onClose={() => setAiPop(null)} onCycle={cycleMarkPopover} />}
@@ -822,11 +825,12 @@ export function TranscriptView() {
 // The timecode plays from the moment the note was made: the marker's time is on the
 // video clock, so it goes back through the dock's offset to reach a line time — the
 // same conversion anchorMarkers uses, in the same direction.
-function MarkerRow({ marker, offset, tsSample, colors, showLid }: {
+function MarkerRow({ marker, offset, tsSample, colors, showLid, onEdit }: {
   marker: Marker; offset: number;
   tsSample: string | undefined;          // a real line's timecode, to copy its shape
   colors: Record<string, string>;        // chosen event-type colours (ui.markerColors)
   showLid: boolean;                      // line numbers on: pad so the chips still line up
+  onEdit: () => void;                    // open the add-event modal on this event
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(marker.label);
@@ -879,6 +883,12 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid }: {
           {marker.label || <em className="mkkey">({key})</em>}
         </span>
       )}
+      {/* full edit (time/type/text) in the same modal that adds one; dblclick on
+          the text stays the quick path for the note alone */}
+      <button className="mkdel mkeditbtn" aria-label={`Edit event at ${lineTs}`}
+        title="Edit this event" onClick={onEdit}>
+        <Icon name="pencil" size={14} />
+      </button>
       <button className="mkdel" aria-label={`Delete event at ${lineTs}${marker.label ? `: ${marker.label}` : `: ${key}`}`}
         title="Delete this event" onClick={() => useStore.getState().deleteMarker(marker.mid)}>
         <Icon name="trash" size={14} />

@@ -11,7 +11,7 @@ import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, spanLens, type Flag } from "../ai/flag";
 import type { GroundRec } from "../ai/ground";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
-import { isMarkerRows, markerIdent, markerRows, parseMarkers, type Marker } from "../markers";
+import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll } from "../scrollMemory";
 import { announce } from "../announce";
@@ -210,6 +210,10 @@ interface State {
   editMarker: (mid: number, label: string) => void;
   // hand-added event (the add-event modal); t is on the VIDEO clock, like imports
   addMarker: (pid: string, m: { t: number; code: string; label: string }) => void;
+  // full edit through the same modal (time/type/text); t on the VIDEO clock
+  updateMarker: (mid: number, m: { t: number; code: string; label: string }) => void;
+  // rename a whole type: every event whose key is `from` gets code `to`
+  renameMarkerType: (from: string, to: string) => void;
   setMarkerColor: (key: string, color: string) => void;
   deleteMarker: (mid: number) => void;
   exportMarkers: () => string;
@@ -862,6 +866,31 @@ export const useStore = create<State>()(
         get().pushUndo();
         set({ markers: [...s.markers, marker], nextMid: s.nextMid + 1 });
         announce("Event added");
+      },
+
+      updateMarker: (mid, m) => {
+        const cur = get().markers.find((x) => x.mid === mid);
+        if (!cur) return;
+        const next = { ...cur, t: m.t, code: m.code.trim(), label: m.label.trim() };
+        if (next.t === cur.t && next.code === cur.code && next.label === cur.label) return; // no change, no undo entry
+        get().pushUndo();
+        set({ markers: get().markers.map((x) => x.mid === mid ? next : x) });
+      },
+
+      // Rename every event of one type — the codebook's renameCode, for events.
+      // Writes the new name into `code` even where the key came from `event`
+      // (recording_start & co), which is exactly what markerKey prefers; the chosen
+      // colour follows the name so the type doesn't visually reset.
+      renameMarkerType: (from, to) => {
+        const name = to.trim();
+        if (!name || name === from) return;
+        get().pushUndo();
+        const s = get();
+        set({ markers: s.markers.map((x) => markerKey(x) === from ? { ...x, code: name } : x) });
+        const colors = { ...get().ui.markerColors };
+        if (from in colors && !(name in colors)) { colors[name] = colors[from]; }
+        delete colors[from];
+        set({ ui: { ...get().ui, markerColors: colors } });
       },
 
       // Recolour one event type. Like setColor for a code: no undo entry (it's a

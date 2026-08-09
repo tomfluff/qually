@@ -41,6 +41,11 @@
   color:var(--muted); border-radius:5px; cursor:pointer; opacity:.35; }
 .markerRow:hover .mkdel, .markerRow:focus-within .mkdel { opacity:1; }
 .markerRow .mkdel:hover { background:#e0554f; color:#fff; }
+/* the pencil rides the trash button's box but hovers accent, not danger-red;
+   margin-left:auto moves to it so the pair sits together at the right edge */
+.markerRow .mkeditbtn:hover { background:var(--sel); color:var(--fg); }
+.markerRow .mkeditbtn { margin-left:auto; }
+.markerRow .mkeditbtn + .mkdel { margin-left:0; }
 
 /* ── the sidebar index ─────────────────────────────────────────────────────── */
 /* Sits under the code list at a height you drag (ui.eventListHeight, clamped in the

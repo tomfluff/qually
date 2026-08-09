@@ -5,7 +5,7 @@
 // the store — an events file that loses columns or lands on the wrong line is worse
 // than no events file at all.
 import { beforeAll, test, expect } from "vitest";
-import { anchorMarkers, fmtLike, fmtTime, isMarkerRows, markerRows, parseMarkers } from "./markers";
+import { anchorMarkers, fmtLike, fmtTime, isMarkerRows, markerKey, markerRows, parseMarkers } from "./markers";
 import { parseCSV } from "./contract/csv";
 import type { Line } from "./state/store";
 
@@ -183,6 +183,32 @@ test("a hand-added event round-trips and dedupes like an imported one", () => {
   expect(out.some((r) => r.label === "typed in the app" && r.event === "marker")).toBe(true);
   s().undo();
   expect(s().markers.length).toBe(n);
+});
+
+test("updateMarker edits time/type/text in one undoable step", () => {
+  const s = () => useStore.getState();
+  const m = s().markers[0];
+  s().updateMarker(m.mid, { t: 42, code: "RETYPED", label: "new words" });
+  const after = s().markers.find((x) => x.mid === m.mid)!;
+  expect([after.t, after.code, after.label]).toEqual([42, "RETYPED", "new words"]);
+  s().undo();
+  const back = s().markers.find((x) => x.mid === m.mid)!;
+  expect([back.t, back.code, back.label]).toEqual([m.t, m.code, m.label]);
+});
+
+test("renameMarkerType renames every event of the type and moves its colour", () => {
+  const s = () => useStore.getState();
+  s().setMarkerColor("custom", "#123456");
+  const n = s().markers.filter((m) => markerKey(m) === "custom").length;
+  expect(n).toBeGreaterThan(0);
+  s().renameMarkerType("custom", "observation");
+  expect(s().markers.filter((m) => markerKey(m) === "custom").length).toBe(0);
+  expect(s().markers.filter((m) => markerKey(m) === "observation").length).toBe(n);
+  expect(s().ui.markerColors.observation).toBe("#123456");
+  expect(s().ui.markerColors.custom).toBeUndefined();
+  // undo brings the events back under the old name (colour is display state, not undone)
+  s().undo();
+  expect(s().markers.filter((m) => markerKey(m) === "custom").length).toBe(n);
 });
 
 test("renaming a transcript takes its events with it", () => {

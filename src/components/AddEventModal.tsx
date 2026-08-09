@@ -10,27 +10,29 @@
 // times convert the other way for display.
 import { useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
-import { fmtLike, markerColor, markerKey } from "../markers";
+import { fmtLike, markerColor, markerKey, type Marker } from "../markers";
 import { tsToSec } from "../video/seek";
 import { fuzzy } from "./CodeCombobox";
 import { Icon } from "./Icon";
 
-export function AddEventModal({ pid, defaultT, tsSample, onClose }: {
+export function AddEventModal({ pid, defaultT, marker, tsSample, onClose }: {
   pid: string;
-  defaultT: number;                // transcript-clock seconds
+  defaultT: number;                // transcript-clock seconds (prefill for a NEW event)
+  marker?: Marker;                 // present = edit this event instead of adding one
   tsSample: string | undefined;    // a real line's timecode — the format to prefill in
   onClose: () => void;
 }) {
   const offset = useStore((s) => s.video[pid]?.offset ?? 0);
-  const [time, setTime] = useState(fmtLike(defaultT, tsSample));
-  const [type, setType] = useState("");
-  const [text, setText] = useState("");
+  const [time, setTime] = useState(fmtLike(marker ? marker.t - offset : defaultT, tsSample));
+  const [type, setType] = useState(marker ? markerKey(marker) : "");
+  const [text, setText] = useState(marker?.label ?? "");
   const [err, setErr] = useState<string | null>(null);
 
   const save = () => {
     const sec = time.trim() ? tsToSec(time) : null;
     if (sec === null) { setErr("Time must look like 24:53 or 0:24:53."); return; }
-    useStore.getState().addMarker(pid, { t: sec + offset, code: type, label: text });
+    if (marker) useStore.getState().updateMarker(marker.mid, { t: sec + offset, code: type, label: text });
+    else useStore.getState().addMarker(pid, { t: sec + offset, code: type, label: text });
     onClose();
   };
 
@@ -45,7 +47,7 @@ export function AddEventModal({ pid, defaultT, tsSample, onClose }: {
           }
         }}>
         <div className="about-head">
-          <h2 id="addev-title">Add event</h2>
+          <h2 id="addev-title">{marker ? "Edit event" : "Add event"}</h2>
           <button className="btn iconbtn" onClick={onClose} title="Cancel (Esc)">
             <Icon name="x" size={16} />
           </button>
@@ -65,7 +67,7 @@ export function AddEventModal({ pid, defaultT, tsSample, onClose }: {
         </label>
         {err && <div className="ctxerr">{err}</div>}
         <div className="imp-actions">
-          <button className="btn primary" onClick={save}>Add event</button>
+          <button className="btn primary" onClick={save}>{marker ? "Save" : "Add event"}</button>
           <button className="btn" onClick={onClose}>Cancel</button>
         </div>
       </div>
