@@ -59,6 +59,14 @@ Shipped items get moved to the "Done" list with the commit.
   edge (`Minimap.tsx`, canvas): zoomed-out segment density, accent viewport box,
   click/drag to navigate; replaces the native transcript scrollbar.
 
+### AI assistance
+- **AI-drafted code definitions.** Many codes never get a written definition,
+  which weakens both the codebook as an artifact and the AI suggest pass (it
+  falls back to name + exemplars). Propose a definition per code from its
+  accepted excerpts — surfaced in the Assist tab or the codebook, editable, and
+  only saved when the researcher finalizes it. The AI drafts; the researcher
+  owns the definition.
+
 ### Codes → paper — shortens the part after coding
 - **Export excerpts grouped by code** as a quote-ready doc (respecting the `[R:]`
   rule — those are researcher speech, never quotable as participant speech, per

@@ -53,7 +53,7 @@ export const LENSES: Lens[] = [
   },
   {
     id: "desire", label: "Desires & needs", method: "dramaturgical coding", color: "#8e6bc9",
-    instruction: `Mark wishes, wants, needs, and imagined improvements ("I wish it would just tell me"). note = what is wanted.`,
+    instruction: `Mark wishes, wants, needs, and imagined improvements concerning the thing being studied ("I wish it would just tell me"). note = what is wanted.`,
   },
   {
     id: "workaround", label: "Workarounds & strategies", method: "process coding", color: "#3fa860",
@@ -65,19 +65,24 @@ export const LENSES: Lens[] = [
   },
   {
     id: "invivo", label: "Quotable phrasing", method: "in-vivo coding", color: "#2fa3a3",
-    instruction: `Mark short, vivid, distinctive phrasings in the speaker's own words that would be worth quoting verbatim. note = why it stands out.`,
+    instruction: `Mark short, unusually vivid, metaphorical, or speaker-specific phrasings worth quoting verbatim — not routine emphasis, generic opinions, or common conversational phrases. note = why it stands out.`,
   },
 ];
 export const lensOf = (id: string) => LENSES.find((l) => l.id === id);
 // old persisted spans predate the lens field: they came from the transcription check
 export const spanLens = (f: { lens?: string }) => f.lens ?? "transcription";
 
-const PREAMBLE = `You are scanning an automatic speech-recognition transcript of a research interview. Apply ONLY the scans listed below, marking instances for the researcher to review — you never code, interpret, or summarise.
+const PREAMBLE = `You are scanning an automatic speech-recognition transcript of a research interview. Apply ONLY the scans listed below, marking instances for the researcher to review — you never create codes or themes and never summarise; each mark carries only the short note its scan asks for.
+
+Each transcript line is three tab-separated fields: line_id<TAB>speaker<TAB>text.
 
 Rules for every scan:
-- Each quote MUST be copied exactly, character for character, from its line.
+- Every line you were given is in scope, whoever speaks it — the researcher already chose which speakers to send.
+- quote = the SHORTEST exact substring of the text field that carries the instance, copied character for character. Never quote the line id or the speaker field, and prefer a phrase over a whole line.
 - Mark only what is clearly present. A transcript with few or no marks is a perfectly good answer.
-- Text like [REDACTED_1] is a removed identifier. Never mark it.
+- The same words may be marked under more than one scan when each scan independently applies.
+- A disfluency is never an instance BY ITSELF: fillers (um, uh, er, hmm, "you know", "like"), false starts, stammers, and word repetitions are how people talk, not signal. A meaning-bearing interjection is different: "ugh, this again" plainly performs frustration and can be marked; a bare "Hmm" cannot.
+- Text like [REDACTED_1] is a removed identifier. Never mark one, and never include one inside a quote — pick a shorter span without it.
 
 Scans to apply:`;
 
