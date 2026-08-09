@@ -55,9 +55,14 @@ Each event sits immediately before the first line that starts after it, so the
 times still run downwards, and it prints its timecode in the transcript's own
 shape (`24:32` next to `24:16`, not `0:24:32`).
 
+Events can also be added by hand: right-click a transcript line (or press **E**
+on the selected line) to open the add-event modal — time prefilled to that
+line's end, type picked from the existing ones or typed fresh, note free-text.
+Hand-added events export and round-trip like recorded ones.
+
 An event shows up three ways — its own row in the transcript, an entry in the
 sidebar's *Events* list (click to jump; drag its top edge to resize, and switch
-between grouped-by-type and time order), and a coloured rule across the minimap.
+between grouped-by-type and time order), and a tick in its own minimap lane.
 Notes are editable in place (double-click) and any event can be deleted; both are
 undoable. Right-click an event's type — in the transcript row or on the sidebar
 dot — to recolour every event of that type; the choice travels in the project file.

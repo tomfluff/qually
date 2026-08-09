@@ -208,6 +208,8 @@ interface State {
   // events: imported against ONE transcript (the tab you right-clicked), never guessed
   importMarkers: (pid: string, rows: Record<string, string>[]) => { added: number; skipped: number };
   editMarker: (mid: number, label: string) => void;
+  // hand-added event (the add-event modal); t is on the VIDEO clock, like imports
+  addMarker: (pid: string, m: { t: number; code: string; label: string }) => void;
   setMarkerColor: (key: string, color: string) => void;
   deleteMarker: (mid: number) => void;
   exportMarkers: () => string;
@@ -848,6 +850,20 @@ export const useStore = create<State>()(
         get().pushUndo();
         set({ markers: get().markers.map((m) => m.mid === mid ? { ...m, label } : m) });
       },
+      // An event written IN the app (add-event modal), not from a file. event:"marker"
+      // and an empty raw: the export writes the canonical columns for it, so it
+      // round-trips like any recorded one. Same identity dedup as the importer —
+      // adding the exact same event twice is a no-op, not a duplicate.
+      addMarker: (pid, m) => {
+        const s = get();
+        const marker: Marker = { mid: s.nextMid, pid, event: "marker",
+          code: m.code.trim(), label: m.label.trim(), t: m.t, detail: "", raw: {} };
+        if (s.markers.some((x) => markerIdent(x) === markerIdent(marker))) return;
+        get().pushUndo();
+        set({ markers: [...s.markers, marker], nextMid: s.nextMid + 1 });
+        announce("Event added");
+      },
+
       // Recolour one event type. Like setColor for a code: no undo entry (it's a
       // display choice, not coding), but redo must go — a stale redo snapshot
       // would otherwise walk back over it.

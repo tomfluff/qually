@@ -168,6 +168,23 @@ test("events.csv re-imports as the same events", () => {
   expect(s().importMarkers("P01", back)).toEqual({ added: 0, skipped: back.length });
 });
 
+test("a hand-added event round-trips and dedupes like an imported one", () => {
+  const s = () => useStore.getState();
+  const n = s().markers.length;
+  s().addMarker("P01", { t: 100, code: "custom", label: "typed in the app" });
+  expect(s().markers.length).toBe(n + 1);
+  const added = s().markers[s().markers.length - 1];
+  expect(added.event).toBe("marker");
+  // same identity again: a no-op, not a duplicate
+  s().addMarker("P01", { t: 100, code: "custom", label: "typed in the app" });
+  expect(s().markers.length).toBe(n + 1);
+  // it exports through the canonical columns (raw is empty)
+  const out = parseCSV(s().exportMarkers());
+  expect(out.some((r) => r.label === "typed in the app" && r.event === "marker")).toBe(true);
+  s().undo();
+  expect(s().markers.length).toBe(n);
+});
+
 test("renaming a transcript takes its events with it", () => {
   const s = () => useStore.getState();
   expect(s().renameTranscript("P01", "P01-final")).toBe(null);

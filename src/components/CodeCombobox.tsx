@@ -5,7 +5,8 @@ import { useStore } from "../state/store";
 import { norm } from "../contract/segments";
 
 // subsequence fuzzy match: "vs" matches "visual strain"
-const fuzzy = (q: string, t: string) => {
+// (exported: the add-event type combobox matches the same way)
+export const fuzzy = (q: string, t: string) => {
   q = q.toLowerCase(); t = t.toLowerCase();
   if (!q) return true;
   let i = 0;

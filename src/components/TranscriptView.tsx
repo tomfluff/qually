@@ -21,6 +21,8 @@ import { tinyDiff } from "../diff";
 import { useMarkers } from "../useMarkers";
 import { fmtLike, markerColor, markerKey, type Marker } from "../markers";
 import { openColorPicker } from "../colorPicker";
+import { AddEventModal } from "./AddEventModal";
+import { tsToSec } from "../video/seek";
 import type { ReactNode } from "react";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
@@ -201,7 +203,20 @@ export function TranscriptView() {
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
   const [aiPop, setAiPop] = useState<{ line: number; span: Flag; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
-  useEffect(() => { setEditingId(null); setAiPop(null); }, [active]);
+  const [addEvT, setAddEvT] = useState<number | null>(null); // add-event modal, prefilled time (transcript clock)
+  useEffect(() => { setEditingId(null); setAiPop(null); setAddEvT(null); }, [active]);
+
+  // "After this line" as a default time: the next timed line's start − 1s, clamped
+  // to the line's own start so a rapid-fire transcript can't push it before the
+  // line; past the last line (or with no timecodes) fall to start + 5s, then 0.
+  const openAddEvent = (g: Group) => {
+    const start = tsToSec(g.ts.trim() || "") ?? 0;
+    const ls = transcript?.lines ?? [];
+    const i = ls.findIndex((l) => l.id === g.endId);
+    const next = i >= 0 ? ls.slice(i + 1).find((l) => l.ts.trim()) : undefined;
+    const nextSec = next ? tsToSec(next.ts) : null;
+    setAddEvT(nextSec !== null && nextSec !== undefined ? Math.max(start, nextSec - 1) : start + 5);
+  };
   const [hoverSid, setHoverSid] = useState<number | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // debounce clearing so moving between a segment's bars doesn't flicker the brackets
@@ -474,6 +489,14 @@ export function TranscriptView() {
       if (cycleMarkPopover()) e.preventDefault();
       return;
     }
+    // E: add an event after the selected line — the keyboard twin of right-click
+    if (e.key === "e" || e.key === "E") {
+      const sel = useStore.getState().selection;
+      if (sel.pid !== active || sel.head === null) return;
+      const g = groups.find((x) => sel.head! >= x.startId && sel.head! <= x.endId);
+      if (g) { e.preventDefault(); openAddEvent(g); }
+      return;
+    }
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const s = useStore.getState();
     if (s.selection.pid === active && s.selection.lines.size) return; // App moves it from here
@@ -730,6 +753,7 @@ export function TranscriptView() {
               laned={laned}
               codebook={codebook}
               onRowDown={(e) => onRowDown(e, it.g.startId)}
+              onAddEvent={() => openAddEvent(it.g)}
               onLaneClick={(seg, e) =>
                 // clicking the segment's own lane while its popover is open closes it
                 // (useDismiss ignores this lane, so the mousedown doesn't close-then-reopen)
@@ -773,6 +797,8 @@ export function TranscriptView() {
         )}
       <SpeakerFocus active={active} groups={groups} />
       </div>
+      {addEvT !== null && <AddEventModal pid={active} defaultT={addEvT} tsSample={tsSample}
+        onClose={() => setAddEvT(null)} />}
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
       {aiPop && <AiMarkPopover pid={active} line={aiPop.line} span={aiPop.span}
         x={aiPop.x} y={aiPop.y} onClose={() => setAiPop(null)} onCycle={cycleMarkPopover} />}
@@ -857,7 +883,7 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid }: {
   );
 }
 
-function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onAddEvent, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
   spkOff: string; // speaker focus: class(es) a NON-focused speaker's row carries ("" = focused/none)
@@ -865,6 +891,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLane
   laned: LanedSeg[];
   codebook: Record<string, { color: string }>;
   onRowDown: (e: MouseEvent) => void;
+  onAddEvent: () => void;
   onLaneClick: (seg: LanedSeg, at: { clientX: number; clientY: number }) => void;
   onGripDown: (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => void;
   onLaneHover: (sid: number | null) => void;
@@ -975,6 +1002,12 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onLane
     <div className={"lineRow" + (weight !== "normal" ? ` spk-${weight}` : "") + spkOff + (selected ? " selected" : "") + (merged ? " merged" : "")}
       id={`trow-${startId}`}
       data-lid={startId} data-end={endId} onMouseDown={onRowDown}
+      // right-click = add an event after this line. The line editor keeps its
+      // native menu (paste); nothing else on a row had a use for right-click.
+      onContextMenu={(e) => {
+        if ((e.target as HTMLElement).closest(".lineEdit")) return;
+        e.preventDefault(); onAddEvent();
+      }}
       style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
       {showLid && <span className="lid">{lidLabel(group)}</span>}
       {/* out of the Tab order: tabbing walked every rendered timecode. Mouse users

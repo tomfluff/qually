@@ -126,7 +126,8 @@ export function DataFormatButton() {
                   transcript, in the sidebar's <b>Events</b> list (drag its top edge to resize;
                   switch between by-type and by-time), and as a coloured rule across the minimap.
                   The text is editable (double-click), any event can be deleted, and right-clicking
-                  an event's type recolours every event of that type.</p>
+                  an event recolours its type. Add events by hand too: right-click a line (or
+                  press <kbd>E</kbd> on the selected line).</p>
               </section>
 
               <section>

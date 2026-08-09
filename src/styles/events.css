@@ -87,6 +87,18 @@
   font-size:.9em; }
 .eventList .evtext { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
+/* ── the add-event modal ───────────────────────────────────────────────────── */
+.addev { max-width:420px; }
+.addev .signfield { align-items:flex-start; }
+.addev .signfield > span { min-width:4ch; padding-top:7px; }
+.addev .signinput { flex:1; min-width:0; }
+.addev .addev-time { max-width:11ch; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* the type combobox rides the code combobox's wrap for the anchored .acList;
+   in the modal's field row it just fills the line, no sidebar margins */
+.addev .addev-typewrap { flex:1; min-width:0; margin-bottom:0; }
+.addev .addev-typewrap .signinput { width:100%; }
+.addev .addev-text { resize:vertical; font:inherit; line-height:1.4; }
+
 /* the tab menu's "Load events…" count + result note */
 .ctxmenu .ctxcount { margin-left:auto; color:var(--muted); font-size:.85em; }
 .ctxmenu .ctxnote { color:var(--muted); font-size:.9em; padding:2px 4px; }
