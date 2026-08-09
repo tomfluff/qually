@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Yotam Sechayk
 // F3 suggest: the trust boundary (sanitizeSuggestReply) and overlap memory.
 import { test, expect } from "vitest";
-import { sanitizeSuggestReply, overlapsExisting, type SuggestCode, type SuggestProposal } from "./ai/suggest";
+import { renderSuggestChunk, sanitizeSuggestReply, overlapsExisting, type SuggestCode, type SuggestProposal } from "./ai/suggest";
+import { redactor } from "./ai/redact";
 import type { Line } from "./state/store";
 
 const L = (id: number, text: string): Line => ({ id, ts: "", speaker: "Pat", text });
@@ -42,4 +43,28 @@ test("overlapsExisting skips a range already carrying that code (any status)", (
   expect(overlapsExisting(segs, "P01", p)).toBe(true);
   expect(overlapsExisting(segs, "P01", { startLine: 6, endLine: 7, code: "magnification" })).toBe(false);
   expect(overlapsExisting(segs, "P01", { startLine: 3, endLine: 5, code: "frustration" })).toBe(false);
+});
+
+// ── context speakers (researcher lines ride along, never coded) ─────────────
+const R = (id: number, text: string): Line => ({ id, ts: "", speaker: "R", text });
+const mixed: Line[] = [R(1, "How do you read this?"), L(2, "I zoom in."), R(3, "Say more?"), L(4, "Then I pan.")];
+
+test("a proposal covering only context lines is dropped; crossing one survives", () => {
+  const ctx = new Set(["R"]);
+  const out = sanitizeSuggestReply(codes, mixed, [
+    { line_start: 1, line_end: 1, code: "magnification" },   // R only -> drop
+    { line_start: 3, line_end: 3, code: "magnification" },   // R only -> drop
+    { line_start: 2, line_end: 4, code: "magnification" },   // spans R line 3, has P lines -> keep
+  ], ctx);
+  expect(out).toEqual([{ startLine: 2, endLine: 4, code: "magnification" }]);
+  // without a context set the same reply passes untouched (back-compat)
+  expect(sanitizeSuggestReply(codes, mixed, [{ line_start: 1, line_end: 1, code: "magnification" }]))
+    .toHaveLength(1);
+});
+
+test("the rendered window tags context speakers and only them", () => {
+  const out = renderSuggestChunk(mixed, codes, redactor([]), new Set(["R"]));
+  const rows = out.split("TRANSCRIPT:\n")[1].split("\n");
+  expect(rows[0]).toBe("1\t[context] R\tHow do you read this?");
+  expect(rows[1]).toBe("2\tPat\tI zoom in.");
 });

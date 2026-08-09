@@ -9,7 +9,7 @@
 // transcript (its menu says "AI for this transcript"), while the Assist tab passes
 // `choose` and picks from the corpus in here — Assist has no active transcript.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { guessQuiet, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -29,7 +29,30 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   // passed and can't be changed here. "" means nothing picked yet.
   const [picked, setPicked] = useState(initial ?? "");
   const pid = picked;
-  const lines = transcripts[pid]?.lines ?? [];
+  const lines = useMemo(() => transcripts[pid]?.lines ?? [], [transcripts, pid]);
+
+  // Whose speech may CARRY a code. Every line is still sent (the exchange needs
+  // its questions), but unticked speakers ride as [context] — never coded, and a
+  // proposal landing only on them is dropped (sanitizeSuggestReply). Defaults to
+  // the researcher unticked, by the same whole-label guess the speaker map uses;
+  // per transcript, so a change of pid recomputes rather than carrying names over.
+  const speakers = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of lines) m.set(l.speaker.trim(), (m.get(l.speaker.trim()) ?? 0) + 1);
+    return [...m.entries()];
+  }, [lines]);
+  const [context, setContext] = useState<Set<string>>(() => new Set(guessQuiet([...new Set(lines.map((l) => l.speaker.trim()))])));
+  const pickPid = (p: string) => {
+    setPicked(p);
+    const ls = transcripts[p]?.lines ?? [];
+    setContext(new Set(guessQuiet([...new Set(ls.map((l) => l.speaker.trim()))])));
+  };
+  const toggleSpeaker = (sp: string) =>
+    setContext((prev) => {
+      const n = new Set(prev);
+      n.has(sp) ? n.delete(sp) : n.add(sp);
+      return n;
+    });
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const ai = useStore((s) => s.ai);
@@ -77,14 +100,14 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   }, [choose, tabs, transcripts, aiLog, segments]);
 
   const chunks = useMemo(() => chunksOf(lines), [lines]);
-  const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, codes, red), 0), [chunks, codes, red]);
+  const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, codes, red, context), 0), [chunks, codes, red, context]);
   const redactions = useMemo(() => {
     const book = codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0);
     const win = lines.reduce((n, l) => n + red.count(l.text), 0);
     return book * chunks.length + win; // the codebook rides every chunk
   }, [codes, lines, red, chunks.length]);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(lines.length * 6)));
-  const preview = chunks.length ? renderSuggestChunk(chunks[0].slice(0, 8), codes, red) : "";
+  const preview = chunks.length ? renderSuggestChunk(chunks[0].slice(0, 8), codes, red, context) : "";
   const ready = codes.length > 0 && lines.length > 0;
 
   const run = async () => {
@@ -101,7 +124,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     try {
       for (let i = 0; i < chunks.length; i++) {
         const { proposals, usage } = await suggestChunk({
-          key, model: model.id, lines: chunks[i], codes, redaction: red, signal: abort.current.signal,
+          key, model: model.id, lines: chunks[i], codes, redaction: red, context, signal: abort.current.signal,
         });
         for (const p of proposals) {
           // read live each time: catches candidates added earlier in THIS run and
@@ -168,7 +191,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                     {choices.map((c) => (
                       <label key={c.pid} className={"ai-trow" + (picked === c.pid ? " on" : "")}>
                         <input type="radio" name="suggest-pid" checked={picked === c.pid}
-                          onChange={() => setPicked(c.pid)} disabled={busy} />
+                          onChange={() => pickPid(c.pid)} disabled={busy} />
                         <span className="tName">{c.pid}</span>
                         <em>{c.n} lines
                           {c.at ? ` · run ${c.at}` : " · not run yet"}
@@ -179,6 +202,22 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                 </>
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
+              {/* every line still goes (the exchange needs its questions); unticking
+                  only stops a speaker's lines from CARRYING a code */}
+              {pid && speakers.length > 1 && (
+                <>
+                  <div className="ai-sec">Whose speech gets coded{" "}
+                    <span className="ai-sec-hint">unticked speakers are sent as context, never coded</span></div>
+                  <div className="ai-spks">
+                    {speakers.map(([sp, n]) => (
+                      <label key={sp} className="ai-spk">
+                        <input type="checkbox" checked={!context.has(sp)} onChange={() => toggleSpeaker(sp)} disabled={busy} />
+                        <span>{sp} <em>{n}</em></span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
               {!ready ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   {codes.length === 0

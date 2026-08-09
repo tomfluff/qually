@@ -78,10 +78,11 @@ Shipped items get moved to the "Done" list with the commit.
 - ~~**Density minimap**~~ — shipped 2026-07-05 (Done above).
 
 ### AI assistance
-- **Per-speaker scope for the suggest pass.** The observation scan lets you
-  untick speakers before sending; suggest sends every line. A modal option so
-  researcher lines ride along as context but are never themselves coded
-  (tagged in the window + a sanitize-side guard).
+- ~~**Per-speaker scope for the suggest pass.**~~ — **SHIPPED 2026-08-10.**
+  "Whose speech gets coded" checkboxes in the suggest modal; unticked speakers
+  (researcher unticked by default, via the speaker-map guess) are sent tagged
+  [context] — visible to the model, never codeable, with a sanitize-side guard
+  dropping any proposal that lands only on context lines.
 - **AI-drafted code definitions.** Many codes never get a written definition,
   which weakens both the codebook as an artifact and the AI suggest pass (it
   falls back to name + exemplars). Propose a definition per code from its
