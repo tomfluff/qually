@@ -8,6 +8,7 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   "chevron-down": { d: ["M6 9l6 6l6 -6"] },
   check: { d: ["M5 12l5 5l10 -10"] },
   "chevron-left": { d: ["M15 6l-6 6l6 6"] },
+  "chevron-right": { d: ["M9 6l6 6l-6 6"] },
   play: { d: ["M7 4v16l13 -8z"], fill: true },
   pause: { d: ["M6 5h4v14h-4z", "M14 5h4v14h-4z"], fill: true },
   refresh: { d: ["M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4", "M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"] },

@@ -83,7 +83,8 @@ export function EventList({ pid }: { pid: string }) {
                 <div key={key} className="evgroup">
                   <button className="evgrouphead" aria-expanded={!closed}
                     onClick={() => setShut((c) => closed ? c.filter((k) => k !== key) : [...c, key])}>
-                    <Icon name={closed ? "chevron-up" : "chevron-down"} size={fs - 1} />
+                    {/* right = folded shut, down = spilled open — the file-tree convention */}
+                    <Icon name={closed ? "chevron-right" : "chevron-down"} size={fs - 1} />
                     <span className="evdot" style={{ background: markerColor(key, colors) }}
                       title="Right-click to recolor"
                       onContextMenu={(e) => {
