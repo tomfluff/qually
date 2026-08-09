@@ -239,8 +239,10 @@ export function TranscriptView() {
   // Session events, interleaved BY TIME (see markers.ts / useMarkers): each one
   // renders immediately before the first line that starts after it, so reading down
   // the transcript the clock only goes forwards. Several at once stack in time
-  // order; markers past the last line go at the end. A marker landing inside a
-  // merged group goes before the whole group — a group is one row and can't be split.
+  // order; markers past the last line go at the end. A group is one row and can't
+  // be split, so a marker anchored to a line INSIDE a merged group goes AFTER the
+  // group: it happened during the group's speech, and "before" would show it ahead
+  // of words spoken earlier than it.
   const { placed, offset: mkOffset } = useMarkers(active);
   // A real line's timecode, so an event's time is printed in the transcript's own
   // shape ("01:20", not "0:01:20") — the two clocks must look like one clock.
@@ -250,8 +252,10 @@ export function TranscriptView() {
     if (!placed.before.size && !placed.tail.length) return groups.map((g) => ({ kind: "g", g }));
     const out: Item[] = [];
     for (const g of groups) {
-      for (const id of g.ids) for (const m of placed.before.get(id) ?? []) out.push({ kind: "m", m });
+      for (const m of placed.before.get(g.startId) ?? []) out.push({ kind: "m", m });
       out.push({ kind: "g", g });
+      for (const id of g.ids) if (id !== g.startId)
+        for (const m of placed.before.get(id) ?? []) out.push({ kind: "m", m });
     }
     for (const m of placed.tail) out.push({ kind: "m", m });
     return out;
