@@ -13,6 +13,8 @@ import { LENSES, hashLine, spanLens, lensOf } from "../ai/flag";
 import { MergeModal } from "./MergeModal";
 import { SuggestModal } from "./SuggestModal";
 import { AiCheckModal } from "./AiCheckModal";
+import { SummarizeModal } from "./SummarizeModal";
+import { openSummary } from "./SummaryView";
 import type { MergeProposal } from "../ai/dedupe";
 import { excerptOf } from "../contract/excerpt";
 import { Icon } from "./Icon";
@@ -44,6 +46,8 @@ const pairKey = (p: MergeProposal) => JSON.stringify([p.from, p.into].sort());
 export function AssistView() {
   const transcripts = useStore((s) => s.transcripts);
   const segments = useStore((s) => s.segments);
+  const markers = useStore((s) => s.markers);
+  const summaries = useStore((s) => s.summaries);
   const codebook = useStore((s) => s.codebook);
   const aiFlags = useStore((s) => s.aiFlags);
   const tabs = useStore((s) => s.tabs);
@@ -61,6 +65,7 @@ export function AssistView() {
   // null = closed; "" = open with nothing picked; a pid = open on that transcript
   const [suggestFor, setSuggestFor] = useState<string | null>(null);
   const [scanFor, setScanFor] = useState<string | null>(null);
+  const [sumFor, setSumFor] = useState<string | null>(null);
   const [suggestBy, setSuggestBy] = useState(remembered.suggestBy);
   const [suggestSel, setSuggestSel] = useState(remembered.suggestSel);
   useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel }); },
@@ -150,7 +155,7 @@ export function AssistView() {
         {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
             own menu — this heading just names what's showing. It stays fixed; the
             list below scrolls inside cbList so the scrollbar clears the drag divider. */}
-        <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "suggest" ? "Suggest codes" : "Observations"}</div>
+        <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
 
         <div className="cbList nicescroll">
         {panel === "observations" ? (
@@ -231,6 +236,40 @@ export function AssistView() {
                 ? "Code at least two different codes first, then the AI can look for duplicates."
                 : "The AI proposes pairs that look like the same concept. You accept each merge — nothing changes on its own."}
             </div>
+          </>
+        ) : panel === "summary" ? (
+          <>
+            {/* Same two ways in as the other panels: the button picks in the modal,
+                a row's sparkle opens it already scoped to that transcript. */}
+            <button className="btn groundBtn" onClick={() => setSumFor("")} disabled={allPids.length === 0}
+              title={allPids.length
+                ? "Pick a transcript and let the AI draft its session summary from the events and coded excerpts (sends them to OpenAI after your approval)"
+                : "Import a transcript first"}>
+              <Icon name="sparkle" size={15} /> AI transcript summary…
+            </button>
+            {allPids.length === 0 ? (
+              <div className="bSideNote">No transcripts loaded yet — import one and its session can be summarised from here.</div>
+            ) : allPids.map((p) => {
+              const ev = markers.filter((m) => m.pid === p).length;
+              const seg = segments.filter((s) => s.pid === p && s.status === "accepted").length;
+              return (
+                <div key={p} className={"nLens" + (ev + seg === 0 ? " none" : "")}
+                  tabIndex={0} role="button"
+                  onClick={() => openSummary(p)}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSummary(p); }
+                  }}>
+                  <span className="nName">{p}</span>
+                  <span className="cnt">{ev + seg || "—"}</span>
+                  <button className="rowRun" aria-label={`AI transcript summary for ${p}`}
+                    title={`AI transcript summary for ${p}`}
+                    onClick={(e) => { e.stopPropagation(); setSumFor(p); }}>
+                    <Icon name="sparkle" size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </>
         ) : (
           <>
@@ -323,6 +362,8 @@ export function AssistView() {
         ) : panel === "merge" ? (
           <MergeList proposals={liveProposals} codebook={codebook} flipped={flipped}
             onAccept={accept} onSkip={skip} onFlip={toggleFlip} />
+        ) : panel === "summary" ? (
+          <SummaryList pids={allPids} summaries={summaries} onGenerate={setSumFor} />
         ) : (
           <SuggestList candidates={shownCandidates} groupBy={suggestBy}
             transcripts={transcripts} codebook={codebook} tabs={tabs} />
@@ -334,6 +375,8 @@ export function AssistView() {
         onClose={() => setSuggestFor(null)} />}
       {scanFor !== null && <AiCheckModal pid={scanFor} choose
         onClose={() => setScanFor(null)} />}
+      {sumFor !== null && <SummarizeModal pid={sumFor} choose
+        onClose={() => setSumFor(null)} />}
     </div>
   );
 }
@@ -448,6 +491,37 @@ function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
           {inGroup(g).map(row)}
         </div>
       ))}
+    </div>
+  );
+}
+
+// What each session's summary says, at a glance — the full text lives (and is
+// edited) in the Summary tab; "open" lands there on that transcript.
+function SummaryList({ pids, summaries, onGenerate }: {
+  pids: string[]; summaries: Record<string, string>; onGenerate: (pid: string) => void;
+}) {
+  if (!pids.length) {
+    return <div className="empty">No transcripts loaded yet — import one and its session can be summarised here.</div>;
+  }
+  return (
+    <div className="mList">
+      {pids.map((p) => {
+        const text = summaries[p]?.trim() ?? "";
+        return (
+          <div key={p} className="nInst sumSnip">
+            <div className="nGrp">{p}</div>
+            {text
+              ? <div className="nLine sumSnipText">{text}</div>
+              : <div className="nLine"><em>No summary yet — write one in the Summary tab, or draft it with AI.</em></div>}
+            <div className="nFoot">
+              <span className="nActs">
+                <button className="nBtn pri" onClick={() => onGenerate(p)}>{text ? "regenerate…" : "generate…"}</button>
+                <button className="nBtn" onClick={() => openSummary(p)}>open</button>
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

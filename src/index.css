@@ -17,6 +17,7 @@
 @import "./styles/transcript.css";  /* rows, lanes, minimap, close-call badge */
 @import "./styles/events.css";      /* session event rows + the sidebar index */
 @import "./styles/browse.css";      /* browse view */
+@import "./styles/summary.css";     /* summary tab: session record + summary panes */
 @import "./styles/settings.css";
 @import "./styles/zen.css";
 @import "./styles/hotbar.css";

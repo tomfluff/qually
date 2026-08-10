@@ -91,6 +91,8 @@ marker,custom,"Clicks the chart to see what each colour means",1473.218,1472.195
 - **Session events:** ride in the project file, and export as `events.csv`
   (alone or in the CSV bundle) with your edits applied. Re-importing that export
   is a no-op — events already loaded are recognised and skipped.
+- **Session summaries:** the Summary tab's per-transcript text rides in the
+  project file (`summaries`), alongside everything else the file carries.
 
 ## Convert any transcript with AI
 

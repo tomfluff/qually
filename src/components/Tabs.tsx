@@ -54,6 +54,11 @@ export function Tabs() {
         role="tab" aria-selected={active === "browse"} onClick={() => setActive("browse")}>
         <Icon name="list" size={14} /> Codebook
       </button>
+      <button className={"tab browsetab" + (active === "summary" ? " active" : "")}
+        role="tab" aria-selected={active === "summary"} onClick={() => setActive("summary")}
+        title="Per-transcript session record and summary">
+        <Icon name="file-text" size={14} /> Summary
+      </button>
       {/* Assist tab: click to open, the chevron opens a menu to pick which panel
           (Observations / Merge / Suggest) shows. Right-click opens it too. */}
       <div className={"tab assisttab" + (active === "assist" ? " active" : "")}
@@ -169,6 +174,7 @@ const ASSIST_PANELS = [
   { id: "observations", label: "Observations", hint: "AI marks to triage into codes" },
   { id: "merge", label: "Merge codes", hint: "near-duplicate codes to fold together" },
   { id: "suggest", label: "Suggest codes", hint: "candidate codings from your codebook" },
+  { id: "summary", label: "Transcript summary", hint: "AI-drafted session summaries to edit and own" },
 ] as const;
 
 function AssistMenu({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {

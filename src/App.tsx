@@ -9,6 +9,7 @@ import { Resizer } from "./components/Resizer";
 import { TranscriptView } from "./components/TranscriptView";
 import { BrowseView } from "./components/BrowseView";
 import { AssistView } from "./components/AssistView";
+import { SummaryView } from "./components/SummaryView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
@@ -249,6 +250,7 @@ export function App() {
           {hasData && onTranscript && <SearchBar />}
           {!hasData ? <Welcome />
             : active === "browse" ? <BrowseView />
+            : active === "summary" ? <SummaryView />
             : active === "assist" ? <AssistView />
             : <TranscriptView />}
         </div>

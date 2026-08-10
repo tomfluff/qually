@@ -22,7 +22,7 @@ export const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#
 // `active` is a transcript pid or one of these reserved view keys (Codebook / Assist).
 // Both are non-transcript surfaces, so transcript-only chrome and selection bookkeeping
 // gate on isTranscriptView.
-export const RESERVED_VIEWS = ["browse", "assist"] as const;
+export const RESERVED_VIEWS = ["browse", "assist", "summary"] as const;
 export const isTranscriptView = (active: string) => !RESERVED_VIEWS.includes(active as typeof RESERVED_VIEWS[number]);
 
 // orig = the imported text, present only while an in-app correction differs from it
@@ -57,7 +57,12 @@ export interface Ui {
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
   // which Assist-tab panel is showing — chosen from the tab's own menu
-  assistPanel: "observations" | "merge" | "suggest";
+  assistPanel: "observations" | "merge" | "suggest" | "summary";
+  // the Summary tab's split between the detailed timeline and the summary text:
+  // side by side, stacked, or one pane at a time. The split position is a fraction
+  // of the container (not px) so it survives both orientations and window resizes.
+  summaryLayout: "side" | "stack" | "one";
+  summarySplit: number;
   // the sidebar's session-events list: how tall (px, dragged) and how ordered.
   // "type" groups by event/code (what kinds of things happened); "time" is one flat
   // run down the session (what happened next) — the two ways anyone reads a log.
@@ -87,6 +92,9 @@ export const clampMinimapWidth = (w: number) =>
 // events list height bounds — the drag handle and the rehydrate default share them
 export const clampEventHeight = (h: number) =>
   Number.isFinite(h) ? Math.max(72, Math.min(720, h)) : 200;
+// summary split bounds — neither pane may vanish under the drag
+export const clampSummarySplit = (f: number) =>
+  Number.isFinite(f) ? Math.max(0.15, Math.min(0.85, f)) : 0.5;
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
   current: { line: number; occ: number } | null; // the emphasized occurrence
@@ -146,6 +154,9 @@ interface State {
   // session event log (see markers.ts): imported per transcript from the tab menu.
   // Positions are derived from the time, never stored — so they follow the video offset.
   markers: Marker[];
+  // per-transcript session summary (the Summary tab's text pane): written by the
+  // researcher, or AI-drafted and then owned by the researcher. Project data.
+  summaries: Record<string, string>;
   // transient (not persisted)
   selection: Selection;
   savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
@@ -217,6 +228,8 @@ interface State {
   setMarkerColor: (key: string, color: string) => void;
   deleteMarker: (mid: number) => void;
   exportMarkers: () => string;
+  // the Summary tab's text pane (per keystroke — no undo entry, like setNotes)
+  setSummary: (pid: string, text: string) => void;
   exportNotices: () => string;
   exportProject: () => string;
   openProject: (p: Project) => void;
@@ -355,9 +368,9 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", markerColors: {}, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [],
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {},
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, formatOpen: false,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
@@ -370,7 +383,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [],
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {},
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
           ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {} },
@@ -698,10 +711,13 @@ export const useStore = create<State>()(
         if (from in video) { video[to] = video[from]; delete video[from]; }
         const speakerFocus = { ...s.ui.speakerFocus };
         if (from in speakerFocus) { speakerFocus[to] = speakerFocus[from]; delete speakerFocus[from]; }
+        const summaries = { ...s.summaries };
+        if (from in summaries) { summaries[to] = summaries[from]; delete summaries[from]; }
         set({
           transcripts,
           segments: s.segments.map((x) => x.pid === from ? { ...x, pid: to } : x),
           markers: s.markers.map((x) => x.pid === from ? { ...x, pid: to } : x),
+          summaries,
           extSegRows: s.extSegRows.map((r) => r.pid === from
             ? { ...r, pid: to, segment_ref: r.segment_ref.startsWith(`${from}:`) ? to + r.segment_ref.slice(from.length) : r.segment_ref }
             : r),
@@ -948,6 +964,7 @@ export const useStore = create<State>()(
           ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog,
           markers: s.markers, // session events + field notes: study data, not a preference
           markerColors: s.ui.markerColors,
+          summaries: s.summaries, // session summaries: the researcher's artifact, study data
           // the speaker map rides along even though it lives in `ui`: who the
           // interviewer is belongs to the study, not to my font size (see project.ts)
           speakers: { colors: s.ui.speakerColors, weight: s.ui.speakerWeight },
@@ -980,6 +997,7 @@ export const useStore = create<State>()(
           extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: [], active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
           markers: p.markers ?? [],
+          summaries: p.summaries ?? {},
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
@@ -1019,6 +1037,9 @@ export const useStore = create<State>()(
         announce(`Segment ${status}`);
       },
       setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x), redoStack: [] }),
+      // per keystroke, like notes. Summaries aren't in the undo snapshot, so no
+      // redo invalidation is needed — undo/redo never touch them.
+      setSummary: (pid, text) => set({ summaries: { ...get().summaries, [pid]: text } }),
       setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } }, redoStack: [] }),
       setDef: (code, def) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], def } }, redoStack: [] }),
       renameCode: (code, newName) => {
@@ -1201,7 +1222,7 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
-        markers: s.markers,
+        markers: s.markers, summaries: s.summaries,
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
@@ -1217,6 +1238,9 @@ export const useStore = create<State>()(
         s.ui.eventSort ??= "type";
         s.ui.markerColors ??= {};
         s.ui.eventListHeight = clampEventHeight(s.ui.eventListHeight ?? 200);
+        s.summaries ??= {};
+        s.ui.summaryLayout ??= "side";
+        s.ui.summarySplit = clampSummarySplit(s.ui.summarySplit ?? 0.5);
         s.ui.groundBold ??= true;
         s.ui.groundWash ??= true;
         s.ui.groundUnderline ??= false;

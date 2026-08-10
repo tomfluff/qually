@@ -46,6 +46,8 @@ export interface Project {
   // event-type colours, for the same reason the speaker map travels: which colour
   // "BREAK" is, is a fact about the study, not about my screen
   markerColors?: Record<string, string>;
+  // per-transcript session summaries (Summary tab) — the researcher's own artifact
+  summaries?: Record<string, string>;
   speakers?: { // optional: absent in files written before this existed
     colors: Record<string, string>;
     weight: Record<string, SpeakerWeight>;
@@ -102,6 +104,7 @@ export function parseProject(text: string): Project {
     aiLog: p.aiLog ?? [],
     markers: p.markers ?? [],
     markerColors: p.markerColors ?? {},
+    summaries: p.summaries ?? {},
     speakers: p.speakers, // may be absent — openProject re-guesses the interviewer
   };
 }
