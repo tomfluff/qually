@@ -31,6 +31,11 @@
    all the way down on a narrow dock instead of wrapping or pushing controls out */
 .vhead .vtitle { flex:0 1 auto; min-width:0; max-width:12em;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* the playhead timecode: tabular digits so it doesn't jitter as seconds tick.
+   Never ellipsised — unlike the filename it replaced, it's short and bounded,
+   and "00…" says nothing */
+.vhead .vclock { font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric:tabular-nums; flex-shrink:0; }
 /* minimised: just grip + transport + expand, shoulder to shoulder. The label is
    dropped in JSX when media is loaded (the transport says what it is); with no
    media the "Video" label stays, so the pill isn't an anonymous pair of glyphs. */
@@ -64,6 +69,9 @@
 .vspeedwrap .vbtn.speed { padding:0 .6em; min-width:3.4em; justify-content:center; }
 .vspeedwrap .vbtn.speed.on { background:var(--accent); color:#fff; border-color:var(--accent); }
 [data-theme=dark] .vspeedwrap .vbtn.speed.on { color:#12161a; }
+/* the PiP button lit while the video floats — same voice as the speed toggle */
+.vhead .vbtn.icononly.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+[data-theme=dark] .vhead .vbtn.icononly.on { color:#12161a; }
 /* fixed + translated, NOT absolute: .vdock is overflow:hidden (rounded corners),
    and an absolute menu poking above the dock's top edge gets clipped there.
    Anchored to the button's top-right corner, growing up-left. It is PORTALED to

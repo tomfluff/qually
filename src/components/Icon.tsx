@@ -10,6 +10,7 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   "chevron-left": { d: ["M15 6l-6 6l6 6"] },
   "chevron-right": { d: ["M9 6l6 6l-6 6"] },
   play: { d: ["M7 4v16l13 -8z"], fill: true },
+  pip: { d: ["M11 19h-6a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v4", "M14 14m0 1a1 1 0 0 1 1 -1h5a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1z"] },
   pause: { d: ["M6 5h4v14h-4z", "M14 5h4v14h-4z"], fill: true },
   refresh: { d: ["M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4", "M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"] },
   undo: { d: ["M9 14l-4 -4l4 -4", "M5 10h11a4 4 0 1 1 0 8h-1"] },

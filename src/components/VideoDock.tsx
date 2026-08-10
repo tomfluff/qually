@@ -59,6 +59,8 @@ export function VideoDock() {
   const [geom, setGeom] = useState<Geom>(loadGeom);
   const [media, setMedia] = useState<Record<string, { url: string; name: string }>>({});
   const [playing, setPlaying] = useState(false);
+  const [pip, setPip] = useState(false); // the video floats in a picture-in-picture window
+  const [time, setTime] = useState(0);   // playhead, for the head's timecode
   // anchor coords, not a boolean: the menu renders position:fixed at the button's
   // corner because .vdock's overflow:hidden would clip a child that pokes above it.
   // `up` picks the growth direction — a dock dragged near the top of the window
@@ -111,6 +113,15 @@ export function VideoDock() {
   // apply persisted playback rate whenever the source or rate changes — unless a
   // line-edit loop owns the rate right now (it restores the dock's rate on stop)
   useEffect(() => { if (videoRef.current && !isLooping()) videoRef.current.playbackRate = geom.rate; }, [cur, geom.rate]);
+  // PiP state comes from the element's own events — the window also closes from
+  // its native × (no React involved), so the button can't track itself
+  useEffect(() => {
+    const v = videoRef.current; if (!v) return;
+    const on = () => setPip(true), off = () => setPip(false);
+    v.addEventListener("enterpictureinpicture", on);
+    v.addEventListener("leavepictureinpicture", off);
+    return () => { v.removeEventListener("enterpictureinpicture", on); v.removeEventListener("leavepictureinpicture", off); };
+  }, [cur]);
 
   // The clamp in `pos` only runs while rendering, and nothing re-renders on a window
   // resize — so shrinking the window left the dock at its old transform, stranded
@@ -240,14 +251,37 @@ export function VideoDock() {
 
   const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? void v.play() : v.pause(); };
   const setRate = (rate: number) => setGeom((g) => ({ ...g, rate }));
+  // Pop the video into the browser's picture-in-picture window — a real window
+  // that moves to another monitor while the SAME element keeps answering every
+  // dock control (play/pause, speed, offset, sync). Audio-only media rejects;
+  // the catch keeps that (and unsupported browsers) a silent no-op.
+  const togglePip = async () => {
+    const v = videoRef.current; if (!v) return;
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      else await v.requestPictureInPicture();
+    } catch { /* audio-only source, or PiP unavailable */ }
+  };
 
   // remember this tab's position as it plays; restore it when its source loads
-  const onTimeUpdate = () => { const v = videoRef.current; if (v && !switching.current) lastTime.current[pid] = v.currentTime; };
+  const onTimeUpdate = () => {
+    const v = videoRef.current; if (!v) return;
+    if (!switching.current) lastTime.current[pid] = v.currentTime;
+    setTime(v.currentTime);
+  };
   const onLoaded = () => {
     const v = videoRef.current; if (!v) return;
     const t = lastTime.current[pid];
     if (t != null && t > 0.05) v.currentTime = t;
     switching.current = false;
+    setTime(v.currentTime);
+  };
+  // H:MM:SS only once there's an hour to show
+  const clock = (s: number) => {
+    const t = Math.floor(Math.max(0, s));
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), ss = t % 60;
+    const two = (n: number) => String(n).padStart(2, "0");
+    return h ? `${h}:${two(m)}:${two(ss)}` : `${two(m)}:${two(ss)}`;
   };
 
   // Feature: jump the transcript to whatever is playing now. The line's position in the
@@ -326,7 +360,7 @@ export function VideoDock() {
           )}
           {/* stays mounted when collapsed (0x0) so audio keeps playing but the
               video's dimensions don't affect the collapsed bar's auto width */}
-          <video ref={videoRef} src={cur.url} controls disablePictureInPicture aria-label={cur.name}
+          <video ref={videoRef} src={cur.url} controls aria-label={cur.name}
             onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
             onTimeUpdate={onTimeUpdate} onLoadedMetadata={onLoaded}
             style={{ width: geom.collapsed ? 0 : "100%", height: geom.collapsed ? 0 : "auto", display: "block", background: "#000" }} />
@@ -342,10 +376,15 @@ export function VideoDock() {
 
       <div className="vhead" onMouseDown={startDrag}>
         <span className="vgrip" aria-hidden="true"><Icon name="grip-horizontal" size={fs + 1} /></span>
-        {/* minimised with media: controls only — the filename returns on expand.
-            With no media the pill keeps a plain "Video" label; a bare grip and
-            chevron says nothing about what it is. */}
-        {!(geom.collapsed && cur) && <span className="vtitle">{cur ? cur.name : "Video"}</span>}
+        {/* minimised with media: controls only — the timecode returns on expand.
+            With media it's the playhead (the filename lives in its tooltip);
+            with none, a plain "Video" label — a bare grip and chevron says
+            nothing about what it is. */}
+        {!(geom.collapsed && cur) && (
+          <span className={"vtitle" + (cur ? " vclock" : "")} title={cur?.name}>
+            {cur ? clock(time) : "Video"}
+          </span>
+        )}
         <span style={{ flex: 1 }} />
         {cur && (
           <>
@@ -353,6 +392,13 @@ export function VideoDock() {
               aria-label={playing ? "Pause" : "Play"}>
               <Icon name={playing ? "pause" : "play"} size={fs} />
             </button>
+            {"pictureInPictureEnabled" in document && document.pictureInPictureEnabled && (
+              <button className={"vbtn icononly" + (pip ? " on" : "")} onClick={() => void togglePip()}
+                title={pip ? "Bring the video back to the dock" : "Pop the video out — a floating window you can move to another screen; every control here still drives it"}
+                aria-label={pip ? "Exit picture-in-picture" : "Open picture-in-picture"} aria-pressed={pip}>
+                <Icon name="pip" size={fs + 2} />
+              </button>
+            )}
             {/* speed lives in a popover now — ten steps would not fit as pills */}
             <div className="vspeedwrap" ref={speedRef}>
               <button className={"vbtn speed" + (speedMenu ? " on" : "")}
