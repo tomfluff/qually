@@ -193,6 +193,9 @@ interface State {
   setActive: (pid: string) => void;
   closeTab: (pid: string) => void;
   togglePinTab: (pid: string) => void;
+  // drag-reorder a tab to index `to`, clamped inside its own group (pinned tabs
+  // keep the front; the boundary is crossed by pinning, not dragging)
+  moveTab: (pid: string, to: number) => void;
   // rename a transcript file (remaps every pid-keyed slice); returns an error
   // message for the rename form, or null on success
   renameTranscript: (from: string, to: string) => string | null;
@@ -672,6 +675,26 @@ export const useStore = create<State>()(
         if (s.active !== pid) { set({ tabs, savedSelections: saved }); return; }
         const next = tabs[0] || "browse";
         set({ tabs, active: next, selection: saved[next] ?? emptySel(), savedSelections: saved });
+      },
+
+      moveTab: (pid, to) => {
+        const s = get();
+        const from = s.tabs.indexOf(pid);
+        if (from < 0) return;
+        // the pinned group occupies the front (togglePinTab's invariant); clamp
+        // the target into the group the tab belongs to
+        const nPin = s.tabs.filter((p) => s.pinnedTabs.includes(p)).length;
+        const isPin = s.pinnedTabs.includes(pid);
+        const t = Math.max(isPin ? 0 : nPin, Math.min(to, isPin ? nPin - 1 : s.tabs.length - 1));
+        if (t === from) return;
+        const tabs = [...s.tabs];
+        tabs.splice(from, 1);
+        tabs.splice(t, 0, pid);
+        set({
+          tabs,
+          // pin order = display order; keep the two lists agreeing after a drag
+          pinnedTabs: isPin ? tabs.filter((p) => s.pinnedTabs.includes(p)) : s.pinnedTabs,
+        });
       },
 
       togglePinTab: (pid) => {

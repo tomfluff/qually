@@ -17,6 +17,7 @@ export function Tabs() {
   const closeTab = useStore((s) => s.closeTab);
   const [menu, setMenu] = useState<{ pid: string; x: number; y: number } | null>(null);
   const [assistMenu, setAssistMenu] = useState<{ x: number; y: number } | null>(null);
+  const [dragPid, setDragPid] = useState<string | null>(null);
   const openMenuAt = (pid: string, el: HTMLElement) => {
     const r = el.getBoundingClientRect();
     setMenu({ pid, x: r.left, y: r.bottom + 4 });
@@ -33,9 +34,24 @@ export function Tabs() {
           The wrapper is presentation so the tablist's exposed children are the tab
           buttons themselves (the × stays a plain button — it is not a tab). */}
       {tabs.map((pid) => (
-        <div key={pid} className={"tab" + (active === pid ? " active" : "")}
+        <div key={pid} className={"tab" + (active === pid ? " active" : "") + (dragPid === pid ? " dragging" : "")}
           role="presentation" onClick={() => setActive(pid)}
-          onContextMenu={(e) => { e.preventDefault(); setMenu({ pid, x: e.clientX, y: e.clientY }); }}>
+          onContextMenu={(e) => { e.preventDefault(); setMenu({ pid, x: e.clientX, y: e.clientY }); }}
+          // drag to reorder: the list REORDERS LIVE under the pointer (moveTab per
+          // dragover), so the drop itself has nothing left to do. Crossing the pin
+          // boundary is clamped in the store — pinned tabs keep the front.
+          draggable
+          onDragStart={(e) => { setDragPid(pid); e.dataTransfer.effectAllowed = "move"; }}
+          onDragEnd={() => setDragPid(null)}
+          onDragOver={(e) => {
+            if (!dragPid || dragPid === pid) return;
+            e.preventDefault();
+            const r = e.currentTarget.getBoundingClientRect();
+            const before = e.clientX < r.left + r.width / 2;
+            let to = tabs.indexOf(pid) + (before ? 0 : 1);
+            if (tabs.indexOf(dragPid) < to) to--; // removing the dragged tab shifts the target left
+            useStore.getState().moveTab(dragPid, to);
+          }}>
           <button className="tabname" role="tab" aria-selected={active === pid}
             onKeyDown={(e: ReactKeyboardEvent<HTMLButtonElement>) => {
               // keyboard route to the tab menu, matching the sidebar rows

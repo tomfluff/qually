@@ -9,6 +9,8 @@
 /* the open transcript outlines itself in its own text colour — the accent border
    is the Codebook/Assist signature, and those override this below */
 .tab.active { color:var(--fg); border-color:currentColor; }
+/* mid-drag: the tab travels with the pointer as the list reorders under it */
+.tab.dragging { opacity:.45; }
 /* the label and × inside are real buttons (focusable, base focus ring) — strip the
    UA chrome so they read as one tab; the old 6px 14px padding is split between them */
 .tab .tabname, .tab .x { background:none; border:none; color:inherit; font:inherit;
