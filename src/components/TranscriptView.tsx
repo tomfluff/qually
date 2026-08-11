@@ -15,7 +15,7 @@ import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
 import { excerptOf } from "../contract/excerpt";
-import { savedScroll, positioned } from "../scrollMemory";
+import { savedScroll, positioned, rememberScroll } from "../scrollMemory";
 import { announce } from "../announce";
 import { tinyDiff } from "../diff";
 import { useMarkers } from "../useMarkers";
@@ -172,7 +172,7 @@ export function TranscriptView() {
     // against the new content, which would overwrite the new tab's saved position.
     if (positioned.has(active) && !positioning.current) {
       const index = v.findItemIndex(v.scrollOffset);
-      savedScroll[active] = { index, delta: v.scrollOffset - v.getItemOffset(index) };
+      rememberScroll(active, { index, delta: v.scrollOffset - v.getItemOffset(index) });
     }
     if (v.viewportSize) mmRef.current?.setRange(v.findItemIndex(v.scrollOffset), v.findItemIndex(v.scrollOffset + v.viewportSize));
     // Home/End (and any scroll) leave the selection behind. Rather than silently move
