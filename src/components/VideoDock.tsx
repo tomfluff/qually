@@ -53,21 +53,32 @@ export function VideoDock() {
   // buttons, the speed menu, and the icons below.
   const fs = DOCK_FS;
   const minimapWidth = useStore((s) => s.ui.minimapWidth); // the default rest spot clears it
-  // The media element is keyed to the last TRANSCRIPT you were on, not to
-  // `active`: while a video floats in picture-in-picture, leaving for the
-  // Codebook/Summary/Assist tab must not destroy the element the floating
-  // window is showing. Unmounting it left the browser holding a detached
-  // orphan — the dock then built a second video, and no control on the dock
-  // reached the one on screen.
+  // WHICH transcript's media the dock's one <video> element is playing.
+  //
+  // Normally the active transcript (and the last one you were on, while you're
+  // off in Codebook/Summary/Assist). But a floating video PINS it: popping out
+  // means "keep this on my other screen while I work", and that has to survive
+  // every tab change, including switching to a transcript with no media of its
+  // own. Unmounting the element leaves the browser holding a DETACHED orphan —
+  // the window keeps showing a video no control can reach, and the leave event
+  // never arrives (a detached node's events don't reach the document), so the
+  // toggle stayed lit over a window that wasn't there.
+  const [pipPid, setPipPid] = useState("");
   const lastTab = useRef("");
   useEffect(() => { if (onTranscript) lastTab.current = pid; }, [onTranscript, pid]);
-  const vidPid = onTranscript ? pid : lastTab.current;
+  const [media, setMedia] = useState<Record<string, { url: string; name: string }>>({});
+  const wantPid = onTranscript ? pid : lastTab.current;
+  // The pin is the FALLBACK, not an override: a transcript with its own media
+  // takes the element (swapping src keeps the floating window — PiP follows the
+  // element, not the source, so it simply starts showing this transcript). Only
+  // where the new tab has no video of its own does the floating one hold on.
+  const vidPid = media[wantPid] ? wantPid : (pipPid || wantPid);
   const offset = useStore((s) => s.video[vidPid]?.offset ?? 0);
+  // keyed to the media on screen, which is the transcript the offset belongs to
   const setOffset = (v: number) =>
-    useStore.setState((s) => ({ video: { ...s.video, [pid]: { ...s.video[pid], offset: v } } }));
+    useStore.setState((s) => ({ video: { ...s.video, [vidPid]: { ...s.video[vidPid], offset: v } } }));
 
   const [geom, setGeom] = useState<Geom>(loadGeom);
-  const [media, setMedia] = useState<Record<string, { url: string; name: string }>>({});
   const [playing, setPlaying] = useState(false);
   const [pip, setPip] = useState(false); // the video floats in a picture-in-picture window
   const [time, setTime] = useState(0);   // playhead, for the head's timecode
@@ -123,27 +134,41 @@ export function VideoDock() {
   // apply persisted playback rate whenever the source or rate changes — unless a
   // line-edit loop owns the rate right now (it restores the dock's rate on stop)
   useEffect(() => { if (videoRef.current && !isLooping()) videoRef.current.playbackRate = geom.rate; }, [cur, geom.rate]);
-  // PiP is entered and left from FOUR places — our button, the video's own
+  // PiP is entered and left from several places — our button, the video's own
   // native control, the floating window's × and back-to-tab, and the browser
-  // itself (a tab switch closes it). The button can only mirror that if it
-  // reads the truth rather than its own last click.
+  // itself. The button can only mirror that if it reads the truth rather than
+  // its own last click, so the state is DERIVED, never remembered: the floating
+  // element must be the one this dock is holding.
   //
-  // Listened for on the DOCUMENT, not the element: these events bubble (per
-  // spec), so one listener mounted once catches every transition regardless of
-  // which <video> is current or whether it existed when we subscribed. The
-  // earlier element-level version re-subscribed on media change and silently
-  // missed anything that happened outside that window. State is read back from
-  // document.pictureInPictureElement, so it can never disagree with the browser.
-  useEffect(() => {
-    const sync = () => setPip(!!document.pictureInPictureElement);
-    document.addEventListener("enterpictureinpicture", sync);
-    document.addEventListener("leavepictureinpicture", sync);
-    sync();
-    return () => {
-      document.removeEventListener("enterpictureinpicture", sync);
-      document.removeEventListener("leavepictureinpicture", sync);
-    };
+  // Runs after EVERY render, not just on the events. Events alone were not
+  // enough: a video removed from the document takes its leave event with it (a
+  // detached node's events never reach the listener), which is precisely the
+  // case that left a lit toggle over a window that was gone. Re-deriving costs
+  // one identity comparison, and React drops the re-render when nothing moved.
+  // The document listeners stay for the transitions that happen while nothing
+  // else is re-rendering.
+  const syncPip = useCallback(() => {
+    const el = document.pictureInPictureElement;
+    const ours = !!videoRef.current && el === videoRef.current;
+    setPip(ours);
+    // A floating element that ISN'T ours is a leftover no control can reach.
+    // Close it rather than leave a dead window on someone's second screen.
+    if (el && !ours) void document.exitPictureInPicture().catch(() => { /* already gone */ });
+    setPipPid((prev) => (ours ? (prev || vidPidRef.current) : ""));
   }, []);
+  // vidPid as a ref: syncPip is a stable callback (the listeners below subscribe
+  // once) and must still see which transcript is playing right now
+  const vidPidRef = useRef(vidPid);
+  useEffect(() => { vidPidRef.current = vidPid; }, [vidPid]);
+  useEffect(syncPip);
+  useEffect(() => {
+    document.addEventListener("enterpictureinpicture", syncPip);
+    document.addEventListener("leavepictureinpicture", syncPip);
+    return () => {
+      document.removeEventListener("enterpictureinpicture", syncPip);
+      document.removeEventListener("leavepictureinpicture", syncPip);
+    };
+  }, [syncPip]);
 
   // The clamp in `pos` only runs while rendering, and nothing re-renders on a window
   // resize — so shrinking the window left the dock at its old transform, stranded
@@ -190,9 +215,12 @@ export function VideoDock() {
   // pop-back controls keep reaching the window on your other screen while you
   // work in the Codebook, Summary or Assist tab.
   if (!onTranscript && !(pip && cur)) return null;
-  // one flag for "show only the pill": collapsed by choice, or by being off a
-  // transcript (the offset and sync-to-line controls have no meaning there)
-  const shut = geom.collapsed || !onTranscript;
+  // One flag for "show only the pill": collapsed by choice, or showing a video
+  // that isn't this tab's — off a transcript entirely, or floating another
+  // transcript's media. The offset and sync-to-line controls read the ACTIVE
+  // transcript, so they'd be acting on one transcript while the picture is
+  // another's; the pill's transport is the only thing that still makes sense.
+  const shut = geom.collapsed || !onTranscript || vidPid !== pid;
 
   const pickMedia = (f: File | undefined) => {
     if (!f) return;
@@ -320,7 +348,9 @@ export function VideoDock() {
   const syncToLine = () => {
     const v = videoRef.current; if (!v) return;
     const t = v.currentTime;
-    const lines = useStore.getState().transcripts[pid]?.lines ?? [];
+    // the transcript whose media is playing — the button only shows when that is
+    // the active one, and keying it to the video keeps the two from ever diverging
+    const lines = useStore.getState().transcripts[vidPid]?.lines ?? [];
     let best = -1, bestT = -Infinity;
     for (const l of lines) {
       const s = tsToSec(l.ts);
@@ -411,7 +441,11 @@ export function VideoDock() {
             with none, a plain "Video" label — a bare grip and chevron says
             nothing about what it is. */}
         {!(shut && cur) && (
-          <span className={"vtitle" + (cur ? " vclock" : "")} title={cur?.name}>
+          <span className={"vtitle" + (cur ? " vclock" : "")}
+            // when the picture belongs to another transcript (a floating video
+            // held while you work elsewhere), say whose — the filename alone
+            // wouldn't tell you why this tab is showing someone else's video
+            title={cur ? (vidPid === pid ? cur.name : `${vidPid} — ${cur.name}`) : undefined}>
             {cur ? clock(time) : "Video"}
           </span>
         )}
