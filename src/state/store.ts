@@ -14,10 +14,13 @@ import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll } from "../scrollMemory";
+import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
 import { announce } from "../announce";
 
-export const COLORS = ["#e0554f", "#3b82c4", "#3fa860", "#c98a2a", "#8e6bc9", "#2fa3a3",
-  "#c95c9c", "#7d8f2e", "#b0653a", "#5470d6", "#4f9e86", "#a35ac0"];
+// The code palette (codeColors.ts owns it, and the assignment logic with it).
+// The colour picker offers exactly what auto-assignment can hand out, so a
+// hand-picked colour and a generated one come from one vocabulary.
+export const COLORS = PALETTE;
 
 // `active` is a transcript pid or one of these reserved view keys (Codebook / Assist).
 // Both are non-transcript surfaces, so transcript-only chrome and selection bookkeeping
@@ -138,7 +141,9 @@ export interface AiCall {
 interface State {
   transcripts: Record<string, { lines: Line[] }>;
   segments: Segment[];
-  codebook: Record<string, { color: string; def: string; status: string }>;
+  // colorLock marks a colour the researcher chose by hand (the picker), so a
+  // recolour pass can be told to keep it and work around it
+  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean }>;
   extSegRows: Record<string, string>[];
   tabs: string[];
   pinnedTabs: string[]; // pids pinned to the FRONT of the tab list, in pin order
@@ -244,6 +249,9 @@ interface State {
   setStatus: (sid: number, status: string) => void;
   setNotes: (sid: number, notes: string) => void;
   setColor: (code: string, color: string) => void;
+  // recolour every code so co-occurring codes differ; keepManual pins the
+  // colours picked by hand. Returns how many colours changed.
+  recolorCodes: (keepManual: boolean) => number;
   togglePin: (code: string) => void;
   refreshHotbar: () => void;
   pushUndo: () => void;
@@ -1076,7 +1084,35 @@ export const useStore = create<State>()(
       // per keystroke, like notes. Summaries aren't in the undo snapshot, so no
       // redo invalidation is needed — undo/redo never touch them.
       setSummary: (pid, text) => set({ summaries: { ...get().summaries, [pid]: text } }),
-      setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color } }, redoStack: [] }),
+      // a colour chosen by hand is LOCKED: a later recolour pass can be asked to
+      // keep these and colour the generated ones around them
+      setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color, colorLock: true } }, redoStack: [] }),
+
+      // Recolour the whole codebook so that no two codes appearing on the same
+      // line share a colour (codeColors.ts does the graph colouring). Undoable —
+      // it rewrites every code's colour, which is exactly the kind of sweeping
+      // change Ctrl+Z exists for. Returns how many colours actually moved.
+      recolorCodes: (keepManual) => {
+        const s = get();
+        const codes = Object.keys(s.codebook);
+        if (!codes.length) return 0;
+        s.pushUndo();
+        const locked = keepManual
+          ? Object.fromEntries(codes.filter((c) => s.codebook[c].colorLock).map((c) => [c, s.codebook[c].color]))
+          : {};
+        const plan = recolorPlan(codes, conflictGraph(s.segments), locked);
+        const cb = { ...s.codebook };
+        let changed = 0;
+        for (const c of codes) {
+          const color = plan[c] ?? cb[c].color;
+          if (color.toLowerCase() !== cb[c].color.toLowerCase()) changed++;
+          // recolouring everything discards the hand-picked colours, so the locks
+          // they stood for go with them
+          cb[c] = keepManual ? { ...cb[c], color } : { ...cb[c], color, colorLock: false };
+        }
+        set({ codebook: cb });
+        return changed;
+      },
       setDef: (code, def) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], def } }, redoStack: [] }),
       renameCode: (code, newName) => {
         const name = newName.trim();
@@ -1315,7 +1351,11 @@ function ensureCode(get: Get, set: Set_, code: string): string {
   const cb = get().codebook;
   const existing = Object.keys(cb).find((c) => norm(c) === norm(code));
   if (existing) return existing;
-  set({ codebook: { ...cb, [code]: { color: COLORS[Object.keys(cb).length % COLORS.length], def: "", status: "candidate" } } });
+  // least-used palette colour, NOT a counter over the codebook size: the counter
+  // handed out a colour another code already held as soon as one was deleted
+  set({ codebook: { ...cb, [code]: {
+    color: pickNewColor(Object.values(cb).map((c) => c.color)), def: "", status: "candidate",
+  } } });
   // a newly created code should appear in the hotbar immediately (no manual refresh)
   set({ hotbarCache: hotbarCodes(get()) });
   return code;

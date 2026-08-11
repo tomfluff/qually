@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 // The Codebook tab: go over your coding. Codes on the left, their excerpts on the
 // right. The AI's observations moved out to the Assist tab; this view is yours.
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, type Segment } from "../state/store";
 import { norm } from "../contract/segments";
 import { excerptOf } from "../contract/excerpt";
@@ -11,8 +11,9 @@ import { CodeMenu } from "./CodeMenu";
 import { openColorPicker } from "../colorPicker";
 import { groundHash } from "../ai/ground";
 import { GroundModal } from "./GroundModal";
-import { useToggleMenu } from "../usePopover";
+import { useToggleMenu, useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
+import { announce } from "../announce";
 
 // Codebook working state (chosen codes, filter, show-rejected) survives leaving the
 // tab — the view unmounts, so plain useState would reset it on every visit.
@@ -42,6 +43,7 @@ export function BrowseView() {
   const [filter, setFilter] = useState(remembered.filter);
   const [showRejected, setShowRejected] = useState(remembered.showRejected);
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
+  const [recolor, setRecolor] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => { Object.assign(remembered, { selected, anchor, filter, showRejected }); },
     [selected, anchor, filter, showRejected]);
 
@@ -106,7 +108,8 @@ export function BrowseView() {
             onChange={(e) => setFilter(e.target.value)} />
           <CbAiMenu onGround={() => setGroundOpen(true)} fontSize={sidebarFontSize} />
           <CbViewMenu showRejected={showRejected} setShowRejected={setShowRejected}
-            ui={ui} setUi={setUi} hasGrounds={hasGrounds} fontSize={sidebarFontSize} />
+            ui={ui} setUi={setUi} hasGrounds={hasGrounds} fontSize={sidebarFontSize}
+            onRecolor={(r) => setRecolor({ x: r.left, y: r.bottom + 4 })} />
         </div>
         <div className="cbList nicescroll">
         {listed.map((c) => (
@@ -192,6 +195,7 @@ export function BrowseView() {
         )}
       </div>
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
+      {recolor && <RecolorConfirm x={recolor.x} y={recolor.y} onClose={() => setRecolor(null)} />}
       {groundOpen && <GroundModal onClose={() => setGroundOpen(false)} />}
     </div>
   );
@@ -222,13 +226,57 @@ function CbAiMenu({ onGround, fontSize }: { onGround: () => void; fontSize: numb
 // View settings for the excerpt list — a rejected filter and grounding emphasis,
 // kept out of the AI menu because they're display prefs, not an action. A dot on
 // the button flags any non-default setting.
-function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, fontSize }: {
+// Recolour the whole codebook. The point is the CONFLICT rule — two codes on one
+// line can't share a colour — so the note says that rather than "assign colours".
+// Hand-picked colours are a real decision, so when any exist the choice to keep
+// them is offered rather than assumed; with none there's nothing to ask about.
+function RecolorConfirm({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const codebook = useStore((s) => s.codebook);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(ref, onClose);
+  const codes = Object.keys(codebook);
+  const locked = codes.filter((c) => codebook[c].colorLock).length;
+  const run = (keepManual: boolean) => {
+    const n = useStore.getState().recolorCodes(keepManual);
+    announce(n ? `${n} code colour${n === 1 ? "" : "s"} changed.` : "Colours already distinct — nothing changed.");
+    onClose();
+  };
+  return (
+    <div className="ctxmenu" ref={ref} role="dialog" aria-label="Recolour codes"
+      style={{ left: Math.min(x, window.innerWidth - 280), top: y, fontSize: fs }}>
+      <div className="ctxhead">Recolour {codes.length} code{codes.length === 1 ? "" : "s"}</div>
+      <div className="ctxnote">
+        Codes that appear on the same line get clearly different colours. Undo (Ctrl+Z) puts the old ones back.
+      </div>
+      <div className="ctxform">
+        <div className="ctxrow">
+          {locked > 0 ? (
+            <>
+              <button className="btn" autoFocus onClick={() => run(true)}
+                title={`${locked} colour${locked === 1 ? "" : "s"} you picked by hand stay as they are`}>
+                Keep my {locked} colour{locked === 1 ? "" : "s"}
+              </button>
+              <button className="btn" onClick={() => run(false)}>Recolour all</button>
+            </>
+          ) : (
+            <button className="btn" autoFocus onClick={() => run(false)}>Recolour</button>
+          )}
+          <button className="btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, fontSize, onRecolor }: {
   showRejected: boolean;
   setShowRejected: (f: (v: boolean) => boolean) => void;
   ui: { groundBold: boolean; groundWash: boolean; groundUnderline: boolean };
   setUi: (u: Partial<{ groundBold: boolean; groundWash: boolean; groundUnderline: boolean }>) => void;
   hasGrounds: boolean;
   fontSize: number;
+  onRecolor: (rect: DOMRect) => void;
 }) {
   const { open, setOpen, btnRef, menuRef } = useToggleMenu();
   // defaults: rejected off, bold on, wash on, underline off
@@ -259,6 +307,14 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
                 onChange={() => setUi({ groundUnderline: !ui.groundUnderline })} /> Underline</label>
             </>
           )}
+          <div className="cbMenuGrp">Colours</div>
+          <button className="cbAct" onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setOpen(false);
+            onRecolor(r);
+          }}>
+            <Icon name="droplet" size={fontSize + 1} /> Recolour codes…
+          </button>
         </div>
       )}
     </div>

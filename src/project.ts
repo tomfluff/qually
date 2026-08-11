@@ -32,7 +32,9 @@ export interface Project {
   savedAt: string;
   transcripts: Record<string, { lines: Line[] }>; // Line carries `orig`, so corrections survive
   segments: Segment[];
-  codebook: Record<string, { color: string; def: string; status: string }>;
+  // colorLock (optional) records that a colour was chosen by hand, so a recolour
+  // pass on another machine keeps it too. Absent in files written before it existed.
+  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean }>;
   extSegRows: Record<string, string>[];
   tabs: string[];
   active: string;
