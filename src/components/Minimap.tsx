@@ -80,16 +80,37 @@ export const Minimap = forwardRef<MinimapHandle, {
       // columns: [0..warnW] warnings gutter · text · lane columns (flush right).
       // simplified widens everything and enforces min sizes so marks stay obvious.
       const warnW = simple ? 6 : 4;
-      // session events: their own thin lane, before the speaker rail — a tick in the
-      // event's colour, exactly how every other kind of mark here claims a column.
-      // (It replaced a full-width rule, which shouted over everything else.)
-      const mkW = simple ? 5 : 3;
+      // Session events: ONE COLUMN PER TYPE, before the speaker rail. Sharing a
+      // single lane meant two types at the same scroll position drew over each
+      // other, and a type had no fixed x to scan down — "where did the breaks
+      // happen" was unanswerable. Columns follow first appearance (i.e. time),
+      // the same order the sidebar's Events list groups by.
+      const mkKeys: string[] = [];
+      const mkCol = new Map<string, number>();
+      for (const it of items) {
+        if (it.kind !== "m") continue;
+        const k = markerKey(it.m);
+        if (!mkCol.has(k)) { mkCol.set(k, mkKeys.length); mkKeys.push(k); }
+      }
+      // The band is capped as a share of the width — a study with a dozen event
+      // types must not crowd out the code lanes — so columns thin out rather than
+      // the band growing. No events, no band: the space goes back to the text bars.
+      // Sized by PITCH, so the band can never exceed its budget: a minimum column
+      // width would have won against the cap and pushed the band straight over the
+      // code lanes once a study ran past ~8 event types. Columns thin (and the gap
+      // with them) instead; widening the minimap widens the budget.
+      const mkBandMax = w * (simple ? 0.3 : 0.26);
+      const mkPitch = mkKeys.length
+        ? Math.min((simple ? 5 : 3) + 1, mkBandMax / mkKeys.length) : 0;
+      const mkGap = Math.min(1, mkPitch * 0.25);
+      const mkW = mkKeys.length ? Math.max(0.8, mkPitch - mkGap) : 0;
+      const mkBandW = mkKeys.length * mkPitch;
       const mkX = warnW + 2;
       // speaker rail: WHO is talking, as its own channel. Deliberately a separate strip
       // rather than tinting the text bars — the text bars stay a pure "how much was
       // said" signal, and the two colour systems (speaker, code) never share a column.
       const railW = simple ? 6 : 4;
-      const railX = mkX + mkW + 2;
+      const railX = mkX + mkBandW + (mkBandW ? 2 : 0);
       const laneAreaW = Math.min(w * (simple ? 0.6 : 0.5), cols * (simple ? 10 : 7));
       const laneX = w - laneAreaW - 2;
       const colW = laneAreaW / Math.max(1, cols);
@@ -211,15 +232,17 @@ export const Minimap = forwardRef<MinimapHandle, {
         }
       }
 
-      // session events, as ticks in their own lane (mkX) — sized like the AI-notice
+      // session events: a tick in the type's own column, sized like the AI-notice
       // ticks so a single event stays findable at any transcript length
       const mkMinH = simple ? 5 : 3;
       for (let i = 0; i < N; i++) {
         const it = items[i];
         if (it.kind !== "m") continue;
+        const key = markerKey(it.m);
         ctx.globalAlpha = 0.95;
-        ctx.fillStyle = markerColor(markerKey(it.m), ui.markerColors);
-        ctx.fillRect(mkX, (i / N) * h, mkW, Math.max(mkMinH, (h / N) * 0.85));
+        ctx.fillStyle = markerColor(key, ui.markerColors);
+        ctx.fillRect(mkX + (mkCol.get(key) ?? 0) * mkPitch, (i / N) * h,
+          mkW, Math.max(mkMinH, (h / N) * 0.85));
       }
       ctx.globalAlpha = 1;
     };
