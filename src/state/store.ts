@@ -192,6 +192,8 @@ interface State {
   clearSelection: () => void;
   setActive: (pid: string) => void;
   closeTab: (pid: string) => void;
+  // reopen a loaded transcript whose tab was closed (the data never left)
+  openTab: (pid: string) => void;
   togglePinTab: (pid: string) => void;
   // drag-reorder a tab to index `to`, clamped inside its own group (pinned tabs
   // keep the front; the boundary is crossed by pinning, not dragging)
@@ -675,6 +677,17 @@ export const useStore = create<State>()(
         if (s.active !== pid) { set({ tabs, savedSelections: saved }); return; }
         const next = tabs[0] || "browse";
         set({ tabs, active: next, selection: saved[next] ?? emptySel(), savedSelections: saved });
+      },
+
+      // Put a closed transcript back on the bar. Closing a tab only ever hid the
+      // transcript — its lines, coding, events and summary were never touched —
+      // so reopening is a view change, not a recovery.
+      openTab: (pid) => {
+        const s = get();
+        if (!s.transcripts[pid] || !isTranscriptView(pid)) return;
+        const tabs = s.tabs.includes(pid) ? s.tabs : [...s.tabs, pid];
+        const saved = { ...s.savedSelections, [s.active]: s.selection };
+        set({ tabs, active: pid, selection: saved[pid] ?? emptySel(), savedSelections: saved });
       },
 
       moveTab: (pid, to) => {

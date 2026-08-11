@@ -834,6 +834,19 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, onEdit }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(marker.label);
+  // The box opens at the note's real height and grows as it's typed. rows={1}
+  // alone showed a one-line slot with the rest of a long note scrolled out of
+  // sight (the CSS hides the overflow), so editing meant hunting for text that
+  // was already there.
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto"; // measure from scratch, or shrinking never happens
+    // scrollHeight is the PADDING box; the element is border-box, so the borders
+    // have to be added back or the last line stays 2px under the edge
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+  }, [editing, value]);
   const key = markerKey(marker);
   const color = markerColor(key, colors);
   const lineTs = fmtLike(marker.t - offset, tsSample);
@@ -864,7 +877,7 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, onEdit }: {
       <button className="ts" tabIndex={-1} title="play from here"
         onClick={() => seekVideo(lineTs)}>{lineTs}</button>
       {editing ? (
-        <textarea className="mkedit" rows={1} autoFocus value={value}
+        <textarea className="mkedit" rows={1} autoFocus value={value} ref={taRef}
           aria-label={`Edit event note at ${lineTs}`}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {

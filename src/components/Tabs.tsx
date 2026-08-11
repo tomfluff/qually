@@ -12,12 +12,18 @@ export function Tabs() {
   const tabs = useStore((s) => s.tabs);
   const pinnedTabs = useStore((s) => s.pinnedTabs);
   const active = useStore((s) => s.active);
+  const transcripts = useStore((s) => s.transcripts);
   const fontSize = useStore((s) => s.ui.sidebarFontSize);
   const setActive = useStore((s) => s.setActive);
-  const closeTab = useStore((s) => s.closeTab);
   const [menu, setMenu] = useState<{ pid: string; x: number; y: number } | null>(null);
   const [assistMenu, setAssistMenu] = useState<{ x: number; y: number } | null>(null);
+  const [reopenMenu, setReopenMenu] = useState<{ x: number; y: number } | null>(null);
+  // the × asks first — see CloseConfirm
+  const [closing, setClosing] = useState<{ pid: string; x: number; y: number } | null>(null);
   const [dragPid, setDragPid] = useState<string | null>(null);
+  // loaded transcripts with no tab: closing one only hid it, so these are all
+  // reopenable. The + only exists while there is something to reopen.
+  const closed = Object.keys(transcripts).filter((p) => !tabs.includes(p));
   const openMenuAt = (pid: string, el: HTMLElement) => {
     const r = el.getBoundingClientRect();
     setMenu({ pid, x: r.left, y: r.bottom + 4 });
@@ -63,9 +69,25 @@ export function Tabs() {
             {pid}
           </button>
           <button className="x" aria-label={`Close ${pid}`}
-            onClick={(e) => { e.stopPropagation(); closeTab(pid); }}>×</button>
+            onClick={(e) => {
+              e.stopPropagation();
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setClosing({ pid, x: r.left, y: r.bottom + 4 });
+            }}>×</button>
         </div>
       ))}
+      {/* reopen: the closed transcripts are still loaded, one click from the bar */}
+      {closed.length > 0 && (
+        <button className="tab tabadd" aria-haspopup="menu" aria-expanded={!!reopenMenu}
+          title={`Reopen a closed transcript (${closed.length})`}
+          aria-label={`Reopen a closed transcript (${closed.length} available)`}
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setReopenMenu((m) => m ? null : { x: r.left, y: r.bottom + 4 });
+          }}>
+          <Icon name="plus" size={14} />
+        </button>
+      )}
       <button className={"tab browsetab" + (active === "browse" ? " active" : "")}
         role="tab" aria-selected={active === "browse"} onClick={() => setActive("browse")}>
         <Icon name="list" size={14} /> Codebook
@@ -93,6 +115,59 @@ export function Tabs() {
       </div>
       {menu && <TabMenu pid={menu.pid} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
       {assistMenu && <AssistMenu x={assistMenu.x} y={assistMenu.y} onClose={() => setAssistMenu(null)} />}
+      {reopenMenu && <ReopenMenu pids={closed} x={reopenMenu.x} y={reopenMenu.y}
+        onClose={() => setReopenMenu(null)} />}
+      {closing && <CloseConfirm pid={closing.pid} x={closing.x} y={closing.y}
+        onClose={() => setClosing(null)} />}
+    </div>
+  );
+}
+
+// The × asks before it acts. Closing costs no data — the transcript, its coding,
+// its events and its summary all stay loaded, and the + on the bar puts it back —
+// so this is a confirmation, not a warning, and it says exactly that. What a
+// close DOES cost is the tab's selection and scroll position (closeTab drops
+// both), which is why a stray click shouldn't be able to spend it.
+function CloseConfirm({ pid, x, y, onClose }: { pid: string; x: number; y: number; onClose: () => void }) {
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(ref, onClose);
+  const confirm = () => { useStore.getState().closeTab(pid); onClose(); };
+  return (
+    <div className="ctxmenu" ref={ref} role="dialog" aria-label={`Close ${pid}?`}
+      style={{ left: Math.min(x, window.innerWidth - 260), top: y, fontSize: fs }}>
+      <div className="ctxhead">Close {pid}?</div>
+      <div className="ctxnote">Nothing is deleted — the coding stays, and the <b>+</b> on the tab bar reopens it.</div>
+      <div className="ctxform">
+        <div className="ctxrow">
+          <button className="btn" autoFocus onClick={confirm}
+            onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}>Close tab</button>
+          <button className="btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Every loaded transcript that has no tab. Reopening is a view change (openTab),
+// so a transcript closed by accident is one click away rather than a re-import —
+// which would have re-run the import machinery over data already in the project.
+function ReopenMenu({ pids, x, y, onClose }: {
+  pids: string[]; x: number; y: number; onClose: () => void;
+}) {
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(ref, onClose);
+  return (
+    <div className="ctxmenu" ref={ref} role="menu" aria-label="Reopen a closed transcript"
+      style={{ left: Math.min(x, window.innerWidth - 240), top: y, fontSize: fs }}>
+      <div className="ctxhead">Reopen</div>
+      {pids.map((p) => (
+        <button key={p} role="menuitem"
+          onClick={() => { useStore.getState().openTab(p); onClose(); }}>
+          <Icon name="file-text" size={fs + 2} /> {p}
+        </button>
+      ))}
     </div>
   );
 }

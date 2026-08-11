@@ -49,3 +49,24 @@ test("a pinned tab reorders within the front, and pin order follows", () => {
   useStore.getState().moveTab("B", 3); // dragged past the boundary: stops at it
   expect(useStore.getState().tabs).toEqual(["A", "B", "C", "D"]);
 });
+
+test("closing a tab only hides it — openTab puts it back", () => {
+  useStore.setState({
+    tabs: ["A", "B"], pinnedTabs: [],
+    transcripts: { A: { lines: [] }, B: { lines: [] } } as never,
+    active: "A", savedSelections: {},
+  });
+  useStore.getState().closeTab("A");
+  expect(useStore.getState().tabs).toEqual(["B"]);
+  expect(useStore.getState().transcripts.A).toBeDefined(); // the data never left
+  useStore.getState().openTab("A");
+  expect(useStore.getState().tabs).toEqual(["B", "A"]);
+  expect(useStore.getState().active).toBe("A");
+});
+
+test("openTab ignores unknown transcripts and reserved view names", () => {
+  useStore.setState({ tabs: ["B"], transcripts: { B: { lines: [] } } as never, active: "B" });
+  useStore.getState().openTab("nope");
+  useStore.getState().openTab("browse");
+  expect(useStore.getState().tabs).toEqual(["B"]);
+});

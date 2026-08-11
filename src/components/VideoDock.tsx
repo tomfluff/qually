@@ -48,11 +48,21 @@ function loadGeom(): Geom {
 export function VideoDock() {
   const pid = useStore((s) => s.active);
   const hasTranscript = useStore((s) => !!s.transcripts[s.active]);
+  const onTranscript = isTranscriptView(pid) && hasTranscript;
   // Fixed size, not the sidebar setting — DOCK_FS sizes the whole panel: rows,
   // buttons, the speed menu, and the icons below.
   const fs = DOCK_FS;
   const minimapWidth = useStore((s) => s.ui.minimapWidth); // the default rest spot clears it
-  const offset = useStore((s) => s.video[s.active]?.offset ?? 0);
+  // The media element is keyed to the last TRANSCRIPT you were on, not to
+  // `active`: while a video floats in picture-in-picture, leaving for the
+  // Codebook/Summary/Assist tab must not destroy the element the floating
+  // window is showing. Unmounting it left the browser holding a detached
+  // orphan — the dock then built a second video, and no control on the dock
+  // reached the one on screen.
+  const lastTab = useRef("");
+  useEffect(() => { if (onTranscript) lastTab.current = pid; }, [onTranscript, pid]);
+  const vidPid = onTranscript ? pid : lastTab.current;
+  const offset = useStore((s) => s.video[vidPid]?.offset ?? 0);
   const setOffset = (v: number) =>
     useStore.setState((s) => ({ video: { ...s.video, [pid]: { ...s.video[pid], offset: v } } }));
 
@@ -92,7 +102,7 @@ export function VideoDock() {
     const t = setTimeout(() => { try { localStorage.setItem("coding-app-dock", JSON.stringify(geom)); } catch { /* transient */ } }, 250);
     return () => clearTimeout(t);
   }, [geom]);
-  const cur = media[pid];
+  const cur = media[vidPid];
   // prune object URLs whose transcript is gone (new/open project, closed data):
   // a loaded video would otherwise stay retained for the page's lifetime
   const transcripts = useStore((s) => s.transcripts);
@@ -106,22 +116,34 @@ export function VideoDock() {
     });
   }, [transcripts]);
   // keep the seek bridge pointed at the current element + offset
-  useEffect(() => { registerVideo(videoRef.current, offset); }, [cur, offset, pid]);
+  useEffect(() => { registerVideo(videoRef.current, offset); }, [cur, offset, vidPid]);
   // the source is about to change (tab switch / new media): ignore the reset-to-0
   // timeupdate that follows, so it can't clobber the position we'll restore on load
   useEffect(() => { switching.current = true; }, [cur?.url]);
   // apply persisted playback rate whenever the source or rate changes — unless a
   // line-edit loop owns the rate right now (it restores the dock's rate on stop)
   useEffect(() => { if (videoRef.current && !isLooping()) videoRef.current.playbackRate = geom.rate; }, [cur, geom.rate]);
-  // PiP state comes from the element's own events — the window also closes from
-  // its native × (no React involved), so the button can't track itself
+  // PiP is entered and left from FOUR places — our button, the video's own
+  // native control, the floating window's × and back-to-tab, and the browser
+  // itself (a tab switch closes it). The button can only mirror that if it
+  // reads the truth rather than its own last click.
+  //
+  // Listened for on the DOCUMENT, not the element: these events bubble (per
+  // spec), so one listener mounted once catches every transition regardless of
+  // which <video> is current or whether it existed when we subscribed. The
+  // earlier element-level version re-subscribed on media change and silently
+  // missed anything that happened outside that window. State is read back from
+  // document.pictureInPictureElement, so it can never disagree with the browser.
   useEffect(() => {
-    const v = videoRef.current; if (!v) return;
-    const on = () => setPip(true), off = () => setPip(false);
-    v.addEventListener("enterpictureinpicture", on);
-    v.addEventListener("leavepictureinpicture", off);
-    return () => { v.removeEventListener("enterpictureinpicture", on); v.removeEventListener("leavepictureinpicture", off); };
-  }, [cur]);
+    const sync = () => setPip(!!document.pictureInPictureElement);
+    document.addEventListener("enterpictureinpicture", sync);
+    document.addEventListener("leavepictureinpicture", sync);
+    sync();
+    return () => {
+      document.removeEventListener("enterpictureinpicture", sync);
+      document.removeEventListener("leavepictureinpicture", sync);
+    };
+  }, []);
 
   // The clamp in `pos` only runs while rendering, and nothing re-renders on a window
   // resize — so shrinking the window left the dock at its old transform, stranded
@@ -163,7 +185,14 @@ export function VideoDock() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  if (!isTranscriptView(pid) || !hasTranscript) return null;
+  // Off a transcript the dock normally goes away — EXCEPT while its video is
+  // floating: then it stays as its collapsed pill, so the play/pause, speed and
+  // pop-back controls keep reaching the window on your other screen while you
+  // work in the Codebook, Summary or Assist tab.
+  if (!onTranscript && !(pip && cur)) return null;
+  // one flag for "show only the pill": collapsed by choice, or by being off a
+  // transcript (the offset and sync-to-line controls have no meaning there)
+  const shut = geom.collapsed || !onTranscript;
 
   const pickMedia = (f: File | undefined) => {
     if (!f) return;
@@ -258,7 +287,8 @@ export function VideoDock() {
   const togglePip = async () => {
     const v = videoRef.current; if (!v) return;
     try {
-      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      // identity, not truthiness: only OUR video floating means "click = bring it back"
+      if (document.pictureInPictureElement === v) await document.exitPictureInPicture();
       else await v.requestPictureInPicture();
     } catch { /* audio-only source, or PiP unavailable */ }
   };
@@ -266,12 +296,12 @@ export function VideoDock() {
   // remember this tab's position as it plays; restore it when its source loads
   const onTimeUpdate = () => {
     const v = videoRef.current; if (!v) return;
-    if (!switching.current) lastTime.current[pid] = v.currentTime;
+    if (!switching.current) lastTime.current[vidPid] = v.currentTime;
     setTime(v.currentTime);
   };
   const onLoaded = () => {
     const v = videoRef.current; if (!v) return;
-    const t = lastTime.current[pid];
+    const t = lastTime.current[vidPid];
     if (t != null && t > 0.05) v.currentTime = t;
     switching.current = false;
     setTime(v.currentTime);
@@ -314,7 +344,7 @@ export function VideoDock() {
   // clamp against the width actually RENDERED: an expanded dock dragged far left
   // (legitimate negative r) that then collapses to ~150px would otherwise sit
   // entirely offscreen, persisted, with nothing left to grab
-  const effW = geom.collapsed ? 150 : geom.w;
+  const effW = shut ? 150 : geom.w;
   const pos = geom.r !== null && geom.bottom !== null
     ? {
         right: 0, bottom: 0, left: "auto" as const, top: "auto" as const,
@@ -324,19 +354,19 @@ export function VideoDock() {
     : { right: DEFAULT_RIGHT(minimapWidth), bottom: DEFAULT_BOTTOM };
 
   return (
-    <div className={"vdock" + (geom.collapsed ? " collapsed" : "")}
+    <div className={"vdock" + (shut ? " collapsed" : "")}
       style={{
         // collapsed: shrink to the controls (grip + transport + expand), no title —
         // a minimised dock shouldn't cost a filename's width of screen.
         // expanded: floor the width by the text size — magnified chrome in a 380px
         // dock wraps into a three-row jumble. A dragged width wins above the floor.
-        width: geom.collapsed ? "auto"
+        width: shut ? "auto"
           : Math.min(Math.max(cur ? geom.w : MIN_W, MIN_W), window.innerWidth - 48),
         fontSize: fs, ...pos,
       }}>
       {cur ? (
         <div className="vbody">
-          {!geom.collapsed && (
+          {!shut && (
             <div className="vctrl" onMouseDown={startDrag}>
               {/* top control: find the current playback position in the transcript.
                   The strip is also a drag handle (like vhead) — buttons/inputs opt out. */}
@@ -363,9 +393,9 @@ export function VideoDock() {
           <video ref={videoRef} src={cur.url} controls aria-label={cur.name}
             onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
             onTimeUpdate={onTimeUpdate} onLoadedMetadata={onLoaded}
-            style={{ width: geom.collapsed ? 0 : "100%", height: geom.collapsed ? 0 : "auto", display: "block", background: "#000" }} />
+            style={{ width: shut ? 0 : "100%", height: shut ? 0 : "auto", display: "block", background: "#000" }} />
         </div>
-      ) : (!geom.collapsed && (
+      ) : (!shut && (
         <div className="vbody">
           <div className="vempty">
             <div>No media loaded for {pid}.</div>
@@ -380,7 +410,7 @@ export function VideoDock() {
             With media it's the playhead (the filename lives in its tooltip);
             with none, a plain "Video" label — a bare grip and chevron says
             nothing about what it is. */}
-        {!(geom.collapsed && cur) && (
+        {!(shut && cur) && (
           <span className={"vtitle" + (cur ? " vclock" : "")} title={cur?.name}>
             {cur ? clock(time) : "Video"}
           </span>
@@ -433,14 +463,18 @@ export function VideoDock() {
           </>
         )}
         {/* ghost, not a bordered pill: it's a panel affordance (collapse), and
-            looked like a sibling of the speed control when framed the same way */}
-        <button className="vbtn icononly ghost" onClick={() => setGeom((g) => ({ ...g, collapsed: !g.collapsed }))}
-          title={geom.collapsed ? "Expand" : "Collapse to audio"}>
-          <Icon name={geom.collapsed ? "chevron-up" : "chevron-down"} size={fs + 3} />
-        </button>
+            looked like a sibling of the speed control when framed the same way.
+            Off a transcript the pill can't expand (there's nothing to expand
+            INTO), so the chevron would be a button that does nothing — hidden. */}
+        {onTranscript && (
+          <button className="vbtn icononly ghost" onClick={() => setGeom((g) => ({ ...g, collapsed: !g.collapsed }))}
+            title={shut ? "Expand" : "Collapse to audio"}>
+            <Icon name={shut ? "chevron-up" : "chevron-down"} size={fs + 3} />
+          </button>
+        )}
       </div>
       {/* resize lives on the BAR's corner, not over the video picture */}
-      {cur && !geom.collapsed && <div className="vresize" onMouseDown={startResize} title="Resize" />}
+      {cur && !shut && <div className="vresize" onMouseDown={startResize} title="Resize" />}
       <input ref={fileRef} type="file" accept="video/*,audio/*" style={{ display: "none" }}
         onChange={(e) => { pickMedia(e.target.files?.[0]); e.target.value = ""; }} />
     </div>

@@ -11,6 +11,10 @@
 .tab.active { color:var(--fg); border-color:currentColor; }
 /* mid-drag: the tab travels with the pointer as the list reorders under it */
 .tab.dragging { opacity:.45; }
+/* the reopen (+) pill: a tab-shaped affordance, quieter than a real tab because
+   it isn't one — it only exists while a loaded transcript sits closed */
+.tab.tabadd { padding:6px 10px; align-items:center; color:var(--muted); cursor:pointer; }
+.tab.tabadd:hover { color:var(--fg); background:var(--sel); }
 /* the label and × inside are real buttons (focusable, base focus ring) — strip the
    UA chrome so they read as one tab; the old 6px 14px padding is split between them */
 .tab .tabname, .tab .x { background:none; border:none; color:inherit; font:inherit;
