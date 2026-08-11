@@ -5,6 +5,7 @@ import { VList, type VListHandle } from "virtua";
 import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, clampMinimapWidth } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
+import { CodeMenu } from "./CodeMenu";
 import { AiMarkPopover } from "./AiMarkPopover";
 import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
@@ -201,6 +202,8 @@ export function TranscriptView() {
   const itemIdxRef = useRef<Map<number, number>>(new Map());
   const selBounds = useRef<{ first: number; last: number } | null>(null);
   const [pop, setPop] = useState<{ sid: number; x: number; y: number } | null>(null);
+  // the code menu, opened by right-clicking a lane bar (same menu as the sidebar's)
+  const [codeMenu, setCodeMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [aiPop, setAiPop] = useState<{ line: number; span: Flag; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
   // add/edit-event modal: a prefilled time (new event) or the marker being edited
@@ -764,6 +767,10 @@ export function TranscriptView() {
                 // clicking the segment's own lane while its popover is open closes it
                 // (useDismiss ignores this lane, so the mousedown doesn't close-then-reopen)
                 setPop((p) => p && p.sid === seg.sid ? null : { sid: seg.sid, x: e.clientX, y: e.clientY })}
+              onLaneMenu={(seg, e) => {
+                setPop(null); // one popover at a time — the code menu takes over
+                setCodeMenu({ code: seg.code, x: e.clientX, y: e.clientY });
+              }}
               onGripDown={dragEdge}
               onLaneHover={onLaneHover}
               hl={hl}
@@ -807,6 +814,8 @@ export function TranscriptView() {
         marker={"m" in addEv ? addEv.m : undefined} tsSample={tsSample}
         onClose={() => setAddEv(null)} />}
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
+      {codeMenu && <CodeMenu code={codeMenu.code} x={codeMenu.x} y={codeMenu.y}
+        onClose={() => setCodeMenu(null)} />}
       {aiPop && <AiMarkPopover pid={active} line={aiPop.line} span={aiPop.span}
         x={aiPop.x} y={aiPop.y} onClose={() => setAiPop(null)} onCycle={cycleMarkPopover} />}
     </>
@@ -910,7 +919,7 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, onEdit }: {
   );
 }
 
-function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onAddEvent, onLaneClick, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onAddEvent, onLaneClick, onLaneMenu, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   selected: boolean;
   spkOff: string; // speaker focus: class(es) a NON-focused speaker's row carries ("" = focused/none)
@@ -920,6 +929,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onAddE
   onRowDown: (e: MouseEvent) => void;
   onAddEvent: () => void;
   onLaneClick: (seg: LanedSeg, at: { clientX: number; clientY: number }) => void;
+  onLaneMenu: (seg: LanedSeg, at: { clientX: number; clientY: number }) => void;
   onGripDown: (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => void;
   onLaneHover: (sid: number | null) => void;
   hl: { start: number; end: number; color: string } | null;
@@ -1010,7 +1020,16 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onAddE
           },
         } : {})}
         onMouseEnter={() => onLaneHover(seg.sid)} onMouseLeave={() => onLaneHover(null)}
-        onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}>
+        onClick={(e) => { e.stopPropagation(); onLaneClick(seg, e); }}
+        // right-click the bar = the CODE's menu (rename, define, recolour, merge,
+        // pin, delete) — the same one the sidebar opens, at the place you just
+        // applied the code, so acting on it costs no hunt down the code list.
+        // stopPropagation: the row's own right-click adds an event, which is not
+        // what you meant when you aimed at a lane.
+        onContextMenu={(e) => {
+          e.preventDefault(); e.stopPropagation();
+          onLaneMenu(seg, e);
+        }}>
         {/* close-call (near-balanced excerpt): corner warning badge (side/size configurable) */}
         {isStart && cc && <span className={"ccbadge " + warnCls}>!</span>}
         {isStart && <span className="grip gripTop" onMouseDown={(e) => onGripDown(e, seg, "start")} />}
