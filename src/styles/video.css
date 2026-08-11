@@ -69,9 +69,10 @@
 .vspeedwrap .vbtn.speed { padding:0 .6em; min-width:3.4em; justify-content:center; }
 .vspeedwrap .vbtn.speed.on { background:var(--accent); color:#fff; border-color:var(--accent); }
 [data-theme=dark] .vspeedwrap .vbtn.speed.on { color:#12161a; }
-/* the PiP button lit while the video floats — same voice as the speed toggle */
-.vhead .vbtn.icononly.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-[data-theme=dark] .vhead .vbtn.icononly.on { color:#12161a; }
+/* The PiP button lit while the video floats: the GLYPH takes the accent, the
+   button keeps its normal chrome. A filled pill read as a second play button
+   sitting beside the real one — same shape, same weight, different meaning. */
+.vhead .vbtn.icononly.on { color:var(--accent); }
 /* fixed + translated, NOT absolute: .vdock is overflow:hidden (rounded corners),
    and an absolute menu poking above the dock's top edge gets clipped there.
    Anchored to the button's top-right corner, growing up-left. It is PORTALED to
