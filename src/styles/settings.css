@@ -120,3 +120,14 @@
 .set-modal .wseg button:last-child { border-radius:0 6px 6px 0; }
 /* (speaker FOCUS moved out of this modal — it's the per-transcript target
    button at the transcript's bottom right; see transcript.css .focuswrap) */
+/* the speaker name doubles as the rename button: text, not a control, until you
+   reach for it — the row is a settings row, not a toolbar */
+.set-modal .spkrename { background:none; border:none; font:inherit; color:inherit;
+  text-align:left; padding:2px 4px; margin-left:-4px; border-radius:6px; cursor:pointer; }
+.set-modal .spkrename:hover { background:var(--sel); }
+.set-modal .spkform { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.set-modal .spkform input { flex:1; min-width:8ch; padding:4px 7px; font:inherit;
+  color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:6px; }
+.set-modal .spkerr { color:#e0554f; font-size:.85em; flex-basis:100%; }
+.set-modal .spknote { color:var(--muted); font-size:.85em; flex-basis:100%; }
+.set-modal .spkform .btn { padding:3px 8px; font-size:.9em; }

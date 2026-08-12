@@ -206,6 +206,9 @@ interface State {
   // rename a transcript file (remaps every pid-keyed slice); returns an error
   // message for the rename form, or null on success
   renameTranscript: (from: string, to: string) => string | null;
+  // rename a speaker everywhere (every loaded transcript + the speaker map);
+  // returns an error message for the form, or null on success
+  renameSpeaker: (from: string, to: string) => string | null;
   jumpTo: (pid: string, line: number) => void;
   clearJump: () => void;
   scrollToLine: (line: number) => void;
@@ -734,6 +737,63 @@ export const useStore = create<State>()(
       // stacks are cleared: their snapshots and line entries hold the old pid and
       // replaying them would resurrect it. (Loaded media in the video dock is
       // keyed by pid too and component-local; it drops on rename — re-pick it.)
+      // The speaker label is data — it sits on every line and is what the excerpt
+      // rule, the speaker map and the exports all key on — so renaming rewrites
+      // the lines rather than storing a display alias. Project-wide, matching the
+      // Speakers panel it's driven from: one map of colours and weights covers
+      // every transcript, so one "P" renamed there is every "P".
+      //
+      // Renaming ONTO an existing speaker merges the two (the fix for a corpus
+      // labelled "P" in one file and "P1" in another). The surviving name keeps
+      // its own colour and weight — the merged-away one's settings would
+      // otherwise silently redecorate a speaker the researcher already styled.
+      renameSpeaker: (fromRaw, toRaw) => {
+        const s = get();
+        const from = fromRaw.trim(), to = toRaw.trim();
+        if (!from) return "unknown speaker";
+        if (!to) return "the name can't be empty";
+        if (to === from) return null;
+        const transcripts = { ...s.transcripts };
+        let touched = 0;
+        for (const [pid, t] of Object.entries(s.transcripts)) {
+          if (!t.lines.some((l) => l.speaker.trim() === from)) continue;
+          transcripts[pid] = { lines: t.lines.map((l) => l.speaker.trim() === from ? { ...l, speaker: to } : l) };
+          touched++;
+        }
+        if (!touched) return "no lines carry that speaker";
+        // A MERGE (the name already belongs to someone) keeps the survivor's own
+        // styling — including its defaults, so folding a quiet interviewer into a
+        // participant doesn't quietly dim the participant. A plain rename carries
+        // the settings across; they describe the same person under a new label.
+        const merging = Object.values(s.transcripts)
+          .some((t) => t.lines.some((l) => l.speaker.trim() === to));
+        const move = <T,>(m: Record<string, T>): Record<string, T> => {
+          if (!(from in m)) return m;
+          const n = { ...m };
+          if (!merging) n[to] = n[from];
+          delete n[from];
+          return n;
+        };
+        // speakerFocus is pid -> speaker NAME, so the name lives in the value
+        const speakerFocus = Object.fromEntries(
+          Object.entries(s.ui.speakerFocus).map(([pid, sp]) => [pid, sp === from ? to : sp]));
+        // Undo entries for text edits carry the whole Line, speaker included, so
+        // an untouched stack would put the old name back on one line the next time
+        // someone undid an edit. Rewrite them instead of clearing the history.
+        const fixStack = (stack: string[]) => stack.map((j) => {
+          const o = JSON.parse(j) as { kind?: string; line?: Line };
+          if (o.kind !== "line" || o.line?.speaker.trim() !== from) return j;
+          o.line = { ...o.line, speaker: to };
+          return JSON.stringify(o);
+        });
+        set({
+          transcripts,
+          ui: { ...s.ui, speakerColors: move(s.ui.speakerColors), speakerWeight: move(s.ui.speakerWeight), speakerFocus },
+          undoStack: fixStack(s.undoStack), redoStack: fixStack(s.redoStack),
+        });
+        return null;
+      },
+
       renameTranscript: (from, toRaw) => {
         const s = get();
         const to = toRaw.trim();

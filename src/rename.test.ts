@@ -78,3 +78,63 @@ test("pinning moves a tab to the front (in pin order); unpinning leaves it in pl
   expect(useStore.getState().tabs[0]).toBe("S01"); // position kept, claim released
   expect(useStore.getState().pinnedTabs).toEqual(["P02"]);
 });
+
+// these seed their own transcripts: the renameTranscript tests above have already
+// renamed the imported one, so P01 is not theirs to assume
+const twoTranscripts = () => useStore.setState({
+  transcripts: {
+    P01: { lines: [{ id: 1, ts: "00:00:01", speaker: "P", text: "a" }] },
+    P02: { lines: [{ id: 1, ts: "00:00:01", speaker: "P", text: "b" }] },
+  } as never,
+  ui: { ...useStore.getState().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {} },
+  undoStack: [], redoStack: [],
+});
+
+test("renameSpeaker rewrites every transcript and follows the speaker map", () => {
+  twoTranscripts();
+  useStore.setState({
+    ui: { ...useStore.getState().ui, speakerColors: { P: "#123456" }, speakerFocus: { P01: "P" } },
+  });
+  expect(useStore.getState().renameSpeaker("P", "Ana")).toBeNull();
+  const s = useStore.getState();
+  // EVERY loaded transcript, not just the open one — one speaker map covers all
+  expect(s.transcripts.P01.lines[0].speaker).toBe("Ana");
+  expect(s.transcripts.P02.lines[0].speaker).toBe("Ana");
+  expect(s.ui.speakerColors).toEqual({ Ana: "#123456" });
+  expect(s.ui.speakerFocus).toEqual({ P01: "Ana" }); // the name lives in the VALUE here
+});
+
+test("renameSpeaker bounces empty names and unknown speakers", () => {
+  twoTranscripts();
+  expect(useStore.getState().renameSpeaker("P", "  ")).toMatch(/empty/);
+  expect(useStore.getState().renameSpeaker("nobody", "X")).toMatch(/no lines/);
+  expect(useStore.getState().renameSpeaker("P", "P")).toBeNull(); // no-op
+  expect(useStore.getState().transcripts.P01.lines[0].speaker).toBe("P");
+});
+
+test("renaming onto an existing speaker merges, and the survivor keeps its styling", () => {
+  useStore.setState({
+    transcripts: { P01: { lines: [
+      { id: 1, ts: "00:00:01", speaker: "R", text: "a" },
+      { id: 2, ts: "00:00:02", speaker: "Ana", text: "b" },
+    ] } } as never,
+    ui: { ...useStore.getState().ui, speakerWeight: { R: "quiet" }, speakerColors: {} },
+  });
+  expect(useStore.getState().renameSpeaker("R", "Ana")).toBeNull();
+  const s = useStore.getState();
+  expect(s.transcripts.P01.lines.every((l) => l.speaker === "Ana")).toBe(true);
+  // R's "quiet" must NOT ride along onto Ana, who was never dimmed
+  expect(s.ui.speakerWeight).toEqual({});
+});
+
+test("renameSpeaker rewrites pending undo entries, so an undo can't resurrect the old name", () => {
+  useStore.setState({
+    transcripts: { P01: { lines: [{ id: 1, ts: "00:00:01", speaker: "Bo", text: "hi" }] } } as never,
+    undoStack: [], redoStack: [],
+  });
+  useStore.getState().editLine("P01", 1, "hi there");     // pushes a line entry holding speaker "Bo"
+  useStore.getState().renameSpeaker("Bo", "Bobby");
+  useStore.getState().undo();
+  expect(useStore.getState().transcripts.P01.lines[0].speaker).toBe("Bobby");
+  expect(useStore.getState().transcripts.P01.lines[0].text).toBe("hi");
+});

@@ -8,6 +8,7 @@ import { MODELS, modelOf } from "../ai/openai";
 import { getKey, setKey, isRemembered } from "../ai/key";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
+import { announce } from "../announce";
 
 // Settings popover: instant-apply controls (no save button), all persisted via ui autosave.
 export function SettingsButton() {
@@ -52,11 +53,13 @@ export function SettingsButton() {
   // 286px dropdown made it a long thin scroll. Same shell as the Help/AI dialogs.
   useEffect(() => {
     if (!open) return;
-    // bail while the color picker popover is up: both Esc handlers are document
-    // capture listeners and stopPropagation can't suppress a same-node sibling —
-    // without this one Esc closed the picker AND the settings dialog under it
+    // Bail while something INSIDE the dialog owns Escape: the colour picker, or a
+    // speaker's rename field. This listener is on the capture phase, so a
+    // stopPropagation from their own (bubble-phase) handlers can never reach it —
+    // without the guard one Escape closed the inner thing AND the dialog under it,
+    // instead of peeling one layer the way Escape does everywhere else.
     const onEsc = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || document.querySelector(".clrpop")) return;
+      if (e.key !== "Escape" || document.querySelector(".clrpop, .spkform")) return;
       e.stopPropagation(); setOpen(false);
     };
     document.addEventListener("keydown", onEsc, true);
@@ -318,7 +321,7 @@ function SpeakerRows() {
                 (v) => setUi({ speakerColors: { ...ui.speakerColors, [sp]: v } }), e.currentTarget)}>
               {sp.slice(0, 3)}
             </button>
-            <span className="spkname">{sp}</span>
+            <SpeakerName sp={sp} others={speakers} />
             {/* The control previews its own effect: an "A" at each weight, rather than
                 three words to read (and translate). The note below carries the meaning;
                 aria-label carries it for a screen reader. */}
@@ -333,11 +336,52 @@ function SpeakerRows() {
         );
       })}
       <div className="settings-note">
-        Click a swatch to recolour. <b>quiet</b> dims a speaker's words (usually the
-        interviewer), <b>bold</b> emphasises them. To focus one speaker's dialogue,
-        use the target button at the transcript's bottom right — it's per transcript.
+        Click a swatch to recolour, or the name to rename that speaker in every
+        transcript. <b>quiet</b> dims a speaker's words (usually the interviewer),
+        <b> bold</b> emphasises them. To focus one speaker's dialogue, use the
+        target button at the transcript's bottom right — it's per transcript.
       </div>
     </>
+  );
+}
+
+// The name, and the form to change it. Renaming rewrites the label on every line
+// that carries it, so it says what it will do before it does it — including when
+// the new name already belongs to another speaker, which merges the two.
+function SpeakerName({ sp, others }: { sp: string; others: string[] }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(sp);
+  const [err, setErr] = useState<string | null>(null);
+  const open = () => { setName(sp); setErr(null); setEditing(true); };
+  const commit = () => {
+    const e = useStore.getState().renameSpeaker(sp, name);
+    if (e) { setErr(e); return; }
+    announce(`Speaker renamed to ${name.trim()}.`);
+    setEditing(false);
+  };
+  if (!editing) {
+    return (
+      <button className="spkname spkrename" onClick={open}
+        title={`Rename ${sp} everywhere`} aria-label={`Rename speaker ${sp}`}>
+        {sp}
+      </button>
+    );
+  }
+  const merges = others.some((o) => o !== sp && o === name.trim());
+  return (
+    <span className="spkname spkform">
+      <input value={name} autoFocus aria-label={`New name for ${sp}`}
+        onChange={(e) => { setName(e.target.value); setErr(null); }}
+        onKeyDown={(e) => {
+          e.stopPropagation(); // the settings modal's own key handling stays out of the field
+          if (e.key === "Enter") commit();
+          else if (e.key === "Escape") setEditing(false);
+        }} />
+      <button className="btn" onClick={commit}>Rename</button>
+      <button className="btn" onClick={() => setEditing(false)}>Cancel</button>
+      {err && <span className="spkerr">{err}</span>}
+      {!err && merges && <span className="spknote">merges with {name.trim()}</span>}
+    </span>
   );
 }
 const WEIGHTS: [SpeakerWeight, string][] = [
