@@ -125,9 +125,15 @@
 .set-modal .spkrename { background:none; border:none; font:inherit; color:inherit;
   text-align:left; padding:2px 4px; margin-left:-4px; border-radius:6px; cursor:pointer; }
 .set-modal .spkrename:hover { background:var(--sel); }
-.set-modal .spkform { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+/* overflow:visible undoes .spkname's ellipsis clipping, which cut the focus ring
+   off at the row's edges — the form shares that class for its width, not its
+   text-truncation */
+.set-modal .spkform { display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+  overflow:visible; white-space:normal; }
 .set-modal .spkform input { flex:1; min-width:8ch; padding:4px 7px; font:inherit;
   color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:6px; }
+/* the app's ring (about.css/summary.css), not the UA default */
+.set-modal .spkform input:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 .set-modal .spkerr { color:#e0554f; font-size:.85em; flex-basis:100%; }
 .set-modal .spknote { color:var(--muted); font-size:.85em; flex-basis:100%; }
 .set-modal .spkform .btn { padding:3px 8px; font-size:.9em; }
