@@ -64,15 +64,25 @@ export function VideoDock() {
   // never arrives (a detached node's events don't reach the document), so the
   // toggle stayed lit over a window that wasn't there.
   const [pipPid, setPipPid] = useState("");
+  // The user's INTENT, which outlives the window itself: once PiP is turned on,
+  // every transcript with media should float. Landing on one WITHOUT media has
+  // to close the window (its dock owns no video) — but that exit isn't the user
+  // changing their mind, so the intent stays and the next transcript with media
+  // re-enters PiP. Only the user's own exits (our toggle, the window's ×/back)
+  // clear it. A ref, not state: nothing renders from it.
+  const pipWant = useRef(false);
   const lastTab = useRef("");
   useEffect(() => { if (onTranscript) lastTab.current = pid; }, [onTranscript, pid]);
   const [media, setMedia] = useState<Record<string, { url: string; name: string }>>({});
   const wantPid = onTranscript ? pid : lastTab.current;
   // The pin is the FALLBACK, not an override: a transcript with its own media
   // takes the element (swapping src keeps the floating window — PiP follows the
-  // element, not the source, so it simply starts showing this transcript). Only
-  // where the new tab has no video of its own does the floating one hold on.
-  const vidPid = media[wantPid] ? wantPid : (pipPid || wantPid);
+  // element, not the source, so it simply starts showing this transcript). The
+  // pin only holds OFF transcripts (Codebook/Summary/Assist). A transcript
+  // WITHOUT media doesn't hold the float: its dock owns no video, so its
+  // controls would drive a picture belonging to another tab — instead the
+  // element unmounts and the render-time syncPip below closes the window.
+  const vidPid = media[wantPid] ? wantPid : (!onTranscript && pipPid ? pipPid : wantPid);
   const offset = useStore((s) => s.video[vidPid]?.offset ?? 0);
   // keyed to the media on screen, which is the transcript the offset belongs to
   const setOffset = (v: number) =>
@@ -162,11 +172,27 @@ export function VideoDock() {
   useEffect(() => { vidPidRef.current = vidPid; }, [vidPid]);
   useEffect(syncPip);
   useEffect(() => {
-    document.addEventListener("enterpictureinpicture", syncPip);
-    document.addEventListener("leavepictureinpicture", syncPip);
+    // A leave on OUR mounted element is the user closing the floating window
+    // (the ×, or back-to-tab) — that's a real "turn it off". The programmatic
+    // exit when a video-less transcript unmounts the element never gets here:
+    // a detached node's leave event doesn't reach the document, which is
+    // exactly what lets the intent survive that case.
+    const onLeave = (e: Event) => {
+      if (e.target === videoRef.current) pipWant.current = false;
+      syncPip();
+    };
+    // …and entering from the VIDEO's own native control is the same "float this"
+    // as our button. Recording intent here too keeps the two routes identical:
+    // otherwise a native pop-out silently opted out of carrying across tabs.
+    const onEnter = (e: Event) => {
+      if (e.target === videoRef.current) pipWant.current = true;
+      syncPip();
+    };
+    document.addEventListener("enterpictureinpicture", onEnter);
+    document.addEventListener("leavepictureinpicture", onLeave);
     return () => {
-      document.removeEventListener("enterpictureinpicture", syncPip);
-      document.removeEventListener("leavepictureinpicture", syncPip);
+      document.removeEventListener("enterpictureinpicture", onEnter);
+      document.removeEventListener("leavepictureinpicture", onLeave);
     };
   }, [syncPip]);
 
@@ -316,8 +342,13 @@ export function VideoDock() {
     const v = videoRef.current; if (!v) return;
     try {
       // identity, not truthiness: only OUR video floating means "click = bring it back"
-      if (document.pictureInPictureElement === v) await document.exitPictureInPicture();
-      else await v.requestPictureInPicture();
+      if (document.pictureInPictureElement === v) {
+        pipWant.current = false; // an explicit "off" — don't re-enter on the next tab
+        await document.exitPictureInPicture();
+      } else {
+        await v.requestPictureInPicture();
+        pipWant.current = true; // only a SUCCESSFUL entry records the intent
+      }
     } catch { /* audio-only source, or PiP unavailable */ }
   };
 
@@ -333,6 +364,13 @@ export function VideoDock() {
     if (t != null && t > 0.05) v.currentTime = t;
     switching.current = false;
     setTime(v.currentTime);
+    // Standing PiP intent + a fresh source and no window up = we're arriving on
+    // a transcript with media after PiP was force-closed elsewhere — re-enter.
+    // Here (metadata ready) and not earlier: PiP rejects on an unloaded video.
+    // The tab click that brought us here is the transient user activation this
+    // call spends; if the browser refuses anyway, the toggle just stays off.
+    if (pipWant.current && !document.pictureInPictureElement && document.pictureInPictureEnabled)
+      void v.requestPictureInPicture().catch(() => { /* no activation, or audio-only */ });
   };
   // H:MM:SS only once there's an hour to show
   const clock = (s: number) => {
