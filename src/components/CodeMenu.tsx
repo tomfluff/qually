@@ -5,7 +5,7 @@ import { useStore } from "../state/store";
 import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
 import { openColorPicker } from "../colorPicker";
-import { openDefine } from "./DefineModal";
+import { openDefine } from "./CodeDef";
 import { useDismiss, useClampToViewport } from "../usePopover";
 
 export function CodeMenu({ code, x, y, onClose }: {
@@ -72,8 +72,8 @@ export function CodeMenu({ code, x, y, onClose }: {
         <>
           <div className="ctxhead">{code}</div>
           <button onClick={() => setMode("rename")}><Icon name="pencil" size={15} />Rename…</button>
-          {/* opens the DefineModal (via App's host) — a definition outgrows a menu
-              row, and the modal shows the code's own excerpts while you write */}
+          {/* the same editor the Codebook uses, in a thin dialog: a definition
+              runs to a paragraph and a menu row can only show three lines of it */}
           <button onClick={() => { openDefine(code); onClose(); }}><Icon name="text" size={15} />Edit definition…</button>
           <button onClick={pickColor}><Icon name="droplet" size={15} />Change color…</button>
           {/* aria-disabled, not disabled: a disabled button is unfocusable, so the
@@ -112,16 +112,26 @@ export function CodeMenu({ code, x, y, onClose }: {
   );
 }
 
-function CodeForm({ label, initial, placeholder, onSubmit, onCancel }: {
-  label: string; initial: string; placeholder: string;
+function CodeForm({ label, initial, placeholder, multiline, onSubmit, onCancel }: {
+  label: string; initial: string; placeholder: string; multiline?: boolean;
   onSubmit: (v: string) => void; onCancel: () => void;
 }) {
   const [v, setV] = useState(initial);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  // grow to fit content; CSS max-height caps it then scrolls
+  const resize = () => { const el = taRef.current; if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; } };
+  useEffect(() => { if (multiline) resize(); }, [multiline]);
   return (
     <div className="ctxform">
       <div className="ctxhead">{label}</div>
-      <input autoFocus value={v} placeholder={placeholder} aria-label={label} onChange={(e) => setV(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") onSubmit(v); if (e.key === "Escape") onCancel(); }} />
+      {multiline ? (
+        <textarea ref={taRef} autoFocus value={v} placeholder={placeholder} rows={1} aria-label={label}
+          onChange={(e) => { setV(e.target.value); resize(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) onSubmit(v); if (e.key === "Escape") onCancel(); }} />
+      ) : (
+        <input autoFocus value={v} placeholder={placeholder} aria-label={label} onChange={(e) => setV(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") onSubmit(v); if (e.key === "Escape") onCancel(); }} />
+      )}
       <div className="ctxrow">
         <button className="btn" onClick={() => onSubmit(v)}>Save</button>
         <button className="btn" onClick={onCancel}>Cancel</button>

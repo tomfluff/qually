@@ -9,7 +9,7 @@ import { excerptOf } from "../contract/excerpt";
 import { Resizer } from "./Resizer";
 import { CodeMenu } from "./CodeMenu";
 import { openColorPicker } from "../colorPicker";
-import { openDefine, DefBadge } from "./DefineModal";
+import { DefLine } from "./CodeDef";
 import { groundHash } from "../ai/ground";
 import { GroundModal } from "./GroundModal";
 import { DescribeModal } from "./DescribeModal";
@@ -144,7 +144,9 @@ export function BrowseView() {
               <button className="rowMenu" aria-label={`Options for ${c}`}
                 onClick={(e) => { e.stopPropagation(); openMenuAt(c, e.currentTarget); }}>⋯</button>
             </div>
-            {codebook[c].def && <div className="bCodeDef">{codebook[c].def}</div>}
+            {/* the definition is NOT repeated here: it runs to a paragraph, and
+                a list of them buries the names you're scanning for. It lives
+                under the code's title on the right, where there is room. */}
           </div>
         ))}
         </div>
@@ -164,18 +166,10 @@ export function BrowseView() {
                 <h2 className="bTitle">
                   <span className="swatch" style={{ background: codebook[code].color }} />{code}
                 </h2>
-                {/* the definition (or its absence) is always visible under the title;
-                    double-click edits, matching the transcript's edit gesture */}
-                {codebook[code].def
-                  ? <div className="bDef bDefRow" onDoubleClick={() => openDefine(code)}
-                      title="Double-click to edit the definition">
-                      <span>{codebook[code].def}</span>
-                      <DefBadge def={codebook[code].def} ai={codebook[code].defAi} />
-                    </div>
-                  : <div className="bDef bDefRow bDefEmpty" onDoubleClick={() => openDefine(code)}
-                      title="Double-click to write the definition">
-                      <span>No definition yet — double-click to write one.</span>
-                    </div>}
+                {/* the definition (or its absence) is always visible under the
+                    title, and edits in place — the excerpts are right below, so
+                    there's nothing a dialog could add */}
+                <DefLine code={code} className="bDef" />
                 {segs.length === 0 && <div className="bDef">No excerpts yet.</div>}
                 {segs.map((s) => {
                   const ex = excerptFor(s);

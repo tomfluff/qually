@@ -19,7 +19,7 @@ import { SearchBar } from "./components/SearchBar";
 import { Welcome } from "./components/Welcome";
 import { Tooltip } from "./components/Tooltip";
 import { ColorPickerHost } from "./colorPicker";
-import { DefineHost } from "./components/DefineModal";
+import { DefineHost } from "./components/CodeDef";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";

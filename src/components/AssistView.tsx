@@ -18,7 +18,7 @@ import { SummarizeModal } from "./SummarizeModal";
 import { openSummary } from "./SummaryView";
 import type { MergeProposal } from "../ai/dedupe";
 import { excerptOf } from "../contract/excerpt";
-import { DefBadge, openDefine } from "./DefineModal";
+import { DefLine } from "./CodeDef";
 import { Icon } from "./Icon";
 
 // One AI observation, resolved against the current text (a stale hash means the line
@@ -465,17 +465,14 @@ function DescribeList({ codebook }: {
   return (
     <div className="mList">
       {codes.map((c) => (
-        // same gesture as the Codebook's definition line
-        <div key={c} className="descRow" onDoubleClick={() => openDefine(c)}
-          title="Double-click to edit the definition">
+        <div key={c} className="descRow">
           <div className="descHead">
             <span className="mSw" style={{ background: codebook[c].color }} />
             <b>{c}</b>
-            <DefBadge def={codebook[c].def} ai={codebook[c].defAi} />
           </div>
-          {codebook[c].def
-            ? <div className="descCur">{codebook[c].def}</div>
-            : <div className="descCur">No definition yet.</div>}
+          {/* this panel has no excerpt list of its own, so the definition line
+              carries a disclosure for a few of the code's quotes */}
+          <DefLine code={c} excerpts />
         </div>
       ))}
     </div>
