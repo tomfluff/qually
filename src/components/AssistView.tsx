@@ -43,9 +43,19 @@ const remembered = {
   suggestBy: "transcript" as "transcript" | "code",
   suggestSel: null as string | null, // selected transcript/code, null = all
   defSort: "name" as SortBy,
-  defSel: null as string | null,     // selected code in the Definitions sidebar, null = all
+  defScope: "all" as DefScope,       // which part of the codebook the panel is working through
+  defSel: [] as string[],            // specific codes picked inside that scope; empty = the whole scope
+  defAnchor: null as string | null,  // where a Shift-range measures from
   defOpen: { undefined: true, defined: true } as Record<"undefined" | "defined", boolean>,
 };
+type DefScope = "all" | "undefined" | "defined";
+// one word each: three segments in a 264px sidebar, and "No definition" wrapped
+// to two lines and shoved the control out of shape
+const DEF_SCOPES = [
+  { id: "all", label: "All" },
+  { id: "undefined", label: "Undefined" },
+  { id: "defined", label: "Defined" },
+] as const;
 // stable key for a proposal, direction-independent (NUL can't occur in a code name)
 const pairKey = (p: MergeProposal) => JSON.stringify([p.from, p.into].sort());
 
@@ -76,10 +86,12 @@ export function AssistView() {
   const [suggestBy, setSuggestBy] = useState(remembered.suggestBy);
   const [suggestSel, setSuggestSel] = useState(remembered.suggestSel);
   const [defSort, setDefSort] = useState(remembered.defSort);
+  const [defScope, setDefScope] = useState(remembered.defScope);
   const [defSel, setDefSel] = useState(remembered.defSel);
+  const [defAnchor, setDefAnchor] = useState(remembered.defAnchor);
   const [defOpen, setDefOpen] = useState(remembered.defOpen);
-  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defSel, defOpen }); },
-    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defSel, defOpen]);
+  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen }); },
+    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen]);
 
   // Definitions panel: every code, split by whether it has a definition yet —
   // the split IS the worklist, so it's the sidebar's grouping. Both groups (and
@@ -93,11 +105,43 @@ export function AssistView() {
       undefined: order(all.filter((c) => !codebook[c].def)),
     };
   }, [codebook, stats, defSort]);
-  // a code selected in the sidebar filters the list to it; nothing selected shows
-  // every code, undefined ones first (they're the work left to do)
-  const shownDefCodes = defSel !== null && codebook[defSel]
-    ? [defSel]
-    : [...defGroups.undefined, ...defGroups.defined];
+  // The panel answers two different questions, so it has two controls. SCOPE
+  // (all / undefined / defined) is "which part of the codebook am I working
+  // through" and filters both panes; SELECTION is "these specific codes" and,
+  // while it holds any, narrows the list further. Undefined comes first in
+  // "all": it's the work left to do.
+  const defVisible = useMemo(() => (
+    defScope === "undefined" ? defGroups.undefined
+    : defScope === "defined" ? defGroups.defined
+    : [...defGroups.undefined, ...defGroups.defined]
+  ), [defScope, defGroups]);
+  // a selected code that has since been merged or deleted must not filter the
+  // list down to nothing
+  const liveSel = defSel.filter((c) => codebook[c] && defVisible.includes(c));
+  const shownDefCodes = liveSel.length ? defVisible.filter((c) => liveSel.includes(c)) : defVisible;
+
+  // Same gesture as the Codebook's code list: plain click picks one (or clears
+  // it), Ctrl/Cmd toggles, Shift takes the range — over the order on screen, so
+  // a range means what it looks like.
+  const pickDefCode = (c: string, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => {
+    if (e.shiftKey && defAnchor && defVisible.includes(defAnchor)) {
+      const a = defVisible.indexOf(defAnchor), b = defVisible.indexOf(c);
+      const [lo, hi] = a < b ? [a, b] : [b, a];
+      setDefSel(defVisible.slice(lo, hi + 1));
+      return; // keep the anchor
+    }
+    // functional: a toggle reads the CURRENT selection, not the one this render
+    // closed over — two clicks inside one tick would otherwise both see []
+    if (e.ctrlKey || e.metaKey) {
+      setDefSel((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+      setDefAnchor(c); return;
+    }
+    const clearing = defSel.length === 1 && defSel[0] === c; // clicking the only pick clears it
+    setDefSel(clearing ? [] : [c]);
+    setDefAnchor(clearing ? null : c);
+  };
+  // a new scope is a new question — the codes picked under the old one don't carry
+  const pickDefScope = (s: DefScope) => { setDefScope(s); setDefSel([]); setDefAnchor(null); };
   const pickSuggestBy = (by: "transcript" | "code") => { setSuggestBy(by); setSuggestSel(null); };
   const pickObsBy = (by: "lens" | "transcript") => { setObsBy(by); setObsSel(null); };
   // open tabs first, then the rest of what's loaded — the order both panels list in
@@ -278,16 +322,27 @@ export function AssistView() {
             </div>
             {Object.keys(codebook).length > 0 && (
               <>
-                {/* only rendered while a code is picked: as the lone row it was
-                    a button whose one state was already the state you were in */}
-                {defSel !== null && (
-                  <button className="btn defAll" onClick={() => setDefSel(null)}>
-                    <Icon name="chevron-left" size={13} /> All {Object.keys(codebook).length} codes
+                <div className="aByLabel" id="defScopeLabel">Show</div>
+                <div className="segmented aSuggestBy defScope" role="group" aria-labelledby="defScopeLabel">
+                  {DEF_SCOPES.map((s) => (
+                    <button key={s.id} className={"seg" + (defScope === s.id ? " on" : "")}
+                      aria-pressed={defScope === s.id} onClick={() => pickDefScope(s.id)}
+                      title={s.id === "all" ? `All ${Object.keys(codebook).length} codes`
+                        : s.id === "undefined" ? `${defGroups.undefined.length} codes with no definition yet`
+                        : `${defGroups.defined.length} codes that have one`}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+                {liveSel.length > 0 && (
+                  <button className="btn defAll" onClick={() => { setDefSel([]); setDefAnchor(null); }}>
+                    <Icon name="x" size={12} /> Clear {liveSel.length} picked
                   </button>
                 )}
-                {/* the work left to do comes first */}
+                {/* a group heading is dropped when the scope already excludes it */}
                 {([["undefined", "No definition yet", defGroups.undefined],
                    ["defined", "Has a definition", defGroups.defined]] as const)
+                  .filter(([key]) => defScope === "all" || defScope === key)
                   .map(([key, label, group]) => (
                     <div key={key}>
                       <button className="nGrp defGrp" aria-expanded={defOpen[key]}
@@ -299,11 +354,11 @@ export function AssistView() {
                       {defOpen[key] && (group.length === 0
                         ? <div className="bSideNote defNone">none</div>
                         : group.map((c) => (
-                          <div key={c} className={"nLens" + (defSel === c ? " sel" : "")}
-                            tabIndex={0} role="button" aria-pressed={defSel === c}
-                            onClick={() => setDefSel(defSel === c ? null : c)}
+                          <div key={c} className={"nLens" + (liveSel.includes(c) ? " sel" : "")}
+                            tabIndex={0} role="button" aria-pressed={liveSel.includes(c)}
+                            onClick={(e) => pickDefCode(c, e)}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDefSel(defSel === c ? null : c); }
+                              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickDefCode(c, e); }
                             }}>
                             <span className="nDot" style={{ background: codebook[c].color }} />
                             <span className="nName">{c}</span>
@@ -312,6 +367,7 @@ export function AssistView() {
                         )))}
                     </div>
                   ))}
+                <div className="bSideNote defHint">Click a code to focus it · <b>Ctrl</b> adds · <b>Shift</b> takes a range</div>
               </>
             )}
           </>
@@ -544,7 +600,7 @@ function DescribeList({ codebook, codes, stats, sortBy, setSortBy }: {
         <span className="nCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
       </div>
       {codes.length === 0 ? (
-        <div className="empty">No codes in this group.</div>
+        <div className="empty">No codes here. Widen the <b>Show</b> filter on the left.</div>
       ) : (
         <div className="mList">
           {codes.map((c) => (

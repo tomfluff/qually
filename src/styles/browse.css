@@ -208,9 +208,15 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .browse-left .nGrp.defGrp svg { flex:none; }
 .defGrpName { flex:1; }
 .browse-left .nGrp .cnt { font-weight:400; letter-spacing:0; font-size:1.1em; }
-/* the way back from a picked code — only shown while there is one */
-.defAll { display:flex; align-items:center; gap:4px; width:100%; justify-content:flex-start;
-  margin-bottom:6px; font-size:.9em; }
+/* the scope control: three segments across the sidebar, never wrapping */
+.defScope .seg { white-space:nowrap; padding:4px 6px; font-size:.92em; }
+/* clears a code selection — only shown while there is one */
+.defAll { display:flex; align-items:center; gap:5px; width:100%; justify-content:center;
+  margin:8px 0 2px; font-size:.9em; }
+/* the selection gesture, said once at the foot of the list rather than in a
+   tooltip nobody hovers */
+.bSideNote.defHint { margin-top:10px; padding-top:8px; border-top:1px solid var(--line);
+  line-height:1.5; }
 .descCodes { display:flex; flex-direction:column; gap:2px; margin-bottom:10px;
   max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:4px; }
 .descPickRow { display:flex; align-items:center; gap:7px; padding:4px 6px; border-radius:6px;
