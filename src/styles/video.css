@@ -112,6 +112,8 @@
    moves when resizing — the handle rides it */
 .vresize { position:absolute; left:0; bottom:0; width:16px; height:16px;
   cursor:ew-resize; background:linear-gradient(225deg, transparent 50%, var(--muted) 50%); }
+/* it takes focus now (arrows resize), so it needs a ring that clears the corner */
+.vresize:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-radius:3px; }
 
 /* Narrow dock: under 320px the offset controls come off — the transport is what
    matters at that size (the filename stays and ellipsises instead, see .vtitle).

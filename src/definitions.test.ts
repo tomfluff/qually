@@ -141,7 +141,8 @@ test("a whole AI run's definitions are ONE undo step, and an echo of your own te
     { code: "mine", def: "Written by hand." },
     { code: "ghost", def: "code no longer exists" },
   ]);
-  expect(n).toBe(2);
+  // the codes actually WRITTEN — the echo of "mine" changed nothing
+  expect(n).toEqual(["a", "b"]);
   const cb = useStore.getState().codebook;
   expect(cb.a).toMatchObject({ def: "Marks A.", defAi: true });
   expect(cb.mine).toMatchObject({ def: "Written by hand.", defAi: false });

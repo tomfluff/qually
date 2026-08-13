@@ -74,6 +74,11 @@ export async function callJson<T>(opts: {
       }),
     });
   } catch (e) {
+    // A cancelled run is not a failure: every modal tests for AbortError by name
+    // to stay silent when the user closes the dialog mid-request, and wrapping it
+    // here made all six announce "Couldn't reach the OpenAI API (The user aborted
+    // a request)" instead. Let it through untouched.
+    if ((e as Error).name === "AbortError") throw e;
     // a browser CORS/offline failure lands here with a useless "Failed to fetch"
     throw new AiError(`Couldn't reach the OpenAI API (${(e as Error).message}). Check your connection.`);
   }

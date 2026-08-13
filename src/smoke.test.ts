@@ -512,3 +512,20 @@ test("importing a NEW transcript clears the stacks instead of offering a half-un
   expect(useStore.getState().redoStack).toEqual([]);
   expect(useStore.getState().transcripts.FRESH).toBeDefined();
 });
+
+test("re-importing over a transcript prunes the grounding of the segments it drops", async () => {
+  const s = useStore.getState();
+  await s.importFiles([new File([
+    "line_id,timestamp,speaker,text,codes\n1,00:00:01,P,one,gcode\n2,00:00:02,P,two,\n",
+  ], "GRD.csv")]);
+  const sid = useStore.getState().segments.find((x) => x.pid === "GRD")!.sid;
+  useStore.setState({ aiGrounds: { [sid]: { quotes: ["paid for"] } } } as never);
+  // a re-import with coding present asks first, then "replace" drops every
+  // segment on the transcript — their grounding has to go with them
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text\n1,00:00:01,P,rewritten\n",
+  ], "GRD.csv")]).catch(() => {});
+  useStore.getState().resolveImport("replace");
+  expect(useStore.getState().segments.some((x) => x.pid === "GRD")).toBe(false);
+  expect(useStore.getState().aiGrounds[sid]).toBeUndefined();
+});

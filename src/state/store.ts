@@ -273,7 +273,9 @@ interface State {
   deleteCode: (code: string) => void;
   mergeCode: (from: string, into: string) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
-  applyDrafts: (drafts: { code: string; def: string }[]) => number;
+  // returns the codes it actually wrote — a draft that echoes what is already
+  // stored changes nothing, and the receipt must not claim it did
+  applyDrafts: (drafts: { code: string; def: string }[]) => string[];
   setFontSize: (n: number) => void;
   setSidebarFontSize: (n: number) => void;
   setUi: (patch: Partial<Ui>) => void;
@@ -565,7 +567,11 @@ export const useStore = create<State>()(
         if (choice === "cancel") return;
 
         if (choice === "new") {
-          get().pushUndo(); // an import is an edit: undoable, and it invalidates redo
+          // A new transcript can't be undone honestly (snapshot() covers segments
+          // but not transcripts or tabs), so clear the stacks rather than leave an
+          // entry that deletes the imported coding and leaves the transcript --
+          // the same rule importFiles applies to a first import.
+          set({ undoStack: [], redoStack: [] });
           importTranscript(get, set, uniquePid(get(), p.pid), p.rows);
         } else {
           const s = get();
@@ -591,7 +597,9 @@ export const useStore = create<State>()(
           });
           importTranscript(get, set, p.pid, p.rows);
         }
-        set({ hotbarCache: hotbarCodes(get()) });
+        // "replace" drops every segment on the transcript and "update" drops the
+        // ones that no longer map: their grounding goes with them
+        set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
       },
 
       ensureCode: (code) => ensureCode(get, set, code),
@@ -1234,7 +1242,7 @@ export const useStore = create<State>()(
       applyDrafts: (drafts) => {
         const cb = get().codebook;
         const next = { ...cb };
-        let changed = 0;
+        const changed: string[] = [];
         for (const d of drafts) {
           const cur = next[d.code];
           const def = d.def.trim();
@@ -1247,9 +1255,9 @@ export const useStore = create<State>()(
           const defAi = def === (cur.def ?? "").trim() ? !!cur.defAi : true;
           if (cur.def === def && !!cur.defAi === defAi) continue;
           next[d.code] = { ...cur, def, defAi };
-          changed++;
+          changed.push(d.code);
         }
-        if (!changed) return 0;
+        if (!changed.length) return [];
         get().pushUndo();
         set({ codebook: next });
         return changed;
@@ -1450,6 +1458,13 @@ export const useStore = create<State>()(
       onRehydrateStorage: () => (s) => {
         if (!s) return;
         s.nextSid = Math.max(0, ...s.segments.map((x) => x.sid)) + 1;
+        // Ascending line ids are an assumption everything downstream makes (see
+        // rowsToLines). A workspace saved before that sort existed can hold an
+        // out-of-order transcript, and re-import alignment would then compare two
+        // differently-ordered line lists and drop or misplace coding.
+        for (const t of Object.values(s.transcripts))
+          if (t.lines.some((l, i) => i > 0 && l.id < t.lines[i - 1].id))
+            t.lines = [...t.lines].sort((a, b) => a.id - b.id);
         s.markers ??= [];
         s.nextMid = Math.max(0, ...s.markers.map((x) => x.mid)) + 1;
         s.hotbarCache = hotbarCodes(s as State);

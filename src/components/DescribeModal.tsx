@@ -129,8 +129,9 @@ export function DescribeModal({ initial, onClose }: {
       // written straight in, as one undo step — editing happens afterwards in
       // the Definitions panel, which scales with the reading-size setting and
       // shows the excerpts each definition is answerable to
-      const names = drafts.map((d) => d.code).filter((c) => codebook[c]);
-      applyDrafts(drafts.map((d) => ({ code: d.code, def: d.definition })));
+      // what was WRITTEN, not what came back: a draft identical to the stored
+      // definition changes nothing and must not be counted as a write
+      const names = applyDrafts(drafts.map((d) => ({ code: d.code, def: d.definition })));
       setDone({ names, cost: usage.costUsd });
       announce(names.length
         ? `${names.length} definition${names.length === 1 ? "" : "s"} written.`

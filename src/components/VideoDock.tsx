@@ -555,13 +555,35 @@ export function VideoDock() {
             INTO), so the chevron would be a button that does nothing — hidden. */}
         {onTranscript && (
           <button className="vbtn icononly ghost" onClick={() => setGeom((g) => ({ ...g, collapsed: !g.collapsed }))}
-            title={shut ? "Expand" : "Collapse to audio"}>
+            title={shut ? "Expand" : "Collapse to audio"}
+            aria-label={shut ? "Expand the video dock" : "Collapse the video dock to audio"}
+            aria-expanded={!shut}>
             <Icon name={shut ? "chevron-up" : "chevron-down"} size={fs + 3} />
           </button>
         )}
       </div>
-      {/* resize lives on the BAR's corner, not over the video picture */}
-      {cur && !shut && <div className="vresize" onMouseDown={startResize} title="Resize" />}
+      {/* Resize lives on the BAR's corner, not over the video picture. A focusable
+          slider, not a bare mousedown target: dragging is the only way to size the
+          dock, and a drag is exactly what a tremor or a keyboard-only user cannot
+          do. Arrows step, Home/End take the extremes. */}
+      {cur && !shut && (
+        <div className="vresize" onMouseDown={startResize} title="Resize"
+          role="slider" tabIndex={0} aria-label="Video dock width"
+          aria-valuemin={MIN_W} aria-valuemax={Math.round(window.innerWidth - 40)}
+          aria-valuenow={Math.round(geom.w)}
+          onKeyDown={(e) => {
+            const step = e.shiftKey ? 80 : 20;
+            const max = window.innerWidth - 40;
+            const to = (w: number) => {
+              e.preventDefault();
+              setGeom((g) => ({ ...g, w: Math.max(MIN_W, Math.min(w, max)) }));
+            };
+            if (e.key === "ArrowLeft" || e.key === "ArrowUp") to(geom.w + step);
+            else if (e.key === "ArrowRight" || e.key === "ArrowDown") to(geom.w - step);
+            else if (e.key === "Home") to(MIN_W);
+            else if (e.key === "End") to(max);
+          }} />
+      )}
       <input ref={fileRef} type="file" accept="video/*,audio/*" style={{ display: "none" }}
         onChange={(e) => { pickMedia(e.target.files?.[0]); e.target.value = ""; }} />
     </div>
