@@ -11,12 +11,14 @@ import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
 import { LENSES, hashLine, spanLens, lensOf } from "../ai/flag";
 import { MergeModal } from "./MergeModal";
+import { DescribeModal } from "./DescribeModal";
 import { SuggestModal } from "./SuggestModal";
 import { AiCheckModal } from "./AiCheckModal";
 import { SummarizeModal } from "./SummarizeModal";
 import { openSummary } from "./SummaryView";
 import type { MergeProposal } from "../ai/dedupe";
 import { excerptOf } from "../contract/excerpt";
+import { DefBadge, openDefine } from "./DefineModal";
 import { Icon } from "./Icon";
 
 // One AI observation, resolved against the current text (a stale hash means the line
@@ -62,6 +64,7 @@ export function AssistView() {
   const [proposals, setProposals] = useState<MergeProposal[]>(remembered.proposals);
   const [flipped, setFlipped] = useState<Set<string>>(remembered.flipped);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [describeOpen, setDescribeOpen] = useState(false);
   // null = closed; "" = open with nothing picked; a pid = open on that transcript
   const [suggestFor, setSuggestFor] = useState<string | null>(null);
   const [scanFor, setScanFor] = useState<string | null>(null);
@@ -155,7 +158,7 @@ export function AssistView() {
         {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
             own menu — this heading just names what's showing. It stays fixed; the
             list below scrolls inside cbList so the scrollbar clears the drag divider. */}
-        <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
+        <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
 
         <div className="cbList nicescroll">
         {panel === "observations" ? (
@@ -235,6 +238,18 @@ export function AssistView() {
               {mergeableCount < 2
                 ? "Code at least two different codes first, then the AI can look for duplicates."
                 : "The AI proposes pairs that look like the same concept. You accept each merge — nothing changes on its own."}
+            </div>
+          </>
+        ) : panel === "describe" ? (
+          <>
+            <button className="btn groundBtn" onClick={() => setDescribeOpen(true)} disabled={mergeableCount < 1}
+              title="Ask the AI to draft a definition for each coded code from its excerpts (sends the codebook to OpenAI after your approval)">
+              <Icon name="sparkle" size={15} /> Draft definitions…
+            </button>
+            <div className="bSideNote">
+              {mergeableCount < 1
+                ? "Definitions are drafted from coded excerpts — code a bit first."
+                : "Drafts a definition for every coded code from how you used it. You edit and apply each one in the dialog."}
             </div>
           </>
         ) : panel === "summary" ? (
@@ -364,6 +379,8 @@ export function AssistView() {
             onAccept={accept} onSkip={skip} onFlip={toggleFlip} />
         ) : panel === "summary" ? (
           <SummaryList pids={allPids} summaries={summaries} onGenerate={setSumFor} />
+        ) : panel === "describe" ? (
+          <DescribeList codebook={codebook} />
         ) : (
           <SuggestList candidates={shownCandidates} groupBy={suggestBy}
             transcripts={transcripts} codebook={codebook} tabs={tabs} />
@@ -371,6 +388,7 @@ export function AssistView() {
       </div>
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
         onClose={() => setMergeOpen(false)} />}
+      {describeOpen && <DescribeModal onClose={() => setDescribeOpen(false)} />}
       {suggestFor !== null && <SuggestModal pid={suggestFor} choose
         onClose={() => setSuggestFor(null)} />}
       {scanFor !== null && <AiCheckModal pid={scanFor} choose
@@ -425,6 +443,41 @@ function MergeList({ proposals, codebook, flipped, onAccept, onSkip, onFlip }: {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// The codebook's definitions as they stand — the surface the describe run
+// writes into. Drafting/editing/applying happens in the modal; this list is
+// where you see which codes still have no definition.
+function DescribeList({ codebook }: {
+  codebook: Record<string, { color: string; def: string; status: string; defAi?: boolean }>;
+}) {
+  const codes = Object.keys(codebook).sort();
+  if (!codes.length) {
+    return (
+      <div className="empty">
+        No codes yet. Once you've coded, run <b>Draft definitions</b> on the left and the AI
+        drafts a definition for each code from its excerpts — you edit and apply every one.
+      </div>
+    );
+  }
+  return (
+    <div className="mList">
+      {codes.map((c) => (
+        // same gesture as the Codebook's definition line
+        <div key={c} className="descRow" onDoubleClick={() => openDefine(c)}
+          title="Double-click to edit the definition">
+          <div className="descHead">
+            <span className="mSw" style={{ background: codebook[c].color }} />
+            <b>{c}</b>
+            <DefBadge def={codebook[c].def} ai={codebook[c].defAi} />
+          </div>
+          {codebook[c].def
+            ? <div className="descCur">{codebook[c].def}</div>
+            : <div className="descCur">No definition yet.</div>}
+        </div>
+      ))}
     </div>
   );
 }

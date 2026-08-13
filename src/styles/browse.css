@@ -168,6 +168,61 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .mKeepTag { margin-left:6px; font-size:.68em; font-weight:700; text-transform:uppercase;
   letter-spacing:.05em; color:var(--ok, #3fa860); border:1px solid currentColor; border-radius:999px;
   padding:1px 7px; background:color-mix(in srgb, #3fa860 10%, transparent); }
+/* Describe-codes drafts (DescribeModal): one card per code, textarea editable
+   before Apply. Borrows the mProp card language. */
+.descRow { border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+  background:var(--bg); }
+/* in the modal the cards stack under the lede with no flex-gap parent */
+.ai-body > .descRow { margin-top:10px; }
+.descHead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.descCur { color:var(--muted); font-size:.88em; line-height:1.4; margin-top:5px; }
+.descText { display:block; width:calc(100% - 8px); margin:7px 4px 0; box-sizing:border-box;
+  font:inherit; font-size:.95em; color:var(--fg); background:var(--panel);
+  border:1px solid var(--line); border-radius:6px; padding:5px 7px; resize:vertical; }
+.descText:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+
+/* DescribeModal's code picker: quick-select row + one checkbox row per code */
+.descPicks { display:flex; gap:6px; margin:8px 0 6px; flex-wrap:wrap; }
+.descPicks .btn { padding:3px 10px; font-size:.88em; }
+.descCodes { display:flex; flex-direction:column; gap:2px; margin-bottom:10px;
+  max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:4px; }
+.descPickRow { display:flex; align-items:center; gap:7px; padding:4px 6px; border-radius:6px;
+  cursor:pointer; }
+.descPickRow:hover { background:var(--panel); }
+.descPickRow input { margin:0; flex:none; }
+.descPickName { font-weight:600; flex:none; }
+.descPickDef { color:var(--muted); font-size:.85em; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; flex:1; }
+.descPickDef.none { font-style:italic; }
+.descPickN { color:var(--muted); font-size:.85em; font-variant-numeric:tabular-nums; flex:none; }
+
+/* definition provenance pills: AI = untouched model text, edited = human input */
+.defTag { font-size:.66em; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:1.5px 8px;
+  white-space:nowrap; vertical-align:middle; line-height:1.5; flex:none; }
+.defTag.ai { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 55%, transparent);
+  background:color-mix(in srgb, var(--accent) 8%, transparent); }
+/* The Codebook's definition line. The pill HUGS the end of the sentence rather
+   than sitting flush right: on a wide panel a right-aligned tag floats alone,
+   detached from the text it describes. */
+.bDefRow { cursor:text; }
+.bDefRow .defTag { margin-left:8px; }
+.bDefEmpty { font-style:italic; }
+
+/* DefineModal: the hand-written definition, with the code's own excerpts below */
+.about.defmodal { width:min(520px, 100%); }
+.defmodal .about-head h2 { flex:1; display:flex; align-items:center; gap:8px; }
+.defmodal .about-head .swatch { width:.75em; height:.75em; border-radius:.22em; flex-shrink:0; }
+/* keep the provenance pill off the close button */
+.defmodal .about-head .defTag { margin-right:10px; }
+.defText { display:block; width:calc(100% - 8px); margin:2px 4px 10px; box-sizing:border-box;
+  font:inherit; color:var(--fg); background:var(--panel); border:1px solid var(--line);
+  border-radius:8px; padding:8px 10px; resize:vertical; min-height:5em; line-height:1.45; }
+.defText:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.defEx { border-left:3px solid var(--line); border-radius:2px; padding:2px 0 2px 10px;
+  margin:0 4px 8px; font-size:.92em; line-height:1.45; }
+.defExRef { color:var(--muted); font-size:.85em; margin-top:2px; }
+
 /* the softer proposal tier — muted, where mKeepTag is the confident green */
 .mTier { margin-left:auto; font-size:.68em; font-weight:700; text-transform:uppercase;
   letter-spacing:.05em; color:var(--muted); border:1px solid var(--line); border-radius:999px;

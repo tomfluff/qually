@@ -5,6 +5,7 @@ import { useStore } from "../state/store";
 import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
 import { openColorPicker } from "../colorPicker";
+import { openDefine } from "./DefineModal";
 import { useDismiss, useClampToViewport } from "../usePopover";
 
 export function CodeMenu({ code, x, y, onClose }: {
@@ -21,13 +22,12 @@ export function CodeMenu({ code, x, y, onClose }: {
   const renameCode = useStore((s) => s.renameCode);
   const deleteCode = useStore((s) => s.deleteCode);
   const mergeCode = useStore((s) => s.mergeCode);
-  const setDef = useStore((s) => s.setDef);
   const setColor = useStore((s) => s.setColor);
   const togglePin = useStore((s) => s.togglePin);
   // menu text follows the sidebar text-size setting, like SegmentPopover
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const ref = useRef<HTMLDivElement>(null);
-  const [mode, setMode] = useState<"menu" | "rename" | "def" | "merge">("menu");
+  const [mode, setMode] = useState<"menu" | "rename" | "merge">("menu");
 
   // keyboard route: focus lands on the first item on open, returns to the opener on close
   useEffect(() => {
@@ -72,7 +72,9 @@ export function CodeMenu({ code, x, y, onClose }: {
         <>
           <div className="ctxhead">{code}</div>
           <button onClick={() => setMode("rename")}><Icon name="pencil" size={15} />Rename…</button>
-          <button onClick={() => setMode("def")}><Icon name="text" size={15} />Edit definition…</button>
+          {/* opens the DefineModal (via App's host) — a definition outgrows a menu
+              row, and the modal shows the code's own excerpts while you write */}
+          <button onClick={() => { openDefine(code); onClose(); }}><Icon name="text" size={15} />Edit definition…</button>
           <button onClick={pickColor}><Icon name="droplet" size={15} />Change color…</button>
           {/* aria-disabled, not disabled: a disabled button is unfocusable, so the
               why-is-this-off hint was mouse-only. This stays in the arrow walk and
@@ -93,10 +95,6 @@ export function CodeMenu({ code, x, y, onClose }: {
         <CodeForm label="Rename code" initial={code} placeholder="new name"
           onCancel={() => setMode("menu")} onSubmit={(v) => { renameCode(code, v); onClose(); }} />
       )}
-      {mode === "def" && (
-        <CodeForm label="Definition" initial={codebook[code]?.def || ""} placeholder="short definition" multiline
-          onCancel={() => setMode("menu")} onSubmit={(v) => { setDef(code, v); onClose(); }} />
-      )}
       {mode === "merge" && (
         <>
           <div className="ctxhead">Merge “{code}” into…</div>
@@ -114,26 +112,16 @@ export function CodeMenu({ code, x, y, onClose }: {
   );
 }
 
-function CodeForm({ label, initial, placeholder, multiline, onSubmit, onCancel }: {
-  label: string; initial: string; placeholder: string; multiline?: boolean;
+function CodeForm({ label, initial, placeholder, onSubmit, onCancel }: {
+  label: string; initial: string; placeholder: string;
   onSubmit: (v: string) => void; onCancel: () => void;
 }) {
   const [v, setV] = useState(initial);
-  const taRef = useRef<HTMLTextAreaElement>(null);
-  // grow to fit content; CSS max-height caps it at 3 lines then scrolls
-  const resize = () => { const el = taRef.current; if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; } };
-  useEffect(() => { if (multiline) resize(); }, [multiline]);
   return (
     <div className="ctxform">
       <div className="ctxhead">{label}</div>
-      {multiline ? (
-        <textarea ref={taRef} autoFocus value={v} placeholder={placeholder} rows={1} aria-label={label}
-          onChange={(e) => { setV(e.target.value); resize(); }}
-          onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) onSubmit(v); if (e.key === "Escape") onCancel(); }} />
-      ) : (
-        <input autoFocus value={v} placeholder={placeholder} aria-label={label} onChange={(e) => setV(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") onSubmit(v); if (e.key === "Escape") onCancel(); }} />
-      )}
+      <input autoFocus value={v} placeholder={placeholder} aria-label={label} onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") onSubmit(v); if (e.key === "Escape") onCancel(); }} />
       <div className="ctxrow">
         <button className="btn" onClick={() => onSubmit(v)}>Save</button>
         <button className="btn" onClick={onCancel}>Cancel</button>

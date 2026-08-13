@@ -264,6 +264,7 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
 const ASSIST_PANELS = [
   { id: "observations", label: "Observations", hint: "AI marks to triage into codes" },
   { id: "merge", label: "Merge codes", hint: "near-duplicate codes to fold together" },
+  { id: "describe", label: "Definitions", hint: "AI-drafted code definitions from your excerpts" },
   { id: "suggest", label: "Suggest codes", hint: "candidate codings from your codebook" },
   { id: "summary", label: "Transcript summary", hint: "AI-drafted session summaries to edit and own" },
 ] as const;

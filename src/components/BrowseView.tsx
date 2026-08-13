@@ -9,8 +9,10 @@ import { excerptOf } from "../contract/excerpt";
 import { Resizer } from "./Resizer";
 import { CodeMenu } from "./CodeMenu";
 import { openColorPicker } from "../colorPicker";
+import { openDefine, DefBadge } from "./DefineModal";
 import { groundHash } from "../ai/ground";
 import { GroundModal } from "./GroundModal";
+import { DescribeModal } from "./DescribeModal";
 import { useToggleMenu, useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
 import { announce } from "../announce";
@@ -35,6 +37,7 @@ export function BrowseView() {
   const aiGrounds = useStore((s) => s.aiGrounds);
   const ui = useStore((s) => s.ui);
   const [groundOpen, setGroundOpen] = useState(false);
+  const [describeOpen, setDescribeOpen] = useState(false);
   const hasGrounds = Object.keys(aiGrounds).length > 0;
   const setColor = useStore((s) => s.setColor);
   const jumpTo = useStore((s) => s.jumpTo);
@@ -106,7 +109,8 @@ export function BrowseView() {
         <div className="cbFilterRow">
           <input type="search" placeholder="filter codes…" value={filter}
             onChange={(e) => setFilter(e.target.value)} />
-          <CbAiMenu onGround={() => setGroundOpen(true)} fontSize={sidebarFontSize} />
+          <CbAiMenu onGround={() => setGroundOpen(true)} onDescribe={() => setDescribeOpen(true)}
+            fontSize={sidebarFontSize} />
           <CbViewMenu showRejected={showRejected} setShowRejected={setShowRejected}
             ui={ui} setUi={setUi} hasGrounds={hasGrounds} fontSize={sidebarFontSize}
             onRecolor={(r) => setRecolor({ x: r.left, y: r.bottom + 4 })} />
@@ -160,7 +164,18 @@ export function BrowseView() {
                 <h2 className="bTitle">
                   <span className="swatch" style={{ background: codebook[code].color }} />{code}
                 </h2>
-                {codebook[code].def && <div className="bDef">{codebook[code].def}</div>}
+                {/* the definition (or its absence) is always visible under the title;
+                    double-click edits, matching the transcript's edit gesture */}
+                {codebook[code].def
+                  ? <div className="bDef bDefRow" onDoubleClick={() => openDefine(code)}
+                      title="Double-click to edit the definition">
+                      <span>{codebook[code].def}</span>
+                      <DefBadge def={codebook[code].def} ai={codebook[code].defAi} />
+                    </div>
+                  : <div className="bDef bDefRow bDefEmpty" onDoubleClick={() => openDefine(code)}
+                      title="Double-click to write the definition">
+                      <span>No definition yet — double-click to write one.</span>
+                    </div>}
                 {segs.length === 0 && <div className="bDef">No excerpts yet.</div>}
                 {segs.map((s) => {
                   const ex = excerptFor(s);
@@ -197,13 +212,16 @@ export function BrowseView() {
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
       {recolor && <RecolorConfirm x={recolor.x} y={recolor.y} onClose={() => setRecolor(null)} />}
       {groundOpen && <GroundModal onClose={() => setGroundOpen(false)} />}
+      {describeOpen && <DescribeModal onClose={() => setDescribeOpen(false)} />}
     </div>
   );
 }
 
-// The codebook's AI action, in a sparkle menu that mirrors the transcript
-// sidebar's AI menu (same icon + chevron). One item today — grounding.
-function CbAiMenu({ onGround, fontSize }: { onGround: () => void; fontSize: number }) {
+// The codebook's AI actions, in a sparkle menu that mirrors the transcript
+// sidebar's AI menu (same icon + chevron) — grounding and drafted definitions.
+function CbAiMenu({ onGround, onDescribe, fontSize }: {
+  onGround: () => void; onDescribe: () => void; fontSize: number;
+}) {
   const { open, setOpen, btnRef, menuRef } = useToggleMenu();
   return (
     <div className="cbMenuWrap">
@@ -216,6 +234,9 @@ function CbAiMenu({ onGround, fontSize }: { onGround: () => void; fontSize: numb
           style={{ fontSize }}>
           <button role="menuitem" onClick={() => { onGround(); setOpen(false); }}>
             <Icon name="sparkle" size={fontSize} /> Ground codes…
+          </button>
+          <button role="menuitem" onClick={() => { onDescribe(); setOpen(false); }}>
+            <Icon name="sparkle" size={fontSize} /> Draft definitions…
           </button>
         </div>
       )}

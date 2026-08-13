@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
+// Code definitions: undoable writes, and provenance (AI-drafted vs. human) that
+// survives a codebook.csv round-trip.
+import { beforeAll, beforeEach, test, expect } from "vitest";
+
+let useStore: typeof import("./state/store").useStore;
+// the public route a codebook.csv takes back in — the importer picks the
+// handler off the columns, so this exercises the real dispatch too
+const importCsv = (text: string) =>
+  useStore.getState().importFiles([new File([text], "codebook.csv")]);
+
+beforeAll(async () => {
+  const mem: Record<string, string> = {};
+  (globalThis as unknown as { localStorage: Storage }).localStorage = {
+    getItem: (k: string) => (k in mem ? mem[k] : null),
+    setItem: (k: string, v: string) => { mem[k] = v; },
+    removeItem: (k: string) => { delete mem[k]; },
+    clear: () => { for (const k in mem) delete mem[k]; },
+    key: () => null, length: 0,
+  } as Storage;
+  ({ useStore } = await import("./state/store"));
+});
+
+beforeEach(() => {
+  useStore.setState({
+    codebook: { anger: { color: "#aa3377", def: "", status: "accepted" } },
+    segments: [], undoStack: [], redoStack: [],
+  } as never);
+});
+
+test("a definition write is undoable — an AI draft can't silently eat researcher text", () => {
+  const st = useStore.getState();
+  st.setDef("anger", "Written by hand.");
+  st.setDef("anger", "Drafted by the model.", true);
+  expect(useStore.getState().codebook.anger).toMatchObject({ def: "Drafted by the model.", defAi: true });
+  useStore.getState().undo();
+  expect(useStore.getState().codebook.anger).toMatchObject({ def: "Written by hand.", defAi: false });
+});
+
+test("a no-op save pushes no undo entry", () => {
+  const st = useStore.getState();
+  st.setDef("anger", "Same text.");
+  const depth = useStore.getState().undoStack.length;
+  useStore.getState().setDef("anger", "Same text.");
+  expect(useStore.getState().undoStack).toHaveLength(depth);
+});
+
+test("provenance: verbatim AI is flagged, any human text is not", () => {
+  const st = useStore.getState();
+  st.setDef("anger", "Model words.", true);
+  expect(useStore.getState().codebook.anger.defAi).toBe(true);
+  useStore.getState().setDef("anger", "Model words, edited.", false);
+  expect(useStore.getState().codebook.anger.defAi).toBe(false);
+  // an empty definition has no provenance to claim
+  useStore.getState().setDef("anger", "", true);
+  expect(useStore.getState().codebook.anger.defAi).toBe(false);
+});
+
+test("codebook.csv round-trips provenance into a FRESH codebook", async () => {
+  useStore.setState({
+    codebook: {
+      ai_code: { color: "#4477aa", def: "Drafted by the model.", status: "accepted", defAi: true },
+      my_code: { color: "#228833", def: "Written by hand.", status: "accepted" },
+    },
+  } as never);
+  const csv = useStore.getState().exportCodebook();
+  expect(csv).toContain("def_source");
+
+  // fresh workspace: without the column these would both come back as "human"
+  useStore.setState({ codebook: {}, segments: [] } as never);
+  await importCsv(csv);
+  const cb = useStore.getState().codebook;
+  expect(cb.ai_code).toMatchObject({ def: "Drafted by the model.", defAi: true });
+  expect(cb.my_code).toMatchObject({ def: "Written by hand.", defAi: false });
+});
+
+test("a file with no def_source column (hand-made, or older export) reads as human", async () => {
+  useStore.setState({ codebook: {}, segments: [] } as never);
+  await importCsv("code,color,short_def,status\nx,#123456,Someone's definition.,accepted\n");
+  expect(useStore.getState().codebook.x).toMatchObject({ def: "Someone's definition.", defAi: false });
+});
