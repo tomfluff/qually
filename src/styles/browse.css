@@ -168,6 +168,10 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .mKeepTag { margin-left:6px; font-size:.68em; font-weight:700; text-transform:uppercase;
   letter-spacing:.05em; color:var(--ok, #3fa860); border:1px solid currentColor; border-radius:999px;
   padding:1px 7px; background:color-mix(in srgb, #3fa860 10%, transparent); }
+/* the softer proposal tier — muted, where mKeepTag is the confident green */
+.mTier { margin-left:auto; font-size:.68em; font-weight:700; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); border:1px solid var(--line); border-radius:999px;
+  padding:1px 7px; white-space:nowrap; }
 .mSwap { border:1px solid var(--line); background:var(--bg); color:var(--muted); cursor:pointer;
   border-radius:6px; width:1.9em; height:1.6em; line-height:1; font-size:1.05em; flex:none; }
 .mSwap:hover { color:var(--fg); border-color:var(--accent); }

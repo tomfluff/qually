@@ -414,6 +414,8 @@ function MergeList({ proposals, codebook, flipped, onAccept, onSkip, onFlip }: {
               <button className="mSwap" onClick={() => onFlip(p)} aria-label="Swap which code is kept"
                 title="Swap which code is kept">→</button>
               <span className="mCode mKeep">{swatch(into)}{into}<span className="mKeepTag">kept</span></span>
+              {/* the confident tier is the unmarked default; only the softer one is labelled */}
+              {p.tier === "overlap" && <span className="mTier">worth considering</span>}
             </div>
             {p.rationale && <div className="mWhy">{p.rationale}</div>}
             <div className="mActs">
