@@ -19,6 +19,7 @@ import { openSummary } from "./SummaryView";
 import type { MergeProposal } from "../ai/dedupe";
 import { excerptOf } from "../contract/excerpt";
 import { DefLine } from "./CodeDef";
+import { codeStats, sortCodes, SORTS, type CodeStat, type SortBy } from "../codeStats";
 import { Icon } from "./Icon";
 
 // One AI observation, resolved against the current text (a stale hash means the line
@@ -41,6 +42,8 @@ const remembered = {
   flipped: new Set<string>(),
   suggestBy: "transcript" as "transcript" | "code",
   suggestSel: null as string | null, // selected transcript/code, null = all
+  defSort: "name" as SortBy,
+  defSel: null as string | null,     // selected code in the Definitions sidebar, null = all
 };
 // stable key for a proposal, direction-independent (NUL can't occur in a code name)
 const pairKey = (p: MergeProposal) => JSON.stringify([p.from, p.into].sort());
@@ -71,8 +74,28 @@ export function AssistView() {
   const [sumFor, setSumFor] = useState<string | null>(null);
   const [suggestBy, setSuggestBy] = useState(remembered.suggestBy);
   const [suggestSel, setSuggestSel] = useState(remembered.suggestSel);
-  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel }); },
-    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel]);
+  const [defSort, setDefSort] = useState(remembered.defSort);
+  const [defSel, setDefSel] = useState(remembered.defSel);
+  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defSel }); },
+    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defSel]);
+
+  // Definitions panel: every code, split by whether it has a definition yet —
+  // the split IS the worklist, so it's the sidebar's grouping. Both groups (and
+  // the main list) take the same sort.
+  const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
+  const defGroups = useMemo(() => {
+    const all = Object.keys(codebook);
+    const order = (cs: string[]) => sortCodes(cs, stats, defSort);
+    return {
+      defined: order(all.filter((c) => codebook[c].def)),
+      undefined: order(all.filter((c) => !codebook[c].def)),
+    };
+  }, [codebook, stats, defSort]);
+  // a code selected in the sidebar filters the list to it; nothing selected shows
+  // every code, undefined ones first (they're the work left to do)
+  const shownDefCodes = defSel !== null && codebook[defSel]
+    ? [defSel]
+    : [...defGroups.undefined, ...defGroups.defined];
   const pickSuggestBy = (by: "transcript" | "code") => { setSuggestBy(by); setSuggestSel(null); };
   const pickObsBy = (by: "lens" | "transcript") => { setObsBy(by); setObsSel(null); };
   // open tabs first, then the rest of what's loaded — the order both panels list in
@@ -251,6 +274,38 @@ export function AssistView() {
                 ? "Definitions are drafted from coded excerpts — code a bit first."
                 : "Drafts a definition for every coded code from how you used it. You edit and apply each one in the dialog."}
             </div>
+            {Object.keys(codebook).length > 0 && (
+              <>
+                <div className={"nLens" + (defSel === null ? " sel" : "")}
+                  tabIndex={0} role="button" aria-pressed={defSel === null}
+                  onClick={() => setDefSel(null)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDefSel(null); } }}>
+                  <span className="nName">All</span>
+                  <span className="cnt">{Object.keys(codebook).length}</span>
+                </div>
+                {/* the work left to do comes first */}
+                {([["No definition yet", defGroups.undefined], ["Has a definition", defGroups.defined]] as const)
+                  .map(([label, group]) => (
+                    <div key={label}>
+                      <div className="nGrp">{label} <span className="cnt">{group.length}</span></div>
+                      {group.length === 0
+                        ? <div className="bSideNote defNone">none</div>
+                        : group.map((c) => (
+                          <div key={c} className={"nLens" + (defSel === c ? " sel" : "")}
+                            tabIndex={0} role="button" aria-pressed={defSel === c}
+                            onClick={() => setDefSel(defSel === c ? null : c)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDefSel(defSel === c ? null : c); }
+                            }}>
+                            <span className="nDot" style={{ background: codebook[c].color }} />
+                            <span className="nName">{c}</span>
+                            <span className="cnt">{stats[c]?.segs ?? 0}·{stats[c]?.pids ?? 0}</span>
+                          </div>
+                        ))}
+                    </div>
+                  ))}
+              </>
+            )}
           </>
         ) : panel === "summary" ? (
           <>
@@ -380,7 +435,8 @@ export function AssistView() {
         ) : panel === "summary" ? (
           <SummaryList pids={allPids} summaries={summaries} onGenerate={setSumFor} />
         ) : panel === "describe" ? (
-          <DescribeList codebook={codebook} />
+          <DescribeList codebook={codebook} codes={shownDefCodes} stats={stats}
+            sortBy={defSort} setSortBy={setDefSort} />
         ) : (
           <SuggestList candidates={shownCandidates} groupBy={suggestBy}
             transcripts={transcripts} codebook={codebook} tabs={tabs} />
@@ -450,11 +506,14 @@ function MergeList({ proposals, codebook, flipped, onAccept, onSkip, onFlip }: {
 // The codebook's definitions as they stand — the surface the describe run
 // writes into. Drafting/editing/applying happens in the modal; this list is
 // where you see which codes still have no definition.
-function DescribeList({ codebook }: {
+function DescribeList({ codebook, codes, stats, sortBy, setSortBy }: {
   codebook: Record<string, { color: string; def: string; status: string; defAi?: boolean }>;
+  codes: string[];                       // already filtered by the sidebar and sorted
+  stats: Record<string, CodeStat>;
+  sortBy: SortBy;
+  setSortBy: (s: SortBy) => void;
 }) {
-  const codes = Object.keys(codebook).sort();
-  if (!codes.length) {
+  if (!Object.keys(codebook).length) {
     return (
       <div className="empty">
         No codes yet. Once you've coded, run <b>Draft definitions</b> on the left and the AI
@@ -463,19 +522,39 @@ function DescribeList({ codebook }: {
     );
   }
   return (
-    <div className="mList">
-      {codes.map((c) => (
-        <div key={c} className="descRow">
-          <div className="descHead">
-            <span className="mSw" style={{ background: codebook[c].color }} />
-            <b>{c}</b>
-          </div>
-          {/* this panel has no excerpt list of its own, so the definition line
-              carries a disclosure for a few of the code's quotes */}
-          <DefLine code={c} excerpts />
+    <>
+      <div className="nOpts descListBar">
+        <span className="aByLabel" id="defSortLabel">Sort</span>
+        <div className="nPills" role="group" aria-labelledby="defSortLabel">
+          {SORTS.map((s) => (
+            <button key={s.id} className={"nPill" + (sortBy === s.id ? " on" : "")}
+              aria-pressed={sortBy === s.id} onClick={() => setSortBy(s.id)}>{s.label}</button>
+          ))}
         </div>
-      ))}
-    </div>
+        <span className="nCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+      </div>
+      {codes.length === 0 ? (
+        <div className="empty">No codes in this group.</div>
+      ) : (
+        <div className="mList">
+          {codes.map((c) => (
+            <div key={c} className="descRow">
+              <div className="descHead">
+                <span className="mSw" style={{ background: codebook[c].color }} />
+                <b>{c}</b>
+                {/* the same evidence counts the draft picker shows */}
+                <span className="cnt" title={`${stats[c]?.segs ?? 0} excerpt${stats[c]?.segs === 1 ? "" : "s"} in ${stats[c]?.pids ?? 0} transcript${stats[c]?.pids === 1 ? "" : "s"}`}>
+                  {stats[c]?.segs ?? 0}·{stats[c]?.pids ?? 0}
+                </span>
+              </div>
+              {/* this panel has no excerpt list of its own, so the definition line
+                  carries a disclosure for a few of the code's quotes */}
+              <DefLine code={c} excerpts />
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

@@ -13,6 +13,7 @@ import { excerptOf } from "../contract/excerpt";
 import { describeCodes, renderDescribePayload, estimateDescribeTokens, DESC_EXEMPLARS,
   type DescCodeInput } from "../ai/describe";
 import { announce } from "../announce";
+import { SORTS, sortCodes, type SortBy } from "../codeStats";
 import { AiModal, ModelPicker } from "./AiModal";
 
 export function DescribeModal({ onClose }: { onClose: () => void }) {
@@ -29,6 +30,7 @@ export function DescribeModal({ onClose }: { onClose: () => void }) {
   const [drafts, setDrafts] = useState<{ code: string; text: string; ai: string }[] | null>(null);
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [checked, setChecked] = useState<Set<string> | null>(null); // null until codes exist — then defaults to all
+  const [sortBy, setSortBy] = useState<SortBy>("name");
   const [cost, setCost] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -55,10 +57,13 @@ export function DescribeModal({ onClose }: { onClose: () => void }) {
       }
       byCode.set(s.code, e);
     }
-    return [...byCode.entries()].map(([name, e]) => ({
+    const rows = [...byCode.entries()].map(([name, e]) => ({
       name, def: codebook[name]?.def ?? "", excerpts: e.excerpts, segs: e.segs, pids: e.pids.size,
-    })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [segments, transcripts, codebook]);
+    }));
+    const stats = Object.fromEntries(rows.map((r) => [r.name, { segs: r.segs, pids: r.pids }]));
+    const order = sortCodes(rows.map((r) => r.name), stats, sortBy);
+    return order.map((n) => rows.find((r) => r.name === n)!);
+  }, [segments, transcripts, codebook, sortBy]);
 
   // everything downstream — payload, estimate, the run itself — sees only the
   // codes still ticked
@@ -188,6 +193,16 @@ export function DescribeModal({ onClose }: { onClose: () => void }) {
                   <button className="btn" onClick={() => pick("undescribed")}>Undescribed</button>
                   <button className="btn" onClick={() => pick("described")}>Described</button>
                   <button className="btn" onClick={() => pick("none")}>None</button>
+                  {/* ticks survive a re-sort: the order is a view, not the selection */}
+                  <span className="descSort">
+                    <span className="descSortLabel" id="descSortLabel">Sort</span>
+                    <span className="nPills" role="group" aria-labelledby="descSortLabel">
+                      {SORTS.map((s) => (
+                        <button key={s.id} className={"nPill" + (sortBy === s.id ? " on" : "")}
+                          aria-pressed={sortBy === s.id} onClick={() => setSortBy(s.id)}>{s.label}</button>
+                      ))}
+                    </span>
+                  </span>
                 </div>
                 <div className="descCodes" role="group" aria-label="Codes to describe">
                   {codes.map((c) => (
