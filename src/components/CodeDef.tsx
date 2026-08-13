@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { excerptOf } from "../contract/excerpt";
+import { Icon } from "./Icon";
 
 // The right-click route needs a surface of its own — it fires from the code
 // sidebar and the lane, where there is no definition on screen to edit in place.
@@ -40,6 +41,10 @@ export function DefineHost() {
             <span className="swatch" style={{ background: entry.color }} /> {code}
           </h2>
           <DefBadge def={entry.def} ai={entry.defAi} />
+          {/* every other dialog in the app carries one; Esc and Cancel also close */}
+          <button className="btn iconbtn" onClick={close} title="Close (Esc)" aria-label="Close">
+            <Icon name="x" size={16} />
+          </button>
         </div>
         <DefLine code={code} autoEdit onDone={close} />
       </div>

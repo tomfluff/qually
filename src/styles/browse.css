@@ -173,9 +173,11 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   background:var(--bg); }
 /* in the modal the cards stack under the lede with no flex-gap parent */
 .ai-body > .descRow { margin-top:10px; }
-.descHead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.descHead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:5px; }
 .descCur { color:var(--muted); font-size:.88em; line-height:1.4; margin-top:5px; }
-.descText { display:block; width:calc(100% - 8px); margin:7px 4px 0; box-sizing:border-box;
+/* flush with the card's own padding: a 4px inset left the box visibly off the
+   line the code name, the current definition and the Apply button all sit on */
+.descText { display:block; width:100%; margin:7px 0 0; box-sizing:border-box;
   font:inherit; font-size:.95em; color:var(--fg); background:var(--panel);
   border:1px solid var(--line); border-radius:6px; padding:5px 7px; resize:vertical; }
 .descText:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
@@ -213,6 +215,7 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .defdlg .about-head { align-items:center; gap:8px; }
 .defdlg .about-head h2 { font-size:1.15em; display:flex; align-items:center; gap:8px; flex:1; }
 .defdlg .about-head .swatch { width:.75em; height:.75em; border-radius:.22em; flex-shrink:0; }
+.defdlg .about-head .iconbtn { font-size:1rem; flex:none; } /* the × keeps its fixed icon box */
 .defdlg .defEdit { max-height:50vh; overflow-y:auto; }
 
 /* The definition, edited IN PLACE. Everything here is em-based so it follows the
@@ -220,24 +223,28 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
    the reading/sidebar size settings this app is built around. */
 .defText { cursor:text; }
 .defText.none { font-style:italic; }
+/* margin-top clears the heading above: the focus ring sits OUTSIDE the box and
+   was landing against the code's title */
 .defEdit { display:block; width:100%; box-sizing:border-box; font:inherit; line-height:1.5;
   color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:8px;
-  padding:6px 9px; resize:vertical; overflow:hidden; }
+  padding:6px 9px; margin-top:4px; resize:vertical; overflow:hidden; }
 .defEdit:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 .defBar { display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap; }
 .defHint { color:var(--muted); font-size:.85em; }
 .defHint kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
   padding:0 4px; background:var(--panel); font:inherit; font-size:.95em; }
 /* the excerpt disclosure — only where the surface doesn't already list them */
-.defMore { display:inline-block; margin-top:4px; padding:0; border:none; background:none;
+.defMore { display:inline-block; margin-top:7px; padding:0; border:none; background:none;
   font:inherit; font-size:.9em; color:var(--muted); text-decoration:underline; cursor:pointer; }
 .defMore:hover { color:var(--accent); }
 .defEx { border-left:3px solid var(--line); border-radius:2px; padding:2px 0 2px 10px;
-  margin:6px 0 0; line-height:1.45; }
+  margin:8px 0 0; line-height:1.45; }
 .defExRef { color:var(--muted); font-size:.85em; margin-top:2px; }
 
-/* the softer proposal tier — muted, where mKeepTag is the confident green */
-.mTier { margin-left:auto; font-size:.68em; font-weight:700; text-transform:uppercase;
+/* the softer proposal tier — muted, where mKeepTag is the confident green. It
+   follows the pair rather than sitting flush right: on a wide panel a
+   right-aligned tag floats alone, detached from what it labels. */
+.mTier { font-size:.68em; font-weight:700; text-transform:uppercase;
   letter-spacing:.05em; color:var(--muted); border:1px solid var(--line); border-radius:999px;
   padding:1px 7px; white-space:nowrap; }
 .mSwap { border:1px solid var(--line); background:var(--bg); color:var(--muted); cursor:pointer;
