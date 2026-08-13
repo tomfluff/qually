@@ -334,11 +334,6 @@ export function AssistView() {
                     </button>
                   ))}
                 </div>
-                {liveSel.length > 0 && (
-                  <button className="btn defAll" onClick={() => { setDefSel([]); setDefAnchor(null); }}>
-                    <Icon name="x" size={12} /> Clear {liveSel.length} picked
-                  </button>
-                )}
                 {/* a group heading is dropped when the scope already excludes it */}
                 {([["undefined", "No definition yet", defGroups.undefined],
                    ["defined", "Has a definition", defGroups.defined]] as const)
@@ -368,6 +363,14 @@ export function AssistView() {
                     </div>
                   ))}
                 <div className="bSideNote defHint">Click a code to focus it · <b>Ctrl</b> adds · <b>Shift</b> takes a range</div>
+                {/* below the list, and stuck to the sidebar's floor: with a
+                    codebook of a hundred codes it would otherwise sit off-screen
+                    above whatever you just picked */}
+                {liveSel.length > 0 && (
+                  <button className="btn defAll" onClick={() => { setDefSel([]); setDefAnchor(null); }}>
+                    <Icon name="x" size={12} /> Clear {liveSel.length} picked
+                  </button>
+                )}
               </>
             )}
           </>

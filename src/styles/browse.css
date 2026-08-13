@@ -210,9 +210,15 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .browse-left .nGrp .cnt { font-weight:400; letter-spacing:0; font-size:1.1em; }
 /* the scope control: three segments across the sidebar, never wrapping */
 .defScope .seg { white-space:nowrap; padding:4px 6px; font-size:.92em; }
-/* clears a code selection — only shown while there is one */
-.defAll { display:flex; align-items:center; gap:5px; width:100%; justify-content:center;
-  margin:8px 0 2px; font-size:.9em; }
+/* Clears a code selection — only rendered while there is one, and pinned to the
+   bottom of the scrolling sidebar so it stays reachable however far down the
+   codebook you are. The negative margins let its background cover the sidebar's
+   own padding, so rows don't peek out beneath it. */
+.defAll { position:sticky; bottom:-12px; z-index:1;
+  display:flex; align-items:center; gap:5px; width:calc(100% + 24px);
+  justify-content:center; margin:10px -12px -12px; border-radius:0;
+  border-left:none; border-right:none; border-bottom:none;
+  padding:9px 12px calc(9px + 12px); font-size:.9em; }
 /* the selection gesture, said once at the foot of the list rather than in a
    tooltip nobody hovers */
 .bSideNote.defHint { margin-top:10px; padding-top:8px; border-top:1px solid var(--line);
