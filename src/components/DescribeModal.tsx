@@ -16,7 +16,14 @@ import { announce } from "../announce";
 import { SORTS, sortCodes, type SortBy } from "../codeStats";
 import { AiModal, ModelPicker } from "./AiModal";
 
-export function DescribeModal({ onClose }: { onClose: () => void }) {
+export function DescribeModal({ initial, onClose }: {
+  // What the caller had in view: the codes picked in the Definitions sidebar,
+  // or failing that the ones its Show filter is showing. Opening the dialog
+  // shouldn't throw away the narrowing you just did. Omitted (the Codebook's AI
+  // menu, which has no such context) means every coded code.
+  initial?: string[];
+  onClose: () => void;
+}) {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
   const codebook = useStore((s) => s.codebook);
@@ -29,7 +36,7 @@ export function DescribeModal({ onClose }: { onClose: () => void }) {
   // definition AI-only, while any edit marks it manually shaped.
   const [drafts, setDrafts] = useState<{ code: string; text: string; ai: string }[] | null>(null);
   const [applied, setApplied] = useState<Set<string>>(new Set());
-  const [checked, setChecked] = useState<Set<string> | null>(null); // null until codes exist — then defaults to all
+  const [checked, setChecked] = useState<Set<string> | null>(initial ? new Set(initial) : null); // null = every code
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [cost, setCost] = useState(0);
   const [err, setErr] = useState<string | null>(null);
@@ -64,6 +71,17 @@ export function DescribeModal({ onClose }: { onClose: () => void }) {
     const order = sortCodes(rows.map((r) => r.name), stats, sortBy);
     return order.map((n) => rows.find((r) => r.name === n)!);
   }, [segments, transcripts, codebook, sortBy]);
+
+  // The caller's codes and this dialog's are not the same set: it only lists
+  // codes with accepted segments (the excerpts a definition is drafted from).
+  // If the inherited selection turns out to name none of them, fall back to all
+  // rather than opening with nothing ticked and a dead Send button.
+  const settled = useRef(false);
+  useEffect(() => {
+    if (settled.current || !codes.length) return;
+    settled.current = true;
+    setChecked((c) => (c && !codes.some((x) => c.has(x.name)) ? null : c));
+  }, [codes]);
 
   // everything downstream — payload, estimate, the run itself — sees only the
   // codes still ticked

@@ -508,7 +508,7 @@ export function AssistView() {
       </div>
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
         onClose={() => setMergeOpen(false)} />}
-      {describeOpen && <DescribeModal onClose={() => setDescribeOpen(false)} />}
+      {describeOpen && <DescribeModal initial={shownDefCodes} onClose={() => setDescribeOpen(false)} />}
       {suggestFor !== null && <SuggestModal pid={suggestFor} choose
         onClose={() => setSuggestFor(null)} />}
       {scanFor !== null && <AiCheckModal pid={scanFor} choose
