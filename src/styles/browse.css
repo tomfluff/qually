@@ -60,8 +60,10 @@
 .bExcerpt .ref.open:hover .refspk { color:var(--accent); }
 
 /* ── Assist tab: the AI's observations side by side, staged to become codes ── */
+/* user-select:none like the Codebook's rows: these take Shift-click ranges, and
+   without it the browser paints a text selection across the rows instead */
 .nLens { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
-  cursor:pointer; }
+  cursor:pointer; user-select:none; }
 .nLens:hover { background:var(--panel); }
 .nLens.sel { background:color-mix(in srgb, var(--accent) 14%, transparent); }
 .nLens.none { color:var(--muted); } /* quiet empty lenses by colour, not opacity */
@@ -214,9 +216,13 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
    bottom of the scrolling sidebar so it stays reachable however far down the
    codebook you are. The negative margins let its background cover the sidebar's
    own padding, so rows don't peek out beneath it. */
-.defAll { position:sticky; bottom:-12px; z-index:1;
-  display:flex; align-items:center; gap:5px; width:calc(100% + 24px);
-  justify-content:center; margin:10px -12px -12px; border-radius:0;
+.defAll { position:sticky; bottom:-12px; z-index:1; box-sizing:border-box;
+  display:flex; align-items:center; gap:5px; justify-content:center;
+  /* A <button> sizes to its content even as a flex container, so the width is
+     explicit — but border-box, with the negative margins reaching over the
+     sidebar's padding. The earlier calc(100% + 24px) added the button's own
+     padding on top of that and pushed a horizontal scrollbar onto the sidebar. */
+  width:calc(100% + 24px); margin:10px -12px -12px; border-radius:0;
   border-left:none; border-right:none; border-bottom:none;
   padding:9px 12px calc(9px + 12px); font-size:.9em; }
 /* the selection gesture, said once at the foot of the list rather than in a
