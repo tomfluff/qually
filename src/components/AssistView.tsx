@@ -44,6 +44,7 @@ const remembered = {
   suggestSel: null as string | null, // selected transcript/code, null = all
   defSort: "name" as SortBy,
   defSel: null as string | null,     // selected code in the Definitions sidebar, null = all
+  defOpen: { undefined: true, defined: true } as Record<"undefined" | "defined", boolean>,
 };
 // stable key for a proposal, direction-independent (NUL can't occur in a code name)
 const pairKey = (p: MergeProposal) => JSON.stringify([p.from, p.into].sort());
@@ -76,8 +77,9 @@ export function AssistView() {
   const [suggestSel, setSuggestSel] = useState(remembered.suggestSel);
   const [defSort, setDefSort] = useState(remembered.defSort);
   const [defSel, setDefSel] = useState(remembered.defSel);
-  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defSel }); },
-    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defSel]);
+  const [defOpen, setDefOpen] = useState(remembered.defOpen);
+  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defSel, defOpen }); },
+    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defSel, defOpen]);
 
   // Definitions panel: every code, split by whether it has a definition yet —
   // the split IS the worklist, so it's the sidebar's grouping. Both groups (and
@@ -276,19 +278,25 @@ export function AssistView() {
             </div>
             {Object.keys(codebook).length > 0 && (
               <>
-                <div className={"nLens" + (defSel === null ? " sel" : "")}
-                  tabIndex={0} role="button" aria-pressed={defSel === null}
-                  onClick={() => setDefSel(null)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDefSel(null); } }}>
-                  <span className="nName">All</span>
-                  <span className="cnt">{Object.keys(codebook).length}</span>
-                </div>
+                {/* only rendered while a code is picked: as the lone row it was
+                    a button whose one state was already the state you were in */}
+                {defSel !== null && (
+                  <button className="btn defAll" onClick={() => setDefSel(null)}>
+                    <Icon name="chevron-left" size={13} /> All {Object.keys(codebook).length} codes
+                  </button>
+                )}
                 {/* the work left to do comes first */}
-                {([["No definition yet", defGroups.undefined], ["Has a definition", defGroups.defined]] as const)
-                  .map(([label, group]) => (
-                    <div key={label}>
-                      <div className="nGrp">{label} <span className="cnt">{group.length}</span></div>
-                      {group.length === 0
+                {([["undefined", "No definition yet", defGroups.undefined],
+                   ["defined", "Has a definition", defGroups.defined]] as const)
+                  .map(([key, label, group]) => (
+                    <div key={key}>
+                      <button className="nGrp defGrp" aria-expanded={defOpen[key]}
+                        onClick={() => setDefOpen((o) => ({ ...o, [key]: !o[key] }))}>
+                        <Icon name={defOpen[key] ? "chevron-down" : "chevron-right"} size={13} />
+                        <span className="defGrpName">{label}</span>
+                        <span className="cnt">{group.length}</span>
+                      </button>
+                      {defOpen[key] && (group.length === 0
                         ? <div className="bSideNote defNone">none</div>
                         : group.map((c) => (
                           <div key={c} className={"nLens" + (defSel === c ? " sel" : "")}
@@ -301,7 +309,7 @@ export function AssistView() {
                             <span className="nName">{c}</span>
                             <span className="cnt">{stats[c]?.segs ?? 0}·{stats[c]?.pids ?? 0}</span>
                           </div>
-                        ))}
+                        )))}
                     </div>
                   ))}
               </>
@@ -524,7 +532,9 @@ function DescribeList({ codebook, codes, stats, sortBy, setSortBy }: {
   return (
     <>
       <div className="nOpts descListBar">
-        <span className="aByLabel" id="defSortLabel">Sort</span>
+        {/* descSortLabel, not aByLabel: that one carries margins for a STACKED
+            label and sat off-centre from the pills beside it */}
+        <span className="descSortLabel" id="defSortLabel">Sort</span>
         <div className="nPills" role="group" aria-labelledby="defSortLabel">
           {SORTS.map((s) => (
             <button key={s.id} className={"nPill" + (sortBy === s.id ? " on" : "")}

@@ -192,15 +192,25 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 /* sort sits apart from the select-these buttons: it changes the ORDER, not the
    ticks, and reading them as one row of four+three invites that confusion */
 .descSort { display:flex; align-items:center; gap:6px; margin-left:auto; }
-.descSortLabel { color:var(--muted); font-size:.85em; }
+.descSortLabel { color:var(--muted); font-size:.85em; margin:0; line-height:1; }
 /* the Definitions panel's own sort bar, above the list it orders */
 .descListBar { margin-bottom:12px; }
 .descListBar .nCount { margin-left:auto; }
 /* an empty group still says so, indented under its heading */
 .bSideNote.defNone { margin:0 0 4px 8px; font-style:italic; }
-/* group heading in the Definitions sidebar: label left, its count right */
-.browse-left .nGrp { display:flex; align-items:baseline; gap:8px; }
-.browse-left .nGrp .cnt { margin-left:auto; font-weight:400; letter-spacing:0; }
+/* group heading in the Definitions sidebar — a collapse toggle: chevron, label,
+   count. Keeps .nGrp's eyebrow type but has to be a real button. */
+.browse-left .nGrp.defGrp { display:flex; align-items:center; gap:6px; width:100%;
+  border:none; background:none; padding:4px 6px; cursor:pointer; text-align:left;
+  color:var(--muted); font:inherit; font-size:.72em; text-transform:uppercase;
+  letter-spacing:.09em; font-weight:700; border-radius:7px; }
+.browse-left .nGrp.defGrp:hover { background:var(--panel); color:var(--fg); }
+.browse-left .nGrp.defGrp svg { flex:none; }
+.defGrpName { flex:1; }
+.browse-left .nGrp .cnt { font-weight:400; letter-spacing:0; font-size:1.1em; }
+/* the way back from a picked code — only shown while there is one */
+.defAll { display:flex; align-items:center; gap:4px; width:100%; justify-content:flex-start;
+  margin-bottom:6px; font-size:.9em; }
 .descCodes { display:flex; flex-direction:column; gap:2px; margin-bottom:10px;
   max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:4px; }
 .descPickRow { display:flex; align-items:center; gap:7px; padding:4px 6px; border-radius:6px;
