@@ -26,6 +26,20 @@ export interface ExcerptResult {
 export const RESEARCHER = /^(r|r\d+|researcher|interviewer|moderator|facilitator|int|i)$/i;
 const isR = (speaker: string) => RESEARCHER.test(speaker.trim());
 
+// A segment's excerpt: pick its lines out of the transcript, run the rule, and
+// hand back the BODY without the "[R:] " marker plus the dominant speaker as a
+// field. The marker is produced in exactly one place (below) and was being
+// un-produced by nine hand-written regexes scattered across the app — copies
+// that had already drifted, since only the Codebook kept the speaker and every
+// other surface dropped it, silently showing an interviewer's line as the
+// participant's words. One helper, so a surface that wants to label the speaker
+// can, and none of them has to know about the marker at all.
+export interface SegLine { id: number; text: string; speaker: string }
+export function segExcerpt(range: { start: number; end: number }, lines: SegLine[]): ExcerptResult {
+  const r = excerptOf(lines.filter((l) => l.id >= range.start && l.id <= range.end));
+  return { ...r, excerpt: r.excerpt.replace(/^\[R:\] /, "") };
+}
+
 export function excerptOf(lines: ExLine[]): ExcerptResult {
   const chars = new Map<string, number>();
   const order: string[] = [];

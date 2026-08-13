@@ -5,7 +5,7 @@
 // PROPOSES pairs; the researcher accepts each one, and the merge itself runs
 // through the existing (undoable) mergeCode. Nothing is applied here.
 import { callJson, estimateTokens, type Usage } from "./openai";
-import type { Redaction } from "./redact";
+import { restore, type Redaction } from "./redact";
 
 export const MERGE_EXEMPLARS = 6; // sample coded excerpts sent per code
 
@@ -79,7 +79,7 @@ export async function dedupeCodes(opts: {
     schema: SCHEMA,
     signal: opts.signal,
   });
-  return { proposals: sanitizeMergeReply(opts.codes, data.proposals ?? []), usage };
+  return { proposals: sanitizeMergeReply(opts.codes, data.proposals ?? [], opts.redaction), usage };
 }
 
 // The trust boundary, separated so it's testable without the network. A proposal
@@ -89,6 +89,7 @@ export async function dedupeCodes(opts: {
 export function sanitizeMergeReply(
   codes: MergeCodeInput[],
   reply: MergeProposal[],
+  r?: Redaction,
 ): MergeProposal[] {
   const known = new Set(codes.map((c) => c.name));
   const seen = new Set<string>();
@@ -100,7 +101,10 @@ export function sanitizeMergeReply(
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({
-      from, into, rationale: (p.rationale ?? "").trim(),
+      // the rationale is read by the researcher who listed those terms, next to
+      // the raw excerpts it argues from — leaving [REDACTED_1] in it buys no
+      // privacy and just makes the sentence unreadable
+      from, into, rationale: restore(r, (p.rationale ?? "").trim()),
       // an unrecognised tier downgrades to "overlap": mislabelling a proposal
       // as the confident kind is the only harmful direction
       tier: p.tier === "duplicate" ? "duplicate" : "overlap",

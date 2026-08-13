@@ -57,6 +57,18 @@ export function rememberScroll(pid: string, anchor: ScrollAnchor) {
   persist();
 }
 
+/** Carry a tab's position to its new name. A rename is the SAME transcript —
+ *  forgetting threw the researcher back to line 1 of a long one, which is the
+ *  single thing a reload can't reconstruct and the costliest to redo at a
+ *  low-vision reading speed. */
+export function renameScroll(from: string, to: string) {
+  if (!(from in savedScroll)) return;
+  savedScroll[to] = savedScroll[from];
+  delete savedScroll[from];
+  if (positioned.has(from)) { positioned.delete(from); positioned.add(to); }
+  persist();
+}
+
 /** Forget one tab's position, or every tab's (a project swap). */
 export function forgetScroll(pid?: string) {
   if (pid === undefined) {

@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// Consent gate + review desk for AI-drafted code definitions. Scope: every code
-// with at least one accepted segment (the excerpts are the evidence a definition
-// is grounded in). The AI drafts; each draft is edited and applied HERE, one
-// Apply per code through the existing setDef — closing the modal applies nothing.
+// Consent gate for AI-drafted code definitions. Scope: every code with at least
+// one accepted segment (the excerpts are the evidence a definition is grounded
+// in). Sending WRITES the drafts — one undoable step — and reports the cost,
+// like every other AI run in the app. There is no review desk: a stack of
+// textareas in a dialog was a worse editor than the Definitions panel the
+// researcher already has, and it made a paid run discardable by a stray click.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { excerptOf } from "../contract/excerpt";
+import { segExcerpt } from "../contract/excerpt";
 import { describeCodes, renderDescribePayload, estimateDescribeTokens, DESC_EXEMPLARS,
   type DescCodeInput } from "../ai/describe";
 import { announce } from "../announce";
@@ -27,18 +29,14 @@ export function DescribeModal({ initial, onClose }: {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
   const codebook = useStore((s) => s.codebook);
-  const setDef = useStore((s) => s.setDef);
+  const applyDrafts = useStore((s) => s.applyDrafts);
   const ai = useStore((s) => s.ai);
   const [busy, setBusy] = useState(false);
-  // null = still on the consent stage; after the run, the drafts being reviewed
-  // (edited in place) with which are applied, plus the run's cost for the footer.
-  // `ai` keeps the model's original text: applying it verbatim marks the
-  // definition AI-only, while any edit marks it manually shaped.
-  const [drafts, setDrafts] = useState<{ code: string; text: string; ai: string }[] | null>(null);
-  const [applied, setApplied] = useState<Set<string>>(new Set());
+  // null = still on the consent stage; after the run, what was written and what
+  // it cost — the same receipt every other AI run shows.
+  const [done, setDone] = useState<{ names: string[]; cost: number } | null>(null);
   const [checked, setChecked] = useState<Set<string> | null>(initial ? new Set(initial) : null); // null = every code
   const [sortBy, setSortBy] = useState<SortBy>("name");
-  const [cost, setCost] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
@@ -57,9 +55,7 @@ export function DescribeModal({ initial, onClose }: {
       const e = byCode.get(s.code) ?? { excerpts: [], segs: 0, pids: new Set<string>() };
       e.segs++; e.pids.add(s.pid);
       if (e.excerpts.length < DESC_EXEMPLARS) {
-        const ex = excerptOf(transcripts[s.pid].lines
-          .filter((l) => l.id >= s.start && l.id <= s.end)
-          .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
+        const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
         if (ex) e.excerpts.push(ex);
       }
       byCode.set(s.code, e);
@@ -73,15 +69,15 @@ export function DescribeModal({ initial, onClose }: {
   }, [segments, transcripts, codebook, sortBy]);
 
   // The caller's codes and this dialog's are not the same set: it only lists
-  // codes with accepted segments (the excerpts a definition is drafted from).
-  // If the inherited selection turns out to name none of them, fall back to all
-  // rather than opening with nothing ticked and a dead Send button.
-  const settled = useRef(false);
-  useEffect(() => {
-    if (settled.current || !codes.length) return;
-    settled.current = true;
-    setChecked((c) => (c && !codes.some((x) => c.has(x.name)) ? null : c));
-  }, [codes]);
+  // codes with accepted segments (the excerpts a definition is drafted from), so
+  // a selection made in the sidebar can name codes that have none. Say which
+  // ones fell out rather than quietly widening the run — this one costs money
+  // and ships participant data, so the safe direction is the smaller set.
+  const dropped = useMemo(() => {
+    if (!initial) return [];
+    const live = new Set(codes.map((c) => c.name));
+    return initial.filter((n) => !live.has(n));
+  }, [initial, codes]);
 
   // everything downstream — payload, estimate, the run itself — sees only the
   // codes still ticked
@@ -93,18 +89,22 @@ export function DescribeModal({ initial, onClose }: {
   const toggle = (name: string) => setChecked(() => {
     const n = new Set(on); n.has(name) ? n.delete(name) : n.add(name); return n;
   });
-  const pick = (which: "all" | "none" | "undescribed" | "described") => setChecked(new Set(
+  const pick = (which: "all" | "none" | "undefined" | "defined") => setChecked(new Set(
     codes.filter((c) =>
       which === "all" ? true
       : which === "none" ? false
-      : which === "undescribed" ? !c.def
+      : which === "undefined" ? !c.def
       : !!c.def).map((c) => c.name)));
 
   const exCount = sent.reduce((n, c) => n + c.excerpts.length, 0);
   const inTok = useMemo(() => estimateDescribeTokens(sent, red), [sent, red]);
   const redactions = useMemo(() => sent.reduce((n, c) =>
     n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [sent, red]);
-  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(sent.length * 40)));
+  // A definition runs one or two sentences (~40 tokens), and every call bills
+  // low-effort reasoning at the OUTPUT rate on top — the old guess of ~10 tokens
+  // a code, reasoning ignored, showed a price several times under what the run
+  // actually cost. Overshoot: this number sits next to the Send button.
+  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(sent.length * 160)) + 300);
   const preview = useMemo(() => renderDescribePayload(sent, red), [sent, red]);
   const enough = sent.length >= 1;
 
@@ -118,7 +118,7 @@ export function DescribeModal({ initial, onClose }: {
     announce(`Drafting definitions for ${sent.length} codes…`);
     abort.current = new AbortController();
     try {
-      const { drafts: out, usage } = await describeCodes({
+      const { drafts, usage } = await describeCodes({
         key, model: model.id, codes: sent, redaction: red, signal: abort.current.signal,
       });
       useStore.getState().logAiCall({
@@ -126,10 +126,14 @@ export function DescribeModal({ initial, onClose }: {
         lines: sent.length, redactions,
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
-      setDrafts(out.map((d) => ({ code: d.code, text: d.definition, ai: d.definition })));
-      setCost(usage.costUsd);
-      announce(out.length
-        ? `${out.length} definition draft${out.length === 1 ? "" : "s"} to review.`
+      // written straight in, as one undo step — editing happens afterwards in
+      // the Definitions panel, which scales with the reading-size setting and
+      // shows the excerpts each definition is answerable to
+      const names = drafts.map((d) => d.code).filter((c) => codebook[c]);
+      applyDrafts(drafts.map((d) => ({ code: d.code, def: d.definition })));
+      setDone({ names, cost: usage.costUsd });
+      announce(names.length
+        ? `${names.length} definition${names.length === 1 ? "" : "s"} written.`
         : "The model returned no definitions.");
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -141,51 +145,30 @@ export function DescribeModal({ initial, onClose }: {
     }
   };
 
-  const apply = (code: string, text: string, aiText: string) => {
-    const t = text.trim();
-    if (!t || !codebook[code]) return;
-    // verbatim AI text is marked AI-only; an edited draft is a person's words
-    setDef(code, t, t === aiText.trim());
-    setApplied((a) => new Set(a).add(code));
-  };
-
   return (
     <AiModal title="Draft definitions" busy={busy} onClose={onClose}>
-      {drafts ? (
+      {done ? (
         <>
           <div className="ai-body nicescroll">
             <p className="about-lede">
-              {drafts.length === 0
+              {done.names.length === 0
                 ? <>The model returned no definitions — nothing has changed.</>
-                : <>Edit each draft as needed, then <b>Apply</b> the ones you want — each write
-                  goes into that code's definition. Anything not applied is discarded on close.</>}
+                : <><b>{done.names.length} definition{done.names.length === 1 ? "" : "s"} written.</b> They
+                  are marked <span className="defTag ai">AI</span> until you edit them — double-click
+                  any definition in the Codebook or the Definitions panel to reshape it.
+                  One <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes the whole run.</>}
             </p>
-            {drafts.map((d, i) => {
-              const gone = !codebook[d.code]; // merged/deleted since the run
-              const cur = codebook[d.code]?.def ?? "";
-              const done = applied.has(d.code);
-              return (
-                <div key={d.code} className="descRow">
-                  <div className="descHead">
-                    <span className="mSw" style={{ background: codebook[d.code]?.color || "#999" }} />
-                    <b>{d.code}</b>
-                    {done && <span className="mKeepTag">applied</span>}
-                    {gone && <span className="mTier">code no longer exists</span>}
-                  </div>
-                  {cur && !done && <div className="descCur">current: {cur}</div>}
-                  <textarea className="descText" value={d.text} rows={2} disabled={gone}
-                    onChange={(e) => setDrafts((ds) =>
-                      ds!.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} />
-                  <div className="mActs">
-                    <button className="nBtn pri" disabled={gone || !d.text.trim()}
-                      onClick={() => apply(d.code, d.text, d.ai)}>
-                      {done ? "Apply again" : cur ? "Replace definition" : "Apply"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            <div className="imp-stats"><div>Cost: <b>${cost.toFixed(4)}</b> · logged to the AI log</div></div>
+            {done.names.length > 0 && (
+              <div className="descWrote">
+                {done.names.map((c) => (
+                  <span key={c} className="descWroteOne">
+                    <span className="mSw" style={{ background: codebook[c]?.color || "#999" }} />
+                    {c}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
           </div>
           <div className="imp-actions"><button className="btn primary" onClick={onClose}>Done</button></div>
         </>
@@ -194,10 +177,10 @@ export function DescribeModal({ initial, onClose }: {
           <div className="ai-body nicescroll">
             <p className="about-lede">
               The AI reads each code's name, its current definition, and a few excerpts you
-              coded with it, then drafts a definition grounded in that usage. You review,
-              edit and apply every definition yourself; nothing is written on its own.
+              coded with it, then drafts a definition grounded in that usage. The drafts are
+              written straight into the codebook, marked AI until you edit them —
+              one <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes the whole run back.
             </p>
-            <ModelPicker modelId={modelId} onPick={setModelId} />
             {codes.length === 0 ? (
               <p className="about-lede" style={{ marginTop: 10 }}>
                 Definitions are drafted from coded excerpts, and no code has an accepted
@@ -205,11 +188,31 @@ export function DescribeModal({ initial, onClose }: {
               </p>
             ) : (
               <>
+                {/* above the picker, not below it: at a normal window size this
+                    box scrolled out of sight while Send stayed visible and
+                    enabled, which is precisely backwards for the one sentence
+                    naming participant data */}
+                <div className="ai-warn">
+                  <b>This sends {sent.length} code{sent.length === 1 ? "" : "s"} — names, current definitions,
+                  and up to {DESC_EXEMPLARS} excerpts each — to OpenAI.</b> Excerpts are participant
+                  data; make sure this is allowed by your consent form and ethics approval.
+                  Definitions you already wrote are replaced.
+                </div>
+                {dropped.length > 0 && (
+                  <p className="descDropped">
+                    {dropped.length === (initial?.length ?? 0)
+                      ? <>None of the {dropped.length} code{dropped.length === 1 ? "" : "s"} you picked
+                        {dropped.length === 1 ? " has" : " have"} coded excerpts yet — tick others below.</>
+                      : <>{dropped.length} of the codes you picked {dropped.length === 1 ? "has" : "have"} no
+                        coded excerpts yet and {dropped.length === 1 ? "is" : "are"} not listed: {dropped.join(", ")}.</>}
+                  </p>
+                )}
+                <ModelPicker modelId={modelId} onPick={setModelId} />
                 <div className="ai-sec">Codes <span className="ai-sec-hint">tick the ones to draft a definition for</span></div>
                 <div className="descPicks">
                   <button className="btn" onClick={() => pick("all")}>All</button>
-                  <button className="btn" onClick={() => pick("undescribed")}>Undescribed</button>
-                  <button className="btn" onClick={() => pick("described")}>Described</button>
+                  <button className="btn" onClick={() => pick("undefined")}>Undefined</button>
+                  <button className="btn" onClick={() => pick("defined")}>Defined</button>
                   <button className="btn" onClick={() => pick("none")}>None</button>
                   {/* ticks survive a re-sort: the order is a view, not the selection */}
                   <span className="descSort">
@@ -222,7 +225,7 @@ export function DescribeModal({ initial, onClose }: {
                     </span>
                   </span>
                 </div>
-                <div className="descCodes" role="group" aria-label="Codes to describe">
+                <div className="descCodes" role="group" aria-label="Codes to draft definitions for">
                   {codes.map((c) => (
                     <label key={c.name} className={"descPickRow" + (on.has(c.name) ? " on" : "")}>
                       <input type="checkbox" checked={on.has(c.name)} onChange={() => toggle(c.name)} />
@@ -230,17 +233,12 @@ export function DescribeModal({ initial, onClose }: {
                       <span className="descPickName">{c.name}</span>
                       {c.def
                         ? <span className="descPickDef" title={c.def}>{c.def}</span>
-                        : <span className="descPickDef none">no definition</span>}
+                        : <span className="descPickDef none">no definition yet</span>}
                       <span className="descPickN" title={`${c.segs} excerpt${c.segs === 1 ? "" : "s"} in ${c.pids} transcript${c.pids === 1 ? "" : "s"}`}>
                         {c.segs}·{c.pids}
                       </span>
                     </label>
                   ))}
-                </div>
-                <div className="ai-warn">
-                  <b>This sends {sent.length} code{sent.length === 1 ? "" : "s"} — names, current definitions,
-                  and up to {DESC_EXEMPLARS} excerpts each — to OpenAI.</b> Excerpts are participant
-                  data; make sure this is allowed by your consent form and ethics approval.
                 </div>
                 <div className="ai-payload">
                   <div className="ai-payload-head">
@@ -250,7 +248,9 @@ export function DescribeModal({ initial, onClose }: {
                   <pre className="nicescroll">{preview}</pre>
                 </div>
                 <div className="ai-facts">
-                  <span>codes <b>{codes.length}</b></span>
+                  {/* the ticked codes, like every other number here — this read
+                      the whole eligible set and contradicted the warning above */}
+                  <span>codes <b>{sent.length}</b></span>
                   <span>excerpts <b>{exCount}</b></span>
                   <span>redacted <b>{redactions}</b></span>
                   <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>

@@ -13,7 +13,7 @@ import type { GroundRec } from "../ai/ground";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
-import { forgetScroll } from "../scrollMemory";
+import { forgetScroll, renameScroll } from "../scrollMemory";
 import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
 import { announce } from "../announce";
 
@@ -273,6 +273,7 @@ interface State {
   deleteCode: (code: string) => void;
   mergeCode: (from: string, into: string) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
+  applyDrafts: (drafts: { code: string; def: string }[]) => number;
   setFontSize: (n: number) => void;
   setSidebarFontSize: (n: number) => void;
   setUi: (patch: Partial<Ui>) => void;
@@ -867,7 +868,7 @@ export const useStore = create<State>()(
           ui: { ...s.ui, speakerFocus },
           undoStack: [], redoStack: [],
         });
-        forgetScroll(from);
+        renameScroll(from, to); // same transcript, new name — keep the reader's place
         return null;
       },
 
@@ -1105,7 +1106,7 @@ export const useStore = create<State>()(
         const p: Project = {
           format: FORMAT, version: VERSION, savedAt: new Date().toISOString(),
           transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
-          extSegRows: s.extSegRows, tabs: s.tabs, active: s.active,
+          extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
           hotbar: s.hotbar, video: s.video,
           ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog,
           markers: s.markers, // session events + field notes: study data, not a preference
@@ -1140,7 +1141,7 @@ export const useStore = create<State>()(
           ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {},
             markerColors: p.markerColors ?? {} },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
-          extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: [], active: p.active,
+          extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: p.pinnedTabs ?? [], active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
           markers: p.markers ?? [],
           summaries: p.summaries ?? {},
@@ -1226,6 +1227,32 @@ export const useStore = create<State>()(
         set({
           codebook: { ...get().codebook, [code]: { ...cur, def, defAi: !!def && ai === true } },
         });
+      },
+      // A whole AI run's definitions written as ONE undoable step — twelve
+      // setDef calls would cost twelve Ctrl+Z presses to walk back a single
+      // action the researcher took once. Returns how many entries changed.
+      applyDrafts: (drafts) => {
+        const cb = get().codebook;
+        const next = { ...cb };
+        let changed = 0;
+        for (const d of drafts) {
+          const cur = next[d.code];
+          const def = d.def.trim();
+          if (!cur || !def) continue;
+          // A draft that comes back identical to what is already stored is not
+          // authorship by anyone: keep the provenance it had, or a definition
+          // the researcher wrote gets relabelled as the model's work (the model
+          // is fed the current definition and told to refine it, so an echo is
+          // routine).
+          const defAi = def === (cur.def ?? "").trim() ? !!cur.defAi : true;
+          if (cur.def === def && !!cur.defAi === defAi) continue;
+          next[d.code] = { ...cur, def, defAi };
+          changed++;
+        }
+        if (!changed) return 0;
+        get().pushUndo();
+        set({ codebook: next });
+        return changed;
       },
       renameCode: (code, newName) => {
         const name = newName.trim();

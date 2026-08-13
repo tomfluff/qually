@@ -6,7 +6,7 @@
 // applies each one in the modal (through the existing setDef). Nothing is
 // applied here.
 import { callJson, estimateTokens, type Usage } from "./openai";
-import type { Redaction } from "./redact";
+import { restore, type Redaction } from "./redact";
 
 export const DESC_EXEMPLARS = 8; // sample coded excerpts sent per code — the evidence a definition is grounded in
 
@@ -69,18 +69,22 @@ export async function describeCodes(opts: {
     schema: SCHEMA,
     signal: opts.signal,
   });
-  return { drafts: sanitizeDescribeReply(opts.codes, data.descriptions ?? []), usage };
+  return { drafts: sanitizeDescribeReply(opts.codes, data.descriptions ?? [], opts.redaction), usage };
 }
 
 // The trust boundary, testable without the network: a draft is only usable for
 // a code we actually sent (an invented name would write a definition onto
 // nothing — or the wrong thing), non-empty, and once per code (first wins).
-export function sanitizeDescribeReply(codes: DescCodeInput[], reply: DescDraft[]): DescDraft[] {
+// A definition is WRITTEN INTO the codebook and exported from there, so a
+// placeholder left in one is permanent and meaningless to everyone who reads
+// the file. The model is told to refine the existing definition, which is fed
+// to it redacted, so it echoes the token back as a matter of course.
+export function sanitizeDescribeReply(codes: DescCodeInput[], reply: DescDraft[], r?: Redaction): DescDraft[] {
   const known = new Set(codes.map((c) => c.name));
   const seen = new Set<string>();
   const out: DescDraft[] = [];
   for (const d of reply) {
-    const code = (d.code ?? "").trim(), definition = (d.definition ?? "").trim();
+    const code = (d.code ?? "").trim(), definition = restore(r, (d.definition ?? "").trim());
     if (!known.has(code) || !definition || seen.has(code)) continue;
     seen.add(code);
     out.push({ code, definition });

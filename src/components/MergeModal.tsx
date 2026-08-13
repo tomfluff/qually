@@ -9,7 +9,7 @@ import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { excerptOf } from "../contract/excerpt";
+import { segExcerpt } from "../contract/excerpt";
 import { dedupeCodes, renderMergePayload, estimateMergeTokens, MERGE_EXEMPLARS,
   type MergeCodeInput, type MergeProposal } from "../ai/dedupe";
 import { announce } from "../announce";
@@ -40,9 +40,7 @@ export function MergeModal({ onProposals, onClose }: {
       if (s.status !== "accepted" || !transcripts[s.pid]) continue;
       const arr = byCode.get(s.code) ?? [];
       if (arr.length >= MERGE_EXEMPLARS) continue;
-      const ex = excerptOf(transcripts[s.pid].lines
-        .filter((l) => l.id >= s.start && l.id <= s.end)
-        .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
+      const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
       if (ex) { arr.push(ex); byCode.set(s.code, arr); }
     }
     return [...byCode.entries()].map(([name, excerpts]) => ({

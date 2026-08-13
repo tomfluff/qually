@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useStore } from "../state/store";
 import { speakerGroupedText } from "../format";
-import { excerptOf } from "../contract/excerpt";
+import { segExcerpt } from "../contract/excerpt";
 import { useDialogFocus } from "../useDialogFocus";
 import { useDismiss, useClampToViewport } from "../usePopover";
 import { groundHash } from "../ai/ground";
@@ -64,12 +64,12 @@ export function SegmentPopover({ sid, x, y, onClose }: {
   // read-only transcript, no need to subscribe
   const tr = useStore.getState().transcripts[seg.pid];
   const ex = tr
-    ? excerptOf(tr.lines.filter((l) => l.id >= seg.start && l.id <= seg.end).map((l) => ({ text: l.text, speaker: l.speaker })))
+    ? segExcerpt(seg, tr.lines)
     : null;
   const closeCall = ex?.closeCall ?? false;
   // AI grounding for this segment, valid only while its hash matches (F1)
   const g = useStore.getState().aiGrounds[sid];
-  const excerptText = ex?.excerpt.replace(/^\[R:\] /, "") ?? "";
+  const excerptText = ex?.excerpt ?? "";
   const grounds = g && excerptText && g.hash === groundHash(seg.code, excerptText) ? g.quotes : [];
 
   return (

@@ -123,3 +123,31 @@ test("a blank short_def column CLEARS the definition; a missing column leaves it
   await importCsv("code,color,status\nanger,#aa3377,accepted\n");
   expect(useStore.getState().codebook.anger).toMatchObject({ def: "Old text.", defAi: true });
 });
+
+test("a whole AI run's definitions are ONE undo step, and an echo of your own text stays yours", () => {
+  useStore.setState({
+    codebook: {
+      a: { color: "#aa3377", def: "", status: "accepted" },
+      b: { color: "#228833", def: "", status: "accepted" },
+      mine: { color: "#4477aa", def: "Written by hand.", status: "accepted", defAi: false },
+    },
+    segments: [], undoStack: [], redoStack: [],
+  } as never);
+  const n = useStore.getState().applyDrafts([
+    { code: "a", def: "Marks A." },
+    { code: "b", def: "Marks B." },
+    // the model is fed the current definition and told to refine it, so echoing
+    // it back is routine — that must not relabel a person's words as AI output
+    { code: "mine", def: "Written by hand." },
+    { code: "ghost", def: "code no longer exists" },
+  ]);
+  expect(n).toBe(2);
+  const cb = useStore.getState().codebook;
+  expect(cb.a).toMatchObject({ def: "Marks A.", defAi: true });
+  expect(cb.mine).toMatchObject({ def: "Written by hand.", defAi: false });
+  expect(cb.ghost).toBeUndefined();
+
+  useStore.getState().undo();
+  expect(useStore.getState().codebook.a.def).toBe("");
+  expect(useStore.getState().codebook.b.def).toBe("");
+});

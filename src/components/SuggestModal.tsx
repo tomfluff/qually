@@ -13,7 +13,7 @@ import { guessQuiet, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { excerptOf } from "../contract/excerpt";
+import { segExcerpt } from "../contract/excerpt";
 import { chunksOf, renderSuggestChunk, estimateSuggestTokens, suggestChunk, overlapsExisting,
   SUGGEST_EXEMPLARS, type SuggestCode } from "../ai/suggest";
 import { announce } from "../announce";
@@ -75,9 +75,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
       for (const s of segments) {
         if (excerpts.length >= SUGGEST_EXEMPLARS) break;
         if (s.status !== "accepted" || s.code !== name || !transcripts[s.pid]) continue;
-        const ex = excerptOf(transcripts[s.pid].lines
-          .filter((l) => l.id >= s.start && l.id <= s.end)
-          .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
+        const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
         if (ex) excerpts.push(ex);
       }
       return { name, def: codebook[name]?.def ?? "", excerpts };

@@ -34,9 +34,15 @@ export interface Project {
   segments: Segment[];
   // colorLock (optional) records that a colour was chosen by hand, so a recolour
   // pass on another machine keeps it too. Absent in files written before it existed.
-  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean }>;
+  // defAi records that a definition is untouched AI output. It has to be DECLARED,
+  // not carried by accident: it survives today only because exportProject assigns
+  // the live codebook and JSON.stringify keeps unknown keys, so any future
+  // normalisation against this type would launder unchecked model text into the
+  // file as human-written — the exact failure the def_source column exists to stop.
+  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean; defAi?: boolean }>;
   extSegRows: Record<string, string>[];
   tabs: string[];
+  pinnedTabs?: string[]; // optional: absent in files written before tab pinning
   active: string;
   hotbar: { mode: "auto" | "pinned"; pinned: string[] };
   video: Record<string, { name?: string; offset: number }>;

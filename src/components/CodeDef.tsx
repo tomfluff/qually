@@ -7,7 +7,7 @@
 // describes — no need to reprint it in a box on top of it.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
-import { excerptOf } from "../contract/excerpt";
+import { segExcerpt } from "../contract/excerpt";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
@@ -79,21 +79,20 @@ export function DefBadge({ def, ai }: { def: string; ai?: boolean }) {
 
 // A few of a code's excerpts, one per transcript first so a code used across
 // sessions shows its breadth rather than three quotes from one participant.
-export function codeExcerpts(code: string, max = 3): { text: string; ref: string }[] {
+export function codeExcerpts(code: string, max = 3): { text: string; ref: string; speaker: string }[] {
   const { segments, transcripts } = useStore.getState();
-  const out: { text: string; ref: string }[] = [];
+  const out: { text: string; ref: string; speaker: string }[] = [];
   const seenPid = new Set<string>();
   for (const pass of [true, false]) { // pass 1: unseen transcripts only; pass 2: fill up
     for (const s of segments) {
       if (out.length >= max) return out;
       if (s.code !== code || s.status !== "accepted" || !transcripts[s.pid]) continue;
       if (pass === seenPid.has(s.pid)) continue;
-      const ex = excerptOf(transcripts[s.pid].lines
-        .filter((l) => l.id >= s.start && l.id <= s.end)
-        .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
-      if (!ex || out.some((x) => x.text === ex)) continue;
+      const r = segExcerpt(s, transcripts[s.pid].lines);
+      if (!r.excerpt || out.some((x) => x.text === r.excerpt)) continue;
       seenPid.add(s.pid);
-      out.push({ text: ex, ref: `${s.pid}:${s.start}${s.end !== s.start ? `-${s.end}` : ""}` });
+      out.push({ text: r.excerpt, speaker: r.speaker,
+        ref: `${s.pid}:${s.start}${s.end !== s.start ? `-${s.end}` : ""}` });
     }
   }
   return out;
@@ -103,10 +102,14 @@ export function codeExcerpts(code: string, max = 3): { text: string; ref: string
 // double-click to edit in place — the transcript's gesture. `excerpts` adds a
 // disclosure with a few of the code's own quotes, for surfaces that don't
 // already list them (the Assist panel; the Codebook prints them below).
-export function DefLine({ code, excerpts = false, className = "", autoEdit = false, onDone }: {
+export function DefLine({ code, excerpts = false, className = "", autoEdit = false, onDone, onEditing }: {
   code: string; excerpts?: boolean; className?: string;
   autoEdit?: boolean;        // open straight into the editor (the dialog route)
   onDone?: () => void;       // told when an edit finishes, either way
+  // Told while an edit is OPEN. The unsaved text lives in this component's
+  // state, so a list that can filter its rows has to know not to unmount this
+  // one out from under it.
+  onEditing?: (on: boolean) => void;
 }) {
   const entry = useStore((s) => s.codebook[code]);
   const setDef = useStore((s) => s.setDef);
@@ -114,7 +117,7 @@ export function DefLine({ code, excerpts = false, className = "", autoEdit = fal
   const [open, setOpen] = useState(false);
   const [v, setV] = useState(() => useStore.getState().codebook[code]?.def ?? "");
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const stop = () => { setEditing(false); onDone?.(); };
+  const stop = () => { setEditing(false); onEditing?.(false); onDone?.(); };
 
   // grow to the text: scrollHeight is the PADDING box, and these are border-box,
   // so the border has to be added back or the last line sits under the edge
@@ -124,13 +127,16 @@ export function DefLine({ code, excerpts = false, className = "", autoEdit = fal
     el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
   };
   useEffect(() => { if (editing) fit(taRef.current); }, [editing]);
+  // the row can still go away for reasons the list doesn't control (the code is
+  // deleted or merged) — don't leave it pinned open forever
+  useEffect(() => () => onEditing?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
   // re-seed when the dialog route opens on a different code
   useEffect(() => { if (autoEdit && entry) setV(entry.def); }, [autoEdit, code]); // eslint-disable-line react-hooks/exhaustive-deps
   // below every hook: an early return above one makes the hook order depend on
   // whether the code still exists
   if (!entry) return null;
 
-  const start = () => { setV(entry.def); setEditing(true); };
+  const start = () => { setV(entry.def); setEditing(true); onEditing?.(true); };
   const save = () => {
     const t = v.trim();
     // Saving the text UNCHANGED isn't authorship: it must not relabel an AI
@@ -186,7 +192,9 @@ export function DefLine({ code, excerpts = false, className = "", autoEdit = fal
       {ex.map((x) => (
         <div key={x.ref} className="defEx" style={{ borderLeftColor: entry.color }}>
           <div>{x.text}</div>
-          <div className="defExRef">{x.ref}</div>
+          {/* whose words these are, the way the Codebook already labels them: an
+              excerpt the interviewer dominated is not the participant speaking */}
+          <div className="defExRef"><span className="refspk">{x.speaker}</span>{x.ref}</div>
         </div>
       ))}
     </div>

@@ -27,9 +27,6 @@
 .bOptions { display:flex; margin-bottom:14px; padding:8px 12px;
   border:1px solid var(--line); border-radius:10px; background:var(--panel); }
 /* toggle switch (em-based so it scales with the excerpt font) */
-.switchRow { font:inherit; display:inline-flex; align-items:center; gap:9px;
-  background:none; border:none; padding:0; cursor:pointer; color:var(--fg); }
-.switchLabel { font-weight:500; }
 .switch { position:relative; width:2.1em; height:1.2em; border-radius:999px;
   background:var(--line); flex-shrink:0; transition:background .15s; }
 .switch.on { background:var(--accent); }
@@ -52,9 +49,13 @@
 .bNote { font-size:.9em; color:var(--fg-dim); margin-top:5px; padding-left:8px;
   border-left:2px solid var(--line); white-space:pre-wrap; font-family:var(--read-font); }
 .bExcerpt .ref { font-size:.8em; color:var(--muted); margin-top:4px; }
-/* the excerpt's dominant speaker, shown as a field rather than baked in as "[R:]" */
-.bExcerpt .ref .refspk { font-weight:600; color:var(--fg-dim); }
-.bExcerpt .ref .refspk::after { content:" · "; color:var(--muted); font-weight:400; }
+/* The excerpt's dominant speaker, shown as a field rather than baked in as
+   "[R:]" — one rule for every surface that prints an excerpt ref, so the
+   Codebook, the Suggest worklist and the definition disclosures all attribute
+   the same segment the same way. */
+.refspk { font-weight:600; color:var(--fg-dim); }
+.refspk:empty { display:none; }
+.refspk::after { content:" · "; color:var(--muted); font-weight:400; }
 .bExcerpt .ref.open { cursor:pointer; }
 .bExcerpt .ref.open:hover { color:var(--accent); }
 .bExcerpt .ref.open:hover .refspk { color:var(--accent); }
@@ -62,8 +63,11 @@
 /* ── Assist tab: the AI's observations side by side, staged to become codes ── */
 /* user-select:none like the Codebook's rows: these take Shift-click ranges, and
    without it the browser paints a text selection across the rows instead */
-.nLens { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
+.nLens { display:flex; align-items:flex-start; gap:8px; padding:6px 8px; border-radius:7px;
   cursor:pointer; user-select:none; }
+/* the dot caps the FIRST line: centred, a name that wrapped to three lines left
+   its colour floating beside line two, unmoored from the name it belongs to */
+.nLens .nDot { margin-top:calc((1lh - 10px) / 2); }
 .nLens:hover { background:var(--panel); }
 .nLens.sel { background:color-mix(in srgb, var(--accent) 14%, transparent); }
 .nLens.none { color:var(--muted); } /* quiet empty lenses by colour, not opacity */
@@ -87,8 +91,13 @@
 .nPill { border:0; background:var(--bg); color:var(--muted); font:inherit; font-size:.78em;
   padding:3px 12px; cursor:pointer; }
 .nPill.on { background:var(--accent); color:#fff; font-weight:600; }
+/* At a large reading size in a narrow window "A-Z" broke after the en-dash and
+   the selected pill painted as a tall oval that no longer read as part of the
+   row. The bar may wrap BETWEEN the label, the pills and the counter; never
+   inside one. */
+.nPill { white-space:nowrap; }
 [data-theme=dark] .nPill.on { color:#12161a; }
-.nCount { color:var(--muted); font-size:.8em; }
+.nCount { color:var(--muted); font-size:.8em; white-space:nowrap; }
 
 .nGrp { font-size:.72em; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
   font-weight:700; margin:16px 0 6px; }
@@ -169,24 +178,25 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .mKeepTag { margin-left:6px; font-size:.68em; font-weight:700; text-transform:uppercase;
   letter-spacing:.05em; color:var(--ok, #3fa860); border:1px solid currentColor; border-radius:999px;
   padding:1px 7px; background:color-mix(in srgb, #3fa860 10%, transparent); }
-/* Describe-codes drafts (DescribeModal): one card per code, textarea editable
-   before Apply. Borrows the mProp card language. */
+/* Definition cards (Assist → Definitions): one per code. Borrows the mProp
+   card language. */
 .descRow { border:1px solid var(--line); border-radius:10px; padding:10px 12px;
   background:var(--bg); }
-/* in the modal the cards stack under the lede with no flex-gap parent */
-.ai-body > .descRow { margin-top:10px; }
-.descHead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:5px; }
+/* The swatch belongs to the name, and the count belongs at the far end: as three
+   independent flex items a long code name put each on its own line, orphaning
+   the swatch and leaving the count reading as a stray number. */
+.descHead { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:5px; }
+.descHead .descName { display:flex; align-items:baseline; gap:8px; flex:1 1 0; min-width:0;
+  overflow-wrap:anywhere; }
 /* the evidence count is a stat, right-aligned like everywhere else it appears
    (sidebar rows, codebook list) rather than crowding the code's name */
 .descHead .cnt { margin-left:auto; color:var(--muted); font-size:.85em;
   font-variant-numeric:tabular-nums; }
-.descCur { color:var(--muted); font-size:.88em; line-height:1.4; margin-top:5px; }
-/* flush with the card's own padding: a 4px inset left the box visibly off the
-   line the code name, the current definition and the Apply button all sit on */
-.descText { display:block; width:100%; margin:7px 0 0; box-sizing:border-box;
-  font:inherit; font-size:.95em; color:var(--fg); background:var(--panel);
-  border:1px solid var(--line); border-radius:6px; padding:5px 7px; resize:vertical; }
-.descText:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+/* what a describe run wrote, listed on the receipt */
+.descWrote { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:10px; }
+.descWroteOne { display:inline-flex; align-items:center; gap:6px; font-size:.92em; }
+/* picks the caller made that this dialog can't offer (no coded excerpts yet) */
+.descDropped { color:var(--muted); font-size:.92em; line-height:1.45; margin:8px 0 0; }
 
 /* DescribeModal's code picker: quick-select row + one checkbox row per code */
 .descPicks { display:flex; align-items:center; gap:6px; margin:8px 0 6px; flex-wrap:wrap; }
@@ -210,8 +220,19 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .browse-left .nGrp.defGrp svg { flex:none; }
 .defGrpName { flex:1; }
 .browse-left .nGrp .cnt { font-weight:400; letter-spacing:0; font-size:1.1em; }
-/* the scope control: three segments across the sidebar, never wrapping */
-.defScope .seg { white-space:nowrap; padding:4px 6px; font-size:.92em; }
+/* The scope control. At a large sidebar text size three segments no longer fit
+   across the column and "Undefined" was clipped mid-word by .segmented's
+   overflow:hidden — so it becomes a grid that reflows to a second row rather
+   than cutting a label in half. */
+/* The scope control wraps WHOLE segments onto a second row rather than breaking
+   a label: nowrap plus .segmented's overflow:hidden clipped "Undefined" to
+   "Undefine" at a large sidebar text size, and letting the word break gave
+   "Undef / ined". Dividers are gaps over the container's ink, so they read
+   correctly in both directions however the segments land. */
+.defScope { flex-wrap:wrap; gap:1px; background:var(--line); }
+.defScope .seg { flex:1 1 auto; min-width:max-content; white-space:nowrap;
+  padding:4px 8px; font-size:.92em; }
+.defScope .seg + .seg { border-left:0; }
 /* clears a code selection, in the list header where there is room — a
    full-width control in the narrow scrolling sidebar kept finding new ways to
    provoke a horizontal scrollbar */
@@ -235,7 +256,10 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .descPickN { color:var(--muted); font-size:.85em; font-variant-numeric:tabular-nums; flex:none; }
 
 /* definition provenance pills: AI = untouched model text, edited = human input */
-.defTag { font-size:.66em; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
+/* .8em, not .66: at the default reading size this was the smallest text on the
+   surface, and it is the only signal separating untouched model output from a
+   definition a person vouched for */
+.defTag { font-size:.8em; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
   color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:1.5px 8px;
   white-space:nowrap; vertical-align:middle; line-height:1.5; flex:none; }
 .defTag.ai { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 55%, transparent);
@@ -295,3 +319,9 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   background:none; border:none; font:inherit; color:var(--fg); padding:5px 8px;
   border-radius:6px; cursor:pointer; }
 .cbMenu .cbAct:hover { background:var(--sel); }
+
+/* the sidebar's own group headings, repeated in the main list so the
+   undefined-first hoist reads as grouping rather than a sort that did not take */
+.descListGrp { margin:18px 0 8px; }
+.descGroupItem:first-child .descListGrp { margin-top:2px; }
+.descGroupItem + .descGroupItem { margin-top:10px; }

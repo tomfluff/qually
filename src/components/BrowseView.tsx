@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, type Segment } from "../state/store";
 import { norm } from "../contract/segments";
-import { excerptOf } from "../contract/excerpt";
+import { segExcerpt } from "../contract/excerpt";
 import { Resizer } from "./Resizer";
 import { CodeMenu } from "./CodeMenu";
 import { openColorPicker } from "../colorPicker";
@@ -61,9 +61,8 @@ export function BrowseView() {
   const excerptFor = (s: Segment): { text: string; speaker: string } | null => {
     const t = transcripts[s.pid];
     if (!t) return null;
-    const r = excerptOf(t.lines.filter((l) => l.id >= s.start && l.id <= s.end)
-      .map((l) => ({ text: l.text, speaker: l.speaker })));
-    return { text: r.excerpt.replace(/^\[R:\] /, ""), speaker: r.speaker };
+    const r = segExcerpt(s, t.lines);
+    return { text: r.excerpt, speaker: r.speaker };
   };
 
   // a segment's grounding quotes, but only while the hash still matches what the
@@ -238,9 +237,6 @@ function CbAiMenu({ onGround, onDescribe, fontSize }: {
   );
 }
 
-// View settings for the excerpt list — a rejected filter and grounding emphasis,
-// kept out of the AI menu because they're display prefs, not an action. A dot on
-// the button flags any non-default setting.
 // Recolour the whole codebook. The point is the CONFLICT rule — two codes on one
 // line can't share a colour — so the note says that rather than "assign colours".
 // Hand-picked colours are a real decision, so when any exist the choice to keep
@@ -284,6 +280,9 @@ function RecolorConfirm({ x, y, onClose }: { x: number; y: number; onClose: () =
   );
 }
 
+// View settings for the excerpt list — a rejected filter and grounding emphasis,
+// kept out of the AI menu because they're display prefs, not an action. A dot on
+// the button flags any non-default setting.
 function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, fontSize, onRecolor }: {
   showRejected: boolean;
   setShowRejected: (f: (v: boolean) => boolean) => void;

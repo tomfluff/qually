@@ -17,7 +17,7 @@ import { AiCheckModal } from "./AiCheckModal";
 import { SummarizeModal } from "./SummarizeModal";
 import { openSummary } from "./SummaryView";
 import type { MergeProposal } from "../ai/dedupe";
-import { excerptOf } from "../contract/excerpt";
+import { segExcerpt } from "../contract/excerpt";
 import { DefLine } from "./CodeDef";
 import { codeStats, sortCodes, SORTS, type CodeStat, type SortBy } from "../codeStats";
 import { Icon } from "./Icon";
@@ -90,6 +90,9 @@ export function AssistView() {
   const [defSel, setDefSel] = useState(remembered.defSel);
   const [defAnchor, setDefAnchor] = useState(remembered.defAnchor);
   const [defOpen, setDefOpen] = useState(remembered.defOpen);
+  // which code's definition is open in an editor right now (deliberately NOT
+  // remembered across tab changes — the editor unmounts with the view)
+  const [editingDef, setEditingDef] = useState<string | null>(null);
   useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen }); },
     [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen]);
 
@@ -115,19 +118,37 @@ export function AssistView() {
     : defScope === "defined" ? defGroups.defined
     : [...defGroups.undefined, ...defGroups.defined]
   ), [defScope, defGroups]);
+  // What a Shift-range may span: the codes actually on screen. Measured over
+  // defVisible instead, a range across a COLLAPSED group silently swept in every
+  // code hidden inside it — "a range means what it looks like" stopped being
+  // true the moment groups could close.
+  const defReachable = useMemo(() => (
+    defScope === "undefined" ? (defOpen.undefined ? defGroups.undefined : [])
+    : defScope === "defined" ? (defOpen.defined ? defGroups.defined : [])
+    : [...(defOpen.undefined ? defGroups.undefined : []),
+       ...(defOpen.defined ? defGroups.defined : [])]
+  ), [defScope, defGroups, defOpen]);
   // a selected code that has since been merged or deleted must not filter the
   // list down to nothing
   const liveSel = defSel.filter((c) => codebook[c] && defVisible.includes(c));
-  const shownDefCodes = liveSel.length ? defVisible.filter((c) => liveSel.includes(c)) : defVisible;
+  // A row that is mid-edit stays on the list whatever the filters say. Its
+  // editor holds unsaved text in local state, so narrowing the list — picking
+  // another code in the sidebar, changing the scope — used to unmount it and
+  // take everything typed with it, silently and with nothing written.
+  const shownDefCodes = (() => {
+    const base = liveSel.length ? defVisible.filter((c) => liveSel.includes(c)) : defVisible;
+    return editingDef && codebook[editingDef] && !base.includes(editingDef)
+      ? [...base, editingDef] : base;
+  })();
 
   // Same gesture as the Codebook's code list: plain click picks one (or clears
   // it), Ctrl/Cmd toggles, Shift takes the range — over the order on screen, so
   // a range means what it looks like.
   const pickDefCode = (c: string, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => {
-    if (e.shiftKey && defAnchor && defVisible.includes(defAnchor)) {
-      const a = defVisible.indexOf(defAnchor), b = defVisible.indexOf(c);
+    if (e.shiftKey && defAnchor && defReachable.includes(defAnchor)) {
+      const a = defReachable.indexOf(defAnchor), b = defReachable.indexOf(c);
       const [lo, hi] = a < b ? [a, b] : [b, a];
-      setDefSel(defVisible.slice(lo, hi + 1));
+      setDefSel(defReachable.slice(lo, hi + 1));
       return; // keep the anchor
     }
     // functional: a toggle reads the CURRENT selection, not the one this render
@@ -173,8 +194,14 @@ export function AssistView() {
     return keys.map((key) => ({ key, n: n.get(key) ?? 0 }));
   }, [candidates, suggestBy, allPids]);
   const hasCodes = Object.keys(codebook).length > 0;
-  const shownCandidates = suggestSel == null ? candidates
-    : candidates.filter((c) => (suggestBy === "transcript" ? c.pid : c.code) === suggestSel);
+  // A selection whose row is gone reads as "all", like liveSel and liveProposals
+  // already do. Grouped by code the rows come only from codes that still HAVE
+  // candidates, so resolving the last one of the code you were working through
+  // took its row away and left the pane empty with nothing highlighted and no
+  // visible cause.
+  const liveSuggestSel = suggestGroups.some((g) => g.key === suggestSel) ? suggestSel : null;
+  const shownCandidates = liveSuggestSel == null ? candidates
+    : candidates.filter((c) => (suggestBy === "transcript" ? c.pid : c.code) === liveSuggestSel);
 
   const accept = (p: MergeProposal) => {
     const swap = flipped.has(pairKey(p));
@@ -218,8 +245,12 @@ export function AssistView() {
   // or a pid, depending on the grouping. The worklist below then groups by the OTHER
   // axis, which is what makes "one lens across transcripts" and "one transcript
   // across lenses" both reachable.
-  const shownNotices = obsSel == null ? notices
-    : notices.filter((n) => (obsBy === "lens" ? n.lens : n.pid) === obsSel);
+  // same liveness guard as the Suggest panel: closing a transcript takes its row
+  // away, and a selection pointing at it would empty the pane with no row lit
+  const obsKeys = obsBy === "lens" ? observeLenses.map((l) => l.id) : allPids;
+  const liveObsSel = obsSel !== null && obsKeys.includes(obsSel) ? obsSel : null;
+  const shownNotices = liveObsSel == null ? notices
+    : notices.filter((n) => (obsBy === "lens" ? n.lens : n.pid) === liveObsSel);
 
   return (
     <div id="browse" style={{ fontSize }}>
@@ -253,8 +284,8 @@ export function AssistView() {
               <div className="bSideNote">No transcripts loaded yet — import one and the AI can scan it from here.</div>
             ) : (
               <>
-                <div className={"nLens" + (obsSel === null ? " sel" : "")}
-                  tabIndex={0} role="button" aria-pressed={obsSel === null}
+                <div className={"nLens" + (liveObsSel === null ? " sel" : "")}
+                  tabIndex={0} role="button" aria-pressed={liveObsSel === null}
                   onClick={() => setObsSel(null)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setObsSel(null); } }}>
                   <span className="nName">All</span>
@@ -263,8 +294,8 @@ export function AssistView() {
                 {obsBy === "lens" ? observeLenses.map((l) => {
                   const st = lensStats(l.id);
                   return (
-                    <div key={l.id} className={"nLens" + (obsSel === l.id ? " sel" : "") + (st.n === 0 ? " none" : "")}
-                      tabIndex={0} role="button" aria-pressed={obsSel === l.id}
+                    <div key={l.id} className={"nLens" + (liveObsSel === l.id ? " sel" : "") + (st.n === 0 ? " none" : "")}
+                      tabIndex={0} role="button" aria-pressed={liveObsSel === l.id}
                       onClick={() => setObsSel(l.id)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setObsSel(l.id); } }}>
                       <span className="nDot" style={{ background: l.color }} />
@@ -275,8 +306,8 @@ export function AssistView() {
                 }) : allPids.map((p) => {
                   const n = notices.filter((x) => x.pid === p).length;
                   return (
-                    <div key={p} className={"nLens" + (obsSel === p ? " sel" : "") + (n === 0 ? " none" : "")}
-                      tabIndex={0} role="button" aria-pressed={obsSel === p}
+                    <div key={p} className={"nLens" + (liveObsSel === p ? " sel" : "") + (n === 0 ? " none" : "")}
+                      tabIndex={0} role="button" aria-pressed={liveObsSel === p}
                       onClick={() => setObsSel(p)}
                       onKeyDown={(e) => {
                         if (e.target !== e.currentTarget) return; // the run button's keys are its own
@@ -312,13 +343,13 @@ export function AssistView() {
         ) : panel === "describe" ? (
           <>
             <button className="btn groundBtn" onClick={() => setDescribeOpen(true)} disabled={mergeableCount < 1}
-              title="Ask the AI to draft a definition for each coded code from its excerpts (sends the codebook to OpenAI after your approval)">
+              title="Ask the AI to draft definitions from each code's excerpts (sends them to OpenAI after your approval)">
               <Icon name="sparkle" size={15} /> Draft definitions…
             </button>
             <div className="bSideNote">
               {mergeableCount < 1
                 ? "Definitions are drafted from coded excerpts — code a bit first."
-                : "Drafts a definition for every coded code from how you used it. You edit and apply each one in the dialog."}
+                : `Drafts definitions for the ${shownDefCodes.length} code${shownDefCodes.length === 1 ? "" : "s"} showing on the right, from how you used them. They are written straight in — edit any of them here afterwards.`}
             </div>
             {Object.keys(codebook).length > 0 && (
               <>
@@ -351,13 +382,17 @@ export function AssistView() {
                         : group.map((c) => (
                           <div key={c} className={"nLens" + (liveSel.includes(c) ? " sel" : "")}
                             tabIndex={0} role="button" aria-pressed={liveSel.includes(c)}
+                            aria-label={`${c}, ${stats[c]?.segs ?? 0} excerpts in ${stats[c]?.pids ?? 0} transcripts`}
                             onClick={(e) => pickDefCode(c, e)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickDefCode(c, e); }
                             }}>
                             <span className="nDot" style={{ background: codebook[c].color }} />
                             <span className="nName">{c}</span>
-                            <span className="cnt">{stats[c]?.segs ?? 0}·{stats[c]?.pids ?? 0}</span>
+                            {/* "3·2" is a glance-stat, not a name: spelled out for
+                                the row's label and hidden from the reading order,
+                                like every other code list in the app */}
+                            <span className="cnt" aria-hidden="true">{stats[c]?.segs ?? 0}·{stats[c]?.pids ?? 0}</span>
                           </div>
                         )))}
                     </div>
@@ -435,16 +470,16 @@ export function AssistView() {
               </div>
             ) : (
               <>
-                <div className={"nLens" + (suggestSel === null ? " sel" : "")}
-                  tabIndex={0} role="button" aria-pressed={suggestSel === null}
+                <div className={"nLens" + (liveSuggestSel === null ? " sel" : "")}
+                  tabIndex={0} role="button" aria-pressed={liveSuggestSel === null}
                   onClick={() => setSuggestSel(null)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSuggestSel(null); } }}>
                   <span className="nName">All</span>
                   <span className="cnt">{candidates.length}</span>
                 </div>
                 {suggestGroups.map((g) => (
-                  <div key={g.key} className={"nLens" + (suggestSel === g.key ? " sel" : "") + (g.n === 0 ? " none" : "")}
-                    tabIndex={0} role="button" aria-pressed={suggestSel === g.key}
+                  <div key={g.key} className={"nLens" + (liveSuggestSel === g.key ? " sel" : "") + (g.n === 0 ? " none" : "")}
+                    tabIndex={0} role="button" aria-pressed={liveSuggestSel === g.key}
                     onClick={() => setSuggestSel(g.key)}
                     onKeyDown={(e) => {
                       if (e.target !== e.currentTarget) return; // the run button's keys are its own
@@ -498,7 +533,9 @@ export function AssistView() {
           <SummaryList pids={allPids} summaries={summaries} onGenerate={setSumFor} />
         ) : panel === "describe" ? (
           <DescribeList codebook={codebook} codes={shownDefCodes} stats={stats}
-            sortBy={defSort} setSortBy={setDefSort}
+            sortBy={defSort} setSortBy={setDefSort} grouped={defScope === "all"}
+            undefinedCodes={defGroups.undefined}
+            onEditing={(c, on) => setEditingDef((prev) => (on ? c : prev === c ? null : prev))}
             picked={liveSel.length} total={defVisible.length}
             onClear={() => { setDefSel([]); setDefAnchor(null); }} />
         ) : (
@@ -570,12 +607,19 @@ function MergeList({ proposals, codebook, flipped, onAccept, onSkip, onFlip }: {
 // The codebook's definitions as they stand — the surface the describe run
 // writes into. Drafting/editing/applying happens in the modal; this list is
 // where you see which codes still have no definition.
-function DescribeList({ codebook, codes, stats, sortBy, setSortBy, picked, total, onClear }: {
+function DescribeList({ codebook, codes, stats, sortBy, setSortBy, grouped, undefinedCodes,
+  onEditing, picked, total, onClear }: {
   codebook: Record<string, { color: string; def: string; status: string; defAi?: boolean }>;
   codes: string[];                       // already filtered by the sidebar and sorted
   stats: Record<string, CodeStat>;
   sortBy: SortBy;
   setSortBy: (s: SortBy) => void;
+  grouped: boolean;                      // scope "all" hoists the undefined codes — say so
+  undefinedCodes: string[];              // which side of the split each code falls on
+  // (code, open). Only the row that CLAIMED the flag may clear it: every DefLine
+  // reports false as it unmounts, and the rows being filtered away unmount in the
+  // same commit as the one we are trying to keep.
+  onEditing: (code: string, on: boolean) => void;
   picked: number;                        // codes picked in the sidebar, 0 = whole scope
   total: number;                         // codes the scope holds
   onClear: () => void;
@@ -613,21 +657,35 @@ function DescribeList({ codebook, codes, stats, sortBy, setSortBy, picked, total
         <div className="empty">No codes here. Widen the <b>Show</b> filter on the left.</div>
       ) : (
         <div className="mList">
-          {codes.map((c) => (
-            <div key={c} className="descRow">
-              <div className="descHead">
-                <span className="mSw" style={{ background: codebook[c].color }} />
-                <b>{c}</b>
-                {/* the same evidence counts the draft picker shows */}
-                <span className="cnt" title={`${stats[c]?.segs ?? 0} excerpt${stats[c]?.segs === 1 ? "" : "s"} in ${stats[c]?.pids ?? 0} transcript${stats[c]?.pids === 1 ? "" : "s"}`}>
-                  {stats[c]?.segs ?? 0}·{stats[c]?.pids ?? 0}
-                </span>
+          {codes.map((c, i) => {
+            // Under scope "all" the list is hoisted undefined-first, which read as
+            // a broken A-Z sort with nothing to explain it. Print the same two
+            // headings the sidebar uses, at the point the list crosses over.
+            const undef = undefinedCodes.includes(c);
+            const head = grouped && (i === 0 || undefinedCodes.includes(codes[i - 1]) !== undef)
+              ? (undef ? "No definition yet" : "Has a definition") : null;
+            return (
+              <div key={c} className="descGroupItem">
+                {head && <div className="nGrp descListGrp">{head}</div>}
+                <div className="descRow">
+                  <div className="descHead">
+                    <span className="descName">
+                      <span className="mSw" style={{ background: codebook[c].color }} />
+                      <b>{c}</b>
+                    </span>
+                    {/* the same evidence counts the draft picker shows */}
+                    <span className="cnt" title={`${stats[c]?.segs ?? 0} excerpt${stats[c]?.segs === 1 ? "" : "s"} in ${stats[c]?.pids ?? 0} transcript${stats[c]?.pids === 1 ? "" : "s"}`}>
+                      {stats[c]?.segs ?? 0}·{stats[c]?.pids ?? 0}
+                    </span>
+                  </div>
+                  {/* this panel has no excerpt list of its own, so the definition line
+                      carries a disclosure for a few of the code's quotes */}
+                  <DefLine code={c} excerpts
+                    onEditing={(on) => onEditing(c, on)} />
+                </div>
               </div>
-              {/* this panel has no excerpt list of its own, so the definition line
-                  carries a disclosure for a few of the code's quotes */}
-              <DefLine code={c} excerpts />
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>
@@ -656,11 +714,9 @@ function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
       </div>
     );
   }
-  const excerptFor = (s: Segment): string => {
+  const excerptFor = (s: Segment) => {
     const t = transcripts[s.pid];
-    if (!t) return "";
-    return excerptOf(t.lines.filter((l) => l.id >= s.start && l.id <= s.end)
-      .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
+    return t ? segExcerpt(s, t.lines) : null;
   };
   const row = (s: Segment) => {
     const range = `${s.start}${s.end !== s.start ? `-${s.end}` : ""}`;
@@ -670,9 +726,11 @@ function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
           <span className="mCode"><span className="mSw" style={{ background: codebook[s.code]?.color || "#999" }} />{s.code}</span>
           <span className="nRef">{s.proposedBy}</span>
         </div>
-        <div className="nLine">{excerptFor(s) || "(excerpt unavailable)"}</div>
+        <div className="nLine">{excerptFor(s)?.excerpt || "(excerpt unavailable)"}</div>
         <div className="nFoot">
-          <span className="nRef">{s.pid}:{range}</span>
+          {/* the speaker as a field, like the Codebook: without it a line the
+              interviewer dominated read as the participant's words */}
+          <span className="nRef"><span className="refspk">{excerptFor(s)?.speaker}</span>{s.pid}:{range}</span>
           <span className="nActs">
             <button className="nBtn pri" onClick={() => setStatus(s.sid, "accepted")}>Accept</button>
             <button className="nBtn" onClick={() => setStatus(s.sid, "rejected")}>Reject</button>

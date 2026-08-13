@@ -20,6 +20,12 @@ export interface Redaction {
 
 export const PLACEHOLDER_RE = /\[REDACTED_\d+\]/;
 
+// Model output that a person reads, or that lands in the codebook, must come
+// back through the map — the placeholder is meaningless to the reader and
+// permanent once it's written into a definition or exported. Optional so the
+// sanitizers stay callable from tests without building a redactor.
+export const restore = (r: Redaction | undefined, text: string) => (r ? r.restore(text) : text);
+
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export function redactor(terms: string[]): Redaction {

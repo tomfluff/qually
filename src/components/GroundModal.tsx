@@ -9,7 +9,7 @@ import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { excerptOf } from "../contract/excerpt";
+import { segExcerpt } from "../contract/excerpt";
 import { chunksOfItems, renderGroundChunk, estimateGroundTokens, groundChunk, groundHash, type GroundItem } from "../ai/ground";
 import { announce } from "../announce";
 import { AiModal, ModelPicker } from "./AiModal";
@@ -38,9 +38,7 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
   const eligible = useMemo<GroundItem[]>(() => segments
     .filter((s) => s.status === "accepted" && transcripts[s.pid])
     .map((s) => {
-      const excerpt = excerptOf(transcripts[s.pid].lines
-        .filter((l) => l.id >= s.start && l.id <= s.end)
-        .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, "");
+      const excerpt = segExcerpt(s, transcripts[s.pid].lines).excerpt;
       return { sid: s.sid, code: s.code, def: codebook[s.code]?.def ?? "", excerpt };
     })
     .filter((it) => !!it.excerpt),

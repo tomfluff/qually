@@ -167,7 +167,10 @@ export async function scanChunk(opts: {
       && !/[\r\n\u0000-\u001f\u202a-\u202e]/.test(fix)
       && fix.length <= quote.length * 4 + 40;
     (flags[f.line_id] ??= []).push({
-      quote, reason: f.note, lens: f.lens,
+      // the note is shown in the mark popover and exported to
+      // ai-observations.csv, both read by the researcher who listed the terms —
+      // restore it like the quote beside it
+      quote, reason: opts.redaction.restore(f.note ?? ""), lens: f.lens,
       ...(fixOk ? { fix } : {}),
     });
   }

@@ -62,8 +62,8 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
   const inTok = useMemo(() => estimateSummaryTokens(evSel, exSel, context, red),
     [evSel, exSel, context, red]);
   const redactions = useMemo(() =>
-    evSel.reduce((n, e) => n + red.count(e.text), 0)
-    + exSel.reduce((n, x) => n + red.count(x.excerpt), 0)
+    evSel.reduce((n, e) => n + red.count(e.text) + red.count(e.type), 0)
+    + exSel.reduce((n, x) => n + red.count(x.excerpt) + red.count(x.ref), 0)
     + red.count(context), [evSel, exSel, context, red]);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(2400))); // a summary runs a few hundred tokens out
   const preview = renderSummaryPayload(evSel, exSel, context, red);

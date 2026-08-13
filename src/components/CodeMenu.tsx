@@ -29,11 +29,22 @@ export function CodeMenu({ code, x, y, onClose }: {
   const ref = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<"menu" | "rename" | "merge">("menu");
 
-  // keyboard route: focus lands on the first item on open, returns to the opener on close
+  // Keyboard route: focus lands on the first item on open, returns to the opener
+  // on close — unless the action DESTROYED the opener. Rename and Delete
+  // re-render a list whose rows are keyed by code name, so the button that
+  // opened this menu is gone by the time the cleanup runs, and focus()ing a
+  // detached node is a silent no-op that drops the caret to <body>. Fall back to
+  // the list the row lived in, so the user stays where they were working.
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const home = opener?.closest<HTMLElement>(".cbList, .cbSide, .sideList, [role=listbox]") ?? null;
     ref.current?.querySelector("button")?.focus();
-    return () => opener?.focus();
+    return () => {
+      if (opener?.isConnected) { opener.focus(); return; }
+      if (!home) return;
+      home.tabIndex = -1; // a scroll container isn't focusable on its own
+      home.focus();
+    };
   }, []);
 
   // Escape peels one layer (a sub-form goes back to the menu); an outside click

@@ -207,3 +207,37 @@ describe("models", () => {
     expect(costOf(modelOf("gpt-5.6-luna"), 1_000_000, 1_000_000)).toBeCloseTo(7, 6);
   });
 });
+
+it("placeholders never reach the codebook or the merge review", async () => {
+  const { redactor } = await import("./redact");
+  const { sanitizeDescribeReply } = await import("./describe");
+  const { sanitizeMergeReply } = await import("./dedupe");
+  const r = redactor(["Ann Lee"]);
+  const token = r.redact("Ann Lee");
+  expect(token).not.toContain("Ann");
+
+  // the model is told to refine the existing definition, which it was handed
+  // redacted — so it echoes the token straight back
+  const [draft] = sanitizeDescribeReply(
+    [{ name: "trust", def: "", excerpts: [] }],
+    [{ code: "trust", definition: `The pattern ${token} described.` }], r);
+  expect(draft.definition).toBe("The pattern Ann Lee described.");
+
+  const [prop] = sanitizeMergeReply(
+    [{ name: "a", def: "", excerpts: [] }, { name: "b", def: "", excerpts: [] }],
+    [{ from: "a", into: "b", rationale: `Both are ${token}'s point.`, tier: "overlap" }], r);
+  expect(prop.rationale).toBe("Both are Ann Lee's point.");
+});
+
+it("a summary payload redacts the event type and the excerpt ref, not just the free text", async () => {
+  const { redactor } = await import("./redact");
+  const { renderSummaryPayload } = await import("./summarize");
+  const r = redactor(["Ann"]);
+  // both fields are study-authored: the type comes from an events CSV column or
+  // the add-event modal, the ref carries the transcript name
+  const out = renderSummaryPayload(
+    [{ time: "0:01", type: "Ann arrives", text: "" }],
+    [{ code: "x", ref: "Ann-interview 0:02", excerpt: "hello" }],
+    "", r);
+  expect(out).not.toContain("Ann");
+});

@@ -8,7 +8,7 @@ import { useMemo } from "react";
 import { useStore, type Segment } from "./state/store";
 import { useMarkers } from "./useMarkers";
 import { fmtLike, markerKey, type Marker } from "./markers";
-import { excerptOf } from "./contract/excerpt";
+import { segExcerpt } from "./contract/excerpt";
 import type { SummaryEvent, SummaryExcerpt } from "./ai/summarize";
 
 export type SumItem =
@@ -35,9 +35,7 @@ export function useSummaryData(pid: string) {
     const time = a ? (b && b !== a ? `${a}–${b}` : a) : "";
     return {
       seg, time,
-      excerpt: excerptOf(ls
-        .filter((l) => l.id >= seg.start && l.id <= seg.end)
-        .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt.replace(/^\[R:\] /, ""),
+      excerpt: segExcerpt(seg, ls).excerpt,
     };
   }), [accepted, transcripts, pid]);
 

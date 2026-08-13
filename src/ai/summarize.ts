@@ -34,12 +34,16 @@ export function renderSummaryPayload(
 ): string {
   const parts: string[] = [];
   if (events.length) {
+    // the type is study-authored text, not a structural id: it comes from an
+    // imported events column or the add-event modal, so a researcher who listed
+    // a name in Settings would still ship it in "Ann arrives"
     parts.push("SESSION EVENTS:\n" + events.map((e) =>
-      `[${e.time}] ${e.type}${e.text ? ` — ${r.redact(e.text)}` : ""}`).join("\n"));
+      `[${e.time}] ${r.redact(e.type)}${e.text ? ` — ${r.redact(e.text)}` : ""}`).join("\n"));
   }
   if (excerpts.length) {
+    // and the ref carries the transcript name, which is frequently a filename
     parts.push("CODED EXCERPTS:\n" + excerpts.map((x) =>
-      `- ${x.code} (${x.ref}): "${r.redact(x.excerpt)}"`).join("\n"));
+      `- ${x.code} (${r.redact(x.ref)}): "${r.redact(x.excerpt)}"`).join("\n"));
   }
   const ctx = context.trim();
   if (ctx) parts.push("RESEARCHER CONTEXT:\n" + r.redact(ctx));
