@@ -362,15 +362,10 @@ export function AssistView() {
                         )))}
                     </div>
                   ))}
+                {/* clearing a selection lives in the list's own header, where
+                    there is room for it — a full-width control in this narrow
+                    scrolling column kept provoking a horizontal scrollbar */}
                 <div className="bSideNote defHint">Click a code to focus it · <b>Ctrl</b> adds · <b>Shift</b> takes a range</div>
-                {/* below the list, and stuck to the sidebar's floor: with a
-                    codebook of a hundred codes it would otherwise sit off-screen
-                    above whatever you just picked */}
-                {liveSel.length > 0 && (
-                  <button className="btn defAll" onClick={() => { setDefSel([]); setDefAnchor(null); }}>
-                    <Icon name="x" size={12} /> Clear {liveSel.length} picked
-                  </button>
-                )}
               </>
             )}
           </>
@@ -503,7 +498,9 @@ export function AssistView() {
           <SummaryList pids={allPids} summaries={summaries} onGenerate={setSumFor} />
         ) : panel === "describe" ? (
           <DescribeList codebook={codebook} codes={shownDefCodes} stats={stats}
-            sortBy={defSort} setSortBy={setDefSort} />
+            sortBy={defSort} setSortBy={setDefSort}
+            picked={liveSel.length} total={defVisible.length}
+            onClear={() => { setDefSel([]); setDefAnchor(null); }} />
         ) : (
           <SuggestList candidates={shownCandidates} groupBy={suggestBy}
             transcripts={transcripts} codebook={codebook} tabs={tabs} />
@@ -573,12 +570,15 @@ function MergeList({ proposals, codebook, flipped, onAccept, onSkip, onFlip }: {
 // The codebook's definitions as they stand — the surface the describe run
 // writes into. Drafting/editing/applying happens in the modal; this list is
 // where you see which codes still have no definition.
-function DescribeList({ codebook, codes, stats, sortBy, setSortBy }: {
+function DescribeList({ codebook, codes, stats, sortBy, setSortBy, picked, total, onClear }: {
   codebook: Record<string, { color: string; def: string; status: string; defAi?: boolean }>;
   codes: string[];                       // already filtered by the sidebar and sorted
   stats: Record<string, CodeStat>;
   sortBy: SortBy;
   setSortBy: (s: SortBy) => void;
+  picked: number;                        // codes picked in the sidebar, 0 = whole scope
+  total: number;                         // codes the scope holds
+  onClear: () => void;
 }) {
   if (!Object.keys(codebook).length) {
     return (
@@ -600,7 +600,14 @@ function DescribeList({ codebook, codes, stats, sortBy, setSortBy }: {
               aria-pressed={sortBy === s.id} onClick={() => setSortBy(s.id)}>{s.label}</button>
           ))}
         </div>
-        <span className="nCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+        {picked > 0 ? (
+          <span className="nCount">
+            {picked} of {total} codes
+            <button className="defClear" onClick={onClear}>clear</button>
+          </span>
+        ) : (
+          <span className="nCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+        )}
       </div>
       {codes.length === 0 ? (
         <div className="empty">No codes here. Widen the <b>Show</b> filter on the left.</div>
