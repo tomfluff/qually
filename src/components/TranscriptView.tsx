@@ -139,6 +139,7 @@ export function TranscriptView() {
   const active = useStore((s) => s.active);
   const transcript = useStore((s) => s.transcripts[s.active]);
   const mergeLines = useStore((s) => s.ui.mergeLines);
+  const mergeGap = useStore((s) => (s.ui.mergeGapOn ? s.ui.mergeGap : null));
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnCls = useStore((s) => `cc-${s.ui.warnSize} cc-${s.ui.warnCorner}`);
@@ -231,7 +232,7 @@ export function TranscriptView() {
   };
 
   // merged display units (singletons when the toggle is off)
-  const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines), [transcript, mergeLines]);
+  const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines, mergeGap), [transcript, mergeLines, mergeGap]);
   // speaker focus (the target button, bottom right) — per transcript. A stale
   // focus name no longer in THIS transcript is ignored rather than dimming
   // every row (a re-import can rename speakers under a stored focus).

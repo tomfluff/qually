@@ -29,7 +29,9 @@ export const RESERVED_VIEWS = ["browse", "assist", "summary"] as const;
 export const isTranscriptView = (active: string) => !RESERVED_VIEWS.includes(active as typeof RESERVED_VIEWS[number]);
 
 // orig = the imported text, present only while an in-app correction differs from it
-export interface Line { id: number; ts: string; speaker: string; text: string; orig?: string; }
+// end (optional end_timestamp column) is when the line stops being spoken —
+// the pause-merge rule prefers it over estimating from the text's length
+export interface Line { id: number; ts: string; speaker: string; text: string; end?: string; orig?: string; }
 export interface Segment {
   sid: number; pid: string; start: number; end: number; code: string;
   notes: string; proposedBy: string; status: string;
@@ -41,6 +43,8 @@ export interface Ui {
   palettePos: "auto" | "centered";
   helpSeen: boolean;
   mergeLines: boolean; // merge partial (non-terminated) same-speaker lines into one unit
+  mergeGapOn: boolean; // also merge same-speaker lines that start close together
+  mergeGap: number;    // "close" = next line starts within this many seconds
   showLineNumbers: boolean;
   accent: string; // primary-color palette id (see palettes.ts)
   speakerNames: "full" | "short"; // transcript speaker column: full label or first 3 chars
@@ -60,7 +64,7 @@ export interface Ui {
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
   // which Assist-tab panel is showing — chosen from the tab's own menu
-  assistPanel: "observations" | "merge" | "suggest" | "summary";
+  assistPanel: "observations" | "merge" | "suggest" | "summary" | "describe";
   // the Summary tab's split between the detailed timeline and the summary text:
   // side by side, stacked, or one pane at a time. The split position is a fraction
   // of the container (not px) so it survives both orientations and window resizes.
@@ -143,7 +147,10 @@ interface State {
   segments: Segment[];
   // colorLock marks a colour the researcher chose by hand (the picker), so a
   // recolour pass can be told to keep it and work around it
-  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean }>;
+  // defAi: the definition text is untouched AI output. Any manual input — hand-
+  // written, or an AI draft edited before/after apply — clears it, so the UI can
+  // mark AI-only definitions apart from ones a person has shaped.
+  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean; defAi?: boolean }>;
   extSegRows: Record<string, string>[];
   tabs: string[];
   pinnedTabs: string[]; // pids pinned to the FRONT of the tab list, in pin order
@@ -265,7 +272,7 @@ interface State {
   renameCode: (code: string, newName: string) => void;
   deleteCode: (code: string) => void;
   mergeCode: (from: string, into: string) => void;
-  setDef: (code: string, def: string) => void;
+  setDef: (code: string, def: string, ai?: boolean) => void;
   setFontSize: (n: number) => void;
   setSidebarFontSize: (n: number) => void;
   setUi: (patch: Partial<Ui>) => void;
@@ -283,7 +290,7 @@ const emptySel = (): Selection => ({ pid: null, anchor: null, head: null, lines:
 // anchor/head are the startId of the anchor/head group.
 function groupsOf(s: State): Group[] {
   const t = s.transcripts[s.active];
-  return t ? mergeGroups(t.lines, s.ui.mergeLines) : [];
+  return t ? mergeGroups(t.lines, s.ui.mergeLines, s.ui.mergeGapOn ? s.ui.mergeGap : null) : [];
 }
 const groupIdxOf = (gs: Group[], lineId: number) => gs.findIndex((g) => lineId >= g.startId && lineId <= g.endId);
 function idsBetween(gs: Group[], i: number, j: number): number[] {
@@ -384,7 +391,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {},
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, formatOpen: false,
@@ -933,10 +940,15 @@ export const useStore = create<State>()(
       // existed with no exporter, so colors and definitions could only ever be lost.
       exportCodebook: () => {
         const cb = get().codebook;
+        // def_source travels with the definition: without it, re-importing this
+        // file into a fresh workspace would relabel untouched AI text as
+        // human-written — the one direction of that error that matters, since it
+        // launders a draft nobody has checked as a researcher's own words.
         const rows = Object.keys(cb).sort().map((code) => ({
           code, color: cb[code].color, short_def: cb[code].def, status: cb[code].status,
+          def_source: cb[code].def ? (cb[code].defAi ? "ai" : "human") : "",
         }));
-        return toCSV(rows, ["code", "color", "short_def", "status"]);
+        return toCSV(rows, ["code", "color", "short_def", "status", "def_source"]);
       },
 
       // Re-importable transcript, carrying the CORRECTED text. `original` is the
@@ -945,10 +957,14 @@ export const useStore = create<State>()(
         const t = get().transcripts[pid];
         if (!t) return "";
         const rows = t.lines.map((l) => ({
-          line_id: String(l.id), timestamp: l.ts, speaker: l.speaker, text: l.text,
-          original: l.orig ?? "",
+          line_id: String(l.id), timestamp: l.ts, end_timestamp: l.end ?? "",
+          speaker: l.speaker, text: l.text, original: l.orig ?? "",
         }));
-        return toCSV(rows, ["line_id", "timestamp", "speaker", "text", "original"]);
+        // end_timestamp only earns a column when the data actually has one
+        const cols = t.lines.some((l) => l.end)
+          ? ["line_id", "timestamp", "end_timestamp", "speaker", "text", "original"]
+          : ["line_id", "timestamp", "speaker", "text", "original"];
+        return toCSV(rows, cols);
       },
 
       // Events for ONE transcript, from that tab's own "Load events…". Additive and
@@ -1173,7 +1189,18 @@ export const useStore = create<State>()(
         set({ codebook: cb });
         return changed;
       },
-      setDef: (code, def) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], def } }, redoStack: [] }),
+      // Undoable like every other codebook edit (rename/merge/delete/colour):
+      // applying an AI draft OVERWRITES whatever the researcher had written, and
+      // that has to be recoverable. No-ops don't push — an undo entry that
+      // restores identical text just eats a slot on the stack.
+      setDef: (code, def, ai) => {
+        const cur = get().codebook[code];
+        if (!cur || (cur.def === def && !!cur.defAi === (!!def && ai === true))) return;
+        get().pushUndo();
+        set({
+          codebook: { ...get().codebook, [code]: { ...cur, def, defAi: !!def && ai === true } },
+        });
+      },
       renameCode: (code, newName) => {
         const name = newName.trim();
         if (!name || name === code) return;
@@ -1396,6 +1423,8 @@ export const useStore = create<State>()(
         s.ui.speakerWeight ??= {};
         s.ui.fontFamily ??= "system";
         s.ui.coderName ??= "";
+        s.ui.mergeGapOn ??= false;
+        s.ui.mergeGap ??= 3;
         // never-empty invariant: rows written empty by an earlier build become "(default)"
         s.segments = s.segments.map((x) => (x.proposedBy?.trim() ? x : { ...x, proposedBy: "(default)" }));
       },
@@ -1440,7 +1469,11 @@ export function badLineIds(rows: Record<string, string>[]): string | null {
 
 export function rowsToLines(rows: Record<string, string>[]): Line[] {
   return rows
-    .map((r) => ({ id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" }))
+    .map((r) => {
+      const l: Line = { id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" };
+      if (r.end_timestamp?.trim()) l.end = r.end_timestamp.trim();
+      return l;
+    })
     .filter((l) => Number.isFinite(l.id));
 }
 
@@ -1513,6 +1546,11 @@ function importCodebook(get: Get, set: Set_, rows: Record<string, string>[]) {
     const cb = get().codebook;
     set({ codebook: { ...cb, [key]: {
       ...cb[key],
+      // our own export says where the definition came from; a hand-made or
+      // older file has no column, and then an unchanged definition keeps the
+      // provenance it had while a new one counts as the file author's
+      defAi: r.def_source ? r.def_source.trim().toLowerCase() === "ai"
+        : (r.short_def || cb[key].def) === cb[key].def ? cb[key].defAi : false,
       def: r.short_def || cb[key].def,
       status: r.status || cb[key].status,
       // colors come from our own codebook.csv export; older files have no column

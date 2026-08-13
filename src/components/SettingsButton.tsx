@@ -39,6 +39,8 @@ export function SettingsButton() {
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const coderName = useStore((s) => s.ui.coderName);
   const mergeLines = useStore((s) => s.ui.mergeLines);
+  const mergeGapOn = useStore((s) => s.ui.mergeGapOn);
+  const mergeGap = useStore((s) => s.ui.mergeGap);
   const showLineNumbers = useStore((s) => s.ui.showLineNumbers);
   const scrollSpeed = useStore((s) => s.ui.scrollSpeed);
   const loopEdit = useStore((s) => s.ui.loopEdit);
@@ -159,13 +161,30 @@ export function SettingsButton() {
                 </div>
                 <div className="settings-note">Short shows a unique abbreviation (hover for the full name).</div>
                 <div className="srow">
-                  <span>Merge lines</span>
+                  <span>Merge split lines</span>
                   <div className="seg">
                     <button className={!mergeLines ? "on" : ""} onClick={() => setUi({ mergeLines: false })}>off</button>
                     <button className={mergeLines ? "on" : ""} onClick={() => setUi({ mergeLines: true })}>on</button>
                   </div>
                 </div>
                 <div className="settings-note">Joins a speaker's unfinished lines (no . ? ! …) into one reading unit.</div>
+                <div className="srow">
+                  <span>Merge by pause</span>
+                  <div className="seg">
+                    <button className={!mergeGapOn ? "on" : ""} onClick={() => setUi({ mergeGapOn: false })}>off</button>
+                    <button className={mergeGapOn ? "on" : ""} onClick={() => setUi({ mergeGapOn: true })}>on</button>
+                  </div>
+                </div>
+                {mergeGapOn && (
+                  <label className="srow">
+                    <span>Pause gap</span>
+                    <input type="range" min={1} max={15} step={1} value={mergeGap}
+                      onChange={(e) => setUi({ mergeGap: +e.target.value })} />
+                    <span className="sval">{mergeGap}s</span>
+                    <button className="sreset" onClick={(e) => { e.preventDefault(); setUi({ mergeGap: 3 }); }} title="Reset to 3s">reset</button>
+                  </label>
+                )}
+                <div className="settings-note">Also joins a speaker's consecutive lines when the pause between them stays within the gap. Where a line ends comes from its <code>end_timestamp</code> when the import had one, otherwise it's estimated from the text's length at a typical speaking pace.</div>
                 <div className="srow">
                   <span>Minimap</span>
                   <div className="seg">

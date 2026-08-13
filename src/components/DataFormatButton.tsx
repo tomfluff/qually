@@ -12,7 +12,7 @@ for a qualitative-coding app. Write a Python 3 script (standard library only, cs
 that reads input.txt in the same folder and writes transcript.csv with EXACTLY these
 columns, in this order:
 
-line_id,timestamp,speaker,text,codes
+line_id,timestamp,end_timestamp,speaker,text,codes
 
 Requirements:
 - One row per digestible chunk of speech, not per whole speaker turn.
@@ -29,6 +29,10 @@ Requirements:
 - line_id: sequential integers starting at 1.
 - timestamp: that row's start time as H:MM:SS, or MM:SS under an hour. Drop milliseconds.
   Empty if the row has no time.
+- end_timestamp: when the row's speech ENDS, same shape, only if the source carries end
+  times (per-segment end timings, cue end anchors, ...). A row split from a longer
+  segment takes the end of its last source segment. Never compute or guess one — leave
+  the column empty when the source has no real end boundary.
 - speaker: consistent label per speaker; reuse the exact same label. If the source uses
   speaker codes (S01, S2, A15, SPEAKER_01, ...), prompt me for a real name for each code,
   showing two sample lines from that speaker so I can tell them apart. Blank input keeps
@@ -44,10 +48,10 @@ Requirements:
 Adapt the parsing to my transcript format: 
 <<paste or attach a sample>>`;
 
-const EXAMPLE_CSV = `line_id,timestamp,speaker,text,codes
-1,00:00:03,R,So how do you usually read a chart?,
-2,00:00:07,P,"I zoom in really close, then pan across to follow the line.",
-3,00:00:12,P,Then I lose track of where the axis labels are.,
+const EXAMPLE_CSV = `line_id,timestamp,end_timestamp,speaker,text,codes
+1,00:00:03,00:00:06,R,So how do you usually read a chart?,
+2,00:00:07,00:00:11,P,"I zoom in really close, then pan across to follow the line.",
+3,00:00:12,00:00:15,P,Then I lose track of where the axis labels are.,
 `;
 
 export function DataFormatButton() {
@@ -101,6 +105,7 @@ export function DataFormatButton() {
                   <tbody>
                     <tr><td><code>line_id</code></td><td>Sequential integers, starting at 1. <b>Required.</b></td></tr>
                     <tr><td><code>timestamp</code></td><td>Line start time, <code>H:MM:SS</code> or <code>MM:SS</code> (milliseconds ignored). Powers the play-from-here chip. Optional.</td></tr>
+                    <tr><td><code>end_timestamp</code></td><td>Line end time, same shape. Makes the merge-by-pause gap exact (otherwise it's estimated from the text's length). Optional.</td></tr>
                     <tr><td><code>speaker</code></td><td>Any consistent label, reused per speaker — a full name is fine, it needn't be short. Optional (defaults to <code>P</code>).</td></tr>
                     <tr><td><code>text</code></td><td>The spoken text for that line. <b>Required.</b></td></tr>
                     <tr><td><code>codes</code></td><td>Pre-existing codes, <code>;</code>-separated, or empty. Loaded as segments. Optional.</td></tr>
