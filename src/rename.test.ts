@@ -138,3 +138,16 @@ test("renameSpeaker rewrites pending undo entries, so an undo can't resurrect th
   expect(useStore.getState().transcripts.P01.lines[0].speaker).toBe("Bobby");
   expect(useStore.getState().transcripts.P01.lines[0].text).toBe("hi");
 });
+
+test("renaming a transcript carries its scroll position, it does not forget it", async () => {
+  const { rememberScroll, savedScroll } = await import("./scrollMemory");
+  useStore.setState({
+    transcripts: { P9: { lines: [{ id: 1, ts: "", speaker: "P", text: "hi" }] } },
+    tabs: ["P9"], active: "P9", segments: [],
+  } as never);
+  rememberScroll("P9", { line: 120, offset: 4 } as never);
+  expect(useStore.getState().renameTranscript("P9", "P9-final")).toBe(null);
+  // same transcript under a new name — forgetting threw the reader back to line 1
+  expect(savedScroll["P9-final"]).toMatchObject({ line: 120 });
+  expect(savedScroll.P9).toBeUndefined();
+});

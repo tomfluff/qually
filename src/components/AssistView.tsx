@@ -720,17 +720,18 @@ function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
   };
   const row = (s: Segment) => {
     const range = `${s.start}${s.end !== s.start ? `-${s.end}` : ""}`;
+    const ex = excerptFor(s); // once per row: it walks the transcript's lines
     return (
       <div key={s.sid} className="nInst" style={{ "--lens-c": codebook[s.code]?.color ?? "#888" } as CSSProperties}>
         <div className="mPair" style={{ marginBottom: 4 }}>
           <span className="mCode"><span className="mSw" style={{ background: codebook[s.code]?.color || "#999" }} />{s.code}</span>
           <span className="nRef">{s.proposedBy}</span>
         </div>
-        <div className="nLine">{excerptFor(s)?.excerpt || "(excerpt unavailable)"}</div>
+        <div className="nLine">{ex?.excerpt || "(excerpt unavailable)"}</div>
         <div className="nFoot">
           {/* the speaker as a field, like the Codebook: without it a line the
               interviewer dominated read as the participant's words */}
-          <span className="nRef"><span className="refspk">{excerptFor(s)?.speaker}</span>{s.pid}:{range}</span>
+          <span className="nRef"><span className="refspk">{ex?.speaker}</span>{s.pid}:{range}</span>
           <span className="nActs">
             <button className="nBtn pri" onClick={() => setStatus(s.sid, "accepted")}>Accept</button>
             <button className="nBtn" onClick={() => setStatus(s.sid, "rejected")}>Reject</button>

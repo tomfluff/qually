@@ -494,3 +494,21 @@ test("undoing a segment deletion brings back its AI grounding", () => {
   // without this the segment came back and the grounding had to be re-bought
   expect(useStore.getState().aiGrounds[7]).toBeDefined();
 });
+
+test("importing a NEW transcript clears the stacks instead of offering a half-undo", async () => {
+  const s = useStore.getState();
+  useStore.setState({ undoStack: [], redoStack: [] } as never);
+  // an undo entry exists from earlier work…
+  s.setNotes(1, "x");
+  useStore.getState().pushUndo();
+  expect(useStore.getState().undoStack.length).toBeGreaterThan(0);
+  // …and the import can't honour it: snapshot() covers segments but not
+  // transcripts or tabs, so Ctrl+Z would delete the coding that came in with the
+  // file and leave the transcript standing
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,codes\n1,00:00:01,P,fresh,newcode\n",
+  ], "FRESH.csv")]);
+  expect(useStore.getState().undoStack).toEqual([]);
+  expect(useStore.getState().redoStack).toEqual([]);
+  expect(useStore.getState().transcripts.FRESH).toBeDefined();
+});
