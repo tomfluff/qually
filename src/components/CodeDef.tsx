@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { excerptOf } from "../contract/excerpt";
+import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
 // The right-click route needs a surface of its own — it fires from the code
@@ -23,8 +24,23 @@ export function DefineHost() {
   const [code, setCode] = useState<string | null>(null);
   const fs = useStore((s) => s.ui.fontSize);
   const entry = useStore((s) => (code === null ? undefined : s.codebook[code]));
-  const close = useCallback(() => setCode(null), []);
-  useEffect(() => { openFn = setCode; return () => { openFn = null; }; }, []);
+  // Whatever was focused when the menu item was chosen — captured here rather
+  // than left to the dialog, because by the time the dialog element attaches
+  // the editor inside it has already taken focus, and the row that opened it is
+  // no longer recoverable. Without this, closing dropped focus to <body> and
+  // Tab restarted from the top of the page.
+  const opener = useRef<HTMLElement | null>(null);
+  const close = useCallback(() => {
+    setCode(null);
+    if (opener.current?.isConnected) opener.current.focus();
+  }, []);
+  // the only dialog in the app that lacked one: Tab used to walk straight out
+  // of a dialog announced as modal
+  const dialogRef = useDialogFocus();
+  useEffect(() => {
+    openFn = (c) => { opener.current = document.activeElement as HTMLElement | null; setCode(c); };
+    return () => { openFn = null; };
+  }, []);
   useEffect(() => {
     if (code === null) return;
     const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
@@ -34,7 +50,7 @@ export function DefineHost() {
   if (code === null || !entry) return null;
   return (
     <div className="about-backdrop" onMouseDown={close}>
-      <div className="about defdlg" role="dialog" aria-modal="true" aria-labelledby="defdlg-title"
+      <div className="about defdlg" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="defdlg-title"
         style={{ fontSize: fs }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="about-head">
           <h2 id="defdlg-title">
@@ -108,11 +124,13 @@ export function DefLine({ code, excerpts = false, className = "", autoEdit = fal
     el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
   };
   useEffect(() => { if (editing) fit(taRef.current); }, [editing]);
+  // re-seed when the dialog route opens on a different code
+  useEffect(() => { if (autoEdit && entry) setV(entry.def); }, [autoEdit, code]); // eslint-disable-line react-hooks/exhaustive-deps
+  // below every hook: an early return above one makes the hook order depend on
+  // whether the code still exists
   if (!entry) return null;
 
   const start = () => { setV(entry.def); setEditing(true); };
-  // re-seed when the dialog route opens on a different code
-  useEffect(() => { if (autoEdit) setV(entry.def); }, [autoEdit, code]); // eslint-disable-line react-hooks/exhaustive-deps
   const save = () => {
     const t = v.trim();
     // Saving the text UNCHANGED isn't authorship: it must not relabel an AI
@@ -146,8 +164,17 @@ export function DefLine({ code, excerpts = false, className = "", autoEdit = fal
   const ex = excerpts && open ? codeExcerpts(code) : [];
   return (
     <div className={`defLine ${className}`}>
+      {/* A real control, not a div with a double-click: double-click alone left
+          the Definitions panel — the surface whose whole job is writing
+          definitions — with no keyboard route in at all, and its rows carry no
+          context menu to fall back on. Focusable also gives the affordance a
+          visible ring instead of a hover title. */}
       <div className={"defText" + (entry.def ? "" : " none")} onDoubleClick={start}
-        title={entry.def ? "Double-click to edit the definition" : "Double-click to write the definition"}>
+        tabIndex={0} role="button" aria-label={`Edit definition for ${code}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " " || e.key === "F2") { e.preventDefault(); start(); }
+        }}
+        title={entry.def ? "Double-click or press Enter to edit the definition" : "Double-click or press Enter to write the definition"}>
         {entry.def || "No definition yet — double-click to write one."}
         <DefBadge def={entry.def} ai={entry.defAi} />
       </div>

@@ -136,14 +136,21 @@ export function VideoDock() {
       return next;
     });
   }, [transcripts]);
-  // keep the seek bridge pointed at the current element + offset
-  useEffect(() => { registerVideo(videoRef.current, offset); }, [cur, offset, vidPid]);
+  // Keep the seek bridge pointed at the current element + offset. Runs after
+  // EVERY render, like syncPip below and for the same reason: leaving a
+  // transcript unmounts the <video> (the early return at the bottom) without
+  // changing cur/offset/vidPid, so a dep list left the bridge holding a
+  // detached node — timecode chips and the line-editor repair loop then drove
+  // an invisible element while the one on screen never moved.
+  useEffect(() => { registerVideo(videoRef.current, offset); });
   // the source is about to change (tab switch / new media): ignore the reset-to-0
   // timeupdate that follows, so it can't clobber the position we'll restore on load
   useEffect(() => { switching.current = true; }, [cur?.url]);
-  // apply persisted playback rate whenever the source or rate changes — unless a
-  // line-edit loop owns the rate right now (it restores the dock's rate on stop)
-  useEffect(() => { if (videoRef.current && !isLooping()) videoRef.current.playbackRate = geom.rate; }, [cur, geom.rate]);
+  // Apply the persisted playback rate — unless a line-edit loop owns the rate
+  // right now (it restores the dock's rate on stop). Every render, not on
+  // [cur, geom.rate]: a remounted <video> defaults to 1× while the button and
+  // the speed menu still claim 1.75×.
+  useEffect(() => { if (videoRef.current && !isLooping()) videoRef.current.playbackRate = geom.rate; });
   // PiP is entered and left from several places — our button, the video's own
   // native control, the floating window's × and back-to-tab, and the browser
   // itself. The button can only mirror that if it reads the truth rather than
@@ -216,8 +223,12 @@ export function VideoDock() {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key !== " " && e.key !== "[" && e.key !== "]") return;
       const t = e.target as HTMLElement;
+      // role=button covers the div rows every code list is built from: they
+      // handle Space themselves and only preventDefault, so without this a
+      // Space on a code row applied the code AND toggled playback.
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT"
-        || t.tagName === "BUTTON" || t.isContentEditable) return;
+        || t.tagName === "BUTTON" || t.isContentEditable
+        || t.getAttribute("role") === "button") return;
       // the focused <video> already handles Space natively — doubling up nets a no-op
       if (t.tagName === "VIDEO" || t.tagName === "A") return;
       if (document.querySelector(OVERLAY_SELECTOR)) return;
@@ -364,6 +375,10 @@ export function VideoDock() {
     if (t != null && t > 0.05) v.currentTime = t;
     switching.current = false;
     setTime(v.currentTime);
+    // `playing` survives the unmount but the element does not: returning to a
+    // transcript you left mid-playback showed a Pause icon (and announced
+    // "Pause") over a paused video. Re-seed both from the element.
+    setPlaying(!v.paused);
     // Standing PiP intent + a fresh source and no window up = we're arriving on
     // a transcript with media after PiP was force-closed elsewhere — re-enter.
     // Here (metadata ready) and not earlier: PiP rejects on an unloaded video.

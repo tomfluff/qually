@@ -3,8 +3,9 @@
 // Shared shell for the AI consent modals (scan / ground / merge / suggest). Each
 // modal keeps its own eligible-set, payload, and run loop; this owns the chrome
 // they all repeated: the backdrop, the focus-trapped dialog, and the head.
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, type ReactNode } from "react";
 import { MODELS } from "../ai/openai";
+import { useStore } from "../state/store";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
@@ -13,13 +14,25 @@ export function AiModal({ title, busy, onClose, children }: {
 }) {
   const dialogRef = useDialogFocus();
   const titleId = useId();
+  // .about pins font-size:1rem, so everything in here read at 16px however large
+  // the reading setting was — on the screens where you decide what participant
+  // data leaves the device. DefineHost re-bases the same way.
+  const fs = useStore((s) => s.ui.fontSize);
+  // Every other dialog in the app closes on Escape; App's global handler bails
+  // out on .about-backdrop, so these have to carry their own. Not while a run is
+  // in flight — a stray Esc must not dismiss something being paid for.
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape" && !busy) { e.stopPropagation(); onClose(); } };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
+  }, [busy, onClose]);
   return (
     <div className="about-backdrop" onMouseDown={() => !busy && onClose()}>
       {/* ai-check: a fixed-head / scrolling-body / pinned-footer layout so the
           consent buttons stay reachable no matter how tall the payload preview and
           any lens/speaker lists get (without it the footer clipped below 84vh). */}
       <div className="about imp ai-check" ref={dialogRef} role="dialog" aria-modal="true"
-        aria-labelledby={titleId} onMouseDown={(e) => e.stopPropagation()}>
+        aria-labelledby={titleId} style={{ fontSize: fs }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="about-head">
           <h2 id={titleId}>{title}</h2>
           <button className="btn iconbtn" onClick={onClose} disabled={busy} title="Close">

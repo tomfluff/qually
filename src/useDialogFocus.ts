@@ -21,9 +21,16 @@ export function useDialogFocus<T extends HTMLElement = HTMLDivElement>(
   const initial = opts?.initialFocus ?? "first";
   return useCallback((el: T | null) => {
     if (!el) return;
-    const opener = document.activeElement as HTMLElement | null;
+    const active = document.activeElement as HTMLElement | null;
+    // A child that already claimed focus keeps it: refs attach bottom-up, so a
+    // dialog whose content carries autoFocus (DefineHost's editor) would
+    // otherwise have it yanked to the close button the instant the dialog
+    // element attached. Same reason the opener isn't taken from inside — that
+    // node dies with the dialog, and focus()ing it on close lands on <body>.
+    const inside = !!active && el.contains(active);
+    const opener = inside ? null : active;
     const focusables = () => [...el.querySelectorAll<HTMLElement>(FOCUSABLE)];
-    (initial === "container" ? el : focusables()[0] ?? el).focus();
+    if (!inside) (initial === "container" ? el : focusables()[0] ?? el).focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Tab") return;
       const f = focusables();
