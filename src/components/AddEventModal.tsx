@@ -23,6 +23,11 @@ export function AddEventModal({ pid, defaultT, marker, tsSample, onClose }: {
   onClose: () => void;
 }) {
   const offset = useStore((s) => s.video[pid]?.offset ?? 0);
+  // An event is transcript content — it renders as a row in the transcript at the
+  // reading size, so it is written at that size too. .about pins itself to 1rem
+  // (it opens from the 12px toolbar and has to re-base), which left this dialog
+  // the one place the text-size setting did nothing.
+  const fs = useStore((s) => s.ui.fontSize);
   const [time, setTime] = useState(fmtLike(marker ? marker.t - offset : defaultT, tsSample));
   const [type, setType] = useState(marker ? markerKey(marker) : "");
   const [text, setText] = useState(marker?.label ?? "");
@@ -39,6 +44,7 @@ export function AddEventModal({ pid, defaultT, marker, tsSample, onClose }: {
   return (
     <div className="about-backdrop" onMouseDown={onClose}>
       <div className="about imp addev" role="dialog" aria-modal="true" aria-labelledby="addev-title"
+        style={{ fontSize: fs }}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "Escape") { e.stopPropagation(); onClose(); }

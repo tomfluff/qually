@@ -93,7 +93,12 @@
 .eventList .evtext { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* ── the add-event modal ───────────────────────────────────────────────────── */
-.addev { max-width:420px; }
+/* em-based so the whole dialog scales with the reading size set on it (the
+   chrome's own px/rem sizes would otherwise stay put while the fields grew) */
+.addev { max-width:34em; }
+.addev .about-head h2 { font-size:1.2em; }
+.addev .btn { font-size:1em; }
+.addev .iconbtn { font-size:1rem; } /* the × keeps its fixed icon box */
 .addev .signfield { align-items:flex-start; }
 .addev .signfield > span { min-width:4ch; padding-top:7px; }
 .addev .signinput { flex:1; min-width:0; }
