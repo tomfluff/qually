@@ -80,3 +80,46 @@ test("a file with no def_source column (hand-made, or older export) reads as hum
   await importCsv("code,color,short_def,status\nx,#123456,Someone's definition.,accepted\n");
   expect(useStore.getState().codebook.x).toMatchObject({ def: "Someone's definition.", defAi: false });
 });
+
+test("merging carries the definition when the surviving code has none", () => {
+  useStore.setState({
+    codebook: {
+      "lost context": { color: "#aa3377", def: "Marks losing the thread.", status: "accepted", defAi: true },
+      "context loss": { color: "#228833", def: "", status: "accepted" },
+    },
+    segments: [],
+  } as never);
+  // neither merge surface shows definitions, so the only one of the pair could
+  // be dropped by picking the wrong survivor
+  useStore.getState().mergeCode("lost context", "context loss");
+  expect(useStore.getState().codebook["context loss"]).toMatchObject({
+    def: "Marks losing the thread.", defAi: true,
+  });
+});
+
+test("merging does NOT overwrite a definition the survivor already has", () => {
+  useStore.setState({
+    codebook: {
+      a: { color: "#aa3377", def: "From A.", status: "accepted" },
+      b: { color: "#228833", def: "From B.", status: "accepted" },
+    },
+    segments: [],
+  } as never);
+  useStore.getState().mergeCode("a", "b");
+  expect(useStore.getState().codebook.b.def).toBe("From B.");
+});
+
+test("a blank short_def column CLEARS the definition; a missing column leaves it", async () => {
+  useStore.setState({
+    codebook: { anger: { color: "#aa3377", def: "Old text.", status: "accepted", defAi: true } },
+    segments: [],
+  } as never);
+  await importCsv("code,color,short_def,status\nanger,#aa3377,,accepted\n");
+  expect(useStore.getState().codebook.anger).toMatchObject({ def: "", defAi: false });
+
+  useStore.setState({
+    codebook: { anger: { color: "#aa3377", def: "Old text.", status: "accepted", defAi: true } },
+  } as never);
+  await importCsv("code,color,status\nanger,#aa3377,accepted\n");
+  expect(useStore.getState().codebook.anger).toMatchObject({ def: "Old text.", defAi: true });
+});

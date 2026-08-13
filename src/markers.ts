@@ -183,8 +183,11 @@ export function markerRows(markers: Marker[]): { rows: Record<string, string>[];
   const rows = markers.map((m) => ({
     ...m.raw,
     event: m.event, code: m.code, label: m.label, detail: m.detail,
-    video_time_s: m.raw.video_time_s ?? String(m.t),
-    video_time_hms: m.raw.video_time_hms ?? fmtTime(m.t),
+    // the in-app time wins, like every other edited field above: keeping the
+    // source row's copy meant retiming an imported event exported (and
+    // re-imported) the time it had before the edit
+    video_time_s: String(m.t),
+    video_time_hms: fmtTime(m.t),
   }));
   return { rows, fields };
 }

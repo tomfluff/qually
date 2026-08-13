@@ -312,6 +312,10 @@ function snapshot(s: State): string {
   return JSON.stringify({
     segments: s.segments, codebook: s.codebook, hotbar: s.hotbar, active: s.active,
     markers: s.markers,
+    // grounding rides with the segments it belongs to: deleting a segment drops
+    // its grounding, and an undo that brought the segment back without it made
+    // the researcher pay for the same AI call twice
+    aiGrounds: s.aiGrounds, markerColors: s.ui.markerColors,
     sel: { ...s.selection, lines: [...s.selection.lines] },
   });
 }
@@ -368,6 +372,10 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
     // a snapshot from before events existed carries none — keep what's on screen
     // rather than wiping the transcript's markers on an old undo entry
     markers: o.markers ?? cur.markers,
+    // both added after snapshots existed — an older entry carries neither, and
+    // wiping live data on an old undo entry is worse than not restoring it
+    aiGrounds: o.aiGrounds ?? cur.aiGrounds,
+    ui: o.markerColors ? { ...cur.ui, markerColors: o.markerColors } : cur.ui,
     hotbarCache: hotbarCodes(next), selection: sel, active, savedSelections: saved,
     // One cache must own the scroll after a tab change, or the tab's remembered anchor
     // (restored in a rAF) races the selection-follow (synchronous) and wins -- landing you
@@ -376,6 +384,16 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
     jump: active !== cur.active && sel.pid && sel.head !== null
       ? { pid: sel.pid, line: sel.head } : cur.jump,
   });
+}
+
+// Grounding is keyed by sid, and three paths (delete a code, merge codes, claim
+// unattributed work) drop segments wholesale. Left alone those records sit in
+// localStorage forever, keyed to segments nobody can reach — and the store
+// already has a quota-failure banner. Call after any bulk segment removal.
+function pruneGrounds(s: State): Partial<State> {
+  const live = new Set(s.segments.map((x) => String(x.sid)));
+  const kept = Object.entries(s.aiGrounds).filter(([sid]) => live.has(sid));
+  return kept.length === Object.keys(s.aiGrounds).length ? {} : { aiGrounds: Object.fromEntries(kept) };
 }
 
 function hotbarCodes(s: State): string[] {
@@ -479,6 +497,13 @@ export const useStore = create<State>()(
           }
         }
         set({ hotbarCache: hotbarCodes(get()) });
+        // A batch that CREATED a transcript can't be undone honestly: snapshot()
+        // covers segments/codebook but not transcripts, tabs or the guessed
+        // speaker weights, so Ctrl+Z deleted the coding that came in with the
+        // file and left the transcript standing — data loss wearing the costume
+        // of a revert. The replace path already clears both stacks for the same
+        // reason; say "not undoable" rather than half-undo it.
+        if (Object.keys(get().transcripts).length > tBefore) set({ undoStack: [], redoStack: [] });
         // someone else's codes arrived unsigned? offer to attribute just those rows
         const fresh = get().segments.filter((s) => !before.has(s.sid) && s.proposedBy === "(default)").map((s) => s.sid);
         if (fresh.length) set({ pendingImportSign: { sids: fresh } });
@@ -529,6 +554,7 @@ export const useStore = create<State>()(
             return seen.has(k) ? false : (seen.add(k), true);
           });
         set({ segments });
+        set(pruneGrounds(get())); // the dedup above deletes rows
       },
 
       resolveImport: (choice) => {
@@ -1227,7 +1253,7 @@ export const useStore = create<State>()(
           segments: s.segments.filter((x) => norm(x.code) !== norm(code)), // A: drop its segments too
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== code) },
         });
-        set({ hotbarCache: hotbarCodes(get()) });
+        set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
       },
       mergeCode: (from, into) => {
         if (norm(from) === norm(into)) return;
@@ -1245,17 +1271,23 @@ export const useStore = create<State>()(
             seen.add(key); return true;
           });
         const cb = { ...s.codebook }; delete cb[from];
+        // Carry the definition when the survivor has none. Neither merge surface
+        // shows definitions, so the swap control let you pick which name lives
+        // with no idea which side held the only definition of the pair.
+        if (!cb[into].def && s.codebook[from].def)
+          cb[into] = { ...cb[into], def: s.codebook[from].def, defAi: s.codebook[from].defAi };
         set({
           codebook: cb,
           segments: merged,
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== from) },
         });
-        set({ hotbarCache: hotbarCodes(get()) });
+        set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
       },
       togglePin: (code) => {
         const p = get().hotbar.pinned;
         const pinned = p.includes(code) ? p.filter((c) => c !== code) : [...p, code];
-        set({ hotbar: { ...get().hotbar, pinned } });
+        // hotbar is snapshotted, so a stale redo would drop the pin again
+        set({ hotbar: { ...get().hotbar, pinned }, redoStack: [] });
         if (get().hotbar.mode === "pinned") set({ hotbarCache: hotbarCodes(get()) });
       },
       refreshHotbar: () => set({ hotbarCache: hotbarCodes(get()) }),
@@ -1330,6 +1362,10 @@ export const useStore = create<State>()(
       claimUnattributed: () => {
         const by = get().ui.coderName.trim();
         if (!by || by === "(default)") return;
+        // relabel + dedup DELETES rows, so it goes on the undo stack like
+        // resolveImportSign's identical pass (pushUndo also clears redo, which
+        // would otherwise restore "(default)" over the name you just claimed)
+        get().pushUndo();
         const seen = new Set<string>();
         const segments = get().segments
           .map((s) => (s.proposedBy.trim() && s.proposedBy !== "(default)" ? s : { ...s, proposedBy: by }))
@@ -1338,9 +1374,10 @@ export const useStore = create<State>()(
             return seen.has(k) ? false : (seen.add(k), true);
           });
         set({ segments });
+        set(pruneGrounds(get())); // the dedup above deletes rows
       },
       toggleTheme: () => set({ ui: { ...get().ui, dark: !get().ui.dark } }),
-      setHotbarMode: (mode) => { set({ hotbar: { ...get().hotbar, mode } }); set({ hotbarCache: hotbarCodes(get()) }); },
+      setHotbarMode: (mode) => { set({ hotbar: { ...get().hotbar, mode }, redoStack: [] }); set({ hotbarCache: hotbarCodes(get()) }); },
       setZen: (v) => set({ ui: { ...get().ui, zen: v } }),
 
       exportCSV: () => {
@@ -1442,7 +1479,9 @@ function ensureCode(get: Get, set: Set_, code: string): string {
   if (existing) return existing;
   // least-used palette colour, NOT a counter over the codebook size: the counter
   // handed out a colour another code already held as soon as one was deleted
-  set({ codebook: { ...cb, [code]: {
+  // codebook is snapshotted: without clearing redo, a code created after an undo
+  // vanishes again on the next Ctrl+Y
+  set({ redoStack: [], codebook: { ...cb, [code]: {
     color: pickNewColor(Object.values(cb).map((c) => c.color)), def: "", status: "candidate",
   } } });
   // a newly created code should appear in the hotbar immediately (no manual refresh)
@@ -1457,12 +1496,14 @@ export function badLineIds(rows: Record<string, string>[]): string | null {
   const seen = new Set<string>();
   rows.forEach((r, i) => {
     const id = (r.line_id || "").trim();
-    if (!/^\d+$/.test(id)) bad.push(i + 2);
+    // safe-integer too, not just digits: past 2^53 distinct ids collapse onto
+    // the same number once `+r.line_id` rounds them, silently merging lines
+    if (!/^\d+$/.test(id) || !Number.isSafeInteger(+id)) bad.push(i + 2);
     else if (seen.has(id)) dup.push(i + 2);
     else seen.add(id);
   });
   const list = (ns: number[]) => ns.slice(0, 5).join(", ") + (ns.length > 5 ? ", …" : "");
-  if (bad.length) return `has a blank or non-numeric line_id on row${bad.length > 1 ? "s" : ""} ${list(bad)}`;
+  if (bad.length) return `has a blank, non-numeric or out-of-range line_id on row${bad.length > 1 ? "s" : ""} ${list(bad)}`;
   if (dup.length) return `has a duplicate line_id on row${dup.length > 1 ? "s" : ""} ${list(dup)}`;
   return null;
 }
@@ -1472,9 +1513,18 @@ export function rowsToLines(rows: Record<string, string>[]): Line[] {
     .map((r) => {
       const l: Line = { id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" };
       if (r.end_timestamp?.trim()) l.end = r.end_timestamp.trim();
+      // our own export writes `original` for a corrected line; without reading it
+      // back, a round-trip through CSV laundered the correction into the source
+      // text and lost the ✱ diff
+      if (r.original?.trim() && r.original !== l.text) l.orig = r.original;
       return l;
     })
-    .filter((l) => Number.isFinite(l.id));
+    .filter((l) => Number.isFinite(l.id))
+    // Ascending ids are an assumption everything downstream makes: mergeGroups
+    // walks in array order, so out-of-order rows built a group whose startId
+    // exceeded its endId, and groupIdxOf's range test then matched no line at
+    // all — the transcript rendered but could not be coded, with no error.
+    .sort((a, b) => a.id - b.id);
 }
 
 // "interview-p3" -> "interview-p3 (2)" when the name is taken (import-as-new)
@@ -1544,14 +1594,19 @@ function importCodebook(get: Get, set: Set_, rows: Record<string, string>[]) {
     if (!r.code) return;
     const key = ensureCode(get, set, r.code);
     const cb = get().codebook;
+    // Column PRESENCE decides, not truthiness: `||` meant a file that
+    // deliberately blanked a definition could never clear the one in the app.
+    // A file with no short_def column at all still leaves it alone.
+    const def = r.short_def !== undefined ? r.short_def.trim() : cb[key].def;
     set({ codebook: { ...cb, [key]: {
       ...cb[key],
       // our own export says where the definition came from; a hand-made or
       // older file has no column, and then an unchanged definition keeps the
       // provenance it had while a new one counts as the file author's
-      defAi: r.def_source ? r.def_source.trim().toLowerCase() === "ai"
-        : (r.short_def || cb[key].def) === cb[key].def ? cb[key].defAi : false,
-      def: r.short_def || cb[key].def,
+      defAi: !def ? false
+        : r.def_source ? r.def_source.trim().toLowerCase() === "ai"
+        : def === cb[key].def ? cb[key].defAi : false,
+      def,
       status: r.status || cb[key].status,
       // colors come from our own codebook.csv export; older files have no column
       color: /^#[0-9a-f]{6}$/i.test(r.color || "") ? r.color : cb[key].color,

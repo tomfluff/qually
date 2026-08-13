@@ -206,9 +206,19 @@ test("renameMarkerType renames every event of the type and moves its colour", ()
   expect(s().markers.filter((m) => markerKey(m) === "observation").length).toBe(n);
   expect(s().ui.markerColors.observation).toBe("#123456");
   expect(s().ui.markerColors.custom).toBeUndefined();
-  // undo brings the events back under the old name (colour is display state, not undone)
+  // undo brings the events back under the old name — WITH the colour the
+  // researcher picked, which the rename had moved to a name that no longer exists
   s().undo();
   expect(s().markers.filter((m) => markerKey(m) === "custom").length).toBe(n);
+  expect(s().ui.markerColors.custom).toBe("#123456");
+});
+
+test("retiming an imported event exports the new time, not the row it came from", () => {
+  const s = () => useStore.getState();
+  const m = s().markers.find((x) => x.raw.video_time_s)!;
+  s().updateMarker(m.mid, { t: 42, code: m.code, label: m.label });
+  const row = markerRows(s().markers).rows.find((r) => r.event === m.event && r.label === m.label)!;
+  expect([row.video_time_s, row.video_time_hms]).toEqual(["42", fmtTime(42)]);
 });
 
 test("renaming a transcript takes its events with it", () => {

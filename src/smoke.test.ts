@@ -327,7 +327,7 @@ test("a transcript CSV with blank, non-numeric, or duplicate line_id is refused 
   const s = useStore.getState();
   await expect(s.importFiles([new File([
     "line_id,timestamp,speaker,text\n1,00:00:01,P,ok\n,00:00:02,P,blank id\n", // row 3 blank
-  ], "BADID.csv")])).rejects.toThrow(/BADID\.csv has a blank or non-numeric line_id on row 3/);
+  ], "BADID.csv")])).rejects.toThrow(/BADID\.csv has a blank, non-numeric or out-of-range line_id on row 3/);
   await expect(s.importFiles([new File([
     "line_id,timestamp,speaker,text\n1,00:00:01,P,a\n1,00:00:02,P,again\n",
   ], "DUPID.csv")])).rejects.toThrow(/DUPID\.csv has a duplicate line_id on row 3/);
@@ -444,4 +444,53 @@ test("newProject wipes the workspace but keeps ui/ai preferences", () => {
   expect(s.ui.coderName).toBe("keepme"); // the person survives the project
   expect(s.ui.speakerWeight).toEqual({}); // the speaker map does NOT: it belongs to the study
   expect(s.ui.speakerColors).toEqual({});
+});
+
+test("out-of-order transcript rows import in id order, so lines stay selectable", async () => {
+  const s = useStore.getState();
+  // same five lines, shuffled: mergeGroups walks the array, so unsorted rows
+  // built a group with startId > endId that groupIdxOf's range test never matched
+  const shuffled = "line_id,timestamp,speaker,text\n"
+    + "3,00:00:15,P,and pan across to follow it\n"
+    + "1,00:00:03,R,So how do you read a chart\n"
+    + "2,00:00:09,P,I zoom in really close\n";
+  await s.importFiles([new File([shuffled], "SHUF.csv")]);
+  const lines = useStore.getState().transcripts.SHUF.lines;
+  expect(lines.map((l) => l.id)).toEqual([1, 2, 3]);
+});
+
+test("a line_id past the safe-integer range is refused, not silently collapsed", async () => {
+  await expect(useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text\n9007199254740993,00:00:01,P,a\n9007199254740994,00:00:02,P,b\n",
+  ], "BIG.csv")])).rejects.toThrow(/out-of-range line_id/);
+});
+
+test("claiming unattributed work is undoable and kills a stale redo branch", () => {
+  useStore.setState({
+    segments: [
+      { sid: 1, pid: "P01", start: 1, end: 1, code: "x", proposedBy: "(default)", status: "accepted", notes: "" },
+    ],
+    undoStack: [], redoStack: [],
+    ui: { ...useStore.getState().ui, coderName: "Yotam" },
+  } as never);
+  useStore.getState().claimUnattributed();
+  expect(useStore.getState().segments[0].proposedBy).toBe("Yotam");
+  // it rewrites AND dedupes snapshotted state, so it must be a step of its own
+  useStore.getState().undo();
+  expect(useStore.getState().segments[0].proposedBy).toBe("(default)");
+});
+
+test("undoing a segment deletion brings back its AI grounding", () => {
+  useStore.setState({
+    segments: [
+      { sid: 7, pid: "P01", start: 1, end: 1, code: "x", proposedBy: "me", status: "accepted", notes: "" },
+    ],
+    aiGrounds: { 7: { quotes: ["paid for once"] } },
+    undoStack: [], redoStack: [],
+  } as never);
+  useStore.getState().deleteSegment(7);
+  expect(useStore.getState().aiGrounds[7]).toBeUndefined();
+  useStore.getState().undo();
+  // without this the segment came back and the grounding had to be re-bought
+  expect(useStore.getState().aiGrounds[7]).toBeDefined();
 });
