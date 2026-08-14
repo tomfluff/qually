@@ -184,7 +184,10 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const pinned = useStore((s) => s.pinnedTabs.includes(pid));
   const evCount = useStore((s) => s.markers.filter((m) => m.pid === pid).length);
+  const segCount = useStore((s) => s.segments.filter((x) => x.pid === pid).length);
   const [renaming, setRenaming] = useState(false);
+  // deleting a transcript can't be undone (see the store), so the menu asks first
+  const [confirming, setConfirming] = useState(false);
   const [name, setName] = useState(pid);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -226,7 +229,7 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
         <Icon name="pin" size={fs + 2} /> {pinned ? "Unpin" : "Pin to front"}
       </button>
       <button role="menuitem" onClick={() => evRef.current?.click()}>
-        <Icon name="upload" size={fs + 2} /> Load events…
+        <Icon name="upload" size={fs + 2} /> Load events
         {evCount > 0 && <span className="ctxcount">{evCount}</span>}
       </button>
       <input ref={evRef} type="file" accept=".csv,text/csv" hidden
@@ -235,9 +238,15 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
       {note && <div className="ctxnote">{note}</div>}
       {/* the rename form shows its own errors inline; this is the events one */}
       {err && !renaming && <div className="ctxerr">{err}</div>}
+      {evCount > 0 && (
+        <button role="menuitem"
+          onClick={() => { useStore.getState().clearMarkers(pid); onClose(); }}>
+          <Icon name="trash" size={fs + 2} /> Remove all events ({evCount})
+        </button>
+      )}
       {!renaming ? (
         <button role="menuitem" onClick={() => setRenaming(true)}>
-          <Icon name="pencil" size={fs + 2} /> Rename…
+          <Icon name="pencil" size={fs + 2} /> Rename
         </button>
       ) : (
         <div className="ctxform">
@@ -251,6 +260,28 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
           <div className="ctxrow">
             <button className="btn" onClick={commit}>Rename</button>
             <button className="btn" onClick={onClose}>Cancel</button>
+          </div>
+        </div>
+      )}
+      <div className="ctxdiv" />
+      {!confirming ? (
+        <button className="danger" role="menuitem" onClick={() => setConfirming(true)}>
+          <Icon name="trash" size={fs + 2} /> Delete transcript
+        </button>
+      ) : (
+        <div className="ctxform">
+          {/* spell out what goes: closing a tab looks the same and keeps everything,
+              so the two have to be told apart before the irreversible one runs */}
+          <div className="ctxnote">
+            Delete <b>{pid}</b> and everything on it
+            {segCount > 0 && <> — {segCount} coding{segCount === 1 ? "" : "s"}</>}
+            {evCount > 0 && <>{segCount > 0 ? "," : " —"} {evCount} event{evCount === 1 ? "" : "s"}</>}
+            ? This can't be undone. To just clear it off the bar, close the tab instead.
+          </div>
+          <div className="ctxrow">
+            <button className="btn danger" autoFocus
+              onClick={() => { useStore.getState().deleteTranscript(pid); onClose(); }}>Delete</button>
+            <button className="btn" onClick={() => setConfirming(false)}>Cancel</button>
           </div>
         </div>
       )}

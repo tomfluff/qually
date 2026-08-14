@@ -7,7 +7,7 @@
 // layouts (side by side / stacked / one at a time) because the writing posture
 // differs: side for writing against the record, stacked for wide excerpts, one
 // for small screens.
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { clampSummarySplit, useStore } from "../state/store";
 import { useSummaryData, type SumItem } from "../useSummaryData";
 import { fmtLike, markerColor, markerKey } from "../markers";
@@ -124,6 +124,15 @@ export function SummaryView() {
 // The merged session record. Every row jumps: an event to the line it sits above,
 // a coding to its first line — the pane is an index into the transcript, not a
 // second place to read it.
+// Where each transcript's session record is parked. Module scope for the same
+// reason scrollMemory is: the whole view unmounts on a tab change, so clicking an
+// event to jump into the transcript and coming back used to land at the top of a
+// long log — losing the place you had read up to, which is the one thing the
+// round trip can't reconstruct. A raw scrollTop is enough here: unlike the
+// transcript this list isn't virtualised, so the pixels mean the same thing every
+// time. Not persisted — it is view state for the session, not project data.
+const sumScroll: Record<string, number> = {};
+
 function DetailPane({ pid }: { pid: string }) {
   const { items, lineOf, offset, tsSample } = useSummaryData(pid);
   const colors = useStore((s) => s.ui.markerColors);
@@ -133,6 +142,10 @@ function DetailPane({ pid }: { pid: string }) {
   const jumpTo = useStore((s) => s.jumpTo);
   // in a split the first pane takes its fraction; alone it takes everything
   const style = layout === "one" ? undefined : { flex: `0 0 ${(split * 100).toFixed(1)}%` };
+  // restore before paint, so the list never flashes at the top on the way back
+  const paneRef = useCallback((el: HTMLDivElement | null) => {
+    if (el) el.scrollTop = sumScroll[pid] ?? 0;
+  }, [pid]);
 
   const row = (it: SumItem) => {
     if (it.kind === "e") {
@@ -163,7 +176,8 @@ function DetailPane({ pid }: { pid: string }) {
   };
 
   return (
-    <div className="sumPane nicescroll" style={style}>
+    <div className="sumPane nicescroll" style={style} ref={paneRef}
+      onScroll={(e) => { sumScroll[pid] = e.currentTarget.scrollTop; }}>
       {items.length === 0
         ? <div className="empty">Nothing here yet — load an events CSV onto this transcript (right-click its tab) or accept some codings, and the session record builds itself.</div>
         : items.map(row)}

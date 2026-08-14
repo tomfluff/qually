@@ -18,9 +18,12 @@
 .ctxmenu button:disabled, .ctxmenu button[aria-disabled="true"] { color:var(--muted); cursor:default; }
 .ctxmenu button:disabled:hover, .ctxmenu button[aria-disabled="true"]:hover { background:transparent; }
 .ctxmenu button svg { flex-shrink:0; color:var(--muted); }
-.ctxmenu button.danger svg { color:inherit; }
-.ctxmenu button.danger { color:#e0554f; }
-.ctxmenu button.danger:hover { background:#e0554f; color:#fff; }
+/* :not(.btn) -- a menu ITEM is red ink on the menu's own ground, but a .btn
+   inside a form here is a filled danger button and already carries its own
+   white-on-red; without this the two rules fought and the label went red on red */
+.ctxmenu button.danger:not(.btn) svg { color:inherit; }
+.ctxmenu button.danger:not(.btn) { color:#e0554f; }
+.ctxmenu button.danger:not(.btn):hover { background:#e0554f; color:#fff; }
 .ctxmenu .ctxdiv { height:1px; background:var(--line); margin:4px 2px; }
 .ctxmenu .ctxlist { max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:1px; }
 .ctxmenu .ctxlist .swatch { width:12px; height:12px; border-radius:3px; flex-shrink:0; }

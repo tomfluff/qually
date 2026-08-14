@@ -70,3 +70,72 @@ test("openTab ignores unknown transcripts and reserved view names", () => {
   useStore.getState().openTab("browse");
   expect(useStore.getState().tabs).toEqual(["B"]);
 });
+
+test("reopening a pinned transcript puts it back in the pinned group", () => {
+  const s = () => useStore.getState();
+  useStore.setState({
+    transcripts: { A: { lines: [] }, B: { lines: [] }, C: { lines: [] } },
+    tabs: ["A", "B", "C"], pinnedTabs: [], active: "A", segments: [],
+  } as never);
+  s().togglePinTab("C");
+  expect(s().tabs).toEqual(["C", "A", "B"]);
+  // closing keeps the pin — so reopening must not land it after the unpinned tabs
+  s().closeTab("C");
+  expect(s().tabs).toEqual(["A", "B"]);
+  expect(s().pinnedTabs).toEqual(["C"]);
+  s().openTab("C");
+  expect(s().tabs).toEqual(["C", "A", "B"]);
+});
+
+test("jumping into a closed pinned transcript also lands it in the pinned group", () => {
+  const s = () => useStore.getState();
+  useStore.setState({
+    transcripts: { A: { lines: [{ id: 1, ts: "", speaker: "P", text: "x" }] }, B: { lines: [] } },
+    tabs: ["B"], pinnedTabs: ["A"], active: "B", segments: [],
+  } as never);
+  s().jumpTo("A", 1);
+  expect(s().tabs).toEqual(["A", "B"]);
+});
+
+test("deleting a transcript takes everything keyed to it, and leaves no undo", () => {
+  const s = () => useStore.getState();
+  useStore.setState({
+    transcripts: { A: { lines: [{ id: 1, ts: "", speaker: "P", text: "x" }] }, B: { lines: [] } },
+    tabs: ["A", "B"], pinnedTabs: ["A"], active: "A",
+    segments: [{ sid: 5, pid: "A", start: 1, end: 1, code: "c", proposedBy: "me", status: "accepted", notes: "" }],
+    markers: [{ mid: 1, pid: "A", t: 0, event: "marker", code: "", label: "e", detail: "", raw: {} }],
+    aiGrounds: { 5: { quotes: ["q"] } }, aiFlags: { "A:1": { hash: "h", spans: [] } },
+    summaries: { A: "written" }, undoStack: [], redoStack: [],
+  } as never);
+  s().deleteTranscript("A");
+  const st = s();
+  expect(st.transcripts.A).toBeUndefined();
+  expect(st.segments).toEqual([]);
+  expect(st.markers).toEqual([]);
+  expect(st.aiGrounds[5]).toBeUndefined();
+  expect(st.aiFlags["A:1"]).toBeUndefined();
+  expect(st.summaries.A).toBeUndefined();
+  expect(st.tabs).toEqual(["B"]);
+  expect(st.pinnedTabs).toEqual([]);
+  expect(st.active).toBe("B");
+  // snapshots don't carry transcripts, so an undo here would restore coding
+  // pointing at a transcript that no longer exists
+  expect(st.undoStack).toEqual([]);
+});
+
+test("clearing a transcript's events is one undoable step and spares the others", () => {
+  const s = () => useStore.getState();
+  useStore.setState({
+    transcripts: { A: { lines: [] }, B: { lines: [] } }, tabs: ["A", "B"], active: "A", segments: [],
+    markers: [
+      { mid: 1, pid: "A", t: 0, event: "marker", code: "", label: "a1", detail: "", raw: {} },
+      { mid: 2, pid: "A", t: 1, event: "marker", code: "", label: "a2", detail: "", raw: {} },
+      { mid: 3, pid: "B", t: 0, event: "marker", code: "", label: "b1", detail: "", raw: {} },
+    ],
+    undoStack: [], redoStack: [],
+  } as never);
+  expect(s().clearMarkers("A")).toBe(2);
+  expect(s().markers.map((m) => m.mid)).toEqual([3]);
+  s().undo();
+  expect(s().markers.map((m) => m.mid)).toEqual([1, 2, 3]);
+});

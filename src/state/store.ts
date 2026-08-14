@@ -204,6 +204,9 @@ interface State {
   clearSelection: () => void;
   setActive: (pid: string) => void;
   closeTab: (pid: string) => void;
+  // Forget a transcript entirely: its lines, coding, events, summary and marks.
+  // Not undoable (snapshots don't carry transcripts), so the caller confirms.
+  deleteTranscript: (pid: string) => void;
   // reopen a loaded transcript whose tab was closed (the data never left)
   openTab: (pid: string) => void;
   togglePinTab: (pid: string) => void;
@@ -247,6 +250,8 @@ interface State {
   renameMarkerType: (from: string, to: string) => void;
   setMarkerColor: (key: string, color: string) => void;
   deleteMarker: (mid: number) => void;
+  // drop every event of one transcript; returns how many went (undoable)
+  clearMarkers: (pid: string) => number;
   exportMarkers: () => string;
   // the Summary tab's text pane (per keystroke — no undo entry, like setNotes)
   setSummary: (pid: string, text: string) => void;
@@ -397,6 +402,17 @@ function pruneGrounds(s: State): Partial<State> {
   const live = new Set(s.segments.map((x) => String(x.sid)));
   const kept = Object.entries(s.aiGrounds).filter(([sid]) => live.has(sid));
   return kept.length === Object.keys(s.aiGrounds).length ? {} : { aiGrounds: Object.fromEntries(kept) };
+}
+
+// Where a tab GOES when it (re)appears. Appending was wrong for a pinned
+// transcript: closing one keeps the pin, so reopening it showed a pin icon on a
+// tab sitting after every unpinned tab. The pinned group owns the front, in pin
+// order — the same invariant togglePinTab and moveTab maintain.
+function placeTab(s: State, pid: string): string[] {
+  if (s.tabs.includes(pid)) return s.tabs;
+  if (!s.pinnedTabs.includes(pid)) return [...s.tabs, pid];
+  const front = s.pinnedTabs.filter((p) => p === pid || s.tabs.includes(p));
+  return [...front, ...s.tabs.filter((t) => !front.includes(t))];
 }
 
 function hotbarCodes(s: State): string[] {
@@ -709,8 +725,7 @@ export const useStore = create<State>()(
         // Browse and all-transcripts search offer every LOADED transcript, tab or no
         // tab. Landing on a closed one must reopen its tab: active∉tabs is otherwise a
         // ghost state — no tab highlighted, no ×, and undo refuses to restore it.
-        const tabs = isTranscriptView(pid) && !s.tabs.includes(pid) && s.transcripts[pid]
-          ? [...s.tabs, pid] : s.tabs;
+        const tabs = isTranscriptView(pid) && s.transcripts[pid] ? placeTab(s, pid) : s.tabs;
         set({ active: pid, tabs, selection: saved[pid] ?? emptySel(), savedSelections: saved, jump: { pid, line } });
       },
       clearJump: () => set({ jump: null }),
@@ -732,13 +747,48 @@ export const useStore = create<State>()(
         set({ tabs, active: next, selection: saved[next] ?? emptySel(), savedSelections: saved });
       },
 
+      // The opposite of closeTab: closing hid a transcript, this FORGETS it —
+      // lines, coding, events, summary, AI marks and grounding, the lot. The undo
+      // stacks go too: snapshot() carries segments but not transcripts, so an undo
+      // afterwards would put the coding back pointing at a transcript that no
+      // longer exists. The caller confirms; there is no way back from here.
+      deleteTranscript: (pid) => {
+        const s = get();
+        if (!s.transcripts[pid]) return;
+        const transcripts = { ...s.transcripts }; delete transcripts[pid];
+        const dead = new Set(s.segments.filter((x) => x.pid === pid).map((x) => String(x.sid)));
+        const saved = { ...s.savedSelections }; delete saved[pid];
+        const video = { ...s.video }; delete video[pid];
+        const summaries = { ...s.summaries }; delete summaries[pid];
+        const speakerFocus = { ...s.ui.speakerFocus }; delete speakerFocus[pid];
+        const tabs = s.tabs.filter((p) => p !== pid);
+        const active = s.active === pid ? (tabs[0] || "browse") : s.active;
+        set({
+          transcripts,
+          segments: s.segments.filter((x) => x.pid !== pid),
+          markers: s.markers.filter((m) => m.pid !== pid),
+          extSegRows: s.extSegRows.filter((r) => r.pid !== pid),
+          aiFlags: Object.fromEntries(Object.entries(s.aiFlags).filter(([k]) => !k.startsWith(`${pid}:`))),
+          aiGrounds: Object.fromEntries(Object.entries(s.aiGrounds).filter(([sid]) => !dead.has(sid))),
+          summaries, video, savedSelections: saved,
+          tabs, pinnedTabs: s.pinnedTabs.filter((p) => p !== pid),
+          active,
+          selection: s.selection.pid === pid ? emptySel() : (saved[active] ?? s.selection),
+          ui: { ...s.ui, speakerFocus },
+          undoStack: [], redoStack: [],
+        });
+        set({ hotbarCache: hotbarCodes(get()) });
+        forgetScroll(pid);
+        announce(`${pid} deleted`);
+      },
+
       // Put a closed transcript back on the bar. Closing a tab only ever hid the
       // transcript — its lines, coding, events and summary were never touched —
       // so reopening is a view change, not a recovery.
       openTab: (pid) => {
         const s = get();
         if (!s.transcripts[pid] || !isTranscriptView(pid)) return;
-        const tabs = s.tabs.includes(pid) ? s.tabs : [...s.tabs, pid];
+        const tabs = placeTab(s, pid);
         const saved = { ...s.savedSelections, [s.active]: s.selection };
         set({ tabs, active: pid, selection: saved[pid] ?? emptySel(), savedSelections: saved });
       },
@@ -1075,6 +1125,19 @@ export const useStore = create<State>()(
         get().pushUndo();
         set({ markers: get().markers.filter((m) => m.mid !== mid) });
         announce("Event deleted");
+      },
+      // Clear one transcript's event log — the way back out of a wrong events CSV,
+      // which otherwise had to be undone one row at a time. Markers ride in the
+      // snapshot, so this is a single undoable step.
+      clearMarkers: (pid) => {
+        const s = get();
+        const rest = s.markers.filter((m) => m.pid !== pid);
+        const n = s.markers.length - rest.length;
+        if (!n) return 0;
+        get().pushUndo();
+        set({ markers: rest });
+        announce(`${n} event${n === 1 ? "" : "s"} removed from ${pid}`);
+        return n;
       },
       // Round-trip: every column the source file carried, edits applied. Ordered by
       // transcript then time, so a multi-session export reads like the sessions ran.
@@ -1599,7 +1662,7 @@ function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string,
   }
   set({
     transcripts: { ...get().transcripts, [pid]: { lines } },
-    tabs: s.tabs.includes(pid) ? s.tabs : [...s.tabs, pid],
+    tabs: placeTab(s, pid), // a re-import of a pinned-but-closed transcript lands back in the pinned group
     active: s.active === "browse" && !s.tabs.length ? pid : s.active,
   });
   // Guess the interviewer for speakers we've never seen before. Only for new ones, so
