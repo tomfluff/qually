@@ -101,6 +101,13 @@
 
 .nGrp { font-size:.72em; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
   font-weight:700; margin:16px 0 6px; }
+/* In the worklists the heading is a NAME — the transcript, the code, the lens
+   the cards under it belong to. It is what you scan the pane by, so it reads as
+   a title rather than the small uppercase eyebrow that suits a category label
+   (the sidebar's groups, and Definitions' "no definition yet"). */
+.bGroup > .nGrp { font-size:1.05em; text-transform:none; letter-spacing:normal;
+  color:var(--fg); margin:18px 0 7px; display:flex; align-items:center; }
+.bGroup:first-child > .nGrp { margin-top:2px; }
 .nInst { border:1px solid var(--line); border-left:4px solid var(--lens-c, var(--accent));
   border-radius:0 8px 8px 0; padding:8px 12px; margin-bottom:8px; background:var(--bg); }
 .nLine { line-height:1.5; font-family:var(--read-font); }
@@ -113,7 +120,9 @@
   border-radius:999px; padding:1px 8px;
   background:color-mix(in srgb, #3fa860 10%, transparent); }
 .nActs { margin-left:auto; display:flex; gap:5px; }
-.nBtn { font:inherit; font-size:.75em; border:1px solid var(--line); background:var(--bg);
+/* inline-flex so a button carrying the AI sparkle sets it on the text's line */
+.nBtn { display:inline-flex; align-items:center; gap:.45em;
+  font:inherit; font-size:.75em; border:1px solid var(--line); background:var(--bg);
   color:var(--muted); border-radius:6px; padding:2px 9px; cursor:pointer; }
 .nBtn:hover { color:var(--fg); border-color:var(--accent); }
 .nBtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }

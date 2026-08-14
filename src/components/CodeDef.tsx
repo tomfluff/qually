@@ -186,7 +186,7 @@ export function DefLine({ code, excerpts = false, className = "", autoEdit = fal
       </div>
       {excerpts && (
         <button className="defMore" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-          {open ? "hide excerpts" : "show excerpts"}
+          {open ? "Hide excerpts" : "Show excerpts"}
         </button>
       )}
       {ex.map((x) => (

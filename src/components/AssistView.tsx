@@ -647,7 +647,7 @@ function DescribeList({ codebook, codes, stats, sortBy, setSortBy, grouped, unde
         {picked > 0 ? (
           <span className="nCount">
             {picked} of {total} codes
-            <button className="defClear" onClick={onClear}>clear</button>
+            <button className="defClear" onClick={onClear}>Clear</button>
           </span>
         ) : (
           <span className="nCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
@@ -735,7 +735,7 @@ function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
           <span className="nActs">
             <button className="nBtn pri" onClick={() => setStatus(s.sid, "accepted")}>Accept</button>
             <button className="nBtn" onClick={() => setStatus(s.sid, "rejected")}>Reject</button>
-            <button className="nBtn" onClick={() => jumpTo(s.pid, s.start)}>open</button>
+            <button className="nBtn" onClick={() => jumpTo(s.pid, s.start)}>Open</button>
           </span>
         </div>
       </div>
@@ -781,8 +781,11 @@ function SummaryList({ pids, summaries, onGenerate }: {
               : <div className="nLine"><em>No summary yet — write one in the Summary tab, or draft it with AI.</em></div>}
             <div className="nFoot">
               <span className="nActs">
-                <button className="nBtn pri" onClick={() => onGenerate(p)}>{text ? "regenerate…" : "generate…"}</button>
-                <button className="nBtn" onClick={() => openSummary(p)}>open</button>
+                {/* it spends an API call, so it carries the app's AI mark */}
+                <button className="nBtn pri" onClick={() => onGenerate(p)}>
+                  <Icon name="sparkle" size={12} />{text ? "Regenerate" : "Generate"}
+                </button>
+                <button className="nBtn" onClick={() => openSummary(p)}>Open</button>
               </span>
             </div>
           </div>
@@ -879,10 +882,11 @@ function NoticeList({ notices, groupBy, pidOrder, onlyUncoded, setOnlyUncoded }:
                       {groupBy === "transcript" && ` · ${lensOf(n.lens)?.label ?? n.lens}`}</span>
                     {n.codedAs && <span className="nCoded">coded · {n.codedAs}</span>}
                     <span className="nActs">
-                      {!n.codedAs && <button className="nBtn pri" onClick={() => setCoding(key)}>code…</button>}
-                      <button className="nBtn" onClick={() => jumpTo(n.pid, n.id)}>open</button>
+                      {/* no sparkle: you pick the code, this spends nothing */}
+                      {!n.codedAs && <button className="nBtn pri" onClick={() => setCoding(key)}>Code</button>}
+                      <button className="nBtn" onClick={() => jumpTo(n.pid, n.id)}>Open</button>
                       <button className="nBtn" title="Remove this observation (it won't be re-fetched)"
-                        onClick={() => useStore.getState().dismissNotice(n.pid, n.id, n.lens, n.quote)}>dismiss</button>
+                        onClick={() => useStore.getState().dismissNotice(n.pid, n.id, n.lens, n.quote)}>Dismiss</button>
                     </span>
                   </div>
                 )}
