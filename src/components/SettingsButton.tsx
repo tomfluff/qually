@@ -199,7 +199,9 @@ export function SettingsButton() {
                   {/* percent with 5% steps (the old 0.25× steps made the thumb jump);
                       committed on RELEASE — a store write per tick re-rendered the
                       whole transcript under the drag, which read as jitter */}
-                  <input type="range" min={25} max={300} step={5}
+                  {/* 200% is the device's own speed: the app's 100% is deliberately
+                      half of it, which is the readable default for a transcript */}
+                  <input type="range" min={25} max={400} step={5}
                     value={dragSpeed ?? Math.round(scrollSpeed * 100)}
                     onChange={(e) => setDragSpeed(+e.target.value)}
                     onPointerUp={() => { if (dragSpeed !== null) { setUi({ scrollSpeed: dragSpeed / 100 }); setDragSpeed(null); } }}
@@ -208,7 +210,7 @@ export function SettingsButton() {
                   <span className="sval">{dragSpeed ?? Math.round(scrollSpeed * 100)}%</span>
                   <button className="sreset" onClick={(e) => { e.preventDefault(); setDragSpeed(null); setUi({ scrollSpeed: 1 }); }} title="Reset to 100%">reset</button>
                 </label>
-                <div className="settings-note">How far one wheel click moves the transcript. 100% is your device's default.</div>
+                <div className="settings-note">How far one wheel click moves any scrolling list in the app. 100% is half your device's default — the pace this is built to read at; 200% is your device's own.</div>
               </>}
 
               {tab === "Media" && <>

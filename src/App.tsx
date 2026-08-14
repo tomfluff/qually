@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useState } from "react";
+import { installScrollSpeed } from "./scrollSpeed";
 import { useStore, isTranscriptView } from "./state/store";
 import { Toolbar } from "./components/Toolbar";
 import { Tabs } from "./components/Tabs";
@@ -124,6 +125,9 @@ export function App() {
     // chosen primary for this theme; CSS derives every other chromatic tint from it
     document.documentElement.style.setProperty("--accent", accentFor(accent, dark));
   }, [dark, accent]);
+
+  // one wheel handler for every scrolling surface in the app (see scrollSpeed.ts)
+  useEffect(installScrollSpeed, []);
 
   // minimap width drives its own width + the search bar/toggle offset
   useEffect(() => {

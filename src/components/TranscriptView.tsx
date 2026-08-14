@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
 import { VList, type VListHandle } from "virtua";
+import { stopScrollAnim } from "../scrollSpeed";
 import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, clampMinimapWidth } from "../state/store";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
@@ -288,39 +289,10 @@ export function TranscriptView() {
 
   // A scaled wheel write can be one frame in flight when a navigation lands; cancel it
   // so the navigation isn't overwritten. Every navigation entry point calls this first.
-  const wheelStop = useRef<() => void>(() => {});
-  const stopAnims = () => wheelStop.current();
-
-  // The wheel is the browser's, except for the Settings "scroll distance" knob: at any
-  // multiplier but 1 we have to scale the delta ourselves.
-  useEffect(() => {
-    const el = tviewRef.current?.querySelector<HTMLElement>(".tviewlist");
-    if (!el) return;
-    let acc = 0, raf = 0;
-    const stop = () => { cancelAnimationFrame(raf); raf = 0; acc = 0; };
-    wheelStop.current = stop;
-    const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey) return; // ctrl+wheel is browser zoom, not ours to take
-      const mult = useStore.getState().ui.scrollSpeed || 1;
-      if (mult === 1) return; // nothing to do: native scroll is right
-      const raw = e.deltaMode === 1 ? e.deltaY * fontSize * ROW_RATIO
-        : e.deltaMode === 2 ? e.deltaY * el.clientHeight // page-mode devices: a page is a viewport
-        : e.deltaY;
-      const px = raw * mult;
-      if (!px) return; // pure-horizontal events aren't ours to eat
-      e.preventDefault();
-      // Deltas accumulate and the write lands ONCE per frame: a per-event scrollTop
-      // write forces layout on every wheel tick of the virtualized list.
-      acc += px;
-      if (!raf) raf = requestAnimationFrame(() => {
-        raf = 0;
-        el.scrollTop = Math.max(0, Math.min(el.scrollTop + acc, el.scrollHeight - el.clientHeight));
-        acc = 0;
-      });
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => { el.removeEventListener("wheel", onWheel); stop(); wheelStop.current = () => {}; };
-  }, [transcript, fontSize]);
+  // The wheel itself is no longer this view's business: one document-level handler
+  // scales every scrolling surface in the app (src/scrollSpeed.ts), because the
+  // Settings knob reaching only the transcript was the bug.
+  const stopAnims = stopScrollAnim;
 
   // scroll the selection back into view — the way home after Home/End
   const backToSelection = () => {
