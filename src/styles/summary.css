@@ -68,6 +68,13 @@
 .sumCtx:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 .sumDraft { white-space:pre-wrap; font-family:var(--read-font); }
 
-/* the Assist panel's per-transcript snippet — a glance, not the reading copy */
+/* The Assist panel's per-transcript snippet — a glance, not the reading copy.
+   The transcript's name is this card's TITLE, not an eyebrow over a group of
+   them: full size, in the foreground ink, since it is what you scan the list
+   by. Its eyebrow margins went with it, and .mList already gaps the cards, so
+   .nInst's own bottom margin was doubling the space between them. */
+.sumSnip .nGrp { font-size:1.05em; text-transform:none; letter-spacing:normal;
+  color:var(--fg); margin:0 0 5px; }
+.sumSnip { margin-bottom:0; padding:7px 12px; }
 .sumSnip .sumSnipText { white-space:pre-wrap;
   display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
