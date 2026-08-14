@@ -70,14 +70,17 @@
   cursor:pointer; user-select:none; }
 /* the dot caps the FIRST line: centred, a name that wrapped to three lines left
    its colour floating beside line two, unmoored from the name it belongs to */
-.nLens .nDot { margin-top:calc((1lh - 10px) / 2); }
+.nLens .nDot { margin-top:calc((1lh - .75em) / 2); }
 .nLens:hover { background:var(--panel); }
 .nLens.sel { background:color-mix(in srgb, var(--accent) 14%, transparent); }
 .nLens.none { color:var(--muted); } /* quiet empty lenses by colour, not opacity */
 /* inline-block, not inline: outside a flex row (the lens group header in the
    worklist) width/height on an inline box collapse to nothing */
-.nDot { display:inline-block; vertical-align:middle; width:10px; height:10px;
-  border-radius:3px; flex-shrink:0; }
+/* em, not px: this is a sidebar mark and the sidebar has a text-size setting. A
+   fixed 10px stayed put while the names beside it grew, which is exactly what
+   the setting exists to prevent (.mSw and .swatch are already em-based). */
+.nDot { display:inline-block; vertical-align:middle; width:.75em; height:.75em;
+  border-radius:.22em; flex-shrink:0;}
 .nName { flex:1; font-weight:500; }
 .nLens .cnt { font-variant-numeric:tabular-nums; color:var(--muted); font-size:.85em; }
 /* per-transcript run button in the Suggest sidebar. Always rendered, never
@@ -184,7 +187,16 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
    only ~2.7:1 (same treatment as .nPill / .nBtn.pri) */
 .segmented .seg.on { background:var(--accent); color:#fff; font-weight:600; }
 [data-theme=dark] .segmented .seg.on { color:#12161a; }
-.aSuggestBy { margin-bottom:10px; }
+/* Every segmented control in the Assist sidebar wraps WHOLE segments onto a
+   second row rather than breaking or clipping a label: nowrap plus .segmented's
+   overflow:hidden cut "Undefined" to "Undefine" and "Excerpts" to "Excerpt" at a
+   large sidebar text size, and letting the word break gave "Undef / ined". The
+   dividers are gaps over the container's ink, so they read correctly however the
+   segments land. */
+.aSuggestBy { margin-bottom:10px; flex-wrap:wrap; gap:1px; background:var(--line); }
+.aSuggestBy .seg { flex:1 1 auto; min-width:max-content; white-space:nowrap;
+  padding:4px 8px; }
+.aSuggestBy .seg + .seg { border-left:0; }
 /* the folded-in code is de-emphasised (it disappears on merge); the kept one holds full weight */
 .mDrop { color:var(--fg-dim); text-decoration:line-through; text-decoration-color:var(--muted); }
 .mKeepTag { margin-left:6px; font-size:.68em; font-weight:700; text-transform:uppercase;
@@ -231,19 +243,8 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .browse-left .nGrp.defGrp svg { flex:none; }
 .defGrpName { flex:1; }
 .browse-left .nGrp .cnt { font-weight:400; letter-spacing:0; font-size:1.1em; }
-/* The scope control. At a large sidebar text size three segments no longer fit
-   across the column and "Undefined" was clipped mid-word by .segmented's
-   overflow:hidden — so it becomes a grid that reflows to a second row rather
-   than cutting a label in half. */
-/* The scope control wraps WHOLE segments onto a second row rather than breaking
-   a label: nowrap plus .segmented's overflow:hidden clipped "Undefined" to
-   "Undefine" at a large sidebar text size, and letting the word break gave
-   "Undef / ined". Dividers are gaps over the container's ink, so they read
-   correctly in both directions however the segments land. */
-.defScope { flex-wrap:wrap; gap:1px; background:var(--line); }
-.defScope .seg { flex:1 1 auto; min-width:max-content; white-space:nowrap;
-  padding:4px 8px; font-size:.92em; }
-.defScope .seg + .seg { border-left:0; }
+/* three segments in one narrow column: a touch smaller than the two-way controls */
+.defScope .seg { font-size:.92em; }
 /* clears a code selection, in the list header where there is room — a
    full-width control in the narrow scrolling sidebar kept finding new ways to
    provoke a horizontal scrollbar */
@@ -359,6 +360,9 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .askGroup.off { opacity:.55; pointer-events:none; }
 .askTick { width:1em; height:1em; flex:none; display:inline-flex; align-items:center;
   justify-content:center; color:var(--accent); }
+/* Icon writes px width/height attributes; the mark has to follow the text size
+   like everything else in the row */
+.askTick svg { width:1em; height:1em; }
 
 /* one answer: the question, its points with refs, then what it couldn't carry */
 .askAns { border:1px solid var(--line); border-radius:10px; padding:11px 13px;

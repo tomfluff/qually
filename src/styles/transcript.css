@@ -32,7 +32,7 @@
 .lineRow { margin-bottom:-1px; }
 /* vertical spacing lives on the text so the lane strip spans the full row
    height and multiline segment bars connect (no inter-row gap) */
-.lineRow .txt { padding-block:6px; margin-top: -2px;}
+.lineRow .txt { padding-block:6px;}
 /* gray hover, light-primary select, slightly-deeper primary on select+hover.
    The tint alone was the ONLY difference between selected and unselected — a small
    delta against the hover grey, and pure colour. The rail adds a structural cue
