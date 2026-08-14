@@ -96,7 +96,7 @@ export function CodeSidebar() {
             </span>
             {/* right-click only: a left-click on the swatch is almost always a missed
                 click on the row (apply code) — let it fall through. Keyboard and
-                screen-reader users recolor via the ⋯ menu's "Change color…". */}
+                screen-reader users recolor via the ⋯ menu's "Change color". */}
             {/* native title (owner's call — the custom bubble clipped here); the empty
                 data-tip stops the closest() walk so the row's code-name tip doesn't
                 show on top of it */}

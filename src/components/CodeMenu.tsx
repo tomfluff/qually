@@ -82,11 +82,11 @@ export function CodeMenu({ code, x, y, onClose }: {
       {mode === "menu" && (
         <>
           <div className="ctxhead">{code}</div>
-          <button onClick={() => setMode("rename")}><Icon name="pencil" size={15} />Rename…</button>
+          <button onClick={() => setMode("rename")}><Icon name="pencil" size={15} />Rename</button>
           {/* the same editor the Codebook uses, in a thin dialog: a definition
               runs to a paragraph and a menu row can only show three lines of it */}
-          <button onClick={() => { openDefine(code); onClose(); }}><Icon name="text" size={15} />Edit definition…</button>
-          <button onClick={pickColor}><Icon name="droplet" size={15} />Change color…</button>
+          <button onClick={() => { openDefine(code); onClose(); }}><Icon name="text" size={15} />Edit definition</button>
+          <button onClick={pickColor}><Icon name="droplet" size={15} />Change color</button>
           {/* aria-disabled, not disabled: a disabled button is unfocusable, so the
               why-is-this-off hint was mouse-only. This stays in the arrow walk and
               announces as disabled; data-tip shows the hint on hover AND focus. */}
@@ -95,7 +95,7 @@ export function CodeMenu({ code, x, y, onClose }: {
             data-tip={hotbarMode !== "pinned" ? "The hotbar is in auto (by usage) mode — switch it to pinned in Settings first" : undefined}>
             <Icon name="pin" size={15} />{isPinned ? "Unpin from hotbar" : "Pin to hotbar"}
           </button>
-          {others.length > 0 && <button onClick={() => setMode("merge")}><Icon name="merge" size={15} />Merge into…</button>}
+          {others.length > 0 && <button onClick={() => setMode("merge")}><Icon name="merge" size={15} />Merge into</button>}
           <div className="ctxdiv" />
           <button className="danger" onClick={() => { deleteCode(code); onClose(); }}>
             <Icon name="trash" size={15} />Delete{segCount > 0 ? ` (and ${segCount} segment${segCount > 1 ? "s" : ""})` : ""}

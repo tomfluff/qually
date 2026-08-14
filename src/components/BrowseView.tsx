@@ -226,10 +226,10 @@ function CbAiMenu({ onGround, onDescribe, fontSize }: {
         <div className="ctxmenu cbMenu" ref={menuRef} role="menu" aria-label="Codebook AI"
           style={{ fontSize }}>
           <button role="menuitem" onClick={() => { onGround(); setOpen(false); }}>
-            <Icon name="sparkle" size={fontSize} /> Ground codes…
+            <Icon name="sparkle" size={fontSize} /> Ground codes
           </button>
           <button role="menuitem" onClick={() => { onDescribe(); setOpen(false); }}>
-            <Icon name="sparkle" size={fontSize} /> Draft definitions…
+            <Icon name="sparkle" size={fontSize} /> Draft definitions
           </button>
         </div>
       )}

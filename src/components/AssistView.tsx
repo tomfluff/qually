@@ -269,7 +269,7 @@ export function AssistView() {
               title={allPids.length
                 ? "Pick a transcript and let the AI mark instances under the lenses you tick (sends those lines to OpenAI after your approval)"
                 : "Import a transcript first"}>
-              <Icon name="sparkle" size={15} /> AI observation scan…
+              <Icon name="sparkle" size={15} /> AI observation scan
             </button>
             <div className="aByLabel" id="obsByLabel">Group by</div>
             <div className="segmented aSuggestBy" role="group" aria-labelledby="obsByLabel">
@@ -332,7 +332,7 @@ export function AssistView() {
           <>
             <button className="btn groundBtn" onClick={() => setMergeOpen(true)} disabled={mergeableCount < 2}
               title="Ask the AI to propose near-duplicate codes to merge (sends the codebook to OpenAI after your approval)">
-              <Icon name="sparkle" size={15} /> Find duplicates…
+              <Icon name="sparkle" size={15} /> Find duplicates
             </button>
             <div className="bSideNote">
               {mergeableCount < 2
@@ -344,7 +344,7 @@ export function AssistView() {
           <>
             <button className="btn groundBtn" onClick={() => setDescribeOpen(true)} disabled={mergeableCount < 1}
               title="Ask the AI to draft definitions from each code's excerpts (sends them to OpenAI after your approval)">
-              <Icon name="sparkle" size={15} /> Draft definitions…
+              <Icon name="sparkle" size={15} /> Draft definitions
             </button>
             <div className="bSideNote">
               {mergeableCount < 1
@@ -412,7 +412,7 @@ export function AssistView() {
               title={allPids.length
                 ? "Pick a transcript and let the AI draft its session summary from the events and coded excerpts (sends them to OpenAI after your approval)"
                 : "Import a transcript first"}>
-              <Icon name="sparkle" size={15} /> AI transcript summary…
+              <Icon name="sparkle" size={15} /> AI transcript summary
             </button>
             {allPids.length === 0 ? (
               <div className="bSideNote">No transcripts loaded yet — import one and its session can be summarised from here.</div>
@@ -448,7 +448,7 @@ export function AssistView() {
               title={hasCodes
                 ? "Pick a transcript and let the AI propose where your codes apply (sends it to OpenAI after your approval)"
                 : "Add a code first — suggestions apply your existing codes"}>
-              <Icon name="sparkle" size={15} /> AI code suggestion…
+              <Icon name="sparkle" size={15} /> AI code suggestion
             </button>
             {/* two equal halves rather than the pill pair that sized to its own
                 text and left a dead rail on the right; the label says GROUPING,
@@ -842,7 +842,7 @@ function NoticeList({ notices, groupBy, pidOrder, onlyUncoded, setOnlyUncoded }:
 
   return (
     <>
-      <div className="bOptions nOpts">
+      <div className="nOpts descListBar">
         <div className="nPills">
           <button className={"nPill" + (onlyUncoded ? " on" : "")} onClick={() => setOnlyUncoded(true)}>Only uncoded</button>
           <button className={"nPill" + (!onlyUncoded ? " on" : "")} onClick={() => setOnlyUncoded(false)}>All</button>

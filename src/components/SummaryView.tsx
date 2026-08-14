@@ -102,7 +102,7 @@ export function SummaryView() {
             )}
             <button className="btn sumGen" onClick={() => setGenOpen(true)}
               title="Draft a summary with AI from this session's events and coded excerpts (sends them to OpenAI after your approval)">
-              <Icon name="sparkle" size={14} /> Generate…
+              <Icon name="sparkle" size={14} /> Generate
             </button>
           </div>
           <div className={"sumSplit " + layout}>

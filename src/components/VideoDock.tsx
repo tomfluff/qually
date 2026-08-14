@@ -482,7 +482,7 @@ export function VideoDock() {
         <div className="vbody">
           <div className="vempty">
             <div>No media loaded for {pid}.</div>
-            <button className="btn" style={{ marginTop: 8 }} onClick={() => fileRef.current?.click()}>Choose video/audio…</button>
+            <button className="btn" style={{ marginTop: 8 }} onClick={() => fileRef.current?.click()}>Choose video/audio</button>
           </div>
         </div>
       ))}

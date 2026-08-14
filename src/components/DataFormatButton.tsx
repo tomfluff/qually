@@ -94,7 +94,7 @@ export function DataFormatButton() {
             </div>
             <p className="about-lede">
               Transcripts import as CSV. The easiest path: use the AI prompt below to convert
-              whatever you have into the right shape, then <b>Import files…</b>.
+              whatever you have into the right shape, then <b>Import files</b>.
             </p>
 
             <div className="about-body nicescroll">

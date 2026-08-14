@@ -711,7 +711,7 @@ export function TranscriptView() {
   };
 
   if (!transcript) {
-    return <div className="empty">Import transcript CSVs to begin (Import files…).</div>;
+    return <div className="empty">Import transcript CSVs to begin (Import files).</div>;
   }
 
   // uniform column widths sized to the longest displayed label in this transcript
