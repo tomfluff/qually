@@ -69,13 +69,14 @@ test("renaming onto an existing transcript is refused", async () => {
   expect(useStore.getState().transcripts.P02).toBeDefined();
 });
 
-test("pinning moves a tab to the front (in pin order); unpinning leaves it in place", () => {
+test("pinning moves a tab to the front (in pin order); unpinning moves it back out", () => {
   const st = useStore.getState();
   expect(st.pinnedTabs).toEqual(["S01"]); // survived the rename, still first
   st.togglePinTab("P02");
   expect(useStore.getState().tabs.slice(0, 2)).toEqual(["S01", "P02"]); // pin order
   useStore.getState().togglePinTab("S01"); // unpin the first
-  expect(useStore.getState().tabs[0]).toBe("S01"); // position kept, claim released
+  // it leaves the pinned block rather than sitting in it without a pin
+  expect(useStore.getState().tabs.slice(0, 2)).toEqual(["P02", "S01"]);
   expect(useStore.getState().pinnedTabs).toEqual(["P02"]);
 });
 

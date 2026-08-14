@@ -844,8 +844,14 @@ export const useStore = create<State>()(
       togglePinTab: (pid) => {
         const s = get();
         if (s.pinnedTabs.includes(pid)) {
-          // unpin keeps the tab where it sits — only the "stay in front" claim goes
-          set({ pinnedTabs: s.pinnedTabs.filter((p) => p !== pid) });
+          // Unpinning moves the tab OUT of the pinned block, to the first
+          // unpinned slot — leaving it sitting among the pins without a pin icon
+          // read as a bug, and "pinned tabs occupy the front" is the invariant
+          // moveTab clamps against, so a tab that isn't pinned must not be there.
+          const pinnedTabs = s.pinnedTabs.filter((p) => p !== pid);
+          const front = s.tabs.filter((t) => pinnedTabs.includes(t));
+          const rest = s.tabs.filter((t) => t !== pid && !pinnedTabs.includes(t));
+          set({ pinnedTabs, tabs: [...front, pid, ...rest] });
         } else {
           const pinnedTabs = [...s.pinnedTabs, pid];
           const front = pinnedTabs.filter((p) => s.tabs.includes(p));

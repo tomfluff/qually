@@ -139,3 +139,22 @@ test("clearing a transcript's events is one undoable step and spares the others"
   s().undo();
   expect(s().markers.map((m) => m.mid)).toEqual([1, 2, 3]);
 });
+
+test("unpinning moves the tab out of the pinned block, not just off the pin list", () => {
+  const s = () => useStore.getState();
+  useStore.setState({
+    transcripts: { A: { lines: [] }, B: { lines: [] }, C: { lines: [] }, D: { lines: [] } },
+    tabs: ["A", "B", "C", "D"], pinnedTabs: [], active: "A", segments: [],
+  } as never);
+  s().togglePinTab("C");
+  s().togglePinTab("D");
+  expect(s().tabs).toEqual(["C", "D", "A", "B"]);
+  // C unpins: it lands at the head of the unpinned group, behind the pin that stays
+  s().togglePinTab("C");
+  expect(s().pinnedTabs).toEqual(["D"]);
+  expect(s().tabs).toEqual(["D", "C", "A", "B"]);
+  // and the last pin leaving keeps the order it left behind
+  s().togglePinTab("D");
+  expect(s().pinnedTabs).toEqual([]);
+  expect(s().tabs).toEqual(["D", "C", "A", "B"]);
+});
