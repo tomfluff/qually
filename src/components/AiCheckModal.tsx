@@ -24,7 +24,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
   const aiLog = useStore((s) => s.aiLog);
   const [picked, setPicked] = useState(initial ?? ""); // "" = nothing picked yet
   const pid = picked;
-  const lines = transcripts[pid]?.lines ?? [];
+  const allLines = transcripts[pid]?.lines ?? [];
   const ai = useStore((s) => s.ai);
   const setAi = useStore((s) => s.setAi);
   const aiFlags = useStore((s) => s.aiFlags);
@@ -43,9 +43,9 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
   // labelling convention work the same. All ticked by default, per run.
   const speakers = useMemo(() => {
     const m = new Map<string, number>();
-    for (const l of lines) m.set(l.speaker.trim(), (m.get(l.speaker.trim()) ?? 0) + 1);
+    for (const l of allLines) m.set(l.speaker.trim(), (m.get(l.speaker.trim()) ?? 0) + 1);
     return [...m.entries()];
-  }, [lines]);
+  }, [allLines]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   // Speaker names are per-transcript, so an exclusion carried across a change of
   // transcript would silently skip a speaker you never looked at.
@@ -80,6 +80,19 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
   // per-run model override — starts at the Settings default, changes THIS run only
   const [modelId, setModelId] = useState(ai.model);
   const model = modelOf(modelId);
+
+  // Lines the researcher had selected on THIS transcript, if any. Scoping a run to
+  // a passage is the point of the selection they already made; the toggle lives in
+  // the gate so the payload preview, the token count and the price all answer to it.
+  const selection = useStore((s) => s.selection);
+  const selIds = useMemo(
+    () => (selection.pid === pid && selection.lines.size ? selection.lines : null),
+    [selection, pid]);
+  const [onlySel, setOnlySel] = useState(true);
+  const scoped = !!selIds && onlySel;
+  const lines = useMemo(
+    () => (scoped ? allLines.filter((l) => selIds!.has(l.id)) : allLines),
+    [allLines, scoped, selIds]);
 
   // Send only lines that need it: right speaker, and not already scanned under
   // every requested lens at their current text (edits invalidate by hash).
@@ -170,7 +183,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
                   enabled -- backwards for the one sentence naming participant data */}
               {todo.length > 0 && (
                 <div className="ai-warn">
-                  <b>This sends {todo.length} line{todo.length === 1 ? "" : "s"} of “{pid}” to OpenAI.</b> Interview
+                  <b>This sends {todo.length} {scoped ? "selected " : ""}line{todo.length === 1 ? "" : "s"} of “{pid}” to OpenAI.</b> Interview
                   transcripts are participant data — make sure this is allowed by your consent form and ethics approval.
                 </div>
               )}
@@ -193,6 +206,13 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
                     ))}
                   </div>
                 </>
+              )}
+              {selIds && (
+                <label className="ai-spk" style={{ margin: "8px 0" }}>
+                  <input type="checkbox" checked={onlySel} onChange={() => setOnlySel((v) => !v)} />
+                  <span>Only the {selIds.size} line{selIds.size === 1 ? "" : "s"} you selected{" "}
+                  <em>the rest of {pid} is not sent, and is not scanned</em></span>
+                </label>
               )}
               <div className="ai-sec">Look for <span className="ai-sec-hint">marks instances only — coding stays yours</span></div>
               <div className="ai-lenses">

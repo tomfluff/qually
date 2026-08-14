@@ -68,3 +68,41 @@ test("the rendered window tags context speakers and only them", () => {
   expect(rows[0]).toBe("1\t[context] R\tHow do you read this?");
   expect(rows[1]).toBe("2\tPat\tI zoom in.");
 });
+
+test("bulk delete clears one status, leaves the others, and is one undo step", async () => {
+  const { useStore } = await import("./state/store");
+  useStore.setState({
+    transcripts: {
+      P01: { lines: [{ id: 1, ts: "", speaker: "P", text: "a" }, { id: 2, ts: "", speaker: "P", text: "b" }] },
+      P02: { lines: [{ id: 1, ts: "", speaker: "P", text: "c" }] },
+    },
+    codebook: { c: { color: "#123456", def: "", status: "accepted" } },
+    segments: [
+      { sid: 1, pid: "P01", start: 1, end: 1, code: "c", proposedBy: "ai", status: "candidate", notes: "" },
+      { sid: 2, pid: "P01", start: 2, end: 2, code: "c", proposedBy: "ai", status: "rejected", notes: "" },
+      { sid: 3, pid: "P02", start: 1, end: 1, code: "c", proposedBy: "ai", status: "rejected", notes: "" },
+      { sid: 4, pid: "P01", start: 1, end: 2, code: "c", proposedBy: "me", status: "accepted", notes: "" },
+    ],
+    aiGrounds: { 2: { quotes: ["x"] } },
+    tabs: ["P01", "P02"], active: "P01", undoStack: [], redoStack: [],
+  } as never);
+
+  // one transcript only
+  expect(useStore.getState().deleteSegmentsBy({ pid: "P01", status: "rejected" })).toBe(1);
+  expect(useStore.getState().segments.map((x) => x.sid)).toEqual([1, 3, 4]);
+  // the grounding of a deleted row goes with it
+  expect(useStore.getState().aiGrounds[2]).toBeUndefined();
+
+  // …and everywhere
+  expect(useStore.getState().deleteSegmentsBy({ status: "rejected" })).toBe(1);
+  expect(useStore.getState().segments.map((x) => x.sid)).toEqual([1, 4]);
+
+  // accepted coding is never caught by a candidate/rejected sweep
+  expect(useStore.getState().deleteSegmentsBy({ status: "candidate" })).toBe(1);
+  expect(useStore.getState().segments.map((x) => x.sid)).toEqual([4]);
+  expect(useStore.getState().deleteSegmentsBy({ status: "candidate" })).toBe(0); // nothing left to do
+
+  // each sweep was one step
+  useStore.getState().undo();
+  expect(useStore.getState().segments.map((x) => x.sid)).toEqual([1, 4]);
+});

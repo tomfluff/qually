@@ -29,7 +29,19 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   // passed and can't be changed here. "" means nothing picked yet.
   const [picked, setPicked] = useState(initial ?? "");
   const pid = picked;
-  const lines = useMemo(() => transcripts[pid]?.lines ?? [], [transcripts, pid]);
+  const allLines = useMemo(() => transcripts[pid]?.lines ?? [], [transcripts, pid]);
+  // Lines the researcher had selected on THIS transcript, if any. Scoping a run to
+  // a passage is the point of the selection they already made; the toggle lives in
+  // the gate so the payload preview, the token count and the price answer to it.
+  const selection = useStore((s) => s.selection);
+  const selIds = useMemo(
+    () => (selection.pid === pid && selection.lines.size ? selection.lines : null),
+    [selection, pid]);
+  const [onlySel, setOnlySel] = useState(true);
+  const scoped = !!selIds && onlySel;
+  const lines = useMemo(
+    () => (scoped ? allLines.filter((l) => selIds!.has(l.id)) : allLines),
+    [allLines, scoped, selIds]);
 
   // Whose speech may CARRY a code. Every line is still sent (the exchange needs
   // its questions), but unticked speakers ride as [context] — never coded, and a
@@ -38,10 +50,10 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   // per transcript, so a change of pid recomputes rather than carrying names over.
   const speakers = useMemo(() => {
     const m = new Map<string, number>();
-    for (const l of lines) m.set(l.speaker.trim(), (m.get(l.speaker.trim()) ?? 0) + 1);
+    for (const l of allLines) m.set(l.speaker.trim(), (m.get(l.speaker.trim()) ?? 0) + 1);
     return [...m.entries()];
-  }, [lines]);
-  const [context, setContext] = useState<Set<string>>(() => new Set(guessQuiet([...new Set(lines.map((l) => l.speaker.trim()))])));
+  }, [allLines]);
+  const [context, setContext] = useState<Set<string>>(() => new Set(guessQuiet([...new Set(allLines.map((l) => l.speaker.trim()))])));
   const pickPid = (p: string) => {
     setPicked(p);
     const ls = transcripts[p]?.lines ?? [];
@@ -184,7 +196,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                   enabled -- backwards for the one sentence naming participant data */}
               {ready && (
                 <div className="ai-warn">
-                  <b>This sends {lines.length} line{lines.length === 1 ? "" : "s"} of “{pid}” plus your{" "}
+                  <b>This sends {lines.length} {scoped ? "selected " : ""}line{lines.length === 1 ? "" : "s"} of “{pid}” plus your{" "}
                   {codes.length}-code codebook (once per window) to OpenAI.</b> Interview transcripts
                   are participant data — make sure this is allowed by your consent form and ethics approval.
                 </div>
@@ -208,6 +220,13 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                     ))}
                   </div>
                 </>
+              )}
+              {selIds && (
+                <label className="ai-spk" style={{ margin: "8px 0" }}>
+                  <input type="checkbox" checked={onlySel} onChange={() => setOnlySel((v) => !v)} />
+                  <span>Only the {selIds.size} line{selIds.size === 1 ? "" : "s"} you selected{" "}
+                  <em>suggestions land only there, and the rest of {pid} is not sent</em></span>
+                </label>
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
               {/* every line still goes (the exchange needs its questions); unticking

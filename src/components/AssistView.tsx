@@ -5,7 +5,7 @@
 // code pairs to fold together) and suggest (candidate codings). Observations and
 // suggest are also where their runs START: each groups by transcript or by its own
 // axis, and a transcript row carries the sparkle that opens that run's consent gate.
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, type Segment } from "../state/store";
 import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
@@ -22,6 +22,7 @@ import type { MergeProposal } from "../ai/dedupe";
 import { segExcerpt } from "../contract/excerpt";
 import { DefLine } from "./CodeDef";
 import { codeStats, sortCodes, SORTS, type CodeStat, type SortBy } from "../codeStats";
+import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
 
 // One AI observation, resolved against the current text (a stale hash means the line
@@ -543,6 +544,7 @@ export function AssistView() {
                 : "Add a code first — suggestions apply your existing codes"}>
               <Icon name="sparkle" size={15} /> AI code suggestion
             </button>
+            <ClearSuggestions pid={suggestBy === "transcript" ? liveSuggestSel : null} />
             {/* two equal halves rather than the pill pair that sized to its own
                 text and left a dead rail on the right; the label says GROUPING,
                 which the bare pair read as filtering */}
@@ -788,6 +790,73 @@ function DescribeList({ codebook, codes, stats, sortBy, setSortBy, grouped, unde
         </div>
       )}
     </>
+  );
+}
+
+// The way out of a run you didn't want. Rejecting candidates one at a time is
+// the same work twice over, and a rejected pile is dead weight nobody revisits.
+// Scoped to the transcript picked on the left when there is one, because "here"
+// has to name something; otherwise the whole project.
+function ClearSuggestions({ pid }: { pid: string | null }) {
+  const segments = useStore((s) => s.segments);
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(ref, () => { setOpen(false); setArmed(false); });
+  const n = (status: string, p: string | null) =>
+    segments.filter((x) => x.status === status && (!p || x.pid === p)).length;
+  const run = (status: Segment["status"], p: string | null) => {
+    useStore.getState().deleteSegmentsBy({ pid: p ?? undefined, status });
+    setOpen(false); setArmed(false);
+  };
+  const total = n("candidate", null) + n("rejected", null);
+  if (!total && !n("accepted", null)) return null;
+  const item = (label: string, count: number, onClick: () => void, danger = false) => (
+    <button role="menuitem" className={danger ? "danger" : ""} disabled={!count} onClick={onClick}>
+      <Icon name="trash" size={fs} /> {label}
+      {<span className="ctxcount">{count}</span>}
+    </button>
+  );
+  return (
+    <div className="settings-wrap" ref={ref}>
+      <button className="btn clearSug" aria-haspopup="menu" aria-expanded={open}
+        onClick={() => { setOpen((v) => !v); setArmed(false); }}>
+        <Icon name="trash" size={14} /> Clear codings
+      </button>
+      {open && (
+        <div className="ctxmenu" role="menu" aria-label="Clear codings" style={{ fontSize: fs }}>
+          <div className="ctxhead">{pid ? `In ${pid}, or everywhere` : "Across every transcript"}</div>
+          {pid && item(`Rejected in ${pid}`, n("rejected", pid), () => run("rejected", pid))}
+          {item("Rejected everywhere", n("rejected", null), () => run("rejected", null))}
+          {pid && item(`Candidates in ${pid}`, n("candidate", pid), () => run("candidate", pid))}
+          {item("Candidates everywhere", n("candidate", null), () => run("candidate", null))}
+          <div className="ctxdiv" />
+          {/* accepted coding is the researcher's analysis, not the AI's leftovers:
+              it sits behind a second click, under a rule the rest of the menu
+              doesn't need */}
+          {!armed ? (
+            <button role="menuitem" className="danger" disabled={!n("accepted", pid)}
+              onClick={() => setArmed(true)}>
+              <Icon name="trash" size={fs} /> Accepted coding{pid ? ` in ${pid}` : " everywhere"}
+              <span className="ctxcount">{n("accepted", pid)}</span>
+            </button>
+          ) : (
+            <div className="ctxform">
+              <div className="ctxnote">
+                Delete <b>{n("accepted", pid)}</b> accepted coding{n("accepted", pid) === 1 ? "" : "s"}
+                {pid ? <> in <b>{pid}</b></> : " across every transcript"}? That is your analysis,
+                not the AI's leftovers. <b>Ctrl+Z</b> puts it back.
+              </div>
+              <div className="ctxrow">
+                <button className="btn danger" autoFocus onClick={() => run("accepted", pid)}>Delete</button>
+                <button className="btn" onClick={() => setArmed(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

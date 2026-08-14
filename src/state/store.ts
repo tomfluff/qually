@@ -281,6 +281,9 @@ export interface State {
   setPendingProject: (p: Project | null) => void;
   setSegmentRange: (sid: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
+  // Bulk cleanup of a status across one transcript or all of them. Returns how
+  // many went, so the caller can say it out loud.
+  deleteSegmentsBy: (opts: { pid?: string; status: Segment["status"] }) => number;
   setStatus: (sid: number, status: string) => void;
   setNotes: (sid: number, notes: string) => void;
   setColor: (code: string, color: string) => void;
@@ -1293,6 +1296,20 @@ export const useStore = create<State>()(
         delete grounds[sid]; // its grounding dies with it
         set({ segments: get().segments.filter((x) => x.sid !== sid), aiGrounds: grounds });
         announce("Segment deleted");
+      },
+      // The way out of a suggestion run you didn't want: rejecting each candidate
+      // one at a time is the same work twice over. Undoable in one step — this can
+      // remove a lot at once, and the accepted case removes actual analysis.
+      deleteSegmentsBy: ({ pid, status }) => {
+        const s = get();
+        const doomed = s.segments.filter((x) => x.status === status && (!pid || x.pid === pid));
+        if (!doomed.length) return 0;
+        get().pushUndo();
+        const gone = new Set(doomed.map((x) => x.sid));
+        set({ segments: s.segments.filter((x) => !gone.has(x.sid)) });
+        set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
+        announce(`${doomed.length} ${status} coding${doomed.length === 1 ? "" : "s"} deleted`);
+        return doomed.length;
       },
       setStatus: (sid, status) => {
         get().pushUndo();
