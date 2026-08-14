@@ -643,7 +643,8 @@ export function AssistView() {
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
         onClose={() => setMergeOpen(false)} />}
       {describeOpen && <DescribeModal initial={shownDefCodes} onClose={() => setDescribeOpen(false)} />}
-      {askOpen && <AskModal question={askQ.trim()} scope={askScope} onClose={() => setAskOpen(false)} />}
+      {askOpen && <AskModal question={askQ.trim()} scope={askScope}
+        onAsked={() => setAskQ("")} onClose={() => setAskOpen(false)} />}
       {suggestFor !== null && <SuggestModal pid={suggestFor} choose
         onClose={() => setSuggestFor(null)} />}
       {scanFor !== null && <AiCheckModal pid={scanFor} choose

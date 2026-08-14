@@ -20,8 +20,13 @@ import { AiModal, ModelPicker } from "./AiModal";
 // say so and let the researcher narrow rather than quietly send it anyway.
 const MAX_TOK = 120_000;
 
-export function AskModal({ question, scope, onClose }: {
-  question: string; scope: AskScope; onClose: () => void;
+export function AskModal({ question, scope, onAsked, onClose }: {
+  question: string; scope: AskScope;
+  // told only when an answer was actually WRITTEN — the question has moved into
+  // the record then, so the box is free. On a failure or a cancel it stays put:
+  // nothing was saved, and retyping it is the last thing anyone wants to do.
+  onAsked: () => void;
+  onClose: () => void;
 }) {
   const ai = useStore((s) => s.ai);
   const [busy, setBusy] = useState(false);
@@ -88,6 +93,7 @@ export function AskModal({ question, scope, onClose }: {
       announce(reply.points.length
         ? `${reply.points.length} point${reply.points.length === 1 ? "" : "s"}, grounded in your material.`
         : "Nothing in the material in scope answers that.");
+      onAsked();
       onClose();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
