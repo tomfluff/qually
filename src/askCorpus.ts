@@ -97,3 +97,31 @@ export function buildCorpus(s: State, scope: AskScope): AskCorpus {
   }
   return out;
 }
+
+// Where a citation lands. Resolved against the CURRENT project, not a map stored
+// with the answer: an excerpt can be recoded, resized or deleted afterwards, and
+// a link that goes where the segment lives NOW is the honest one. A ref that no
+// longer resolves simply doesn't navigate.
+//
+// Lives here because this module defines both ref shapes, and a parser that
+// drifts from the writer is how a citation ends up pointing at the wrong thing.
+export function refTarget(s: State, ref: string): { pid: string; line: number } | null {
+  // the segment shape is tried FIRST because it is the stricter one: a pid may
+  // legally contain "@" (it comes from a filename), and splitting on that first
+  // would read the excerpt ref "a@b:2-3" as an event on a transcript called "a"
+  const seg = /^(.+):(\d+)(?:-(\d+))?$/.exec(ref);
+  if (seg && s.transcripts[seg[1]]) return { pid: seg[1], line: +seg[2] };
+  const at = ref.lastIndexOf("@");
+  if (at <= 0) return null;
+  const pid = ref.slice(0, at), time = ref.slice(at + 1);
+  const lines = s.transcripts[pid]?.lines;
+  if (!lines?.length) return null;
+  const offset = s.video[pid]?.offset ?? 0;
+  const tsSample = lines.find((l) => l.ts.trim())?.ts;
+  const list = s.markers.filter((m) => m.pid === pid).sort((a, b) => a.t - b.t);
+  const hit = list.find((m) => fmtLike(m.t - offset, tsSample) === time);
+  if (!hit) return null;
+  const placed = anchorMarkers(list, lines, offset);
+  for (const [lid, ms] of placed.before) if (ms.some((m) => m.mid === hit.mid)) return { pid, line: lid };
+  return { pid, line: lines[lines.length - 1].id }; // an event past the last line
+}

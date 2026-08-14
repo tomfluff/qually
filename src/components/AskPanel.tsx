@@ -8,8 +8,10 @@
 // every payload — growing cost, and a consent gate that can no longer show you
 // one payload and have that be the whole truth. A question is one request; a
 // follow-up is another question over the same material.
+import { useState } from "react";
 import { useStore, type Answer } from "../state/store";
-import { anchorMarkers, fmtLike, } from "../markers";
+import { refTarget } from "../askCorpus";
+
 import { Icon } from "./Icon";
 
 // The scope controls' own membership gesture: a row is IN or OUT, so a click
@@ -100,7 +102,7 @@ export function AskList({ answers, question, setQuestion, onAsk, canAsk, why }: 
             <div key={a.aid} className="askAns">
               <div className="askQ">
                 <span className="askQText">{a.question}</span>
-                <button className="nBtn" title="Delete this answer" onClick={() => del(a.aid)}>Delete</button>
+                <DeleteAnswer onConfirm={() => del(a.aid)} />
               </div>
               {a.points.map((p, i) => (
                 <div key={i} className="askPoint">
@@ -108,7 +110,7 @@ export function AskList({ answers, question, setQuestion, onAsk, canAsk, why }: 
                   <div className="askRefs">
                     {p.refs.map((r) => (
                       <button key={r} className="askRef" title={`Open ${r}`}
-                        onClick={() => { const w = whereOf(r); if (w) jumpTo(w.pid, w.line); }}>{r}</button>
+                        onClick={() => { const w = refTarget(useStore.getState(), r); if (w) jumpTo(w.pid, w.line); }}>{r}</button>
                     ))}
                   </div>
                 </div>
@@ -135,30 +137,15 @@ export function AskList({ answers, question, setQuestion, onAsk, canAsk, why }: 
   );
 }
 
-// A ref is resolved against the CURRENT project, not against a map stored with
-// the answer: an excerpt can be recoded, resized or deleted after the fact, and a
-// link that still lands where the segment lives now is the honest one. A ref that
-// no longer resolves simply doesn't navigate.
-function whereOf(ref: string): { pid: string; line: number } | null {
-  const s = useStore.getState();
-  const at = ref.indexOf("@");
-  if (at > 0) {
-    // an event ref carries the session clock; find the event again by that time
-    // and anchor it the way the transcript does, so the jump lands where the note
-    // was made rather than at the top of the file
-    const pid = ref.slice(0, at), time = ref.slice(at + 1);
-    const lines = s.transcripts[pid]?.lines;
-    if (!lines?.length) return null;
-    const offset = s.video[pid]?.offset ?? 0;
-    const tsSample = lines.find((l) => l.ts.trim())?.ts;
-    const list = s.markers.filter((m) => m.pid === pid).sort((a, b) => a.t - b.t);
-    const hit = list.find((m) => fmtLike(m.t - offset, tsSample) === time);
-    if (!hit) return null;
-    const placed = anchorMarkers(list, lines, offset);
-    for (const [lid, ms] of placed.before) if (ms.some((m) => m.mid === hit.mid)) return { pid, line: lid };
-    return { pid, line: lines[lines.length - 1].id }; // past the last line
-  }
-  const m = /^(.+):(\d+)(?:-(\d+))?$/.exec(ref);
-  if (!m || !s.transcripts[m[1]]) return null;
-  return { pid: m[1], line: +m[2] };
+// An answer cost an API call and is a study artifact, so it does not go on one
+// stray click — but it is also not worth a dialog. Two clicks, in place.
+function DeleteAnswer({ onConfirm }: { onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false);
+  if (!armed) return <button className="nBtn" title="Delete this answer" onClick={() => setArmed(true)}>Delete</button>;
+  return (
+    <span className="askDel">
+      <button className="nBtn danger" autoFocus onClick={onConfirm}>Delete for good</button>
+      <button className="nBtn" onClick={() => setArmed(false)}>Keep</button>
+    </span>
+  );
 }

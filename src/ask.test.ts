@@ -4,7 +4,7 @@
 // if the corpus carried that exact ref. Everything else about the feature is
 // plumbing; these two are the claims it rests on.
 import { beforeAll, beforeEach, test, expect } from "vitest";
-import { buildCorpus, emptyCorpus } from "./askCorpus";
+import { buildCorpus, emptyCorpus, refTarget } from "./askCorpus";
 import { sanitizeAskReply, renderAskPayload } from "./ai/ask";
 import { redactor } from "./ai/redact";
 
@@ -140,4 +140,25 @@ test("an answer records the scope it came from, so it stays interpretable later"
   expect(a.scope).toEqual({ pids: ["P01"], codes: ["magnification"], events: false, excerpts: true });
   expect(a.model).toBe("gpt-5.6-luna");
   expect(a.at).toMatch(/^\d{4}-\d\d-\d\dT/);
+});
+
+test("a citation resolves to where the material lives NOW", () => {
+  const s = useStore.getState();
+  expect(refTarget(s, "P01:2-3")).toEqual({ pid: "P01", line: 2 });
+  expect(refTarget(s, "P01@00:00:12")).toEqual({ pid: "P01", line: 3 }); // the line the note sits above
+  expect(refTarget(s, "P09:1")).toBe(null);        // transcript gone
+  expect(refTarget(s, "P01@09:99:99")).toBe(null); // event gone
+});
+
+test("a pid containing @ is still read as a transcript, not as an event time", () => {
+  useStore.setState({
+    transcripts: { "a@b": { lines: [L(1, "00:00:01", "P", "one"), L(2, "00:00:05", "P", "two")] } },
+    segments: [{ sid: 9, pid: "a@b", start: 2, end: 2, code: "c", proposedBy: "me", status: "accepted", notes: "" }],
+    codebook: { c: { color: "#123456", def: "", status: "accepted" } },
+    markers: [], video: {},
+  } as never);
+  const c = buildCorpus(useStore.getState(), { pids: ["a@b"], codes: ["c"], events: false, excerpts: true });
+  expect(c.excerpts[0].ref).toBe("a@b:2");
+  // splitting on the FIRST "@" would have read this as an event on a transcript "a"
+  expect(refTarget(useStore.getState(), "a@b:2")).toEqual({ pid: "a@b", line: 2 });
 });

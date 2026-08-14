@@ -204,10 +204,14 @@ export function AssistView() {
   const onCodes = useMemo(
     () => new Set(askCodes ?? askCodeList.map((c) => c.id)),
     [askCodes, askCodeList]);
+  // filtered to what still EXISTS: a transcript or code deleted since the scope
+  // was last touched would otherwise be recorded on the answer as material it
+  // covered, which is exactly the claim the stored scope is there to make
   const askScope = useMemo(() => ({
-    pids: [...onPids], codes: [...onCodes].filter((c) => codebook[c]),
+    pids: [...onPids].filter((p) => transcripts[p]),
+    codes: [...onCodes].filter((c) => codebook[c]),
     events: askEvents, excerpts: askExcerpts,
-  }), [onPids, onCodes, codebook, askEvents, askExcerpts]);
+  }), [onPids, onCodes, transcripts, codebook, askEvents, askExcerpts]);
   const askWhy = !askQ.trim() ? "Type a question first"
     : !onPids.size ? "Pick at least one transcript on the left"
     : !askEvents && !askExcerpts ? "Turn on excerpts or events on the left"

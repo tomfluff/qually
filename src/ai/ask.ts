@@ -50,8 +50,9 @@ export function renderAskPayload(q: string, c: AskCorpus, r: Redaction): string 
   return parts.join("\n\n");
 }
 
-export const estimateAskTokens = (q: string, c: AskCorpus, r: Redaction) =>
-  estimateTokens(SYSTEM) + estimateTokens(renderAskPayload(q, c, r));
+// takes the RENDERED payload: the caller already has it for the preview, and the
+// corpus is far too big to build twice for one number
+export const estimateAskTokens = (payload: string) => estimateTokens(SYSTEM) + estimateTokens(payload);
 
 const SCHEMA = {
   type: "object",

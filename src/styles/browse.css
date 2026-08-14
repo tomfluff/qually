@@ -357,7 +357,11 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
    focus highlight — these decide what is SENT, not what is shown */
 .askGroup { margin-bottom:6px; }
 .askGrpHead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.askGroup.off { opacity:.55; pointer-events:none; }
+/* quiet by COLOUR, not opacity (see base.css): opacity over --muted text drops
+   it under AA, and the label saying WHY a group is inert must stay readable */
+.askGroup.off { pointer-events:none; }
+.askGroup.off .nLens, .askGroup.off .askGrpHead { color:var(--muted); }
+.askGroup.off .nDot, .askGroup.off .askTick { visibility:hidden; }
 .askTick { width:1em; height:1em; flex:none; display:inline-flex; align-items:center;
   justify-content:center; color:var(--accent); }
 /* Icon writes px width/height attributes; the mark has to follow the text size

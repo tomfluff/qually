@@ -37,7 +37,10 @@ export function AskModal({ question, scope, onClose }: {
   // estimate, the request and the citation check — a corpus that differed
   // between the preview and the send would make the gate a lie
   const corpus = useMemo(() => buildCorpus(useStore.getState(), scope), [scope]);
-  const inTok = useMemo(() => estimateAskTokens(question, corpus, red), [question, corpus, red]);
+  const preview = useMemo(() => renderAskPayload(question, corpus, red), [question, corpus, red]);
+  // measured off the preview, not built a second time: the corpus can run to tens
+  // of thousands of tokens and rendering it twice per change is real work
+  const inTok = useMemo(() => estimateAskTokens(preview), [preview]);
   const redactions = useMemo(() =>
     corpus.excerpts.reduce((n, x) => n + red.count(x.text), 0)
     + corpus.events.reduce((n, x) => n + red.count(x.text) + red.count(x.type), 0)
@@ -46,7 +49,6 @@ export function AskModal({ question, scope, onClose }: {
   // an answer runs a handful of points with refs; reasoning bills at the output
   // rate on top, so the estimate errs high rather than low (see DescribeModal)
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(3000)) + 400);
-  const preview = useMemo(() => renderAskPayload(question, corpus, red), [question, corpus, red]);
   const items = corpus.excerpts.length + corpus.events.length;
   const tooBig = inTok > MAX_TOK;
 
