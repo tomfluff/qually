@@ -80,6 +80,12 @@ export function installScrollSpeed(): () => void {
   const onWheel = (e: WheelEvent) => {
     if (e.ctrlKey || e.defaultPrevented) return; // ctrl+wheel is browser zoom, not ours to take
     if (!e.deltaY) return;                       // pure-horizontal events aren't ours to eat
+    // A text box is an editing surface, not a list: the browser's own scrolling
+    // is what people expect inside one, and taking the event over a textarea
+    // stopped it scrolling at all in at least one browser. Left native, which
+    // also chains to the pane behind it when the box has nothing to scroll.
+    const t = e.target as Element | null;
+    if (t?.closest?.("textarea, input, select, [contenteditable=true], [contenteditable='']")) return;
     const mult = SCROLL_BASE * (useStore.getState().ui.scrollSpeed || 1);
     if (mult === 1) return;                      // exactly device speed: leave it native
     const el = targetOf(e.target, e.deltaY > 0);
