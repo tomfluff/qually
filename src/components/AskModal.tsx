@@ -27,7 +27,11 @@ export function AskModal({ question, scope, onClose }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
-  useEffect(() => () => abort.current?.abort(), []);
+  // `busy` is state, so it can't gate a second click landing in the same tick —
+  // and this click spends money. The ref is the real guard; `busy` is the label.
+  const inFlight = useRef(false);
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; abort.current?.abort(); }, []);
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
   const [modelId, setModelId] = useState(ai.model);
@@ -53,18 +57,25 @@ export function AskModal({ question, scope, onClose }: {
   const tooBig = inTok > MAX_TOK;
 
   const run = async () => {
+    if (inFlight.current) return;
     const key = getKey();
     if (!key) {
       const m = "No API key set. Add one in Settings → AI.";
       setErr(m); announce(m, { assertive: true }); return;
     }
+    inFlight.current = true;
     setBusy(true); setErr(null);
     announce("Asking your coded material…");
-    abort.current = new AbortController();
+    const ctl = new AbortController();
+    abort.current = ctl;
     try {
       const { reply, usage } = await askQuestion({
-        key, model: model.id, question, corpus, redaction: red, signal: abort.current.signal,
+        key, model: model.id, question, corpus, redaction: red, signal: ctl.signal,
       });
+      // Stop (or a close) can land while the reply is in transit or being parsed:
+      // an answer written after the researcher cancelled is one they never agreed
+      // to keep, and it would sit in the project as if they had.
+      if (ctl.signal.aborted || !alive.current) return;
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "ask", pid: "(corpus)",
         lines: items, redactions,
@@ -84,7 +95,8 @@ export function AskModal({ question, scope, onClose }: {
       setErr(msg);
       announce(`Ask failed: ${msg}`, { assertive: true });
     } finally {
-      setBusy(false);
+      inFlight.current = false;
+      if (alive.current) setBusy(false);
     }
   };
 

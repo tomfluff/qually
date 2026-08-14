@@ -122,11 +122,25 @@ test("answers export one row per citation, so they join to coded-segments on the
   });
   const csv = useStore.getState().exportAnswers();
   const rows = csv.trim().split(/\r?\n/); // toCSV writes CRLF, like every other export
-  expect(rows[0]).toBe("asked_at,question,kind,point,ref,model,scope");
+  expect(rows[0]).toBe("asked_at,question,kind,point,ref,scope_transcripts,scope_codes,scope_material,model");
   expect(rows.length).toBe(4); // header + two citations + one unsupported
   expect(csv).toContain("P01:2-3");
   expect(csv).toContain("P01@00:00:12");
   expect(csv).toContain("unsupported");
+  // the scope goes out in full, so a later reader can tell what the answer covered
+  expect(csv).toContain("magnification");
+});
+
+test("an answer that produced nothing still exports as a question that was asked", () => {
+  useStore.setState({ answers: [], nextAid: 1 } as never);
+  useStore.getState().addAnswer({
+    question: "anything about cost?", points: [], unsupported: [],
+    scope: { pids: ["P01"], codes: [], events: true, excerpts: false },
+    model: "gpt-5.6-luna", costUsd: 0.0004,
+  });
+  const rows = useStore.getState().exportAnswers().trim().split(/\r?\n/);
+  expect(rows.length).toBe(2); // header + the empty answer
+  expect(rows[1]).toContain("empty");
 });
 
 test("an answer records the scope it came from, so it stays interpretable later", () => {
@@ -161,4 +175,56 @@ test("a pid containing @ is still read as a transcript, not as an event time", (
   expect(c.excerpts[0].ref).toBe("a@b:2");
   // splitting on the FIRST "@" would have read this as an event on a transcript "a"
   expect(refTarget(useStore.getState(), "a@b:2")).toEqual({ pid: "a@b", line: 2 });
+});
+
+test("one span coded twice is ONE excerpt carrying both codes, so a ref stays unique", () => {
+  useStore.setState({
+    transcripts: { P01: { lines: [L(1, "00:00:01", "P", "one"), L(2, "00:00:05", "P", "the same words")] } },
+    segments: [
+      { sid: 1, pid: "P01", start: 2, end: 2, code: "magnification", proposedBy: "me", status: "accepted", notes: "" },
+      { sid: 2, pid: "P01", start: 2, end: 2, code: "frustration", proposedBy: "me", status: "accepted", notes: "" },
+    ],
+    codebook: {
+      magnification: { color: "#4477aa", def: "", status: "accepted" },
+      frustration: { color: "#ee6677", def: "", status: "accepted" },
+    },
+    markers: [], video: {},
+  } as never);
+  const c = buildCorpus(useStore.getState(), { pids: ["P01"], codes: ["magnification", "frustration"], events: false, excerpts: true });
+  expect(c.excerpts.length).toBe(1);
+  expect(c.excerpts[0].codes.sort()).toEqual(["frustration", "magnification"]);
+  expect(c.where.size).toBe(1); // one ref, one meaning
+});
+
+test("two events on the same second read as one moment rather than sharing a ref", () => {
+  useStore.setState({
+    transcripts: { P01: { lines: [L(1, "00:00:01", "P", "one"), L(2, "00:00:20", "P", "two")] } },
+    segments: [], codebook: {}, video: {},
+    markers: [
+      { mid: 1, pid: "P01", t: 12, event: "marker", code: "custom", label: "leans in", detail: "", raw: {} },
+      { mid: 2, pid: "P01", t: 12, event: "marker", code: "custom", label: "squints", detail: "", raw: {} },
+    ],
+  } as never);
+  const c = buildCorpus(useStore.getState(), { pids: ["P01"], codes: [], events: true, excerpts: false });
+  expect(c.events.length).toBe(1);
+  expect(c.events[0].text).toBe("leans in; squints");
+});
+
+test("renaming a transcript carries the citations of every saved answer", () => {
+  useStore.setState({
+    transcripts: { P01: { lines: [L(1, "00:00:01", "P", "x")] }, P01b: { lines: [L(1, "00:00:01", "P", "y")] } },
+    tabs: ["P01", "P01b"], active: "P01", segments: [], markers: [], codebook: {},
+    answers: [{
+      aid: 1, at: "2026-08-14T10:00:00.000Z", question: "q",
+      points: [{ text: "p", refs: ["P01:2-3", "P01@00:00:12", "P01b:1"] }],
+      unsupported: [], scope: { pids: ["P01", "P01b"], codes: [], events: true, excerpts: true },
+      model: "m", costUsd: 0,
+    }],
+    nextAid: 2,
+  } as never);
+  expect(useStore.getState().renameTranscript("P01", "P07")).toBe(null);
+  const a = useStore.getState().answers[0];
+  // the prefix-sharing transcript must NOT be caught by the rewrite
+  expect(a.points[0].refs).toEqual(["P07:2-3", "P07@00:00:12", "P01b:1"]);
+  expect(a.scope.pids).toEqual(["P07", "P01b"]);
 });

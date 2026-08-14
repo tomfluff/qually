@@ -192,7 +192,12 @@ export function AssistView() {
   // offering a code with no excerpts there would be offering nothing.
   const answers = useStore((s) => s.answers);
   const askPidList = allPids;
-  const onPids = useMemo(() => new Set(askPids ?? askPidList), [askPids, askPidList]);
+  // intersected with what EXISTS: the remembered picks outlive a project swap and
+  // a rename, and a scope holding a dead pid would disagree with the sidebar that
+  // is meant to be showing it
+  const onPids = useMemo(
+    () => new Set(askPids ? askPidList.filter((p) => askPids.includes(p)) : askPidList),
+    [askPids, askPidList]);
   const askCodeList = useMemo(() => {
     const n = new Map<string, number>();
     for (const g of segments) {
@@ -202,16 +207,15 @@ export function AssistView() {
     return [...n.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([id, c]) => ({ id, n: c }));
   }, [segments, onPids]);
   const onCodes = useMemo(
-    () => new Set(askCodes ?? askCodeList.map((c) => c.id)),
+    () => new Set(askCodes ? askCodeList.map((c) => c.id).filter((c) => askCodes.includes(c)) : askCodeList.map((c) => c.id)),
     [askCodes, askCodeList]);
   // filtered to what still EXISTS: a transcript or code deleted since the scope
   // was last touched would otherwise be recorded on the answer as material it
   // covered, which is exactly the claim the stored scope is there to make
   const askScope = useMemo(() => ({
-    pids: [...onPids].filter((p) => transcripts[p]),
-    codes: [...onCodes].filter((c) => codebook[c]),
+    pids: [...onPids], codes: [...onCodes],
     events: askEvents, excerpts: askExcerpts,
-  }), [onPids, onCodes, transcripts, codebook, askEvents, askExcerpts]);
+  }), [onPids, onCodes, askEvents, askExcerpts]);
   const askWhy = !askQ.trim() ? "Type a question first"
     : !onPids.size ? "Pick at least one transcript on the left"
     : !askEvents && !askExcerpts ? "Turn on excerpts or events on the left"
@@ -410,7 +414,7 @@ export function AssistView() {
                 return askPidList.filter((p) => cur.has(p));
               })}
               onAll={(all) => setAskPids(all ? null : [])} />
-            <ScopeGroup title="Codes" disabled={!askExcerpts}
+            <ScopeGroup title="Codes" disabled={!askExcerpts} unit="excerpts in the transcripts in scope"
               items={askCodeList.map((c) => ({ id: c.id, label: c.id, n: c.n, color: codebook[c.id]?.color }))}
               on={onCodes}
               onToggle={(id) => setAskCodes((prev) => {

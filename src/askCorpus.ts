@@ -29,7 +29,10 @@ export interface AskScope {
   excerpts: boolean;   // include the coded excerpts
 }
 
-export interface AskExcerpt { ref: string; pid: string; line: number; code: string; time: string; text: string }
+// `codes` is a LIST because one span is routinely coded twice — the excerpt is
+// one piece of evidence carrying two codes, not two excerpts. Merging them is
+// what keeps a ref unique, which is the whole contract.
+export interface AskExcerpt { ref: string; pid: string; line: number; codes: string[]; speaker: string; time: string; text: string }
 export interface AskEvent { ref: string; pid: string; line: number; time: string; type: string; text: string }
 export interface AskCorpus {
   excerpts: AskExcerpt[];
@@ -55,18 +58,27 @@ export function buildCorpus(s: State, scope: AskScope): AskCorpus {
       const segs = s.segments
         .filter((x) => x.pid === pid && x.status === "accepted" && codes.has(x.code))
         .sort((a, b) => a.start - b.start || a.end - b.end);
+      // Two codes on one span share a segment ref, and a ref that denotes two
+      // different things is a citation that can point at the wrong evidence. They
+      // are the same excerpt, so they become ONE entry carrying both codes.
+      const byRef = new Map<string, AskExcerpt>();
       for (const seg of segs) {
-        const text = segExcerpt(seg, lines).excerpt;
-        if (!text) continue;
+        const ex = segExcerpt(seg, lines);
+        if (!ex.excerpt) continue;
+        const ref = formatSegRef(pid, seg.start, seg.end);
+        const already = byRef.get(ref);
+        if (already) { if (!already.codes.includes(seg.code)) already.codes.push(seg.code); continue; }
         // the segment's own timecodes, so a citation is seekable as well as clickable
         const a = lines.find((l) => l.id === seg.start)?.ts.trim() ?? "";
         const b = lines.find((l) => l.id === seg.end)?.ts.trim() ?? "";
-        const ref = formatSegRef(pid, seg.start, seg.end);
-        out.excerpts.push({
-          ref, pid, line: seg.start, code: seg.code,
-          time: a ? (b && b !== a ? `${a}–${b}` : a) : "", text,
+        byRef.set(ref, {
+          ref, pid, line: seg.start, codes: [seg.code], speaker: ex.speaker,
+          time: a ? (b && b !== a ? `${a}–${b}` : a) : "", text: ex.excerpt,
         });
-        out.where.set(ref, { pid, line: seg.start });
+      }
+      for (const x of byRef.values()) {
+        out.excerpts.push(x);
+        out.where.set(x.ref, { pid, line: x.line });
       }
     }
 
@@ -78,13 +90,27 @@ export function buildCorpus(s: State, scope: AskScope): AskCorpus {
       for (const [lid, ms] of placed.before) for (const mk of ms) lineOf.set(mk.mid, lid);
       const last = lines[lines.length - 1]?.id;
       if (last !== undefined) for (const mk of placed.tail) lineOf.set(mk.mid, last);
+      // two events can land on the same second, which would share a ref for the
+      // same reason — they are one moment, so they read as one entry
+      const evByRef = new Map<string, AskEvent>();
       for (const m of list) {
+        const type = markerKey(m).trim();
+        // an event with neither a type nor a note carries nothing a question can use
+        if (!m.label.trim() && !type) continue;
         const time = fmtLike(m.t - offset, tsSample);
         const ref = `${pid}@${time}`;
-        // an event with no note carries no information a question can use
-        if (!m.label.trim() && !markerKey(m).trim()) continue;
-        out.events.push({ ref, pid, line: lineOf.get(m.mid) ?? lines[0]?.id ?? 1, time, type: markerKey(m), text: m.label });
-        out.where.set(ref, { pid, line: lineOf.get(m.mid) ?? lines[0]?.id ?? 1 });
+        const line = lineOf.get(m.mid) ?? lines[0]?.id ?? 1;
+        const already = evByRef.get(ref);
+        if (already) {
+          if (type && !already.type.includes(type)) already.type += `; ${type}`;
+          if (m.label.trim()) already.text = already.text ? `${already.text}; ${m.label}` : m.label;
+          continue;
+        }
+        evByRef.set(ref, { ref, pid, line, time, type, text: m.label });
+      }
+      for (const x of evByRef.values()) {
+        out.events.push(x);
+        out.where.set(x.ref, { pid, line: x.line });
       }
     }
   }
@@ -92,7 +118,7 @@ export function buildCorpus(s: State, scope: AskScope): AskCorpus {
   // definitions travel with the excerpts: they are how the model knows what a
   // code MEANS, and they cost almost nothing next to the excerpts themselves
   if (scope.excerpts) {
-    const used = new Set(out.excerpts.map((x) => x.code));
+    const used = new Set(out.excerpts.flatMap((x) => x.codes));
     out.codes = [...used].sort().map((name) => ({ name, def: s.codebook[name]?.def ?? "" }));
   }
   return out;

@@ -435,6 +435,12 @@ function placeTab(s: State, pid: string): string[] {
   return [...front, ...s.tabs.filter((t) => !front.includes(t))];
 }
 
+// a citation ref is "<pid>:2-3" or "<pid>@0:12:30" — rewrite only the pid part,
+// and only on an exact match, so a transcript whose name is a prefix of another's
+// is left alone
+const renameRef = (ref: string, from: string, to: string) =>
+  ref.startsWith(`${from}:`) || ref.startsWith(`${from}@`) ? to + ref.slice(from.length) : ref;
+
 function hotbarCodes(s: State): string[] {
   if (s.hotbar.mode === "pinned") return s.hotbar.pinned.slice(0, 9);
   const count: Record<string, number> = {};
@@ -939,6 +945,14 @@ export const useStore = create<State>()(
           extSegRows: s.extSegRows.map((r) => r.pid === from
             ? { ...r, pid: to, segment_ref: r.segment_ref.startsWith(`${from}:`) ? to + r.segment_ref.slice(from.length) : r.segment_ref }
             : r),
+          // saved answers cite refs that begin with the pid, and their scope
+          // names it — a rename that skipped them would leave every citation on
+          // this transcript pointing at a name that no longer exists
+          answers: s.answers.map((a) => ({
+            ...a,
+            points: a.points.map((pt) => ({ ...pt, refs: pt.refs.map((r) => renameRef(r, from, to)) })),
+            scope: { ...a.scope, pids: a.scope.pids.map((x) => x === from ? to : x) },
+          })),
           tabs: s.tabs.map((x) => x === from ? to : x),
           pinnedTabs: s.pinnedTabs.map((x) => x === from ? to : x),
           active: s.active === from ? to : s.active,
@@ -1297,16 +1311,24 @@ export const useStore = create<State>()(
       exportAnswers: () => {
         const rows: Record<string, string>[] = [];
         for (const a of [...get().answers].reverse()) {
-          const scope = `${a.scope.pids.join(" ")} | ${a.scope.excerpts ? "excerpts" : ""}${a.scope.events ? " events" : ""} | ${a.scope.codes.length} codes`;
+          // the scope goes out in full, in its own columns: a count of codes told
+          // a later reader nothing about WHICH material the answer covered, and a
+          // space-joined list is ambiguous for names that contain spaces
+          const meta = {
+            asked_at: a.at, question: a.question, model: a.model,
+            scope_transcripts: a.scope.pids.join("; "),
+            scope_codes: a.scope.excerpts ? a.scope.codes.join("; ") : "",
+            scope_material: [a.scope.excerpts && "excerpts", a.scope.events && "events"].filter(Boolean).join("; "),
+          };
           const add = (kind: string, text: string, ref: string) =>
-            rows.push({ asked_at: a.at, question: a.question, kind, point: text, ref, model: a.model, scope });
-          for (const p of a.points) {
-            if (!p.refs.length) add("point", p.text, "");
-            for (const r of p.refs) add("point", p.text, r);
-          }
+            rows.push({ ...meta, kind, point: text, ref });
+          for (const p of a.points) for (const r of p.refs) add("point", p.text, r);
           for (const u of a.unsupported) add("unsupported", u, "");
+          // an answer that produced nothing is still a question that was asked
+          if (!a.points.length && !a.unsupported.length) add("empty", "", "");
         }
-        return toCSV(rows, ["asked_at", "question", "kind", "point", "ref", "model", "scope"]);
+        return toCSV(rows, ["asked_at", "question", "kind", "point", "ref",
+          "scope_transcripts", "scope_codes", "scope_material", "model"]);
       },
       // a colour chosen by hand is LOCKED: a later recolour pass can be asked to
       // keep these and colour the generated ones around them

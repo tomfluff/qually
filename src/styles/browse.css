@@ -194,8 +194,11 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
    dividers are gaps over the container's ink, so they read correctly however the
    segments land. */
 .aSuggestBy { margin-bottom:10px; flex-wrap:wrap; gap:1px; background:var(--line); }
-.aSuggestBy .seg { flex:1 1 auto; min-width:max-content; white-space:nowrap;
-  padding:4px 8px; }
+/* max-content keeps a label whole while it FITS; past that (a very large sidebar
+   size in a narrow column) the word breaks rather than being clipped by
+   .segmented's overflow:hidden — a broken word is still readable, a cut one isn't */
+.aSuggestBy .seg { flex:1 1 auto; min-width:min(max-content, 100%);
+  overflow-wrap:anywhere; padding:4px 8px; }
 .aSuggestBy .seg + .seg { border-left:0; }
 /* the folded-in code is de-emphasised (it disappears on merge); the kept one holds full weight */
 .mDrop { color:var(--fg-dim); text-decoration:line-through; text-decoration-color:var(--muted); }
@@ -348,10 +351,12 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   border-radius:7px; padding:7px 9px; resize:vertical; line-height:1.4;
   font-family:var(--read-font); }
 .askInput:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-.askBar { display:flex; align-items:center; gap:10px; margin-top:8px; }
+/* wraps: at a large reading size in a narrow pane the hint has nowhere to go
+   beside the button, and crushing it is worse than putting it on its own line */
+.askBar { display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap; }
 /* the sparkle sits on the label's line rather than wrapping above it */
 .askBar .btn { display:inline-flex; align-items:center; gap:.45em; flex:none; white-space:nowrap; }
-.askHint { color:var(--muted); font-size:.82em; }
+.askHint { color:var(--muted); font-size:.82em; min-width:0; overflow-wrap:anywhere; }
 
 /* scope groups: same rows as the worklists, but a membership tick rather than a
    focus highlight — these decide what is SENT, not what is shown */
@@ -377,10 +382,13 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .askPointText { line-height:1.5; font-family:var(--read-font); }
 .askRefs { display:flex; flex-wrap:wrap; gap:5px; margin-top:4px; }
 /* a ref is the evidence, so it reads as a link you can follow, not a tag */
+/* a ref carries the transcript's name, which can be long: it may break rather
+   than run out of the card, and it keeps its full text either way */
 .askRef { font:inherit; font-size:.78em; font-variant-numeric:tabular-nums;
   color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent);
   border:1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  border-radius:999px; padding:1px 9px; cursor:pointer; white-space:nowrap; }
+  border-radius:999px; padding:1px 9px; cursor:pointer;
+  max-width:100%; overflow-wrap:anywhere; text-align:left; }
 .askRef:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
 [data-theme=dark] .askRef:hover { color:#12161a; }
 .askUnsup { border-left:3px solid var(--warn, #c98a2a); padding-left:9px; margin-top:10px; }

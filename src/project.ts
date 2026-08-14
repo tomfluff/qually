@@ -116,7 +116,13 @@ export function parseProject(text: string): Project {
     markers: p.markers ?? [],
     markerColors: p.markerColors ?? {},
     summaries: p.summaries ?? {},
-    answers: p.answers ?? [],
+    // hand-editable like everything else here: openProject maps over these and
+    // derives nextAid from them, so a malformed entry would crash the load or
+    // poison the counter
+    answers: (Array.isArray(p.answers) ? p.answers : []).filter((a): a is Answer =>
+      !!a && Number.isSafeInteger(a.aid) && typeof a.question === "string"
+      && Array.isArray(a.points) && Array.isArray(a.unsupported) && !!a.scope
+      && Array.isArray(a.scope.pids) && Array.isArray(a.scope.codes)),
     speakers: p.speakers, // may be absent — openProject re-guesses the interviewer
   };
 }

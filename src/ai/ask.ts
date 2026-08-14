@@ -38,13 +38,16 @@ export function renderAskPayload(q: string, c: AskCorpus, r: Redaction): string 
       `- ${x.name}${x.def ? `: ${r.redact(x.def)}` : " (no definition yet)"}`).join("\n"));
   }
   if (c.excerpts.length) {
+    // the SPEAKER travels with the excerpt: the rule keeps only the dominant
+    // speaker's words, and an interviewer-dominant excerpt sent without that
+    // label reads to the model as something a participant said
     parts.push("CODED EXCERPTS:\n" + c.excerpts.map((x) =>
-      `[${x.ref}] (${x.code}${x.time ? `, ${r.redact(x.time)}` : ""}) "${r.redact(x.text)}"`).join("\n"));
+      `[${r.redact(x.ref)}] (${x.codes.join("; ")}${x.speaker ? `, ${r.redact(x.speaker)}` : ""}${x.time ? `, ${r.redact(x.time)}` : ""}) "${r.redact(x.text)}"`).join("\n"));
   }
   if (c.events.length) {
     // type and text are both study-authored, so both go through the redactor
     parts.push("SESSION EVENTS:\n" + c.events.map((x) =>
-      `[${x.ref}] ${r.redact(x.type)}${x.text ? ` — ${r.redact(x.text)}` : ""}`).join("\n"));
+      `[${r.redact(x.ref)}] ${r.redact(x.type)}${x.text ? ` — ${r.redact(x.text)}` : ""}`).join("\n"));
   }
   parts.push("QUESTION:\n" + r.redact(q.trim()));
   return parts.join("\n\n");
@@ -109,8 +112,11 @@ export function sanitizeAskReply(reply: AskReply, corpus: AskCorpus, r?: Redacti
     const text = restore(r, (p?.text ?? "").trim());
     if (!text) continue;
     const seen = new Set<string>();
+    // A ref carries the transcript name, which is usually a filename and can
+    // therefore carry a participant's name — so it goes out redacted like
+    // everything else, and comes back through the map before it is checked.
     const refs = (p?.refs ?? [])
-      .map((x) => (x ?? "").trim())
+      .map((x) => restore(r, (x ?? "").trim()))
       .filter((x) => corpus.where.has(x) && !seen.has(x) && (seen.add(x), true));
     if (refs.length) points.push({ text, refs });
     else unsupported.push(text);

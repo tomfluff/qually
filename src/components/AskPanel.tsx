@@ -17,9 +17,10 @@ import { Icon } from "./Icon";
 // The scope controls' own membership gesture: a row is IN or OUT, so a click
 // toggles it rather than focusing it the way the Definitions rows do. Same row
 // visuals, so the panels still look like one another.
-export function ScopeGroup({ title, items, on, onToggle, onAll, disabled }: {
+export function ScopeGroup({ title, items, on, onToggle, onAll, disabled, unit = "" }: {
   title: string;
   items: { id: string; label: string; n?: number; color?: string }[];
+  unit?: string;               // what the row's count counts, for the label
   on: Set<string>;
   onToggle: (id: string) => void;
   onAll: (all: boolean) => void;
@@ -28,17 +29,20 @@ export function ScopeGroup({ title, items, on, onToggle, onAll, disabled }: {
   if (!items.length) return null;
   const every = items.every((i) => on.has(i.id));
   return (
-    <div className={"askGroup" + (disabled ? " off" : "")}>
+    // the heading names the group for a screen reader too, so its rows and its
+    // all/none button aren't announced adrift of what they scope
+    <div className={"askGroup" + (disabled ? " off" : "")} role="group" aria-label={title}>
       <div className="nGrp askGrpHead">
         <span>{title}</span>
         <button className="defClear" disabled={disabled}
+          aria-label={`${every ? "Clear" : "Select"} all ${title.toLowerCase()}`}
           onClick={() => onAll(!every)}>{every ? "none" : "all"}</button>
       </div>
       {items.map((i) => (
         <div key={i.id} className={"nLens" + (on.has(i.id) ? " sel" : "")}
           tabIndex={disabled ? -1 : 0} role="checkbox" aria-checked={on.has(i.id)}
           aria-disabled={disabled || undefined}
-          aria-label={`${i.label}${i.n === undefined ? "" : `, ${i.n} in scope`}`}
+          aria-label={`${i.label}${i.n === undefined ? "" : `, ${i.n} ${unit}`}`}
           onClick={() => !disabled && onToggle(i.id)}
           onKeyDown={(e) => {
             if (disabled) return;
