@@ -23,6 +23,12 @@
 .bTitle { display:flex; align-items:center; gap:8px; margin:0 0 6px; line-height:1; }
 .bTitle .swatch { width:.9em; height:.9em; border-radius:.3em; flex-shrink:0; align-self:center; }
 .bDef { color:var(--muted); font-size:.85em; line-height:1.4; margin-bottom:8px; }
+/* The Assist worklists' options bar: a bordered, filled strip that separates the
+   list's own controls from the cards under them. Its parts are different heights
+   (a label, a pill group, a count), so they centre on the bar's middle rather
+   than stretching -- without that the short ones sat on the top edge. */
+.bOptions { display:flex; align-items:center; margin-bottom:14px; padding:8px 12px;
+  border:1px solid var(--line); border-radius:10px; background:var(--panel); }
 /* toggle switch (em-based so it scales with the excerpt font) */
 .switch { position:relative; width:2.1em; height:1.2em; border-radius:999px;
   background:var(--line); flex-shrink:0; transition:background .15s; }
@@ -212,8 +218,6 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .descSort { display:flex; align-items:center; gap:6px; margin-left:auto; }
 .descSortLabel { color:var(--muted); font-size:.85em; margin:0; line-height:1; }
 /* the Definitions panel's own sort bar, above the list it orders */
-/* the list bars above every Assist worklist: a plain row, not a bordered panel */
-.descListBar { margin-bottom:12px; }
 .descListBar .nCount { margin-left:auto; }
 /* an empty group still says so, indented under its heading */
 .bSideNote.defNone { margin:0 0 4px 8px; font-style:italic; }

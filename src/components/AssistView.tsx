@@ -634,7 +634,7 @@ function DescribeList({ codebook, codes, stats, sortBy, setSortBy, grouped, unde
   }
   return (
     <>
-      <div className="nOpts descListBar">
+      <div className="bOptions nOpts descListBar">
         {/* descSortLabel, not aByLabel: that one carries margins for a STACKED
             label and sat off-centre from the pills beside it */}
         <span className="descSortLabel" id="defSortLabel">Sort</span>
@@ -842,7 +842,7 @@ function NoticeList({ notices, groupBy, pidOrder, onlyUncoded, setOnlyUncoded }:
 
   return (
     <>
-      <div className="nOpts descListBar">
+      <div className="bOptions nOpts descListBar">
         <div className="nPills">
           <button className={"nPill" + (onlyUncoded ? " on" : "")} onClick={() => setOnlyUncoded(true)}>Only uncoded</button>
           <button className={"nPill" + (!onlyUncoded ? " on" : "")} onClick={() => setOnlyUncoded(false)}>All</button>
