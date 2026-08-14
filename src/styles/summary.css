@@ -42,11 +42,18 @@
 /* the colour bar marks CODED material only — an event row's dot is enough */
 .sumSeg { border-left:3px solid var(--mk-c); }
 .sumEv:hover, .sumSeg:hover { background:var(--sel); }
-.sumEv { align-items:baseline; padding-left:11px; } /* 3px bar + 8px, keeps the columns flush */
+/* Top-aligned, with the time and the dot centred on the note's FIRST LINE --
+   centring them on the ROW left a three-line note with its timecode at the top
+   and its colour floating beside line two, so neither belonged to the line it
+   labels. The row's line box is 1.4em; the timecode's is 1.4 x .85em = 1.19em
+   and the dot is .7em, so each takes half the difference as a top margin. */
+.sumEv { align-items:flex-start; line-height:1.4; padding-left:11px; } /* 3px bar + 8px, keeps the columns flush */
 .sumEv .evtime, .sumSeg .sumRef { flex-shrink:0; color:var(--muted);
   font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.85em; }
+.sumEv .evtime { line-height:1.4; margin-top:calc((1.4em - 1.19em) / 2); }
 .sumEv .evdot, .sumSegHead .evdot { width:.7em; height:.7em; border-radius:.2em;
   flex-shrink:0; align-self:center; }
+.sumEv > .evdot { align-self:flex-start; margin-top:calc((1.4em - .7em) / 2); }
 .sumEv .sumEvText { flex:1; min-width:0; line-height:1.4; }
 .sumEv .mkempty { color:var(--muted); }
 .sumSeg { flex-direction:column; gap:3px; }
