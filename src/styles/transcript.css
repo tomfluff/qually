@@ -227,7 +227,7 @@
 .lineEdit { display:block; }
 .lineEdit textarea { display:block; width:100%; box-sizing:border-box; resize:none; overflow:hidden;
   font:inherit; color:inherit; line-height:inherit;
-  background:var(--bg); border:2px solid var(--accent); border-radius:6px; padding:3px 7px; }
+  background:var(--bg); border:2px solid var(--accent); border-radius:6px; padding:3px 7px 8px 7px; }
 .lineEdit textarea:focus { outline:none; }
 /* font-size comes inline from ui.sidebarFontSize (LineEditor) — the bar holds
    real controls now (loop, revert), which must stay readable and hittable at
