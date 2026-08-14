@@ -165,6 +165,16 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
         ) : (
           <>
             <div className="ai-body nicescroll">
+              {/* above the controls, not below them: at a normal window size this box
+                  scrolled out of the scrolling body while Send stayed visible and
+                  enabled -- backwards for the one sentence naming participant data */}
+              {todo.length > 0 && (
+                <div className="ai-warn">
+                  <b>This sends {todo.length} line{todo.length === 1 ? "" : "s"} of “{pid}” to OpenAI.</b> Interview
+                  transcripts are participant data — make sure this is allowed by your consent form and ethics approval.
+                </div>
+              )}
+
               {choose && (
                 <>
                   {/* Nothing preselected: the primary stays disabled until you pick, so a
@@ -223,11 +233,6 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
                 </p>
               ) : (
                 <>
-                  <div className="ai-warn">
-                    <b>This sends {todo.length} line{todo.length === 1 ? "" : "s"} of “{pid}” to OpenAI.</b> Interview
-                    transcripts are participant data — make sure this is allowed by your consent form and ethics approval.
-                  </div>
-
                   <div className="ai-payload">
                     <div className="ai-payload-head">
                       <span className="eyebrow">Exactly what leaves your device</span>

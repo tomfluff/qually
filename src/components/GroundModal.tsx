@@ -120,6 +120,16 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                 as the reason the code applies — the evidence for <b>your</b> coding. It
                 proposes nothing.
               </p>
+              {/* above the controls, not below them: at a normal window size this box
+                  scrolled out of the scrolling body while Send stayed visible and
+                  enabled -- backwards for the one sentence naming participant data */}
+              {todo.length > 0 && (
+                <div className="ai-warn">
+                  <b>This sends {todo.length} coded excerpt{todo.length === 1 ? "" : "s"} from{" "}
+                  {pids.join(", ")} to OpenAI.</b> Interview transcripts are participant data —
+                  make sure this is allowed by your consent form and ethics approval.
+                </div>
+              )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
               {alreadyGrounded > 0 && (
                 <label className="ai-spk" style={{ marginBottom: 8 }}>
@@ -137,11 +147,6 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                 </p>
               ) : (
                 <>
-                  <div className="ai-warn">
-                    <b>This sends {todo.length} coded excerpt{todo.length === 1 ? "" : "s"} from{" "}
-                    {pids.join(", ")} to OpenAI.</b> Interview transcripts are participant data —
-                    make sure this is allowed by your consent form and ethics approval.
-                  </div>
                   <div className="ai-payload">
                     <div className="ai-payload-head">
                       <span className="eyebrow">Exactly what leaves your device</span>

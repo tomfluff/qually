@@ -113,6 +113,16 @@ export function MergeModal({ onProposals, onClose }: {
                 excerpts you coded with it — and proposes pairs that look like the same
                 concept under two labels. You accept each merge yourself; it proposes nothing else.
               </p>
+              {/* above the controls, not below them: at a normal window size this box
+                  scrolled out of the scrolling body while Send stayed visible and
+                  enabled -- backwards for the one sentence naming participant data */}
+              {enough && (
+                <div className="ai-warn">
+                  <b>This sends {codes.length} code{codes.length === 1 ? "" : "s"} — names, definitions,
+                  and up to {MERGE_EXEMPLARS} excerpts each — to OpenAI.</b> Excerpts are participant
+                  data; make sure this is allowed by your consent form and ethics approval.
+                </div>
+              )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
               {!enough ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
@@ -121,11 +131,6 @@ export function MergeModal({ onProposals, onClose }: {
                 </p>
               ) : (
                 <>
-                  <div className="ai-warn">
-                    <b>This sends {codes.length} code{codes.length === 1 ? "" : "s"} — names, definitions,
-                    and up to {MERGE_EXEMPLARS} excerpts each — to OpenAI.</b> Excerpts are participant
-                    data; make sure this is allowed by your consent form and ethics approval.
-                  </div>
                   <div className="ai-payload">
                     <div className="ai-payload-head">
                       <span className="eyebrow">Exactly what leaves your device</span>

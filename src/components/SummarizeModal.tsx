@@ -139,11 +139,24 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
         <>
           <div className="ai-body nicescroll">
             <p className="about-lede">
+              {/* the shortest of the five ledes on purpose: this modal's warning is the
+                  one that has to share a 700px window with a six-line intro */}
               The AI drafts a prose summary of {pid ? <b>{pid}</b> : "one session"} — what
-              happened, what was expressed and why, what was observed, and highlights —
-              from your own session record: the event log and the excerpts you coded.
-              You review the draft before it is saved, and you own every word after.
+              happened, what was expressed, what was observed, and highlights — from the
+              event log and the excerpts you coded. You review it before it is saved.
             </p>
+            {/* above the controls, not below them: at a normal window size this box
+                scrolled out of the scrolling body while Send stayed visible and
+                enabled -- backwards for the one sentence naming participant data */}
+            {ready && (
+              <div className="ai-warn">
+                <b>This sends {evSel.length ? `${evSel.length} session event${evSel.length === 1 ? "" : "s"}` : ""}
+                {evSel.length && exSel.length ? " and " : ""}
+                {exSel.length ? `${exSel.length} coded excerpt${exSel.length === 1 ? "" : "s"}` : ""} of
+                “{pid}” to OpenAI.</b> Excerpts and notes are participant data — make sure
+                this is allowed by your consent form and ethics approval.
+              </div>
+            )}
             {choose && (
               <>
                 <div className="ai-sec">Transcript <span className="ai-sec-hint">the summary covers this session</span></div>
@@ -188,13 +201,6 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
               </p>
             ) : (
               <>
-                <div className="ai-warn">
-                  <b>This sends {evSel.length ? `${evSel.length} session event${evSel.length === 1 ? "" : "s"}` : ""}
-                  {evSel.length && exSel.length ? " and " : ""}
-                  {exSel.length ? `${exSel.length} coded excerpt${exSel.length === 1 ? "" : "s"}` : ""} of
-                  “{pid}” to OpenAI.</b> Excerpts and notes are participant data — make sure
-                  this is allowed by your consent form and ethics approval.
-                </div>
                 <div className="ai-payload">
                   <div className="ai-payload-head">
                     <span className="eyebrow">Exactly what leaves your device</span>

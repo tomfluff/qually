@@ -179,6 +179,16 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                 proposes where each existing code might apply. They arrive as <b>candidate
                 codings</b> for you to accept or reject — it never invents a code.
               </p>
+              {/* above the controls, not below them: at a normal window size this box
+                  scrolled out of the scrolling body while Send stayed visible and
+                  enabled -- backwards for the one sentence naming participant data */}
+              {ready && (
+                <div className="ai-warn">
+                  <b>This sends {lines.length} line{lines.length === 1 ? "" : "s"} of “{pid}” plus your{" "}
+                  {codes.length}-code codebook (once per window) to OpenAI.</b> Interview transcripts
+                  are participant data — make sure this is allowed by your consent form and ethics approval.
+                </div>
+              )}
               {choose && (
                 <>
                   {/* Nothing is preselected when the caller didn't name a transcript: the
@@ -226,11 +236,6 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                 </p>
               ) : (
                 <>
-                  <div className="ai-warn">
-                    <b>This sends {lines.length} line{lines.length === 1 ? "" : "s"} of “{pid}” plus your{" "}
-                    {codes.length}-code codebook (once per window) to OpenAI.</b> Interview transcripts
-                    are participant data — make sure this is allowed by your consent form and ethics approval.
-                  </div>
                   <div className="ai-payload">
                     <div className="ai-payload-head">
                       <span className="eyebrow">Exactly what leaves your device</span>
