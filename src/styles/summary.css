@@ -51,14 +51,14 @@
    plus margins opened a gap between events wider than the wrapped lines inside
    one of them, so a three-line note read as further from the event above it
    than its own second line */
-.sumEv { align-items:flex-start; line-height:1.4; padding:2px 8px 2px 11px; margin:1px 0; } /* 3px bar + 8px, keeps the columns flush */
+.sumEv { align-items:flex-start; line-height:1.4; padding:3px 8px 3px 11px; margin:3px 0; } /* 3px bar + 8px, keeps the columns flush */
 .sumEv .evtime, .sumSeg .sumRef { flex-shrink:0; color:var(--muted);
   font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.85em; }
 .sumEv .evtime { line-height:1.4; margin-top:calc((1.4em - 1.19em) / 2); }
 .sumEv .evdot, .sumSegHead .evdot { width:.7em; height:.7em; border-radius:.2em;
   flex-shrink:0; align-self:center; }
 .sumEv > .evdot { align-self:flex-start; margin-top:calc((1.4em - .7em) / 2); }
-.sumEv .sumEvText { flex:1; min-width:0; line-height:1.4; }
+.sumEv .sumEvText { flex:1; min-width:0; line-height:1.4; margin-top: -1px;}
 .sumEv .mkempty { color:var(--muted); }
 .sumSeg { flex-direction:column; gap:3px; }
 .sumSegHead { display:flex; align-items:baseline; gap:6px; }
