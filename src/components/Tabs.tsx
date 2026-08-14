@@ -298,6 +298,7 @@ const ASSIST_PANELS = [
   { id: "describe", label: "Definitions", hint: "AI-drafted code definitions from your excerpts" },
   { id: "suggest", label: "Suggest codes", hint: "candidate codings from your codebook" },
   { id: "summary", label: "Transcript summary", hint: "AI-drafted session summaries to edit and own" },
+  { id: "ask", label: "Ask", hint: "questions answered from your codes, excerpts and events" },
 ] as const;
 
 function AssistMenu({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {

@@ -19,7 +19,7 @@
 // what colour each one is, is a fact about the STUDY, not a display preference — a
 // colleague opening the file should see the same people marked the same way. Optional,
 // so a v1 file written before this existed still loads (openProject re-guesses).
-import type { Ai, AiCall, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
+import type { Ai, AiCall, Answer, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
 import type { GroundRec } from "./ai/ground";
 import type { Marker } from "./markers";
 
@@ -56,6 +56,9 @@ export interface Project {
   markerColors?: Record<string, string>;
   // per-transcript session summaries (Summary tab) — the researcher's own artifact
   summaries?: Record<string, string>;
+  // answers to questions asked of the coded material, each with the scope and
+  // model it came from — optional: absent in files written before Ask existed
+  answers?: Answer[];
   speakers?: { // optional: absent in files written before this existed
     colors: Record<string, string>;
     weight: Record<string, SpeakerWeight>;
@@ -113,6 +116,7 @@ export function parseProject(text: string): Project {
     markers: p.markers ?? [],
     markerColors: p.markerColors ?? {},
     summaries: p.summaries ?? {},
+    answers: p.answers ?? [],
     speakers: p.speakers, // may be absent — openProject re-guesses the interviewer
   };
 }

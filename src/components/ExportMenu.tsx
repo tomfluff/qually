@@ -37,6 +37,7 @@ export function ExportMenu() {
   const editCount = useStore((s) => Object.values(s.transcripts)
     .reduce((n, t) => n + t.lines.filter((l) => l.orig !== undefined).length, 0));
   const aiCalls = useStore((s) => s.aiLog.length);
+  const answerCount = useStore((s) => s.answers.length);
   const noticeCount = useStore((s) => Object.values(s.aiFlags)
     .reduce((n, f) => n + f.spans.filter((x) => (x.lens ?? "transcription") !== "transcription").length, 0));
   const eventCount = useStore((s) => s.markers.length);
@@ -116,6 +117,7 @@ it round-trips everything, including corrections and AI marks.
     if (eventCount) files.push({ name: "events.csv", text: st.exportMarkers() });
     if (noticeCount) files.push({ name: "ai-observations.csv", text: st.exportNotices() });
     if (aiCalls) files.push({ name: "ai-provenance.csv", text: st.exportAiLog() });
+    if (answerCount) files.push({ name: "answers.csv", text: st.exportAnswers() });
     save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
       new Date()), `${base}-csv.zip`);
     setOpen(false);
@@ -149,6 +151,8 @@ it round-trips everything, including corrections and AI marks.
             () => { saveText(s().exportMarkers(), "events.csv"); setOpen(false); })}
           {noticeCount > 0 && item(`AI observations (.csv) · ${noticeCount}`, "Instances the AI marked for review.",
             () => { saveText(s().exportNotices(), "ai-observations.csv"); setOpen(false); })}
+          {answerCount > 0 && item(`Answers (.csv) · ${answerCount}`, "Every question you asked your material, one row per citation — joins to coded segments on the ref.",
+            () => { saveText(s().exportAnswers(), "answers.csv"); setOpen(false); })}
           {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost — your methods appendix.",
             () => { saveText(s().exportAiLog(), "ai-provenance.csv"); setOpen(false); })}
         </div>

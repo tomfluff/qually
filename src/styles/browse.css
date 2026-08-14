@@ -336,3 +336,50 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .descListGrp { margin:18px 0 8px; }
 .descGroupItem:first-child .descListGrp { margin-top:2px; }
 .descGroupItem + .descGroupItem { margin-top:10px; }
+
+/* ── Assist → Ask ──────────────────────────────────────────────────────────── */
+/* the question, at the top of the pane where it is the first thing you do */
+.askBox { border:1px solid var(--line); border-radius:10px; background:var(--panel);
+  padding:10px 12px; margin-bottom:14px; }
+.askLabel { display:block; font-size:.8em; color:var(--muted); margin-bottom:5px; }
+.askInput { display:block; width:100%; box-sizing:border-box; font:inherit;
+  color:var(--fg); background:var(--bg); border:1px solid var(--line);
+  border-radius:7px; padding:7px 9px; resize:vertical; line-height:1.4;
+  font-family:var(--read-font); }
+.askInput:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.askBar { display:flex; align-items:center; gap:10px; margin-top:8px; }
+/* the sparkle sits on the label's line rather than wrapping above it */
+.askBar .btn { display:inline-flex; align-items:center; gap:.45em; flex:none; white-space:nowrap; }
+.askHint { color:var(--muted); font-size:.82em; }
+
+/* scope groups: same rows as the worklists, but a membership tick rather than a
+   focus highlight — these decide what is SENT, not what is shown */
+.askGroup { margin-bottom:6px; }
+.askGrpHead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.askGroup.off { opacity:.55; pointer-events:none; }
+.askTick { width:1em; height:1em; flex:none; display:inline-flex; align-items:center;
+  justify-content:center; color:var(--accent); }
+
+/* one answer: the question, its points with refs, then what it couldn't carry */
+.askAns { border:1px solid var(--line); border-radius:10px; padding:11px 13px;
+  background:var(--bg); }
+.askQ { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+.askQText { flex:1; min-width:0; font-weight:600; overflow-wrap:anywhere; }
+.askPoint { margin:0 0 9px; }
+.askPointText { line-height:1.5; font-family:var(--read-font); }
+.askRefs { display:flex; flex-wrap:wrap; gap:5px; margin-top:4px; }
+/* a ref is the evidence, so it reads as a link you can follow, not a tag */
+.askRef { font:inherit; font-size:.78em; font-variant-numeric:tabular-nums;
+  color:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius:999px; padding:1px 9px; cursor:pointer; white-space:nowrap; }
+.askRef:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+[data-theme=dark] .askRef:hover { color:#12161a; }
+.askUnsup { border-left:3px solid var(--warn, #c98a2a); padding-left:9px; margin-top:10px; }
+.askUnsupHead { font-size:.75em; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); font-weight:700; margin-bottom:3px; }
+.askUnsupLine { color:var(--fg-dim); line-height:1.45; }
+.askMeta { color:var(--muted); font-size:.78em; margin-top:9px; }
+/* the question, echoed in the consent gate above the payload */
+.askQuoted { border-left:3px solid var(--accent); padding:2px 0 2px 10px;
+  margin:6px 0 4px; line-height:1.45; font-family:var(--read-font); }

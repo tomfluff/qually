@@ -31,6 +31,18 @@ export const isTranscriptView = (active: string) => !RESERVED_VIEWS.includes(act
 // orig = the imported text, present only while an in-app correction differs from it
 // end (optional end_timestamp column) is when the line stops being spoken —
 // the pause-merge rule prefers it over estimating from the text's length
+export interface AnswerPoint { text: string; refs: string[] }
+export interface Answer {
+  aid: number;
+  at: string;               // ISO, and the sort key
+  question: string;
+  points: AnswerPoint[];
+  unsupported: string[];    // what the material could not carry
+  scope: { pids: string[]; codes: string[]; events: boolean; excerpts: boolean };
+  model: string;
+  costUsd: number;
+}
+
 export interface Line { id: number; ts: string; speaker: string; text: string; end?: string; orig?: string; }
 export interface Segment {
   sid: number; pid: string; start: number; end: number; code: string;
@@ -64,7 +76,7 @@ export interface Ui {
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
   // which Assist-tab panel is showing — chosen from the tab's own menu
-  assistPanel: "observations" | "merge" | "suggest" | "summary" | "describe";
+  assistPanel: "observations" | "merge" | "suggest" | "summary" | "describe" | "ask";
   // the Summary tab's split between the detailed timeline and the summary text:
   // side by side, stacked, or one pane at a time. The split position is a fraction
   // of the container (not px) so it survives both orientations and window resizes.
@@ -142,7 +154,7 @@ export interface AiCall {
   lines: number; redactions: number; inTok: number; outTok: number; costUsd: number;
 }
 
-interface State {
+export interface State {
   transcripts: Record<string, { lines: Line[] }>;
   segments: Segment[];
   // colorLock marks a colour the researcher chose by hand (the picker), so a
@@ -169,6 +181,11 @@ interface State {
   // per-transcript session summary (the Summary tab's text pane): written by the
   // researcher, or AI-drafted and then owned by the researcher. Project data.
   summaries: Record<string, string>;
+  // Answers to questions asked of the coded material (Assist -> Ask). Study
+  // artifacts, not chat: each carries the scope and model it came from, because
+  // an answer whose corpus can't be reconstructed is evidence of nothing.
+  answers: Answer[];
+  nextAid: number;
   // transient (not persisted)
   selection: Selection;
   savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
@@ -255,6 +272,9 @@ interface State {
   exportMarkers: () => string;
   // the Summary tab's text pane (per keystroke — no undo entry, like setNotes)
   setSummary: (pid: string, text: string) => void;
+  addAnswer: (a: Omit<Answer, "aid" | "at">) => void;
+  deleteAnswer: (aid: number) => void;
+  exportAnswers: () => string;
   exportNotices: () => string;
   exportProject: () => string;
   openProject: (p: Project) => void;
@@ -432,6 +452,7 @@ export const useStore = create<State>()(
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {},
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, formatOpen: false,
+      answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
 
@@ -444,6 +465,7 @@ export const useStore = create<State>()(
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
           video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {},
+          answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
           ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {} },
@@ -1183,6 +1205,7 @@ export const useStore = create<State>()(
           markers: s.markers, // session events + field notes: study data, not a preference
           markerColors: s.ui.markerColors,
           summaries: s.summaries, // session summaries: the researcher's artifact, study data
+          answers: s.answers,     // …and so are the questions asked of the material
           // the speaker map rides along even though it lives in `ui`: who the
           // interviewer is belongs to the study, not to my font size (see project.ts)
           speakers: { colors: s.ui.speakerColors, weight: s.ui.speakerWeight },
@@ -1216,12 +1239,14 @@ export const useStore = create<State>()(
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
           markers: p.markers ?? [],
           summaries: p.summaries ?? {},
+          answers: p.answers ?? [],
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
           nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
           nextMid: Math.max(0, ...(p.markers ?? []).map((x) => x.mid)) + 1,
+          nextAid: Math.max(0, ...(p.answers ?? []).map((x) => x.aid)) + 1,
         });
         set({ hotbarCache: hotbarCodes(get()) });
         forgetScroll(); // every pid in the new project is a different transcript
@@ -1258,6 +1283,31 @@ export const useStore = create<State>()(
       // per keystroke, like notes. Summaries aren't in the undo snapshot, so no
       // redo invalidation is needed — undo/redo never touch them.
       setSummary: (pid, text) => set({ summaries: { ...get().summaries, [pid]: text } }),
+      // Newest first: the list is a record of what you asked, read most-recent
+      // down. Not undoable — an answer costs an API call, and Ctrl+Z after some
+      // unrelated edit must never be able to spend it again.
+      addAnswer: (a) => {
+        const aid = get().nextAid;
+        set({ answers: [{ ...a, aid, at: new Date().toISOString() }, ...get().answers], nextAid: aid + 1 });
+      },
+      deleteAnswer: (aid) => set({ answers: get().answers.filter((x) => x.aid !== aid) }),
+      // One row per CITATION, so the file joins against coded-segments.csv on
+      // segment_ref — an answer you can't trace back to the excerpts is not
+      // something to put in a methods section.
+      exportAnswers: () => {
+        const rows: Record<string, string>[] = [];
+        for (const a of [...get().answers].reverse()) {
+          const scope = `${a.scope.pids.join(" ")} | ${a.scope.excerpts ? "excerpts" : ""}${a.scope.events ? " events" : ""} | ${a.scope.codes.length} codes`;
+          const add = (kind: string, text: string, ref: string) =>
+            rows.push({ asked_at: a.at, question: a.question, kind, point: text, ref, model: a.model, scope });
+          for (const p of a.points) {
+            if (!p.refs.length) add("point", p.text, "");
+            for (const r of p.refs) add("point", p.text, r);
+          }
+          for (const u of a.unsupported) add("unsupported", u, "");
+        }
+        return toCSV(rows, ["asked_at", "question", "kind", "point", "ref", "model", "scope"]);
+      },
       // a colour chosen by hand is LOCKED: a later recolour pass can be asked to
       // keep these and colour the generated ones around them
       setColor: (code, color) => set({ codebook: { ...get().codebook, [code]: { ...get().codebook[code], color, colorLock: true } }, redoStack: [] }),
@@ -1516,7 +1566,7 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
-        markers: s.markers, summaries: s.summaries,
+        markers: s.markers, summaries: s.summaries, answers: s.answers,
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
@@ -1540,6 +1590,8 @@ export const useStore = create<State>()(
         s.ui.markerColors ??= {};
         s.ui.eventListHeight = clampEventHeight(s.ui.eventListHeight ?? 200);
         s.summaries ??= {};
+        s.answers ??= [];
+        s.nextAid = Math.max(0, ...s.answers.map((x) => x.aid)) + 1;
         s.ui.summaryLayout ??= "side";
         s.ui.summarySplit = clampSummarySplit(s.ui.summarySplit ?? 0.5);
         s.ui.groundBold ??= true;

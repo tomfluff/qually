@@ -12,6 +12,8 @@ import { CodeCombobox } from "./CodeCombobox";
 import { LENSES, hashLine, spanLens, lensOf } from "../ai/flag";
 import { MergeModal } from "./MergeModal";
 import { DescribeModal } from "./DescribeModal";
+import { AskModal } from "./AskModal";
+import { AskList, ScopeGroup } from "./AskPanel";
 import { SuggestModal } from "./SuggestModal";
 import { AiCheckModal } from "./AiCheckModal";
 import { SummarizeModal } from "./SummarizeModal";
@@ -47,6 +49,14 @@ const remembered = {
   defSel: [] as string[],            // specific codes picked inside that scope; empty = the whole scope
   defAnchor: null as string | null,  // where a Shift-range measures from
   defOpen: { undefined: true, defined: true } as Record<"undefined" | "defined", boolean>,
+  // Ask scope. null = "everything", resolved against the project at render — a
+  // stored list would silently stop covering a transcript imported afterwards,
+  // which is the wrong default for a question about the whole study.
+  askPids: null as string[] | null,
+  askCodes: null as string[] | null,
+  askEvents: true,
+  askExcerpts: true,
+  askQ: "",
 };
 type DefScope = "all" | "undefined" | "defined";
 // one word each: three segments in a 264px sidebar, and "No definition" wrapped
@@ -90,11 +100,17 @@ export function AssistView() {
   const [defSel, setDefSel] = useState(remembered.defSel);
   const [defAnchor, setDefAnchor] = useState(remembered.defAnchor);
   const [defOpen, setDefOpen] = useState(remembered.defOpen);
+  const [askPids, setAskPids] = useState(remembered.askPids);
+  const [askCodes, setAskCodes] = useState(remembered.askCodes);
+  const [askEvents, setAskEvents] = useState(remembered.askEvents);
+  const [askExcerpts, setAskExcerpts] = useState(remembered.askExcerpts);
+  const [askQ, setAskQ] = useState(remembered.askQ);
+  const [askOpen, setAskOpen] = useState(false);
   // which code's definition is open in an editor right now (deliberately NOT
   // remembered across tab changes — the editor unmounts with the view)
   const [editingDef, setEditingDef] = useState<string | null>(null);
-  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen }); },
-    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen]);
+  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askEvents, askExcerpts, askQ }); },
+    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askEvents, askExcerpts, askQ]);
 
   // Definitions panel: every code, split by whether it has a definition yet —
   // the split IS the worklist, so it's the sidebar's grouping. Both groups (and
@@ -169,6 +185,34 @@ export function AssistView() {
   const allPids = useMemo(() =>
     [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))].filter((p) => transcripts[p]),
     [tabs, transcripts]);
+
+  // Ask scope, resolved. null means "all of it", so a transcript or code added
+  // after the panel was last touched is in scope by default rather than silently
+  // outside it. Codes are those actually USED in the transcripts in scope —
+  // offering a code with no excerpts there would be offering nothing.
+  const answers = useStore((s) => s.answers);
+  const askPidList = allPids;
+  const onPids = useMemo(() => new Set(askPids ?? askPidList), [askPids, askPidList]);
+  const askCodeList = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const g of segments) {
+      if (g.status !== "accepted" || !onPids.has(g.pid)) continue;
+      n.set(g.code, (n.get(g.code) ?? 0) + 1);
+    }
+    return [...n.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([id, c]) => ({ id, n: c }));
+  }, [segments, onPids]);
+  const onCodes = useMemo(
+    () => new Set(askCodes ?? askCodeList.map((c) => c.id)),
+    [askCodes, askCodeList]);
+  const askScope = useMemo(() => ({
+    pids: [...onPids], codes: [...onCodes].filter((c) => codebook[c]),
+    events: askEvents, excerpts: askExcerpts,
+  }), [onPids, onCodes, codebook, askEvents, askExcerpts]);
+  const askWhy = !askQ.trim() ? "Type a question first"
+    : !onPids.size ? "Pick at least one transcript on the left"
+    : !askEvents && !askExcerpts ? "Turn on excerpts or events on the left"
+    : askExcerpts && !onCodes.size && !askEvents ? "Pick at least one code on the left"
+    : "";
 
   // codes with at least one accepted segment — merge needs two to compare
   const mergeableCount = useMemo(() =>
@@ -258,7 +302,7 @@ export function AssistView() {
         {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
             own menu — this heading just names what's showing. It stays fixed; the
             list below scrolls inside cbList so the scrollbar clears the drag divider. */}
-        <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
+        <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
 
         <div className="cbList nicescroll">
         {panel === "observations" ? (
@@ -339,6 +383,38 @@ export function AssistView() {
                 ? "Code at least two different codes first, then the AI can look for duplicates."
                 : "The AI proposes pairs that look like the same concept. You accept each merge — nothing changes on its own."}
             </div>
+          </>
+        ) : panel === "ask" ? (
+          <>
+            <div className="bSideNote">
+              Scope the question. Everything is in by default — narrow it to a participant
+              or a theme when you mean to, not out of habit: deciding what matters before
+              you ask is the job you are handing to the model.
+            </div>
+            <div className="aByLabel" id="askMatLabel">Material</div>
+            <div className="segmented aSuggestBy" role="group" aria-labelledby="askMatLabel">
+              <button className={"seg" + (askExcerpts ? " on" : "")} aria-pressed={askExcerpts}
+                onClick={() => setAskExcerpts((v) => !v)}>Excerpts</button>
+              <button className={"seg" + (askEvents ? " on" : "")} aria-pressed={askEvents}
+                onClick={() => setAskEvents((v) => !v)}>Events</button>
+            </div>
+            <ScopeGroup title="Transcripts" items={askPidList.map((p) => ({ id: p, label: p }))}
+              on={onPids}
+              onToggle={(id) => setAskPids((prev) => {
+                const cur = new Set(prev ?? askPidList);
+                cur.has(id) ? cur.delete(id) : cur.add(id);
+                return askPidList.filter((p) => cur.has(p));
+              })}
+              onAll={(all) => setAskPids(all ? null : [])} />
+            <ScopeGroup title="Codes" disabled={!askExcerpts}
+              items={askCodeList.map((c) => ({ id: c.id, label: c.id, n: c.n, color: codebook[c.id]?.color }))}
+              on={onCodes}
+              onToggle={(id) => setAskCodes((prev) => {
+                const cur = new Set(prev ?? askCodeList.map((c) => c.id));
+                cur.has(id) ? cur.delete(id) : cur.add(id);
+                return askCodeList.map((c) => c.id).filter((c) => cur.has(c));
+              })}
+              onAll={(all) => setAskCodes(all ? null : [])} />
           </>
         ) : panel === "describe" ? (
           <>
@@ -531,6 +607,9 @@ export function AssistView() {
             onAccept={accept} onSkip={skip} onFlip={toggleFlip} />
         ) : panel === "summary" ? (
           <SummaryList pids={allPids} summaries={summaries} onGenerate={setSumFor} />
+        ) : panel === "ask" ? (
+          <AskList answers={answers} question={askQ} setQuestion={setAskQ}
+            onAsk={() => setAskOpen(true)} canAsk={!askWhy} why={askWhy} />
         ) : panel === "describe" ? (
           <DescribeList codebook={codebook} codes={shownDefCodes} stats={stats}
             sortBy={defSort} setSortBy={setDefSort} grouped={defScope === "all"}
@@ -546,6 +625,7 @@ export function AssistView() {
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
         onClose={() => setMergeOpen(false)} />}
       {describeOpen && <DescribeModal initial={shownDefCodes} onClose={() => setDescribeOpen(false)} />}
+      {askOpen && <AskModal question={askQ.trim()} scope={askScope} onClose={() => setAskOpen(false)} />}
       {suggestFor !== null && <SuggestModal pid={suggestFor} choose
         onClose={() => setSuggestFor(null)} />}
       {scanFor !== null && <AiCheckModal pid={scanFor} choose
