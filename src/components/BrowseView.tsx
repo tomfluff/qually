@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 // The Codebook tab: go over your coding. Codes on the left, their excerpts on the
 // right. The AI's observations moved out to the Assist tab; this view is yours.
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, type Segment } from "../state/store";
 import { norm } from "../contract/segments";
 import { segExcerpt } from "../contract/excerpt";
@@ -26,10 +26,15 @@ const remembered = {
   showRejected: false,
 };
 
+// where the excerpt list was parked, for the same reason and in the same place
+// as the rest of this cache
+let excerptScroll = 0;
+
 export function BrowseView() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
+  const paneRef = useCallback((el: HTMLDivElement | null) => { if (el) el.scrollTop = excerptScroll; }, []);
   const fontSize = useStore((s) => s.ui.fontSize);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
@@ -153,7 +158,11 @@ export function BrowseView() {
 
       <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(160, Math.min(520, w)) })} />
 
-      <div className="browse-right nicescroll">
+      {/* the excerpt list keeps its place across a trip into a transcript: its
+          refs are links out, and the view unmounts on a tab change (see
+          AssistView, and scrollMemory for the transcript itself) */}
+      <div className="browse-right nicescroll" ref={paneRef}
+        onScroll={(e) => { excerptScroll = e.currentTarget.scrollTop; }}>
         {chosen.length === 0 ? (
           <div className="empty">Select a code on the left to see its excerpts.</div>
         ) : (

@@ -5,7 +5,7 @@
 // code pairs to fold together) and suggest (candidate codings). Observations and
 // suggest are also where their runs START: each groups by transcript or by its own
 // axis, and a transcript row carries the sparkle that opens that run's consent gate.
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, type Segment } from "../state/store";
 import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
@@ -57,6 +57,11 @@ const remembered = {
   askEvents: true,
   askExcerpts: true,
   askQ: "",
+  // Where each panel's list was parked. Module scope for the same reason the rest
+  // of this cache is: the view unmounts on a tab change, so following a citation
+  // (or an "open") into a transcript and coming back landed at the top of a list
+  // you were working down — the one thing the round trip can't reconstruct.
+  scroll: {} as Record<string, number>,
 };
 type DefScope = "all" | "undefined" | "defined";
 // one word each: three segments in a 264px sidebar, and "No definition" wrapped
@@ -106,6 +111,10 @@ export function AssistView() {
   const [askExcerpts, setAskExcerpts] = useState(remembered.askExcerpts);
   const [askQ, setAskQ] = useState(remembered.askQ);
   const [askOpen, setAskOpen] = useState(false);
+  // restore before paint, so the list never flashes at the top on the way back
+  const paneRef = useCallback((el: HTMLDivElement | null) => {
+    if (el) el.scrollTop = remembered.scroll[panel] ?? 0;
+  }, [panel]);
   // which code's definition is open in an editor right now (deliberately NOT
   // remembered across tab changes — the editor unmounts with the view)
   const [editingDef, setEditingDef] = useState<string | null>(null);
@@ -593,7 +602,8 @@ export function AssistView() {
 
       <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(160, Math.min(520, w)) })} />
 
-      <div className="browse-right nicescroll">
+      <div className="browse-right nicescroll" ref={paneRef}
+        onScroll={(e) => { remembered.scroll[panel] = e.currentTarget.scrollTop; }}>
         {panel === "observations" ? (
           hasNotices ? (
             <NoticeList
