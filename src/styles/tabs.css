@@ -1,14 +1,42 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
    Copyright (C) 2026 Yotam Sechayk */
 /* tabs (directly above content) */
-#tabs { display:flex; align-items:center; gap:2px; padding:6px 8px 0;
-  border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
-.tab { display:inline-flex; align-items:stretch; border:1px solid var(--line); border-bottom:none;
+/* nowrap + a scrolling strip, not wrap: a wrapped second row pushed the whole app
+   down and put Summary/Assist on a line of their own, so the bar's height depended on
+   how many transcripts happened to be open.
+   The bottom rule is the seam against the content and reads as a real edge — --muted
+   at 2px rather than --line at 1px, which at #e4e4e4 was invisible against the panel.
+   It runs unbroken under the active tab too: with a scrolling strip the active tab can
+   be off-screen, and a divider with a gap where the tab USED to be looks broken. */
+/* The WHOLE bar scrolls — Codebook, Summary and Assist included. Scrolling only the
+   transcripts and pinning those three left the pinned group butted against a
+   half-clipped tab, which reads as a rendering fault rather than a boundary.
+   overflow-y:hidden so the x-scroller cannot also grow a vertical bar; the menus
+   opened from here are all position:fixed, so nothing gets clipped by it.
+   scroll-padding-inline matches the bar's own padding, so a tab scrolled into view
+   lands inset rather than flush against the edge. */
+/* --tab-edge is --muted eased 25% back toward the ground: the full-strength line read
+   as heavier than a seam should. Derived rather than hardcoded so it follows the theme
+   AND the system increase-contrast override, which re-points --muted in base.css.
+   NOT a change to --muted itself — that carries content (line numbers, speaker labels,
+   timecodes, code counts) at a tuned contrast, and lightening it would drop that text. */
+#tabs { --tab-edge:color-mix(in srgb, var(--muted) 75%, var(--bg));
+  display:flex; align-items:center; gap:2px; padding:6px 8px 0;
+  border-bottom:2px solid var(--tab-edge); background:var(--panel); flex-wrap:nowrap;
+  overflow-x:auto; overflow-y:hidden; scroll-padding-inline:8px; }
+/* flex:none — inside a scroller a flex child would otherwise squeeze to fit instead
+   of overflowing, and the tabs would shrink to slivers rather than scroll.
+   2px on EVERY tab, not just the active one: the width has to be constant or
+   selecting a tab would grow it by a pixel a side and nudge every tab after it. The
+   selected/idle difference is carried by the colour alone. */
+.tab { display:inline-flex; align-items:stretch; flex:none;
+  border:2px solid var(--line); border-bottom:none;
   border-radius:8px 8px 0 0; cursor:pointer; background:var(--bg);
   color:var(--muted); font-weight:600; user-select:none; }
-/* the open transcript outlines itself in its own text colour — the accent border
-   is the Codebook/Assist signature, and those override this below */
-.tab.active { color:var(--fg); border-color:currentColor; }
+/* the open transcript outlines itself in the divider's own colour and weight, so the
+   tab and the seam below it read as one continuous frame around the content. The
+   accent border is the Codebook/Assist signature, and those override this below. */
+.tab.active { color:var(--fg); border-color:var(--tab-edge); }
 /* mid-drag: the tab travels with the pointer as the list reorders under it */
 .tab.dragging { opacity:.45; }
 /* the reopen (+) pill: a tab-shaped affordance, quieter than a real tab because

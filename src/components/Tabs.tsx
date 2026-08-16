@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useStore } from "../state/store";
+import { SCROLL_BASE, wheelPixels } from "../scrollSpeed";
 import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
 import { parseCSV } from "../contract/csv";
@@ -28,13 +29,51 @@ export function Tabs() {
     const r = el.getBoundingClientRect();
     setMenu({ pid, x: r.left, y: r.bottom + 4 });
   };
+  // The bar scrolls sideways now, so the selected tab can sit off-screen after a
+  // keyboard switch, an import, or a reorder. Pull it back into view. The browser
+  // already does this when a tab takes FOCUS; selection can move without focus
+  // (reopening from the +, closing a neighbour), so it needs its own nudge.
+  // inline+block "nearest" scrolls the bar only when the tab is actually outside it
+  // and never scrolls the page vertically.
+  const stripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    stripRef.current?.querySelector<HTMLElement>(".tab.active")
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [active, tabs]);
+  // A vertical wheel over a container that only scrolls sideways does NOT move it in
+  // Chrome, so the bar looked scrollable and then ignored the wheel. Translate deltaY
+  // into scrollLeft ourselves, at the same pace Settings → scroll distance sets for
+  // every other list (installScrollSpeed governs the vertical axis only, and skips
+  // this element because its overflow-y is hidden).
+  // Native listener, not onWheel: React registers wheel on its root as PASSIVE, so a
+  // preventDefault from a React handler is dropped.
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      // ctrl+wheel is browser zoom; a real horizontal wheel already works natively
+      if (e.ctrlKey || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      const max = el.scrollWidth - el.clientWidth;
+      if (max <= 1) return;
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 20;
+      const px = wheelPixels(e.deltaY, e.deltaMode, lh, el.clientWidth)
+        * SCROLL_BASE * (useStore.getState().ui.scrollSpeed || 1);
+      const next = Math.max(0, Math.min(el.scrollLeft + px, max));
+      if (next === el.scrollLeft) return; // already at that end — let the wheel through
+      e.preventDefault();
+      el.scrollLeft = next;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
   const openAssistMenu = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
     setAssistMenu({ x: r.left, y: r.bottom + 4 });
   };
 
   return (
-    <div id="tabs" style={{ fontSize }} role="tablist" aria-label="Transcripts">
+    <div id="tabs" className="nicescroll" style={{ fontSize }} role="tablist"
+      aria-label="Transcripts" ref={stripRef}>
       {/* label and × are real <button>s so the keyboard can switch and close tabs;
           the label's click bubbles to the wrapper's onClick (whole tab stays clickable).
           The wrapper is presentation so the tablist's exposed children are the tab
