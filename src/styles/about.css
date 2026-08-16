@@ -7,16 +7,28 @@
    #toolbar (font-size:12px), so without this they inherit 12px and every unstyled or
    em-relative line renders tiny. 1rem re-bases them to a readable 16px regardless of
    the chrome that launched them. (rem, not em — anchored to the root, immune to the
-   toolbar's 12px.) */
-.about { width:min(600px, 100%); max-height:84vh; display:flex; flex-direction:column;
+   toolbar's 12px.)
+
+   Deliberately NOT wired to the Panel text setting. Scaling a dialog's font alone
+   scales only its font: the icons (fixed px `size` props) and the paddings stay put,
+   so you get big labels in small boxes. Browser zoom is the interface scale here — it
+   scales type, padding, icons, hit targets and borders together, which no font-size
+   knob can. Two dialogs opt UP on purpose (DefineHost, AddEventModal) because what you
+   type in them becomes codebook/transcript content; they set font-size inline.
+
+   Widths stay in em so those two grow their BOX with their type instead of wrapping
+   36px text inside a hard 600px column. */
+.about { width:min(37.5em, 100%); max-height:84vh; display:flex; flex-direction:column;
   background:var(--bg); border:1px solid var(--line); border-radius:14px;
   box-shadow:0 20px 60px rgba(0,0,0,.45); padding:18px 20px; font-size:1rem; }
 .about-head { display:flex; align-items:center; }
-.about-head h2 { margin:0; flex:1; font-size:19px; }
+/* em, not 19px: at a raised setting a fixed title ended up SMALLER than the body text
+   it was titling */
+.about-head h2 { margin:0; flex:1; font-size:1.19em; }
 .about-lede { color:var(--muted); line-height:1.5; margin:6px 0 12px; }
 .about-body { overflow-y:auto; padding-right:6px; }
 .about-body section { margin-bottom:16px; }
-.about-body h3 { font-size:12px; text-transform:uppercase; letter-spacing:.07em;
+.about-body h3 { font-size:.75em; text-transform:uppercase; letter-spacing:.07em;
   color:var(--muted); margin:0 0 8px; }
 .about-body ul, .about-body ol { margin:0; padding-left:20px; line-height:1.55; }
 .about-body li { margin-bottom:5px; }
@@ -34,17 +46,17 @@
 .fmt-table td:first-child { white-space:nowrap; width:1%; }
 .fmt-note { color:var(--muted); font-size:.92em; line-height:1.45; margin:4px 0 10px; }
 .aiprompt-wrap { position:relative; }
-.aiprompt { margin:0; max-height:280px; overflow:auto; padding:12px 12px 12px; white-space:pre-wrap;
+.aiprompt { margin:0; max-height:23.3em; overflow:auto; padding:12px 12px 12px; white-space:pre-wrap;
   word-break:break-word; background:var(--panel); border:1px solid var(--line); border-radius:8px;
-  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; line-height:1.5; color:var(--fg); }
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.75em; line-height:1.5; color:var(--fg); }
 .copyprompt { position:absolute; top:8px; right:8px; z-index:1; display:inline-flex; align-items:center;
-  gap:5px; padding:4px 9px; font-size:12px; }
+  gap:5px; padding:4px 9px; font-size:.75em; }
 /* the toolbar "File format" button: same .btn look as Import, with a doc icon */
 .dfbtn { display:inline-flex; align-items:center; gap:6px; }
 .dfbtn svg { color:var(--muted); }
 
 /* re-import conflict modal */
-.imp { width:min(520px, 100%); }
+.imp { width:min(32.5em, 100%); }
 
 /* the name field shared by the export sign-nudge and the import "whose is this?" dialog */
 .signfield { display:flex; align-items:center; gap:10px; margin:4px 0 2px; }
@@ -58,7 +70,7 @@
    fall below the fold. .about is already a flex column capped at 84vh; .ai-body takes the
    slack and scrolls (min-height:0 lets a flex child shrink below its content — the classic
    flex-scroll fix), while head and the actions footer hold their size. */
-.about.ai-check { width:min(680px, 100%); }
+.about.ai-check { width:min(42.5em, 100%); }
 .ai-check .about-head { flex-shrink:0; }
 .ai-check .ai-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding-right:6px; }
 .ai-check .imp-actions { flex-shrink:0; margin-top:12px; }
@@ -86,21 +98,40 @@
   color:var(--muted); cursor:default; }
 [data-theme=dark] .imp-actions .btn.primary:disabled { color:var(--muted); }
 .imp-actions .btn.primary:disabled:hover { filter:none; border-color:var(--line); }
-.imp-actions .btn { width:100%; justify-content:center; }
+/* .btn pins font-size:1rem app-wide, which left "Send N requests to OpenAI" and
+   "Cancel" as the SMALLEST text in a scaled dialog — the two controls that carry the
+   decision. 1em puts them back on the dialog's own ramp. Scoped to .imp-actions so the
+   toolbar's own .btn sizing is untouched. */
+.imp-actions .btn { width:100%; justify-content:center; font-size:1em; }
 .imp-note { color:var(--muted); font-size:.86em; text-align:center; margin-top:10px; }
 
 /* AI consent gate — lens + speaker choices */
-.ai-sec { font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
+.ai-sec { font-size:.75em; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
   font-weight:700; margin:12px 0 6px; padding-bottom:3px; border-bottom:1px solid var(--line); }
 /* the hint is a full sentence, not an eyebrow — read it back up toward body size
    so it isn't the tiniest text in the dialog (low-vision at magnification) */
 .ai-sec-hint { font-weight:400; text-transform:none; letter-spacing:0; font-size:1.15em; }
-.ai-lenses { display:grid; grid-template-columns:1fr 1fr; gap:3px 14px; }
-.ai-lens, .ai-spk { display:flex; align-items:center; gap:7px; cursor:pointer;
+/* auto-fit, not a hard 1fr 1fr: at a raised text size two columns forced every lens
+   label to wrap ("Transcription errors feeds / the line editor"), which read as two
+   unrelated lines. Below ~2 columns' worth of room it collapses to one full-width
+   column instead. */
+.ai-lenses { display:grid; grid-template-columns:repeat(auto-fit, minmax(19em, 1fr)); gap:3px 14px; }
+/* baseline, not center — same fix as .segdiff-side above: when a label wraps to two
+   lines, centering left the checkbox floating in the middle of the block, attached to
+   neither line. Baseline pins it to the first one. */
+.ai-lens, .ai-spk { display:flex; align-items:baseline; gap:7px; cursor:pointer;
   font-size:.92em; line-height:1.9; }
-.ai-lens input, .ai-spk input { margin:0; }
+/* The box has to scale with its label: a native checkbox is ~13px forever, so at a
+   raised setting the state indicator AND the hit target were the smallest things on
+   the screen that decides what leaves the device.
+   font-size:inherit is the load-bearing half. A form control does NOT inherit
+   font-size — the UA pins it at 13.333px — so `width:1em` alone resolves against THAT
+   and the box never grows, however large the label gets. Inherit first, then 1em
+   measures the text around it. */
+.ai-lens input, .ai-spk input { margin:0; flex:none; font-size:inherit;
+  width:1em; height:1em; accent-color:var(--accent); }
 .ai-lens em, .ai-spk em { font-style:normal; color:var(--muted); font-size:.85em; }
-.ai-lens-dot { width:9px; height:9px; border-radius:3px; flex:none; }
+.ai-lens-dot { width:.56em; height:.56em; border-radius:.19em; flex:none; }
 .ai-spks { display:flex; flex-wrap:wrap; gap:2px 18px; }
 /* the transcript picker (Suggest, launched from Assist): one row per loaded
    transcript, its size and what a previous run left, so the pick is informed */
@@ -115,18 +146,26 @@
   font-variant-numeric:tabular-nums; }
 
 /* AI consent gate — the payload preview */
+/* the one sentence in the app that says participant data is about to leave the device,
+   so it outranks the body text around it rather than matching it. This is hierarchy,
+   not a legibility floor — absolute size still comes from browser zoom. */
 .ai-warn { background:color-mix(in srgb, #e0a020 14%, var(--bg)); border:1px solid #e0a020;
-  border-radius:8px; padding:10px 12px; margin:6px 0 12px; line-height:1.5; }
+  border-radius:8px; padding:10px 12px; margin:6px 0 12px; line-height:1.5;
+  font-size:1.15em; }
 .ai-payload { border:1px solid var(--line); border-radius:8px; overflow:hidden; }
 .ai-payload-head { display:flex; align-items:center; justify-content:space-between;
   padding:6px 10px; background:var(--panel); border-bottom:1px solid var(--line); }
-.ai-payload-head .eyebrow { font-size:10px; text-transform:uppercase; letter-spacing:.09em;
+/* All four were hard px, so the preview of what is about to be SENT stayed at ~11px
+   while the dialog around it scaled — the smallest text in the app sat on the one
+   screen that needs checking. em keeps the same size at the 16px floor and scales up
+   from there. */
+.ai-payload-head .eyebrow { font-size:.625em; text-transform:uppercase; letter-spacing:.09em;
   color:var(--muted); }
-.ai-model { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--muted); }
-.ai-payload pre { margin:0; padding:10px; max-height:150px; overflow:auto; white-space:pre;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; line-height:1.6; }
+.ai-model { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.7em; color:var(--muted); }
+.ai-payload pre { margin:0; padding:10px; max-height:13em; overflow:auto; white-space:pre;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72em; line-height:1.6; }
 .ai-facts { display:flex; flex-wrap:wrap; gap:14px; padding:10px 2px 0;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--muted); }
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72em; color:var(--muted); }
 .ai-facts b { color:var(--fg); font-variant-numeric:tabular-nums; }
 .ai-err { margin-top:10px; padding:8px 10px; border-radius:6px; line-height:1.45;
   background:color-mix(in srgb, #e0554f 12%, var(--bg)); border:1px solid #e0554f; }

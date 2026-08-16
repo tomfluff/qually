@@ -5,7 +5,6 @@
 // they all repeated: the backdrop, the focus-trapped dialog, and the head.
 import { useEffect, useId, type ReactNode } from "react";
 import { MODELS } from "../ai/openai";
-import { useStore } from "../state/store";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
@@ -14,10 +13,12 @@ export function AiModal({ title, busy, onClose, children }: {
 }) {
   const dialogRef = useDialogFocus();
   const titleId = useId();
-  // .about pins font-size:1rem, so everything in here read at 16px however large
-  // the reading setting was — on the screens where you decide what participant
-  // data leaves the device. DefineHost re-bases the same way.
-  const fs = useStore((s) => s.ui.fontSize);
+  // No font-size of its own — it takes .about's 1rem floor. This used to override that
+  // with ui.fontSize, the READING ramp (the transcript's 12–48px), which does not belong
+  // to modal chrome: the consent gate rendered at up to 48px inside a fixed 680px box and
+  // wrapped every lens label onto two lines. Scaling a dialog is browser zoom's job — it
+  // grows the icons and padding too, which a font-size setting cannot. DefineHost and
+  // AddEventModal do override, deliberately: what you type in those becomes content.
   // Every other dialog in the app closes on Escape; App's global handler bails
   // out on .about-backdrop, so these have to carry their own. Not while a run is
   // in flight — a stray Esc must not dismiss something being paid for.
@@ -32,7 +33,7 @@ export function AiModal({ title, busy, onClose, children }: {
           consent buttons stay reachable no matter how tall the payload preview and
           any lens/speaker lists get (without it the footer clipped below 84vh). */}
       <div className="about imp ai-check" ref={dialogRef} role="dialog" aria-modal="true"
-        aria-labelledby={titleId} style={{ fontSize: fs }} onMouseDown={(e) => e.stopPropagation()}>
+        aria-labelledby={titleId} onMouseDown={(e) => e.stopPropagation()}>
         <div className="about-head">
           <h2 id={titleId}>{title}</h2>
           <button className="btn iconbtn" onClick={onClose} disabled={busy} title="Close">

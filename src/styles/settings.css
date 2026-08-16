@@ -8,12 +8,16 @@
    Export menu shares this wrapper — without it the menu renders below the viewport
    and looks like it never opened. */
 .settings-wrap { display:inline-flex; position:relative; }
-.about.set-modal { width:min(600px, 100%); height:min(560px, 84vh); }
+/* em rather than px throughout this file: identical to the old fixed values at the 1rem
+   floor, but they hold their proportions if this panel is ever sized off 1rem again. The
+   px version clipped "dark" to "dar", pushed the sliders past the right edge, and cut the
+   number readout off the panel whose entire job is setting that number. */
+.about.set-modal { width:min(37.5em, 100%); height:min(35em, 84vh); }
 .set-modal .about-head h2 { flex:1; }
 
 /* head (fixed) · body [nav | scrolling panel] (flex:1) · Zen footer (fixed) */
 .set-body { display:flex; flex:1 1 auto; min-height:0; gap:14px; margin-top:6px; }
-.set-nav { flex:0 0 128px; display:flex; flex-direction:column; gap:2px;
+.set-nav { flex:0 0 8em; display:flex; flex-direction:column; gap:2px;
   border-right:1px solid var(--line); padding-right:12px; }
 .set-nav button { text-align:left; border:none; background:none; color:var(--fg); font:inherit;
   font-weight:500; padding:8px 11px; border-radius:8px; cursor:pointer; }
@@ -36,7 +40,9 @@
   margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
 /* the one call-to-action in the footer: accent outline + a faint accent wash,
    larger and rounder than a plain .btn so it reads as the primary thing here */
-.set-foot .zenbtn { flex-shrink:0; white-space:nowrap;
+/* font-size:1em overrides .btn's app-wide 1rem — the footer's one call to action was
+   staying 16px while its own explanatory note beside it grew past it */
+.set-foot .zenbtn { flex-shrink:0; white-space:nowrap; font-size:1em;
   display:inline-flex; align-items:center; gap:8px;
   padding:9px 16px; border-radius:12px; font-weight:600;
   border:2px solid var(--accent);
@@ -44,14 +50,18 @@
   color:var(--fg); }
 .set-foot .zenbtn:hover { border-color:var(--accent);
   background:color-mix(in srgb, var(--accent) 20%, var(--bg)); }
-.set-foot .set-foot-note { font-size:12px; color:var(--muted); line-height:1.4; }
+.set-foot .set-foot-note { font-size:.75em; color:var(--muted); line-height:1.4; }
 
 /* control rows — rescoped from the old .settings-pop; behaviour unchanged */
 .set-modal .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
 .set-modal .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
-.set-modal .srow input[type=range] { width:160px; margin:0; align-self:center; accent-color:var(--accent); }
-  /* 160, not 92: a 92px track made every stop a couple of pixels apart — hostile
-     at magnification, and this is the app FOR magnification */
+.set-modal .srow input[type=range] { font-size:inherit; width:10em; margin:0;
+  align-self:center; accent-color:var(--accent); }
+  /* 10em (=160px at the floor), not 92px: a 92px track made every stop a couple of
+     pixels apart — hostile at magnification, and this is the app FOR magnification.
+     em rather than a fixed 160 so the track keeps that reasoning at every setting.
+     font-size:inherit first — a form control is pinned to the UA's 13.333px, so
+     without it the em resolves against THAT and the track never grows. */
 .set-modal .sval { min-width:2.2ch; padding:2px 4px; text-align:center; color:var(--fg);
   font-variant-numeric:tabular-nums; background:var(--bg);
   border:1px solid var(--line); border-radius:5px; }
@@ -59,7 +69,7 @@
 .set-modal .sreset { border:none; background:none; padding:5px 6px; min-height:24px; cursor:pointer;
   color:var(--muted); font:inherit; font-size:.85em; text-decoration:underline; border-radius:5px; }
 .set-modal .sreset:hover { color:var(--accent); background:var(--panel); }
-.set-modal .seg { display:flex; width:150px; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+.set-modal .seg { display:flex; width:9.4em; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
 .set-modal .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
   padding:5px 0; font:inherit; font-weight:500; text-align:center; cursor:pointer;
   transition:background .12s, color .12s; }
@@ -76,12 +86,19 @@
 .set-modal .seg.loopseg button { flex:0 0 auto; padding:5px 9px; font-variant-numeric:tabular-nums; }
 .set-modal .seg.loopseg button + button { border-left:1px solid var(--line); }
 .set-modal .swatches { display:flex; gap:7px; }
-.set-modal .swatchbtn { width:22px; height:22px; border-radius:50%; padding:0;
+/* "find a 10px colour swatch" is the exact competitor failure this app exists to fix,
+   so the swatches cannot be the one control that stays 22px forever. font-size:inherit
+   first for the same UA reason as the range track above. */
+.set-modal .swatchbtn { font-size:inherit; width:1.375em; height:1.375em;
+  border-radius:50%; padding:0;
   border:2px solid transparent; cursor:pointer; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); }
 .set-modal .swatchbtn.on { border-color:var(--fg); }
 /* a note explains the ROW ABOVE it: pulled tight against that row (and indented
    with it) so ownership is visible, with the panel gap kept below */
-.settings-note { font-size:12px; color:var(--muted); text-align:left; line-height:1.4;
+/* .75em, not 12px: these notes carry the actual explanation of what each control does
+   (what "Sidebar text" also covers, why Atkinson helps), so pinning them made the most
+   useful prose in the panel the least readable part of it at any raised setting. */
+.settings-note { font-size:.75em; color:var(--muted); text-align:left; line-height:1.4;
   margin-top:-7px; }
 .settings-note kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
   padding:0 4px; background:var(--panel); font:inherit; }

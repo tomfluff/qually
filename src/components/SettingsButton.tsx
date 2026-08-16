@@ -126,12 +126,15 @@ export function SettingsButton() {
                   <button className="sreset" onClick={(e) => { e.preventDefault(); setFontSize(16); }} title="Reset to 16px">reset</button>
                 </label>
                 <label className="srow">
-                  <span>Sidebar text</span>
+                  <span>Panel text</span>
                   <input type="range" min={11} max={36} value={sidebarFontSize} onChange={(e) => setSidebarFontSize(+e.target.value)} />
                   <span className="sval">{sidebarFontSize}</span>
                   <button className="sreset" onClick={(e) => { e.preventDefault(); setSidebarFontSize(13); }} title="Reset to 13px">reset</button>
                 </label>
-                <div className="settings-note">Sidebar text also sizes the popovers, menus, video dock, and tooltips.</div>
+                {/* "Sidebar text" undersold it: the same value sizes the code list, tabs,
+                    menus, popovers, tooltips, the event list, the Browse and Summary panes
+                    and the video dock. Naming one of nine made the other eight surprises. */}
+                <div className="settings-note">Sizes the code list, tabs, menus, popovers, tooltips, and the video dock — everything except the transcript. To scale the whole interface instead, including buttons and icons, use your browser's zoom (<kbd>Ctrl</kbd> <kbd>+</kbd> / <kbd>Ctrl</kbd> <kbd>-</kbd>, <kbd>Ctrl</kbd> <kbd>0</kbd> to reset).</div>
                 <div className="srow">
                   <span>Reading font</span>
                   <div className="seg fontseg">
