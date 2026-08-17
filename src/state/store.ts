@@ -53,6 +53,9 @@ export interface Selection { pid: string | null; anchor: number | null; head: nu
 export interface Ui {
   fontSize: number; sidebarFontSize: number; dark: boolean; zen: boolean;
   sidebarWidth: number; browseLeftWidth: number;
+  // where popup cards open — the code palette (0) AND the add-event card:
+  // "auto" anchors to the lines/dock they are about, "centered" always centers.
+  // (Key name predates the event card; kept so persisted states stay valid.)
   palettePos: "auto" | "centered";
   helpSeen: boolean;
   mergeLines: boolean; // merge partial (non-terminated) same-speaker lines into one unit

@@ -282,13 +282,13 @@ export function SettingsButton() {
                 </div>
                 <div className="settings-note">Auto fills the tiles with your most-used codes; pinned shows only codes you pin.</div>
                 <div className="srow">
-                  <span>Code palette 0</span>
+                  <span>Popup cards</span>
                   <div className="segmented">
                     <button className={"seg" + (palettePos === "auto" ? " on" : "")} onClick={() => setUi({ palettePos: "auto" })}>Near</button>
                     <button className={"seg" + (palettePos === "centered" ? " on" : "")} onClick={() => setUi({ palettePos: "centered" })}>Center</button>
                   </div>
                 </div>
-                <div className="settings-note">Where the palette opens: next to your selected lines, or screen-centered.</div>
+                <div className="settings-note">Where the code palette (<kbd>0</kbd>) and the add-event card open: next to the lines they're about, or screen-centered.</div>
               </>}
 
               {tab === "Speakers" && <SpeakerRows />}

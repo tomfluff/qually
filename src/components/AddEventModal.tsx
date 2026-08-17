@@ -37,6 +37,9 @@ export function AddEventModal({ pid, defaultT, marker, tsSample, anchorSel, onCl
   // back. .about pins itself to 1rem (it opens from the 12px toolbar and has to
   // re-base), so without this override the setting would do nothing here.
   const fs = useStore((s) => s.ui.sidebarFontSize);
+  // the same setting that places the code palette (Settings → Coding → Popup
+  // cards): "auto" anchors this card to its row/dock, "centered" always centers
+  const palettePos = useStore((s) => s.ui.palettePos);
   const [time, setTime] = useState(fmtLike(marker ? marker.t - offset : defaultT, tsSample));
   const [type, setType] = useState(marker ? markerKey(marker) : "");
   const [text, setText] = useState(marker?.label ?? "");
@@ -63,6 +66,7 @@ export function AddEventModal({ pid, defaultT, marker, tsSample, anchorSel, onCl
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
   const w = widthFor(fs);
   useLayoutEffect(() => {
+    if (palettePos === "centered") { setPos(null); return; } // forced centered, like the palette
     const el = anchorSel ? document.querySelector<HTMLElement>(anchorSel) : null;
     if (!el) { setPos(null); return; }
     const r = el.getBoundingClientRect();
@@ -73,7 +77,7 @@ export function AddEventModal({ pid, defaultT, marker, tsSample, anchorSel, onCl
     setPos(below >= above
       ? { top: r.bottom + GAP, left }
       : { bottom: window.innerHeight - r.top + GAP, left });
-  }, [anchorSel, fs, w]);
+  }, [anchorSel, fs, w, palettePos]);
   const anchored = pos !== null;
 
   const save = () => {
