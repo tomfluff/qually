@@ -57,6 +57,11 @@
 .vbtn.accent { background:var(--accent); color:#fff; border-color:var(--accent); }
 [data-theme=dark] .vbtn.accent { color:#12161a; }
 .vbtn.accent:hover { filter:brightness(1.08); }
+/* accent OUTLINE: same weight as a plain control, set apart by colour, not fill —
+   the Mark/Transcript pair differs by hue rather than by one looking bigger */
+.vbtn.accentline { color:var(--accent); border-color:var(--accent); }
+.vbtn.accentline:hover { background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+.vbtn.accentline:disabled { color:var(--muted); border-color:var(--line); cursor:default; background:var(--bg); }
 /* circular play/pause — THE transport control, so it reads as one. Same height as
    the other controls so the row keeps one rhythm. */
 .vbtn.playbtn { width:2.35em; height:2.35em; padding:0; justify-content:center; border-radius:50%;

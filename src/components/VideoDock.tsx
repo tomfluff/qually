@@ -374,7 +374,9 @@ export function VideoDock() {
     const t = lastTime.current[vidPid];
     if (t != null && t > 0.05) v.currentTime = t;
     switching.current = false;
-    setTime(v.currentTime);
+    // functional bump: plain setTime(0) with time already 0 bails out of the
+    // re-render, leaving Mark's disabled state reading the pre-registration null
+    setTime((old) => (old === v.currentTime ? v.currentTime + 1e-6 : v.currentTime));
     // `playing` survives the unmount but the element does not: returning to a
     // transcript you left mid-playback showed a Pause icon (and announced
     // "Pause") over a paused video. Re-seed both from the element.
@@ -453,7 +455,7 @@ export function VideoDock() {
             <div className="vctrl" onMouseDown={startDrag}>
               {/* top control: find the current playback position in the transcript.
                   The strip is also a drag handle (like vhead) — buttons/inputs opt out. */}
-              <button className="vbtn accent" onClick={syncToLine}
+              <button className="vbtn" onClick={syncToLine}
                 title="Select the transcript line playing now, and scroll to it">
                 <Icon name="target" size={fs + 2} /> Transcript
               </button>
@@ -465,7 +467,7 @@ export function VideoDock() {
                 // disabled during the pre-roll (offset puts the playhead before the
                 // transcript): a click that silently recorded nothing would lose a
                 // live observation. `time` re-renders on timeupdate, so this tracks.
-                <button className="vbtn" disabled={playheadSec() === null}
+                <button className="vbtn accentline" disabled={playheadSec() === null}
                   onClick={() => {
                     const t = playheadSec();
                     if (t !== null) useStore.getState().setEventAt(t);
