@@ -121,7 +121,7 @@ export function AddEventModal({ pid, defaultT, marker, tsSample, anchorSel, onCl
         {/* the NOTE leads and takes focus: it is the only field you always fill in.
             Time arrives prefilled from the line, and the type is often left blank. */}
         <textarea className="signinput addev-text" rows={3} value={text} autoFocus
-          aria-label="The note" placeholder="what you observed…"
+          aria-label="The note" placeholder="What you observed…"
           onChange={(e) => setText(e.target.value)} />
         {/* labeled: "custom" in a bare box and a bare timecode were two mystery
             fields to anyone seeing the card cold */}
@@ -183,7 +183,7 @@ function TypeCombobox({ value, onChange }: { value: string; onChange: (v: string
 
   return (
     <div className="newCodeWrap addev-typewrap">
-      <input className="signinput" value={value} placeholder="custom" autoComplete="off"
+      <input className="signinput" value={value} placeholder="Custom" autoComplete="off"
         role="combobox" aria-expanded={showList} aria-controls="addev-types" aria-autocomplete="list"
         aria-label="Event type — pick an existing one or write a new one"
         aria-activedescendant={showList ? `addev-types-${hl}` : undefined}

@@ -61,7 +61,7 @@ export function CodeSidebar() {
           acts on THIS transcript (the sidebar only renders for a transcript view),
           so its home is here, not the global toolbar. */}
       <div className="sidebarNewRow">
-        <CodeCombobox placeholder="+ new code" />
+        <CodeCombobox placeholder="+ New code" />
         <button className="btn aibtn aiMenuBtn" ref={aiBtnRef}
           aria-haspopup="menu" aria-expanded={aiMenu}
           title="AI for this transcript" aria-label="AI for this transcript"
@@ -136,7 +136,7 @@ export function CodeSidebar() {
               }} />
             <span className="cname">{code}</span>
             {pinned.includes(code) && (
-              <span className="pindot" title="pinned"><Icon name="pin" size={cntIcon} /></span>
+              <span className="pindot" title="Pinned"><Icon name="pin" size={cntIcon} /></span>
             )}
             <CodeCounts stat={c} size={cntIcon} />
             <button className="rowMenu" aria-label={`Options for ${code}`}

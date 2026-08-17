@@ -71,7 +71,7 @@ export function EventList({ pid }: { pid: string }) {
           <button className="sortchip" onClick={() => setUi({ eventSort: sort === "type" ? "time" : "type" })}
             title={sort === "type" ? "Grouped by type — switch to time order" : "In time order — switch to grouping by type"}
             aria-label={sort === "type" ? "Grouped by type. Switch to time order." : "In time order. Switch to grouping by type."}>
-            {sort === "type" ? "by type" : "by time"}
+            {sort === "type" ? "By type" : "By time"}
           </button>
         )}
       </div>

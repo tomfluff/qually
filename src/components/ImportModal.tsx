@@ -119,7 +119,7 @@ export function ImportSignModal() {
           keep <code>(default)</code>.
         </p>
         <label className="signfield"><span>Their name</span>
-          <input className="signinput" autoFocus value={name} placeholder="their name"
+          <input className="signinput" autoFocus value={name} placeholder="Their name"
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) done(name); }} />
         </label>

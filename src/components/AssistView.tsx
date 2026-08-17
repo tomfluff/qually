@@ -1043,7 +1043,7 @@ function NoticeList({ notices, groupBy, pidOrder, onlyUncoded, setOnlyUncoded }:
                 <div className="nWhy">{n.reason}</div>
                 {coding === key ? (
                   <div className="nCode">
-                    <CodeCombobox autoFocus placeholder="code this line…"
+                    <CodeCombobox autoFocus placeholder="Code this line…"
                       onPick={(c) => codeInstance(n, c)} onClose={() => setCoding(null)} />
                   </div>
                 ) : (

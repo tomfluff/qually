@@ -172,7 +172,7 @@ it round-trips everything, including corrections and AI marks.
               before exporting, or ship them as <code>(default)</code>.
             </p>
             <label className="signfield"><span>Your name</span>
-              <input className="signinput" autoFocus value={gateName} placeholder="your name"
+              <input className="signinput" autoFocus value={gateName} placeholder="Your name"
                 onChange={(e) => setGateName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && gateName.trim()) signAndRun(); }} />
             </label>

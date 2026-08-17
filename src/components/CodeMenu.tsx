@@ -103,7 +103,7 @@ export function CodeMenu({ code, x, y, onClose }: {
         </>
       )}
       {mode === "rename" && (
-        <CodeForm label="Rename code" initial={code} placeholder="new name"
+        <CodeForm label="Rename code" initial={code} placeholder="New name"
           onCancel={() => setMode("menu")} onSubmit={(v) => { renameCode(code, v); onClose(); }} />
       )}
       {mode === "merge" && (

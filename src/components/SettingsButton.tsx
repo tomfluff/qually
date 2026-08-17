@@ -102,8 +102,8 @@ export function SettingsButton() {
                 <div className="srow">
                   <span>Theme</span>
                   <div className="segmented">
-                    <button className={"seg" + (!dark ? " on" : "")} onClick={() => { if (dark) toggleTheme(); }}>light</button>
-                    <button className={"seg" + (dark ? " on" : "")} onClick={() => { if (!dark) toggleTheme(); }}>dark</button>
+                    <button className={"seg" + (!dark ? " on" : "")} onClick={() => { if (dark) toggleTheme(); }}>Light</button>
+                    <button className={"seg" + (dark ? " on" : "")} onClick={() => { if (!dark) toggleTheme(); }}>Dark</button>
                   </div>
                 </div>
                 <div className="srow">
@@ -123,13 +123,13 @@ export function SettingsButton() {
                   <span>Transcript text</span>
                   <input type="range" min={12} max={48} value={fontSize} onChange={(e) => setFontSize(+e.target.value)} />
                   <span className="sval">{fontSize}</span>
-                  <button className="sreset" onClick={(e) => { e.preventDefault(); setFontSize(16); }} title="Reset to 16px">reset</button>
+                  <button className="sreset" onClick={(e) => { e.preventDefault(); setFontSize(16); }} title="Reset to 16px">Reset</button>
                 </label>
                 <label className="srow">
                   <span>Panel text</span>
                   <input type="range" min={11} max={36} value={sidebarFontSize} onChange={(e) => setSidebarFontSize(+e.target.value)} />
                   <span className="sval">{sidebarFontSize}</span>
-                  <button className="sreset" onClick={(e) => { e.preventDefault(); setSidebarFontSize(13); }} title="Reset to 13px">reset</button>
+                  <button className="sreset" onClick={(e) => { e.preventDefault(); setSidebarFontSize(13); }} title="Reset to 13px">Reset</button>
                 </label>
                 {/* "Sidebar text" undersold it: the same value sizes the code list, tabs,
                     menus, popovers, tooltips, the event list, the Browse and Summary panes
@@ -151,31 +151,31 @@ export function SettingsButton() {
                 <div className="srow">
                   <span>Line numbers</span>
                   <div className="segmented">
-                    <button className={"seg" + (!showLineNumbers ? " on" : "")} onClick={() => setUi({ showLineNumbers: false })}>off</button>
-                    <button className={"seg" + (showLineNumbers ? " on" : "")} onClick={() => setUi({ showLineNumbers: true })}>on</button>
+                    <button className={"seg" + (!showLineNumbers ? " on" : "")} onClick={() => setUi({ showLineNumbers: false })}>Off</button>
+                    <button className={"seg" + (showLineNumbers ? " on" : "")} onClick={() => setUi({ showLineNumbers: true })}>On</button>
                   </div>
                 </div>
                 <div className="srow">
                   <span>Speaker names</span>
                   <div className="segmented">
-                    <button className={"seg" + (speakerNames === "full" ? " on" : "")} onClick={() => setUi({ speakerNames: "full" })}>full</button>
-                    <button className={"seg" + (speakerNames === "short" ? " on" : "")} onClick={() => setUi({ speakerNames: "short" })}>short</button>
+                    <button className={"seg" + (speakerNames === "full" ? " on" : "")} onClick={() => setUi({ speakerNames: "full" })}>Full</button>
+                    <button className={"seg" + (speakerNames === "short" ? " on" : "")} onClick={() => setUi({ speakerNames: "short" })}>Short</button>
                   </div>
                 </div>
                 <div className="settings-note">Short shows a unique abbreviation (hover for the full name).</div>
                 <div className="srow">
                   <span>Merge split lines</span>
                   <div className="segmented">
-                    <button className={"seg" + (!mergeLines ? " on" : "")} onClick={() => setUi({ mergeLines: false })}>off</button>
-                    <button className={"seg" + (mergeLines ? " on" : "")} onClick={() => setUi({ mergeLines: true })}>on</button>
+                    <button className={"seg" + (!mergeLines ? " on" : "")} onClick={() => setUi({ mergeLines: false })}>Off</button>
+                    <button className={"seg" + (mergeLines ? " on" : "")} onClick={() => setUi({ mergeLines: true })}>On</button>
                   </div>
                 </div>
                 <div className="settings-note">Joins a speaker's unfinished lines (no . ? ! …) into one reading unit.</div>
                 <div className="srow">
                   <span>Merge by pause</span>
                   <div className="segmented">
-                    <button className={"seg" + (!mergeGapOn ? " on" : "")} onClick={() => setUi({ mergeGapOn: false })}>off</button>
-                    <button className={"seg" + (mergeGapOn ? " on" : "")} onClick={() => setUi({ mergeGapOn: true })}>on</button>
+                    <button className={"seg" + (!mergeGapOn ? " on" : "")} onClick={() => setUi({ mergeGapOn: false })}>Off</button>
+                    <button className={"seg" + (mergeGapOn ? " on" : "")} onClick={() => setUi({ mergeGapOn: true })}>On</button>
                   </div>
                 </div>
                 {mergeGapOn && (
@@ -184,15 +184,15 @@ export function SettingsButton() {
                     <input type="range" min={1} max={15} step={1} value={mergeGap}
                       onChange={(e) => setUi({ mergeGap: +e.target.value })} />
                     <span className="sval">{mergeGap}s</span>
-                    <button className="sreset" onClick={(e) => { e.preventDefault(); setUi({ mergeGap: 3 }); }} title="Reset to 3s">reset</button>
+                    <button className="sreset" onClick={(e) => { e.preventDefault(); setUi({ mergeGap: 3 }); }} title="Reset to 3s">Reset</button>
                   </label>
                 )}
                 <div className="settings-note">Also joins consecutive lines from one speaker when the pause between them fits the gap. Line ends come from <code>end_timestamp</code> if the import had one, otherwise estimated from length.</div>
                 <div className="srow">
                   <span>Minimap</span>
                   <div className="segmented">
-                    <button className={"seg" + (minimapDetail === "detailed" ? " on" : "")} onClick={() => setUi({ minimapDetail: "detailed" })}>detailed</button>
-                    <button className={"seg" + (minimapDetail === "simplified" ? " on" : "")} onClick={() => setUi({ minimapDetail: "simplified" })}>simple</button>
+                    <button className={"seg" + (minimapDetail === "detailed" ? " on" : "")} onClick={() => setUi({ minimapDetail: "detailed" })}>Detailed</button>
+                    <button className={"seg" + (minimapDetail === "simplified" ? " on" : "")} onClick={() => setUi({ minimapDetail: "simplified" })}>Simple</button>
                   </div>
                 </div>
                 <div className="settings-note">Simple uses bigger, blockier marks. Drag the minimap's edge to widen it.</div>
@@ -211,7 +211,7 @@ export function SettingsButton() {
                     onKeyUp={() => { if (dragSpeed !== null) { setUi({ scrollSpeed: dragSpeed / 100 }); setDragSpeed(null); } }}
                     onBlur={() => { if (dragSpeed !== null) { setUi({ scrollSpeed: dragSpeed / 100 }); setDragSpeed(null); } }} />
                   <span className="sval">{dragSpeed ?? Math.round(scrollSpeed * 100)}%</span>
-                  <button className="sreset" onClick={(e) => { e.preventDefault(); setDragSpeed(null); setUi({ scrollSpeed: 1 }); }} title="Reset to 100%">reset</button>
+                  <button className="sreset" onClick={(e) => { e.preventDefault(); setDragSpeed(null); setUi({ scrollSpeed: 1 }); }} title="Reset to 100%">Reset</button>
                 </label>
                 <div className="settings-note">How far one wheel click moves any list. 100% is half your device's default; 200% matches it.</div>
               </>}
@@ -222,8 +222,8 @@ export function SettingsButton() {
                 <div className="srow">
                   <span>Loop while editing</span>
                   <div className="segmented">
-                    <button className={"seg" + (!loopEdit ? " on" : "")} onClick={() => setUi({ loopEdit: false })}>off</button>
-                    <button className={"seg" + (loopEdit ? " on" : "")} onClick={() => setUi({ loopEdit: true })}>on</button>
+                    <button className={"seg" + (!loopEdit ? " on" : "")} onClick={() => setUi({ loopEdit: false })}>Off</button>
+                    <button className={"seg" + (loopEdit ? " on" : "")} onClick={() => setUi({ loopEdit: true })}>On</button>
                   </div>
                 </div>
                 <div className="srow">
@@ -241,7 +241,7 @@ export function SettingsButton() {
               {tab === "Coding" && <>
                 <label className="srow">
                   <span>Coder name</span>
-                  <input type="text" className="settext" value={coderName} placeholder="your name"
+                  <input type="text" className="settext" value={coderName} placeholder="Your name"
                     onChange={(e) => setUi({ coderName: e.target.value })}
                     onBlur={() => claimUnattributed()} />
                 </label>
@@ -258,8 +258,8 @@ export function SettingsButton() {
                 <div className="srow">
                   <span>Code patterns</span>
                   <div className="segmented">
-                    <button className={"seg" + (!lanePattern ? " on" : "")} onClick={() => setUi({ lanePattern: false })}>off</button>
-                    <button className={"seg" + (lanePattern ? " on" : "")} onClick={() => setUi({ lanePattern: true })}>on</button>
+                    <button className={"seg" + (!lanePattern ? " on" : "")} onClick={() => setUi({ lanePattern: false })}>Off</button>
+                    <button className={"seg" + (lanePattern ? " on" : "")} onClick={() => setUi({ lanePattern: true })}>On</button>
                   </div>
                 </div>
                 <div className="settings-note">A texture as well as a colour, so codes stay apart without relying on hue.</div>
@@ -276,16 +276,16 @@ export function SettingsButton() {
                 <div className="srow">
                   <span>Hotbar 1–9</span>
                   <div className="segmented">
-                    <button className={"seg" + (mode === "auto" ? " on" : "")} onClick={() => setHotbarMode("auto")}>auto</button>
-                    <button className={"seg" + (mode === "pinned" ? " on" : "")} onClick={() => setHotbarMode("pinned")}>pinned</button>
+                    <button className={"seg" + (mode === "auto" ? " on" : "")} onClick={() => setHotbarMode("auto")}>Auto</button>
+                    <button className={"seg" + (mode === "pinned" ? " on" : "")} onClick={() => setHotbarMode("pinned")}>Pinned</button>
                   </div>
                 </div>
                 <div className="settings-note">Auto fills the tiles with your most-used codes; pinned shows only codes you pin.</div>
                 <div className="srow">
                   <span>Code palette 0</span>
                   <div className="segmented">
-                    <button className={"seg" + (palettePos === "auto" ? " on" : "")} onClick={() => setUi({ palettePos: "auto" })}>near</button>
-                    <button className={"seg" + (palettePos === "centered" ? " on" : "")} onClick={() => setUi({ palettePos: "centered" })}>center</button>
+                    <button className={"seg" + (palettePos === "auto" ? " on" : "")} onClick={() => setUi({ palettePos: "auto" })}>Near</button>
+                    <button className={"seg" + (palettePos === "centered" ? " on" : "")} onClick={() => setUi({ palettePos: "centered" })}>Center</button>
                   </div>
                 </div>
                 <div className="settings-note">Where the palette opens: next to your selected lines, or screen-centered.</div>

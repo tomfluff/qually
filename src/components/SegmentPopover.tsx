@@ -90,7 +90,7 @@ export function SegmentPopover({ sid, x, y, onClose }: {
           {grounds.map((q, i) => <span key={i} className="pop-ground">“{q}”</span>)}
         </div>
       )}
-      <textarea value={seg.notes} placeholder="notes" onChange={(e) => setNotes(sid, e.target.value)} />
+      <textarea value={seg.notes} placeholder="Notes" onChange={(e) => setNotes(sid, e.target.value)} />
       <div className="row">
         <button className="btn danger" onClick={() => { deleteSegment(sid); onClose(); }}>Delete</button>
         {seg.status !== "accepted" && seg.status !== "rejected" ? (
@@ -106,8 +106,8 @@ export function SegmentPopover({ sid, x, y, onClose }: {
           </button>
         )}
         <button className="btn copy" onClick={() => { const t = segText(); if (t) navigator.clipboard.writeText(t); }}
-          title="copy the segment (Ctrl+C)"><Icon name="copy" size={16} /></button>
-        <button className="btn iconclose" onClick={onClose} title="close"><Icon name="x" size={16} /></button>
+          title="Copy the segment (Ctrl+C)"><Icon name="copy" size={16} /></button>
+        <button className="btn iconclose" onClick={onClose} title="Close"><Icon name="x" size={16} /></button>
       </div>
     </div>
   );

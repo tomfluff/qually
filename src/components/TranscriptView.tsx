@@ -879,7 +879,7 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, onEdit }: {
           { x: e.clientX, y: e.clientY });
       }}>
       {showLid && <span className="lid" aria-hidden="true" />}
-      <button className="ts" tabIndex={-1} title="play from here"
+      <button className="ts" tabIndex={-1} title="Play from here"
         onClick={() => seekVideo(lineTs)}>{lineTs}</button>
       {editing ? (
         <textarea className="mkedit" rows={1} autoFocus value={value} ref={taRef}
@@ -1055,7 +1055,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onAddE
       {/* out of the Tab order: tabbing walked every rendered timecode. Mouse users
           click it; keyboard users press Enter on the selected line (see the list). */}
       <button className="ts" tabIndex={-1} onClick={(e) => { e.stopPropagation(); seekVideo(group.ts); }}
-        title="play from here">
+        title="Play from here">
         {group.ts.split(".")[0]}
       </button>
       {/* the NAME is in the chip: colour tells speakers apart at a glance, but never

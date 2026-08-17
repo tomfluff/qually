@@ -52,7 +52,7 @@ function CoderPrompt() {
           <code>(default)</code> and decide later (the chip and export will remind you).
         </p>
         <label className="signfield"><span>Your name</span>
-          <input className="signinput" autoFocus value={name} placeholder="your name"
+          <input className="signinput" autoFocus value={name} placeholder="Your name"
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) done(name); }} />
         </label>
@@ -77,7 +77,7 @@ function CoderChip() {
   const name = coderName.trim();
   if (editing) {
     return (
-      <input className="coderchip-edit" autoFocus value={coderName} placeholder="your name"
+      <input className="coderchip-edit" autoFocus value={coderName} placeholder="Your name"
         aria-label="Your name — stamped on every code you make"
         onChange={(e) => setUi({ coderName: e.target.value })}
         onBlur={() => { setEditing(false); claimUnattributed(); }}

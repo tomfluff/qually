@@ -115,7 +115,7 @@ export function BrowseView() {
             The row stays fixed; only the code list scrolls (like the transcript sidebar),
             so the scrollbar sits inset from the drag divider instead of against it. */}
         <div className="cbFilterRow">
-          <input type="search" placeholder="filter codes…" value={filter}
+          <input type="search" placeholder="Filter codes…" value={filter}
             onChange={(e) => setFilter(e.target.value)} />
           <CbAiMenu onGround={() => setGroundOpen(true)} onDescribe={() => setDescribeOpen(true)}
             fontSize={sidebarFontSize} />
