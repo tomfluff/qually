@@ -27,7 +27,8 @@
 /* padding-right leaves the full-width controls (key input, model row) the same
    breathing room on the right as the nav gap gives on the left — 6px sat them
    almost against the modal edge */
-.set-panel { flex:1 1 auto; min-width:0; overflow-y:auto; padding: 8px 16px 8px 8px;
+.set-panel { flex:1 1 auto; min-width:0; overflow-y:auto; overflow-x:hidden;
+  padding: 8px 16px 8px 8px;
   display:flex; flex-direction:column; gap:11px; }
 /* Keep every row at its natural height. A flex column with overflow-y:auto still
    shrinks its children to fit the box (flex-shrink defaults to 1), so once the
@@ -53,7 +54,9 @@
 .set-foot .set-foot-note { font-size:.75em; color:var(--muted); line-height:1.4; }
 
 /* control rows — rescoped from the old .settings-pop; behaviour unchanged */
-.set-modal .srow { display:flex; align-items:center; gap:10px; min-height:26px; }
+/* wrap, never a sideways scrollbar: when a row's control can't fit beside its
+   label (heavy zoom, long speaker name), it drops to the next line whole */
+.set-modal .srow { display:flex; flex-wrap:wrap; align-items:center; gap:10px; min-height:26px; }
 .set-modal .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
 .set-modal .srow input[type=range] { font-size:inherit; width:10em; margin:0;
   align-self:center; accent-color:var(--accent); }
@@ -69,22 +72,25 @@
 .set-modal .sreset { border:none; background:none; padding:5px 6px; min-height:24px; cursor:pointer;
   color:var(--muted); font:inherit; font-size:.85em; text-decoration:underline; border-radius:5px; }
 .set-modal .sreset:hover { color:var(--accent); background:var(--panel); }
-.set-modal .seg { display:flex; width:9.4em; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
-.set-modal .seg button { flex:1; border:none; background:var(--bg); color:var(--fg);
-  padding:5px 0; font:inherit; font-weight:500; text-align:center; cursor:pointer;
-  transition:background .12s, color .12s; }
-.set-modal .seg button:hover { background:var(--panel); }
-.set-modal .seg button.on { background:var(--accent); color:#fff; }
-[data-theme=dark] .set-modal .seg button.on { color:#12161a; }
+/* the shared .segmented (base.css), sized for a settings row: a fixed width so
+   every control down the column lines up, and the settings panel's own row rhythm */
+.set-modal .segmented { width:9.4em; flex:none; }
+.set-modal .segmented .seg { padding:5px 0; font-weight:500;
+  text-align:center; transition:background .12s, color .12s; }
+/* full-strength ink on the UNSELECTED option: it is the other choice you are
+   about to make, not helper text — muting it to 5.3:1 flattened ~40 labels.
+   :not(.on) so this can never beat .seg.on's accent ink. */
+.set-modal .segmented .seg:not(.on) { color:var(--fg); }
+/* :not(.on) — this rule sits after the shared .seg.on and would otherwise paint
+   the SELECTED segment grey the moment the pointer touched it */
+.set-modal .segmented .seg:not(.on):hover { background:var(--panel); }
 /* the reading-font control has three uneven labels (one is "Atkinson"), so it
-   sizes to its content and shows dividers rather than cramming into a 150px third */
-.set-modal .seg.fontseg { width:auto; }
-.set-modal .seg.fontseg button { flex:0 0 auto; padding:5px 11px; }
-.set-modal .seg.fontseg button + button { border-left:1px solid var(--line); }
-/* five speed stops don't fit a 150px seg */
-.set-modal .seg.loopseg { width:auto; }
-.set-modal .seg.loopseg button { flex:0 0 auto; padding:5px 9px; font-variant-numeric:tabular-nums; }
-.set-modal .seg.loopseg button + button { border-left:1px solid var(--line); }
+   sizes to its content rather than cramming into a 150px third */
+.set-modal .segmented.fontseg { width:auto; }
+.set-modal .segmented.fontseg .seg { flex:0 0 auto; padding:5px 11px; }
+/* five speed stops don't fit a 150px control */
+.set-modal .segmented.loopseg { width:auto; }
+.set-modal .segmented.loopseg .seg { flex:0 0 auto; padding:5px 9px; font-variant-numeric:tabular-nums; }
 .set-modal .swatches { display:flex; gap:7px; }
 /* "find a 10px colour swatch" is the exact competitor failure this app exists to fix,
    so the swatches cannot be the one control that stays 22px forever. font-size:inherit
@@ -119,22 +125,31 @@
   background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:5px 7px; }
 .set-modal .srow .settext { flex:1; width:auto; }
 .airedact { resize:vertical; font-size:.95em; }
-.set-modal .seg.aimodels { width:100%; }
-.set-modal .seg.aimodels button { flex:1; }
+.set-modal .segmented.aimodels { width:100%; }
 
 /* per-speaker row: colour swatch (with initials) + name + quiet/normal/bold weight */
 .set-modal .spkswatch { width:34px; flex-shrink:0; border:none; border-radius:5px;
   font:inherit; font-size:.8em; font-weight:700; padding:3px 0; cursor:pointer; }
 .set-modal .spkname { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.set-modal .wseg { width:auto; flex-shrink:0; overflow:visible; }
-.set-modal .wseg button { width:30px; font-size:1.05em; line-height:1.5; }
-.set-modal .wseg .wt-quiet { color:var(--muted); font-weight:300; }
-.set-modal .wseg .wt-normal { font-weight:400; }
-.set-modal .wseg .wt-bold { font-weight:600; }
-.set-modal .wseg button.on { color:#fff; }
-[data-theme=dark] .set-modal .wseg button.on { color:#12161a; }
-.set-modal .wseg button:first-child { border-radius:6px 0 0 6px; }
-.set-modal .wseg button:last-child { border-radius:0 6px 6px 0; }
+/* sizes to its three fixed cells, and NEVER clips them: .segmented's overflow
+   hidden cut the second and third A off when the row was squeezed. min-content
+   width plus overflow:visible means the control gives up nothing; the ends
+   carry their own radius since there is no longer a clip to round them. */
+/* .segmented.wseg outranks the fixed 9.4em above by specificity. The width is
+   EXPLICIT (3 cells x 30px + the container's two 1px borders): width:auto asked
+   the browser for the container's intrinsic size, and Chrome-on-Windows measured
+   it from the cells' CONTENT (three "A"s, 35px) rather than their 30px basis —
+   the cells spilled out of a too-small border. Never intrinsically size a flex
+   container whose items have a fixed basis. */
+.set-modal .segmented.wseg { width:92px; flex:none; }
+.set-modal .segmented.wseg .seg { flex:0 0 30px; font-size:1.05em; line-height:1.5; padding:5px 0; }
+.set-modal .segmented.wseg .wt-quiet { color:var(--muted); font-weight:300; }
+.set-modal .segmented.wseg .wt-normal { font-weight:400; }
+.set-modal .segmented.wseg .wt-bold { font-weight:600; }
+/* the selected cell's ink, restated AFTER the weight colours: .wt-quiet's muted
+   would otherwise win the cascade and print low-contrast grey on the accent */
+.set-modal .segmented.wseg .seg.on { color:#fff; }
+[data-theme=dark] .set-modal .segmented.wseg .seg.on { color:#12161a; }
 /* (speaker FOCUS moved out of this modal — it's the per-transcript target
    button at the transcript's bottom right; see transcript.css .focuswrap) */
 /* the speaker name doubles as the rename button: text, not a control, until you

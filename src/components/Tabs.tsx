@@ -112,7 +112,7 @@ export function Tabs() {
               e.stopPropagation();
               const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
               setClosing({ pid, x: r.left, y: r.bottom + 4 });
-            }}>×</button>
+            }}><Icon name="x" size={Math.round(fontSize * 0.85)} /></button>
         </div>
       ))}
       {/* reopen: the closed transcripts are still loaded, one click from the bar */}

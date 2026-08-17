@@ -65,3 +65,34 @@ button { font-family:inherit; }
   }
 }
 
+
+/* ── segmented control ──────────────────────────────────────────────────────
+   The app's ONE "pick one of two to four" control: Settings rows, the Summary
+   layout switch, transcript search scope, the Assist sidebar's group-by and
+   sort. Narrow panel headers use the cycling .sortchip instead (a three-way
+   segment does not fit a 250px sidebar), and menus use native radio rows. */
+/* border --muted, not --line: a control's own boundary needs 3:1 (SC 1.4.11) and
+   --line on --bg measures 1.27:1 — the unselected half read as plain grey text */
+.segmented { display:flex; border:1px solid var(--muted); border-radius:8px; overflow:hidden; }
+.segmented .seg { flex:1 1 0; min-width:0; min-height:24px; border:0; background:var(--bg);
+  color:var(--muted); font:inherit; padding:4px 2px; cursor:pointer; white-space:nowrap; }
+.segmented .seg + .seg { border-left:1px solid var(--muted); }
+.segmented .seg:hover { color:var(--fg); }
+/* the selected segment takes its ink from the theme's accent, not a fixed white:
+   dark's --accent is a light lavender, where near-black reads ~6.7:1 and white
+   only ~2.7:1 (same treatment as .nBtn.pri) */
+.segmented .seg.on { background:var(--accent); color:#fff; font-weight:600; }
+[data-theme=dark] .segmented .seg.on { color:#12161a; }
+
+/* ── count badge ────────────────────────────────────────────────────────────
+   "how many" beside a name, wherever a list shows one: code rows, the events
+   header, lens rows, definition cards, search groups. One size, one colour,
+   tabular figures so a column of them lines up. Contexts add only placement. */
+.cnt { color:var(--muted); font-size:.9em; font-variant-numeric:tabular-nums;
+  flex-shrink:0; } /* .9em, not .8: at the 11px panel minimum .8em rendered 8.8px —
+  the smallest text in an app whose named enemy is small text */
+/* the icon+number pair (CodeCounts) — contexts add placement (margin-left:auto),
+   and re-base the size where the container is already scaled */
+.cnt:has(.cntpair) { display:flex; align-items:center; gap:6px; }
+.cntpair { display:inline-flex; align-items:center; gap:2px; }
+.cntpair svg { opacity:.75; }

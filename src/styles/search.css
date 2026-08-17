@@ -62,17 +62,16 @@
   accent-color:var(--accent); }
 .noticemenu .lensdot { width:.7em; height:.7em; border-radius:50%; flex-shrink:0; }
 .noticemenu-note { color:var(--muted); font-size:.85em; padding:.25em .4em; }
-.seg.searchscope { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
-.seg.searchscope button { border:none; background:var(--bg); color:var(--muted);
-  padding:4px 8px; font-size:12px; cursor:pointer; }
-.seg.searchscope button.on { background:var(--accent); color:#fff; }
-[data-theme=dark] .seg.searchscope button.on { color:#12161a; } /* dark text on the lighter dark accent */
+/* the shared .segmented (base.css), a step down from the bar's text — em, never
+   fixed px: this was the one control the panel-text setting could not enlarge */
+.segmented.searchscope { flex:none; }
+.segmented.searchscope .seg { flex:0 0 auto; padding:.3em .7em; font-size:.92em; }
 .searchresults { max-height:min(50vh, 420px); overflow-y:auto; border-top:1px solid var(--line);
   padding:6px; }
 .searchgroup { margin-bottom:6px; }
 .searchgrouphead { font-size:11px; font-weight:700; color:var(--muted);
   text-transform:uppercase; letter-spacing:.06em; padding:4px 6px 2px; }
-.searchgrouphead .cnt { color:var(--muted); font-weight:400; }
+.searchgrouphead .cnt { font-weight:400; font-size:1em; } /* the head is already 11px */
 .searchhit { display:flex; gap:8px; align-items:baseline; padding:4px 6px; border-radius:6px; cursor:pointer; }
 .searchhit:hover { background:var(--sel); }
 .searchhit .searchlid { color:var(--muted); font-size:.85em; min-width:3ch; text-align:right; flex-shrink:0; }

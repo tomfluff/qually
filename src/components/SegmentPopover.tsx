@@ -82,7 +82,7 @@ export function SegmentPopover({ sid, x, y, onClose }: {
         <span className="meta">  ·  {seg.pid}:{range}  ·  {seg.proposedBy}/{seg.status}</span>
       </div>
       {closeCall && (
-        <div className="pop-warn">⚠ Near-balanced speakers — the excerpt keeps only the dominant speaker's lines, so the other speaker's substance drops out. Check this segment.</div>
+        <div className="pop-warn"><Icon name="alert-triangle" size={14} /> Near-balanced speakers — the excerpt keeps only the dominant speaker's lines, so the other speaker's substance drops out. Check this segment.</div>
       )}
       {grounds.length > 0 && (
         <div className="pop-grounds">

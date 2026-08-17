@@ -49,8 +49,8 @@
   cursor:pointer; }
 .tab .tabname { padding:6px 2px 6px 14px; display:inline-flex; align-items:center; gap:5px; }
 .tab .tabname svg { opacity:.75; } /* the pin marker rides quietly beside the name */
-/* × gets its own full-height padded target instead of a bare glyph */
-.tab .x { padding:6px 12px 6px 8px; opacity:.5; }
+/* close gets its own full-height padded target instead of a bare icon */
+.tab .x { padding:6px 12px 6px 8px; opacity:.5; display:inline-flex; align-items:center; }
 .tab .x:hover, .tab .x:focus-visible { opacity:1; }
 /* Browse is a different kind of view (cross-transcript code browser): same tab
    shape but filled with the primary color + contrasting text, set apart from the

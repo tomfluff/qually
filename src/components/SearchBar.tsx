@@ -101,10 +101,10 @@ export function SearchBar() {
               <Icon name="chevron-down" size={16} />
             </button>
           </>}
-          <div className="seg searchscope">
-            <button className={scope === "tab" ? "on" : ""} aria-pressed={scope === "tab"}
+          <div className="segmented searchscope">
+            <button className={"seg" + (scope === "tab" ? " on" : "")} aria-pressed={scope === "tab"}
               onClick={() => setSearch({ scope: "tab", current: null })}>This tab</button>
-            <button className={scope === "all" ? "on" : ""} aria-pressed={scope === "all"}
+            <button className={"seg" + (scope === "all" ? " on" : "")} aria-pressed={scope === "all"}
               onClick={() => setSearch({ scope: "all", current: null })}>All</button>
           </div>
         </div>
