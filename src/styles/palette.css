@@ -5,7 +5,9 @@
   display:flex; justify-content:center; align-items:flex-start; padding-top:16vh; }
 /* font-size comes inline from ui.sidebarFontSize (like the popovers/menus);
    children scale in em so the whole palette follows the Sidebar text setting */
-.palette { width:min(460px, 90vw); background:var(--bg); border:1px solid var(--line);
+/* em, not px: the centered palette has to grow with the panel text the same way
+   the anchored one does (CommandPalette sizes that in the same 29em units) */
+.palette { width:min(29em, 90vw); background:var(--bg); border:1px solid var(--line);
   border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.4); padding:14px; }
 .palette-head { font-size:.92em; color:var(--muted); margin-bottom:8px; }
 .palette .newCodeWrap { margin-bottom:0; }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useStore, isTranscriptView } from "../state/store";
-import { registerVideo, tsToSec, isLooping } from "../video/seek";
+import { registerVideo, tsToSec, isLooping, playheadSec } from "../video/seek";
 import { useDismiss, OVERLAY_SELECTOR } from "../usePopover";
 import { Icon } from "./Icon";
 
@@ -142,7 +142,7 @@ export function VideoDock() {
   // changing cur/offset/vidPid, so a dep list left the bridge holding a
   // detached node — timecode chips and the line-editor repair loop then drove
   // an invisible element while the one on screen never moved.
-  useEffect(() => { registerVideo(videoRef.current, offset); });
+  useEffect(() => { registerVideo(videoRef.current, offset, vidPid); });
   // the source is about to change (tab switch / new media): ignore the reset-to-0
   // timeupdate that follows, so it can't clobber the position we'll restore on load
   useEffect(() => { switching.current = true; }, [cur?.url]);
@@ -457,6 +457,25 @@ export function VideoDock() {
                 title="Select the transcript line playing now, and scroll to it">
                 <Icon name="target" size={fs + 2} /> Transcript
               </button>
+              {/* the twin of "Transcript": that one takes the playhead TO the text,
+                  this one leaves a note AT the playhead. Only offered while you're
+                  on the transcript the media belongs to — an event is filed against
+                  that transcript, so marking from another tab would file it wrong. */}
+              {onTranscript && vidPid === pid && (
+                // disabled during the pre-roll (offset puts the playhead before the
+                // transcript): a click that silently recorded nothing would lose a
+                // live observation. `time` re-renders on timeupdate, so this tracks.
+                <button className="vbtn" disabled={playheadSec() === null}
+                  onClick={() => {
+                    const t = playheadSec();
+                    if (t !== null) useStore.getState().setEventAt(t);
+                  }}
+                  title={playheadSec() === null
+                    ? "The playhead is before the transcript starts — nothing to mark yet"
+                    : "Add a session event at the playhead"}>
+                  <Icon name="bookmark" size={fs + 2} /> Mark
+                </button>
+              )}
               <span style={{ flex: 1 }} />
               <span className="vlabel">Offset</span>
               <div className="stepper">

@@ -6,14 +6,32 @@
 
 let el: HTMLVideoElement | null = null;
 let offset = 0;
+let ownerPid = ""; // whose transcript the registered media belongs to
 
-export function registerVideo(v: HTMLVideoElement | null, off: number) {
+export function registerVideo(v: HTMLVideoElement | null, off: number, pid = "") {
   el = v;
   offset = off;
+  ownerPid = pid;
 }
 
 // whether any media is loaded — the line editor shows its loop button only then
 export const hasVideo = () => el !== null;
+
+// Where the playhead is, on the TRANSCRIPT clock (the dock shows the video clock;
+// everything the researcher types is on the transcript's). null = no media, and
+// also the pre-roll: with a positive offset the video's first seconds sit BEFORE
+// the transcript, and clamping them to 0 would file every Mark pressed there at
+// the same wrong moment. No reading beats a false one.
+export const playheadSec = () => {
+  if (el === null) return null;
+  const t = el.currentTime - offset;
+  return t < 0 ? null : t;
+};
+
+// The pid-checked reading every event entry point must use: with picture-in-
+// picture holding transcript A's video alive, E pressed on transcript B would
+// otherwise file B's event at A's playhead — silent timeline corruption.
+export const playheadSecFor = (pid: string) => (pid && pid === ownerPid ? playheadSec() : null);
 
 // live rate change while a loop is running (the edit bar's speed button)
 export function setPlaybackRate(r: number) { if (el) el.playbackRate = r; }

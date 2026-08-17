@@ -66,13 +66,14 @@
 .eventList .evheadmain:hover, .eventList .evgrouphead:hover, .eventList .evitem:hover { background:var(--sel); }
 .eventList .evheadmain svg, .eventList .evgrouphead svg { color:var(--muted); flex-shrink:0; }
 /* the order switch: a quiet chip, because it says what you're looking at as much
-   as it offers to change it */
-.eventList .evsort { flex:none; background:none; border:1px solid var(--line);
+   as it offers to change it. Unscoped — the sidebar's code list wears the same
+   chip, and two lists in one panel must not order themselves in two vocabularies */
+.sortchip { flex:none; background:none; border:1px solid var(--muted);
   border-radius:999px; color:var(--muted); font:inherit; font-size:.85em;
-  padding:1px 8px; cursor:pointer; white-space:nowrap; }
-.eventList .evsort:hover { color:var(--fg); border-color:var(--muted); }
+  padding:4px 10px; cursor:pointer; white-space:nowrap; min-height:24px; }
+.sortchip:hover { color:var(--fg); border-color:var(--muted); }
 .eventList .evtitle { flex:1; min-width:0; }
-.eventList .cnt { margin-left:auto; color:var(--muted); font-size:.8em; flex-shrink:0; }
+.eventList .cnt { margin-left:auto; }
 .eventList .evgroups { flex:1; min-height:0; overflow-y:auto; padding-right:4px; }
 .eventList .evgrouphead { font-size:.95em; }
 .eventList .evdot { width:.7em; height:.7em; border-radius:.2em; flex-shrink:0; }
@@ -92,22 +93,40 @@
   font-size:.9em; }
 .eventList .evtext { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-/* ── the add-event modal ───────────────────────────────────────────────────── */
-/* em-based so the whole dialog scales with the reading size set on it (the
+/* ── the add-event card ────────────────────────────────────────────────────── */
+/* em-based so the whole card scales with the panel size set on it (the
    chrome's own px/rem sizes would otherwise stay put while the fields grew) */
 .addev { max-width:34em; }
-.addev .about-head h2 { font-size:1.2em; }
 .addev .btn { font-size:1em; }
-.addev .iconbtn { font-size:1rem; } /* the × keeps its fixed icon box */
-.addev .signfield { align-items:flex-start; }
-.addev .signfield > span { min-width:4ch; padding-top:7px; }
-.addev .signinput { flex:1; min-width:0; }
-.addev .addev-time { max-width:11ch; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* anchored to its line: no dim over the transcript, and the card carries the
+   palette's shadow so it reads as floating above the row rather than replacing it */
+.addev-back.anchored { background:transparent; }
+.addev-anchored { padding:12px; box-shadow:0 12px 40px rgba(0,0,0,.38); }
+/* the hint line does the title bar's job in a fraction of its height */
+.addev-hint { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+  font-size:.92em; color:var(--muted); margin-bottom:8px; }
+.addev-hint b { color:var(--fg); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+.addev-keys { margin-left:auto; white-space:nowrap; }
+/* time and type share one line under the note, each with a small lead-in label —
+   a bare "custom" box and a bare timecode were two mystery fields cold */
+.addev-meta { display:flex; gap:10px; margin-top:8px; }
+.addev-field { flex:1; min-width:0; display:flex; align-items:center; gap:6px; }
+.addev-field-time { flex:none; }
+.addev-lab { color:var(--muted); font-size:.85em; }
+.addev-go { width:100%; justify-content:center; margin-top:10px; }
+/* what you TYPE sits a step above the card's own text — the code palette's
+   1.15em, same reason: the field is the point of the surface */
+.addev .signinput { flex:1; min-width:0; font-size:1.15em; }
+/* 8 mono chars plus the input's own padding — box-sizing:border-box means the
+   ch width has to carry that padding too, or the seconds clip off the end */
+.addev .addev-time { flex:none; width:calc(8.5ch + 20px); text-align:center;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
 /* the type combobox rides the code combobox's wrap for the anchored .acList;
    in the modal's field row it just fills the line, no sidebar margins */
 .addev .addev-typewrap { flex:1; min-width:0; margin-bottom:0; }
 .addev .addev-typewrap .signinput { width:100%; }
-.addev .addev-text { resize:vertical; font:inherit; line-height:1.4; }
+/* font shorthand first — it resets font-size, so the 1.15em has to follow it */
+.addev .addev-text { width:100%; resize:vertical; font:inherit; font-size:1.15em; line-height:1.4; }
 
 /* the tab menu's "Load events…" count + result note */
 .ctxmenu .ctxcount { margin-left:auto; color:var(--muted); font-size:.85em; }

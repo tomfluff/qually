@@ -4,10 +4,15 @@ import { useLayoutEffect, useState, type CSSProperties } from "react";
 import { useStore } from "../state/store";
 import { CodeCombobox } from "./CodeCombobox";
 
-const W = 380, GAP = 8;
-const CHROME = 108;  // header + input + padding above the results list
-const FULL = 340;    // palette height with a full results list
-const LIST_MAX = 240;
+// Shared with AddEventModal — the two anchored cards must stay the same size
+// family or a tweak to one silently desynchronises the pair.
+export const GAP = 8;
+// sized in the panel ramp's own units, not fixed px: at 22px panel text a 380px
+// palette crowds its hint line and clips long code names in the list
+export const widthFor = (fs: number) => Math.max(320, Math.min(Math.round(fs * 29), window.innerWidth - 16));
+const CHROME = 8.3;   // header + input + padding above the results list, in em
+const FULL = 26;      // palette height with a full results list, in em
+const LIST_MAX = 240; // px, deliberately absolute: caps the LIST, not the chrome
 
 // Opened by the 0 key / dock tile. Anchors just above or below the selected
 // lines (whichever side has more room); falls back to a centered overlay when
@@ -20,6 +25,7 @@ export function CommandPalette() {
   const setPalette = useStore((s) => s.setPalette);
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; listMax: number } | null>(null);
 
+  const W = widthFor(sidebarFontSize);
   useLayoutEffect(() => {
     if (!open || palettePos === "centered") { setPos(null); return; } // forced centered
     const els = document.querySelectorAll<HTMLElement>(".lineRow.selected");
@@ -30,18 +36,19 @@ export function CommandPalette() {
       top = Math.min(top, r.top); bottom = Math.max(bottom, r.bottom);
       if (i === 0) cx = r.left + r.width / 2;
     });
+    const chrome = CHROME * sidebarFontSize, full = FULL * sidebarFontSize;
     const left = Math.max(8, Math.min(window.innerWidth - W - 8, cx - W / 2));
     const below = window.innerHeight - (bottom + GAP);
     const above = top - GAP;
-    if (Math.max(below, above) < CHROME + 120) { setPos(null); return; } // too tight -> centered
+    if (Math.max(below, above) < chrome + 120) { setPos(null); return; } // too tight -> centered
     // prefer the side that fits the full palette; else the roomier side
-    const placeBelow = below >= FULL ? true : above >= FULL ? false : below >= above;
+    const placeBelow = below >= full ? true : above >= full ? false : below >= above;
     const avail = placeBelow ? below : above;
-    const listMax = Math.max(120, Math.min(LIST_MAX, avail - CHROME)); // cap list so it can't clip
+    const listMax = Math.max(120, Math.min(LIST_MAX, avail - chrome)); // cap list so it can't clip
     setPos(placeBelow
       ? { top: bottom + GAP, left, listMax }
       : { bottom: window.innerHeight - top + GAP, left, listMax });
-  }, [open, palettePos]);
+  }, [open, palettePos, sidebarFontSize, W]);
 
   if (!open) return null;
   const anchored = pos !== null;

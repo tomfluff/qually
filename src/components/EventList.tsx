@@ -68,7 +68,7 @@ export function EventList({ pid }: { pid: string }) {
           <span className="cnt">{list.length}</span>
         </button>
         {open && (
-          <button className="evsort" onClick={() => setUi({ eventSort: sort === "type" ? "time" : "type" })}
+          <button className="sortchip" onClick={() => setUi({ eventSort: sort === "type" ? "time" : "type" })}
             title={sort === "type" ? "Grouped by type — switch to time order" : "In time order — switch to grouping by type"}
             aria-label={sort === "type" ? "Grouped by type. Switch to time order." : "In time order. Switch to grouping by type."}>
             {sort === "type" ? "by type" : "by time"}

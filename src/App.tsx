@@ -28,6 +28,8 @@ import { AUTHOR_AVATAR } from "./assets/avatar";
 import { LENSES, spanLens } from "./ai/flag";
 import { useCallback, useMemo, useRef } from "react";
 import { useDismiss, OVERLAY_SELECTOR } from "./usePopover";
+import { hasVideo, playheadSecFor } from "./video/seek";
+import { announce } from "./announce";
 
 // Show/hide the AI noticing highlights — the blind-reading control. Only appears
 // once the active transcript actually has notices, so it costs no chrome before.
@@ -174,6 +176,8 @@ export function App() {
       // under them. Each of these closes itself on Escape; the palette additionally
       // needs the hand below for when focus has left its input.
       if (document.querySelector(OVERLAY_SELECTOR)) {
+        // (the add-event card closes itself on a document-level capture Escape,
+        // so it never needs help from here)
         if (e.key === "Escape" && s.paletteOpen) {
           s.setPalette(false); // and back to the list, same as the palette's own close
           document.querySelector<HTMLElement>(".tviewlist")?.focus();
@@ -202,6 +206,17 @@ export function App() {
       // plain digits only — Ctrl+0 (zoom reset), Ctrl+1-9 (tab switch), Alt+digit stay with the browser
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "0") { e.preventDefault(); s.setPalette(true); return; }
+      // E with a line selected is the transcript list's own (it knows which group
+      // the head sits in). With nothing selected and media loaded, it means the
+      // other thing you could be marking: where the playhead is.
+      if ((e.key === "e" || e.key === "E") && isTranscriptView(s.active) && !s.selection.lines.size) {
+        const t = playheadSecFor(s.active); // pid-checked: never another transcript's pinned video
+        if (t !== null) { e.preventDefault(); s.setEventAt(t); }
+        // pre-roll (media loaded, playhead before the transcript): say why nothing
+        // happened instead of silently eating the key
+        else if (hasVideo()) announce("The playhead is before the transcript starts — nothing to mark yet.");
+        return;
+      }
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= 9 && s.selection.lines.size) {
         const code = s.hotbarCache[n - 1];

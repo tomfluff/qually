@@ -209,19 +209,29 @@ export function TranscriptView() {
   const [aiPop, setAiPop] = useState<{ line: number; span: Flag; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null); // line under repair (dblclick)
   // add/edit-event modal: a prefilled time (new event) or the marker being edited
-  const [addEv, setAddEv] = useState<{ t: number } | { m: Marker } | null>(null);
-  useEffect(() => { setEditingId(null); setAiPop(null); setAddEv(null); }, [active]);
+  // lid/mid ride along so the modal can anchor its card to the row it came from
+  const [addEv, setAddEv] = useState<{ t: number; lid: number } | { m: Marker } | null>(null);
+  const eventAt = useStore((s) => s.eventAt);
+  const setEventAt = useStore((s) => s.setEventAt);
+  useEffect(() => { setEditingId(null); setAiPop(null); setAddEv(null); setEventAt(null); }, [active]);
 
   // "After this line" as a default time: the next timed line's start − 1s, clamped
   // to the line's own start so a rapid-fire transcript can't push it before the
   // line; past the last line (or with no timecodes) fall to start + 5s, then 0.
   const openAddEvent = (g: Group) => {
+    // one card at a time. The render guard (eventAt && !addEv) is the arbiter for
+    // the reverse direction; this clear keeps the store honest so the dock card
+    // doesn't reappear the moment this one closes.
+    setEventAt(null);
     const start = tsToSec(g.ts.trim() || "") ?? 0;
     const ls = transcript?.lines ?? [];
     const i = ls.findIndex((l) => l.id === g.endId);
     const next = i >= 0 ? ls.slice(i + 1).find((l) => l.ts.trim()) : undefined;
     const nextSec = next ? tsToSec(next.ts) : null;
-    setAddEv({ t: nextSec !== null && nextSec !== undefined ? Math.max(start, nextSec - 1) : start + 5 });
+    setAddEv({
+      t: nextSec !== null && nextSec !== undefined ? Math.max(start, nextSec - 1) : start + 5,
+      lid: g.startId,
+    });
   };
   const [hoverSid, setHoverSid] = useState<number | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -785,7 +795,19 @@ export function TranscriptView() {
       </div>
       {addEv && <AddEventModal pid={active} defaultT={"t" in addEv ? addEv.t : 0}
         marker={"m" in addEv ? addEv.m : undefined} tsSample={tsSample}
-        onClose={() => setAddEv(null)} />}
+        anchorSel={"m" in addEv ? `#mrow-${addEv.m.mid}` : `#trow-${addEv.lid}`}
+        onClose={() => {
+          setAddEv(null);
+          // hand focus back to the list (it would fall to <body>), like the palette
+          document.querySelector<HTMLElement>(".tviewlist")?.focus();
+        }} />}
+      {/* the same card, asked for from the video dock (Mark) or E with nothing
+          selected — anchored to the dock, since that is where you were looking */}
+      {eventAt !== null && !addEv && <AddEventModal pid={active} defaultT={eventAt} tsSample={tsSample}
+        anchorSel=".vdock" onClose={() => {
+          setEventAt(null);
+          document.querySelector<HTMLElement>(".tviewlist")?.focus();
+        }} />}
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
       {codeMenu && <CodeMenu code={codeMenu.code} x={codeMenu.x} y={codeMenu.y}
         onClose={() => setCodeMenu(null)} />}
@@ -848,7 +870,8 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, onEdit }: {
     //
     // Right-click anywhere on the row recolours the TYPE (every event of it) — the
     // gesture the codebook swatches use; the textarea keeps its native menu.
-    <div className="markerRow" style={{ "--mk-c": color, "--spk-c": color } as CSSProperties}
+    <div className="markerRow" id={`mrow-${marker.mid}`}
+      style={{ "--mk-c": color, "--spk-c": color } as CSSProperties}
       onContextMenu={(e) => {
         if ((e.target as HTMLElement).closest(".mkedit")) return;
         e.preventDefault(); e.stopPropagation();
