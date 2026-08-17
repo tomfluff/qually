@@ -1,21 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useStore, patternOf } from "../state/store";
+import { codeStats, sortCodes, SORTS } from "../codeStats";
 import { CodeMenu } from "./CodeMenu";
+import { CodeCounts } from "./CodeCounts";
 import { CodeCombobox } from "./CodeCombobox";
 import { AiCheckModal } from "./AiCheckModal";
 import { SuggestModal } from "./SuggestModal";
 import { EventList } from "./EventList";
 import { openColorPicker } from "../colorPicker";
+import { announce } from "../announce";
 import { useToggleMenu } from "../usePopover";
-import { Icon } from "./Icon";
+import { Icon, countIconSize } from "./Icon";
 
 export function CodeSidebar() {
   const active = useStore((s) => s.active); // the sidebar only renders for a transcript view
   const lanePattern = useStore((s) => s.ui.lanePattern);
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
+  const transcripts = useStore((s) => s.transcripts);
+  const codeSort = useStore((s) => s.ui.codeSort);
+  const setUi = useStore((s) => s.setUi);
   const hotbarCache = useStore((s) => s.hotbarCache);
   const hasSel = useStore((s) => s.selection.lines.size > 0);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
@@ -35,11 +41,19 @@ export function CodeSidebar() {
     setMenu({ code, x: r.left, y: r.bottom + 2 });
   };
 
-  const counts: Record<string, { segs: number; pids: Set<string> }> = {};
-  segments.filter((s) => s.status === "accepted").forEach((s) => {
-    (counts[s.code] ??= { segs: 0, pids: new Set() });
-    counts[s.code].segs++; counts[s.code].pids.add(s.pid);
-  });
+  const counts = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
+  const codes = useMemo(
+    () => sortCodes(Object.keys(codebook), counts, codeSort), [codebook, counts, codeSort]);
+  // one chip, cycling — three orders is one more than a toggle but still far less
+  // room than three pills cost in a 250px panel, and the chip names the order it
+  // is IN, so the list is always labelled even when nobody touches it
+  // Math.max: rehydrate normalizes codeSort, but a render must never be one
+  // bad value away from SORTS[-1].label throwing (the app has no error boundary)
+  const sortIdx = Math.max(0, SORTS.findIndex((s) => s.id === codeSort));
+  const nextSort = SORTS[(sortIdx + 1) % SORTS.length];
+  // the counts read as icons, not as "12·3": a glyph pair survives the panel getting
+  // narrow, and the separator dot never did say which number was which
+  const cntIcon = countIconSize(sidebarFontSize);
 
   return (
     <div id="sidebar" style={{ fontSize: sidebarFontSize, width: sidebarWidth }}>
@@ -68,15 +82,29 @@ export function CodeSidebar() {
           </div>
         )}
       </div>
+      {/* the events list below has the same header shape (name, count, order chip):
+          two lists in one panel, one vocabulary */}
+      <div className="codeHead">
+        <span className="codeTitle">Codes</span>
+        <span className="cnt">{codes.length}</span>
+        <button className="sortchip"
+          onClick={() => { setUi({ codeSort: nextSort.id }); announce(`Sorted by ${nextSort.label}`); }}
+          title={`Sorted by ${SORTS[sortIdx].label} — switch to ${nextSort.label}`}
+          aria-label={`Sorted by ${SORTS[sortIdx].label}. Switch to ${nextSort.label}.`}>
+          {SORTS[sortIdx].label}
+        </button>
+      </div>
       <div className="codeList nicescroll">
-      {Object.keys(codebook).sort().map((code) => {
+      {codes.map((code) => {
         const slot = hotbarCache.indexOf(code);
         const c = counts[code];
         return (
           <div key={code} className="codeItem" tabIndex={0} role="button"
             aria-label={`Apply code ${code}`
               + (slot >= 0 && slot < 9 ? `, hotkey ${slot + 1}` : "")
-              + `, ${c?.segs ?? 0} segment${c?.segs === 1 ? "" : "s"}`}
+              + `, ${c?.segs ?? 0} excerpt${c?.segs === 1 ? "" : "s"}`
+              + ` in ${c?.pids ?? 0} transcript${c?.pids === 1 ? "" : "s"}`
+              + (pinned.includes(code) ? ", pinned" : "")}
             onClick={() => { if (hasSel) applyCode(code); }}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return; // let the ⋯ button's keys be its own
@@ -107,10 +135,14 @@ export function CodeSidebar() {
                 openColorPicker(codebook[code].color, (v) => setColor(code, v), e.currentTarget);
               }} />
             <span className="cname">{code}</span>
-            {pinned.includes(code) && <span className="pindot" title="pinned">●</span>}
-            <span className="cnt" aria-hidden="true">{c ? `${c.segs}·${c.pids.size}` : "0"}</span>
+            {pinned.includes(code) && (
+              <span className="pindot" title="pinned"><Icon name="pin" size={cntIcon} /></span>
+            )}
+            <CodeCounts stat={c} size={cntIcon} />
             <button className="rowMenu" aria-label={`Options for ${code}`}
-              onClick={(e) => { e.stopPropagation(); openMenuAt(code, e.currentTarget); }}>⋯</button>
+              onClick={(e) => { e.stopPropagation(); openMenuAt(code, e.currentTarget); }}>
+              <Icon name="dots" size={sidebarFontSize} />
+            </button>
           </div>
         );
       })}

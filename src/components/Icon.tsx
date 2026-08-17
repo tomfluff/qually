@@ -42,7 +42,11 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   "file-plus": { d: ["M14 3v4a1 1 0 0 0 1 1h4", "M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z", "M12 11l0 6", "M9 14l6 0"] },
   "grip-horizontal": { d: ["M5 9h.01", "M5 15h.01", "M12 9h.01", "M12 15h.01", "M19 9h.01", "M19 15h.01"] },
   "arrows-exchange": { d: ["M7 10h14l-4 -4", "M17 14h-14l4 4"] },
-  reload: { d: ["M19.933 13.041a8 8 0 1 1 -9.925 -8.788c3.899 -1 7.935 1.007 9.425 4.747", "M20 4v5h-5"]}
+  reload: { d: ["M19.933 13.041a8 8 0 1 1 -9.925 -8.788c3.899 -1 7.935 1.007 9.425 4.747", "M20 4v5h-5"]},
+  bookmark: { d: ["M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4z"] },
+  dots: { d: ["M5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M19 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"] },
+  notes: { d: ["M5 3m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z", "M9 7l6 0", "M9 11l6 0", "M9 15l4 0"] },
+  "message-2": { d: ["M8 9h8", "M8 13h6", "M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z"] }
 };
 
 export function Icon({ name, size = 18 }: { name: keyof typeof PATHS; size?: number }) {
@@ -56,3 +60,8 @@ export function Icon({ name, size = 18 }: { name: keyof typeof PATHS; size?: num
     </svg>
   );
 }
+
+// The count icons beside a code name: 0.8 of the panel text so the glyph reads as
+// an annotation, floored at 12px — a 10px glyph is the unreadable-swatch failure
+// mode this product exists to avoid.
+export const countIconSize = (fs: number) => Math.max(12, Math.round(fs * 0.8));

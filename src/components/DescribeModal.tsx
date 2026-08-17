@@ -218,9 +218,9 @@ export function DescribeModal({ initial, onClose }: {
                   {/* ticks survive a re-sort: the order is a view, not the selection */}
                   <span className="descSort">
                     <span className="descSortLabel" id="descSortLabel">Sort</span>
-                    <span className="nPills" role="group" aria-labelledby="descSortLabel">
+                    <span className="segmented sortseg" role="group" aria-labelledby="descSortLabel">
                       {SORTS.map((s) => (
-                        <button key={s.id} className={"nPill" + (sortBy === s.id ? " on" : "")}
+                        <button key={s.id} className={"seg" + (sortBy === s.id ? " on" : "")}
                           aria-pressed={sortBy === s.id} onClick={() => setSortBy(s.id)}>{s.label}</button>
                       ))}
                     </span>

@@ -45,7 +45,6 @@ const remembered = {
   flipped: new Set<string>(),
   suggestBy: "transcript" as "transcript" | "code",
   suggestSel: null as string | null, // selected transcript/code, null = all
-  defSort: "name" as SortBy,
   defScope: "all" as DefScope,       // which part of the codebook the panel is working through
   defSel: [] as string[],            // specific codes picked inside that scope; empty = the whole scope
   defAnchor: null as string | null,  // where a Shift-range measures from
@@ -101,7 +100,10 @@ export function AssistView() {
   const [sumFor, setSumFor] = useState<string | null>(null);
   const [suggestBy, setSuggestBy] = useState(remembered.suggestBy);
   const [suggestSel, setSuggestSel] = useState(remembered.suggestSel);
-  const [defSort, setDefSort] = useState(remembered.defSort);
+  // shared with the transcript sidebar's chip and the Codebook's View menu: one
+  // "codes are sorted by X" for the whole app, not three controls that disagree
+  const defSort = useStore((s) => s.ui.codeSort);
+  const setDefSort = (v: SortBy) => setUi({ codeSort: v });
   const [defScope, setDefScope] = useState(remembered.defScope);
   const [defSel, setDefSel] = useState(remembered.defSel);
   const [defAnchor, setDefAnchor] = useState(remembered.defAnchor);
@@ -119,8 +121,8 @@ export function AssistView() {
   // which code's definition is open in an editor right now (deliberately NOT
   // remembered across tab changes — the editor unmounts with the view)
   const [editingDef, setEditingDef] = useState<string | null>(null);
-  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askEvents, askExcerpts, askQ }); },
-    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defSort, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askEvents, askExcerpts, askQ]);
+  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askEvents, askExcerpts, askQ }); },
+    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askEvents, askExcerpts, askQ]);
 
   // Definitions panel: every code, split by whether it has a definition yet —
   // the split IS the worklist, so it's the sidebar's grouping. Both groups (and
@@ -343,7 +345,7 @@ export function AssistView() {
                 onClick={() => pickObsBy("lens")}>Lens</button>
             </div>
             {obsBy === "transcript" && allPids.length === 0 ? (
-              <div className="bSideNote">No transcripts loaded yet — import one and the AI can scan it from here.</div>
+              <div className="bSideNote">No transcripts yet. Import one to scan it.</div>
             ) : (
               <>
                 <div className={"nLens" + (liveObsSel === null ? " sel" : "")}
@@ -362,7 +364,7 @@ export function AssistView() {
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setObsSel(l.id); } }}>
                       <span className="nDot" style={{ background: l.color }} />
                       <span className="nName">{l.label}</span>
-                      <span className="cnt">{st.n}·{st.pids}</span>
+                      <span className="cnt" aria-hidden="true">{st.n}·{st.pids}</span>
                     </div>
                   );
                 }) : allPids.map((p) => {
@@ -398,16 +400,14 @@ export function AssistView() {
             </button>
             <div className="bSideNote">
               {mergeableCount < 2
-                ? "Code at least two different codes first, then the AI can look for duplicates."
-                : "The AI proposes pairs that look like the same concept. You accept each merge — nothing changes on its own."}
+                ? "Use at least two codes first."
+                : "Proposes pairs that look like one concept. You accept each merge."}
             </div>
           </>
         ) : panel === "ask" ? (
           <>
             <div className="bSideNote">
-              Scope the question. Everything is in by default — narrow it to a participant
-              or a theme when you mean to, not out of habit: deciding what matters before
-              you ask is the job you are handing to the model.
+              Everything is in scope by default. Narrow it when you mean to.
             </div>
             <div className="aByLabel" id="askMatLabel">Material</div>
             <div className="segmented aSuggestBy" role="group" aria-labelledby="askMatLabel">
@@ -442,8 +442,8 @@ export function AssistView() {
             </button>
             <div className="bSideNote">
               {mergeableCount < 1
-                ? "Definitions are drafted from coded excerpts — code a bit first."
-                : `Drafts definitions for the ${shownDefCodes.length} code${shownDefCodes.length === 1 ? "" : "s"} showing on the right, from how you used them. They are written straight in — edit any of them here afterwards.`}
+                ? "Drafted from coded excerpts — code a bit first."
+                : `Drafts the ${shownDefCodes.length} code${shownDefCodes.length === 1 ? "" : "s"} on the right from how you used them. Written straight in; edit here after.`}
             </div>
             {Object.keys(codebook).length > 0 && (
               <>
@@ -509,7 +509,7 @@ export function AssistView() {
               <Icon name="sparkle" size={15} /> AI transcript summary
             </button>
             {allPids.length === 0 ? (
-              <div className="bSideNote">No transcripts loaded yet — import one and its session can be summarised from here.</div>
+              <div className="bSideNote">No transcripts yet. Import one to summarise its session.</div>
             ) : allPids.map((p) => {
               const ev = markers.filter((m) => m.pid === p).length;
               const seg = segments.filter((s) => s.pid === p && s.status === "accepted").length;
@@ -560,8 +560,8 @@ export function AssistView() {
             {suggestGroups.length === 0 ? (
               <div className="bSideNote">
                 {suggestBy === "transcript"
-                  ? "No transcripts loaded yet — import one and it can be sent for suggestions from here."
-                  : "No candidate codings yet. Run AI code suggestion on a transcript; they land here and striped in the transcript."}
+                  ? "No transcripts yet. Import one to send it for suggestions."
+                  : "No candidates yet. Run AI code suggestion on a transcript; they land here and striped in the text."}
               </div>
             ) : (
               <>
@@ -688,7 +688,7 @@ function MergeList({ proposals, codebook, flipped, onAccept, onSkip, onFlip }: {
             <div className="mPair">
               <span className="mCode mDrop">{swatch(from)}{from}</span>
               <button className="mSwap" onClick={() => onFlip(p)} aria-label="Swap which code is kept"
-                title="Swap which code is kept">→</button>
+                title="Swap which code is kept"><Icon name="arrows-exchange" size={16} /></button>
               <span className="mCode mKeep">{swatch(into)}{into}<span className="mKeepTag">kept</span></span>
               {/* the confident tier is the unmarked default; only the softer one is labelled */}
               {p.tier === "overlap" && <span className="mTier">worth considering</span>}
@@ -739,9 +739,9 @@ function DescribeList({ codebook, codes, stats, sortBy, setSortBy, grouped, unde
         {/* descSortLabel, not aByLabel: that one carries margins for a STACKED
             label and sat off-centre from the pills beside it */}
         <span className="descSortLabel" id="defSortLabel">Sort</span>
-        <div className="nPills" role="group" aria-labelledby="defSortLabel">
+        <div className="segmented sortseg" role="group" aria-labelledby="defSortLabel">
           {SORTS.map((s) => (
-            <button key={s.id} className={"nPill" + (sortBy === s.id ? " on" : "")}
+            <button key={s.id} className={"seg" + (sortBy === s.id ? " on" : "")}
               aria-pressed={sortBy === s.id} onClick={() => setSortBy(s.id)}>{s.label}</button>
           ))}
         </div>
@@ -1011,9 +1011,11 @@ function NoticeList({ notices, groupBy, pidOrder, onlyUncoded, setOnlyUncoded }:
   return (
     <>
       <div className="bOptions nOpts descListBar">
-        <div className="nPills">
-          <button className={"nPill" + (onlyUncoded ? " on" : "")} onClick={() => setOnlyUncoded(true)}>Only uncoded</button>
-          <button className={"nPill" + (!onlyUncoded ? " on" : "")} onClick={() => setOnlyUncoded(false)}>All</button>
+        <div className="segmented sortseg" role="group" aria-label="Which instances are shown">
+          <button className={"seg" + (onlyUncoded ? " on" : "")} aria-pressed={onlyUncoded}
+            onClick={() => setOnlyUncoded(true)}>Only uncoded</button>
+          <button className={"seg" + (!onlyUncoded ? " on" : "")} aria-pressed={!onlyUncoded}
+            onClick={() => setOnlyUncoded(false)}>All</button>
         </div>
         <span className="nCount">{notices.length} instance{notices.length === 1 ? "" : "s"} · {uncoded} uncoded</span>
       </div>

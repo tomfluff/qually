@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 // The Codebook tab: go over your coding. Codes on the left, their excerpts on the
 // right. The AI's observations moved out to the Assist tab; this view is yours.
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, type Segment } from "../state/store";
 import { norm } from "../contract/segments";
 import { segExcerpt } from "../contract/excerpt";
@@ -14,8 +14,10 @@ import { groundHash } from "../ai/ground";
 import { GroundModal } from "./GroundModal";
 import { DescribeModal } from "./DescribeModal";
 import { useToggleMenu, useDismiss } from "../usePopover";
-import { Icon } from "./Icon";
+import { Icon, countIconSize } from "./Icon";
+import { CodeCounts } from "./CodeCounts";
 import { announce } from "../announce";
+import { codeStats, sortCodes, SORTS, type SortBy } from "../codeStats";
 
 // Codebook working state (chosen codes, filter, show-rejected) survives leaving the
 // tab — the view unmounts, so plain useState would reset it on every visit.
@@ -55,11 +57,8 @@ export function BrowseView() {
   useEffect(() => { Object.assign(remembered, { selected, anchor, filter, showRejected }); },
     [selected, anchor, filter, showRejected]);
 
-  const counts: Record<string, { segs: number; pids: Set<string> }> = {};
-  segments.filter((s) => s.status === "accepted").forEach((s) => {
-    (counts[s.code] ??= { segs: 0, pids: new Set() });
-    counts[s.code].segs++; counts[s.code].pids.add(s.pid);
-  });
+  const counts = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
+  const cntIcon = countIconSize(sidebarFontSize);
 
   // The excerpt's dominant speaker is shown as its own field in the ref row (below),
   // so the display text drops the "[R:] " prefix the export keeps baked in.
@@ -77,7 +76,12 @@ export function BrowseView() {
     return g && g.hash === groundHash(seg.code, excerpt) ? g.quotes : [];
   };
 
-  const allCodes = Object.keys(codebook).sort();
+  // the order the View menu asks for — the same three the transcript sidebar and
+  // the Assist definitions panel offer, off the same setting
+  const sortIdx = Math.max(0, SORTS.findIndex((x) => x.id === ui.codeSort));
+  const nextSort = SORTS[(sortIdx + 1) % SORTS.length];
+  const allCodes = useMemo(
+    () => sortCodes(Object.keys(codebook), counts, ui.codeSort), [codebook, counts, ui.codeSort]);
   const listed = allCodes.filter((c) => c.toLowerCase().includes(filter.toLowerCase()));
   const chosen = allCodes.filter((c) => selected.has(c));
 
@@ -119,10 +123,24 @@ export function BrowseView() {
             ui={ui} setUi={setUi} hasGrounds={hasGrounds} fontSize={sidebarFontSize}
             onRecolor={(r) => setRecolor({ x: r.left, y: r.bottom + 4 })} />
         </div>
+        {/* the transcript sidebar's header, twinned: name, count, the same cycling
+            sort chip off the same ui.codeSort — the View menu keeps its radios as
+            the redundant path */}
+        <div className="codeHead">
+          <span className="codeTitle">Codes</span>
+          <span className="cnt">{listed.length}</span>
+          <button className="sortchip"
+            onClick={() => { setUi({ codeSort: nextSort.id }); announce(`Sorted by ${nextSort.label}`); }}
+            title={`Sorted by ${SORTS[sortIdx].label} — switch to ${nextSort.label}`}
+            aria-label={`Sorted by ${SORTS[sortIdx].label}. Switch to ${nextSort.label}.`}>
+            {SORTS[sortIdx].label}
+          </button>
+        </div>
         <div className="cbList nicescroll">
         {listed.map((c) => (
           <div key={c} className={"bCode" + (selected.has(c) ? " sel" : "")} tabIndex={0} role="button"
-            aria-label={`Show excerpts for ${c}, ${counts[c]?.segs || 0} segment${counts[c]?.segs === 1 ? "" : "s"}`}
+            aria-label={`Show excerpts for ${c}, ${counts[c]?.segs || 0} excerpt${counts[c]?.segs === 1 ? "" : "s"}`
+              + ` in ${counts[c]?.pids || 0} transcript${counts[c]?.pids === 1 ? "" : "s"}`}
             aria-pressed={selected.has(c)} onClick={(e) => select(c, e)}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return; // let the ⋯ button's keys be its own
@@ -144,9 +162,11 @@ export function BrowseView() {
                 }} />
               <span className="bCodeName">{c}</span>
               {/* the count is already in the row's aria-label — don't double-speak */}
-              <span className="cnt" aria-hidden="true">{counts[c]?.segs || 0}·{counts[c]?.pids.size || 0}</span>
+              <CodeCounts stat={counts[c]} size={cntIcon} />
               <button className="rowMenu" aria-label={`Options for ${c}`}
-                onClick={(e) => { e.stopPropagation(); openMenuAt(c, e.currentTarget); }}>⋯</button>
+                onClick={(e) => { e.stopPropagation(); openMenuAt(c, e.currentTarget); }}>
+                <Icon name="dots" size={sidebarFontSize} />
+              </button>
             </div>
             {/* the definition is NOT repeated here: it runs to a paragraph, and
                 a list of them buries the names you're scanning for. It lives
@@ -295,15 +315,16 @@ function RecolorConfirm({ x, y, onClose }: { x: number; y: number; onClose: () =
 function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, fontSize, onRecolor }: {
   showRejected: boolean;
   setShowRejected: (f: (v: boolean) => boolean) => void;
-  ui: { groundBold: boolean; groundWash: boolean; groundUnderline: boolean };
-  setUi: (u: Partial<{ groundBold: boolean; groundWash: boolean; groundUnderline: boolean }>) => void;
+  ui: { groundBold: boolean; groundWash: boolean; groundUnderline: boolean; codeSort: SortBy };
+  setUi: (u: Partial<{ groundBold: boolean; groundWash: boolean; groundUnderline: boolean; codeSort: SortBy }>) => void;
   hasGrounds: boolean;
   fontSize: number;
   onRecolor: (rect: DOMRect) => void;
 }) {
   const { open, setOpen, btnRef, menuRef } = useToggleMenu();
-  // defaults: rejected off, bold on, wash on, underline off
-  const nonDefault = showRejected || !ui.groundBold || !ui.groundWash || ui.groundUnderline;
+  // defaults: rejected off, bold on, wash on, underline off, codes A–Z
+  const nonDefault = showRejected || !ui.groundBold || !ui.groundWash || ui.groundUnderline
+    || ui.codeSort !== "name";
   return (
     <div className="cbMenuWrap">
       <button className="btn cbMenuBtn cbViewBtn" ref={btnRef} aria-haspopup="menu" aria-expanded={open}
@@ -314,11 +335,10 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
       {open && (
         <div className="ctxmenu cbMenu cbViewMenu" ref={menuRef} role="group" aria-label="View settings"
           style={{ fontSize }}>
-          <button className="cbSwitch" role="switch" aria-checked={showRejected}
-            onClick={() => setShowRejected((v) => !v)}>
-            <span className={"switch" + (showRejected ? " on" : "")}><span className="knob" /></span>
-            <span>Show rejected</span>
-          </button>
+          {/* a checkbox, like every other boolean in this menu — a switch beside
+              checkboxes read as two kinds of on/off in one list */}
+          <label className="cbChk"><input type="checkbox" checked={showRejected}
+            onChange={() => setShowRejected((v) => !v)} /> Show rejected</label>
           {hasGrounds && (
             <>
               <div className="cbMenuGrp">Grounding emphasis</div>
@@ -330,6 +350,15 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
                 onChange={() => setUi({ groundUnderline: !ui.groundUnderline })} /> Underline</label>
             </>
           )}
+          {/* radios, not the sidebar's cycling chip: a menu has room to show all
+              three orders at once, and the setting is shared with that chip */}
+          <div className="cbMenuGrp">Sort codes</div>
+          {SORTS.map((s) => (
+            <label key={s.id} className="cbChk">
+              <input type="radio" name="cbSort" checked={ui.codeSort === s.id}
+                onChange={() => setUi({ codeSort: s.id })} /> {s.label}
+            </label>
+          ))}
           <div className="cbMenuGrp">Colours</div>
           <button className="cbAct" onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();

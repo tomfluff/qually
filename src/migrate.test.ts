@@ -28,6 +28,7 @@ beforeAll(async () => {
         mergeLines: false, showLineNumbers: false, accent: "violet",
         speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md",
         minimapWidth: 44, minimapDetail: "detailed", showNotices: true,
+        codeSort: "recency", // a value no build ever wrote — must normalize, not crash
       },
       ai: { model: "gpt-5", redactTerms: [] },
       aiFlags: {}, aiLog: [],
@@ -47,5 +48,7 @@ test("old persisted state rehydrates into today's shape", () => {
   expect(ui.focusDim).toBe(true);
   expect(ui.focusCollapse).toBe(false);
   expect(ui.speakerColors).toEqual({});
+  expect(ui.codeSort).toBe("name");     // bogus persisted value normalized, not crashed on
+  expect(ui.eventSort).toBe("type");    // same guard family, previously unasserted
   expect(useStore.getState().ai.lenses).toEqual(["transcription"]);
 });

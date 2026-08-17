@@ -16,9 +16,18 @@
 .bCode:hover { background:var(--sel); }
 .bCode.sel { background:var(--sel); }
 .bCodeMain { display:flex; align-items:center; gap:8px; line-height:1; }
+/* tight (large panel text / narrow pane): two-line rows, name first — same
+   pattern and same safety argument as the sidebar's .codeList (sidebar.css) */
+.cbList { container-type:inline-size; }
+@container (max-width: 16em) {
+  /* grid, not flex-wrap — see sidebar.css: flex lines break on base size and a
+     long name would jump whole onto its own line before ellipsis could act */
+  .bCodeMain { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; }
+  .bCodeMain .cnt { grid-column:1 / -1; justify-content:flex-end; margin-left:0; }
+}
 .bCodeName { overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   line-height:normal; } /* NOT the row's line-height:1 — overflow:hidden at 1em clips descenders (g y p) */
-.bCodeMain .cnt { margin-left:auto; color:var(--muted); font-size:.8em; flex-shrink:0; }
+.bCodeMain .cnt { margin-left:auto; } /* CodeCounts pair styles live in base.css */
 .bGroup { margin-bottom:22px; }
 .bTitle { display:flex; align-items:center; gap:8px; margin:0 0 6px; line-height:1; }
 .bTitle .swatch { width:.9em; height:.9em; border-radius:.3em; flex-shrink:0; align-self:center; }
@@ -29,14 +38,6 @@
    than stretching -- without that the short ones sat on the top edge. */
 .bOptions { display:flex; align-items:center; margin-bottom:14px; padding:8px 12px;
   border:1px solid var(--line); border-radius:10px; background:var(--panel); }
-/* toggle switch (em-based so it scales with the excerpt font) */
-.switch { position:relative; width:2.1em; height:1.2em; border-radius:999px;
-  background:var(--line); flex-shrink:0; transition:background .15s; }
-.switch.on { background:var(--accent); }
-.switch .knob { position:absolute; top:0.15em; left:0.15em; width:0.9em; height:0.9em;
-  border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.35);
-  transition:left .15s; }
-.switch.on .knob { left:calc(100% - 0.9em - 0.15em); }
 .bExcerpt { border-left:4px solid var(--line); margin:10px 0; padding:6px 12px; line-height:1.45;
   font-family:var(--read-font); }
 /* quiet by COLOUR, never opacity (see base.css): opacity stacked on the --muted
@@ -82,7 +83,7 @@
 .nDot { display:inline-block; vertical-align:middle; width:.75em; height:.75em;
   border-radius:.22em; flex-shrink:0;}
 .nName { flex:1; font-weight:500; }
-.nLens .cnt { font-variant-numeric:tabular-nums; color:var(--muted); font-size:.85em; }
+.nLens .cnt { align-self:center; }
 /* per-transcript run button in the Suggest sidebar. Always rendered, never
    hover-revealed: a control that appears on hover is unfindable at magnification
    and unreachable by keyboard. */
@@ -93,16 +94,10 @@
 .nLens .rowRun:disabled { cursor:default; color:var(--muted); } /* muted, not faded — see .ctxmenu */
 
 .nOpts { display:flex; align-items:center; gap:12px; }
-.nPills { display:flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
-.nPill { border:0; background:var(--bg); color:var(--muted); font:inherit; font-size:.78em;
-  padding:3px 12px; cursor:pointer; }
-.nPill.on { background:var(--accent); color:#fff; font-weight:600; }
-/* At a large reading size in a narrow window "A-Z" broke after the en-dash and
-   the selected pill painted as a tall oval that no longer read as part of the
-   row. The bar may wrap BETWEEN the label, the pills and the counter; never
-   inside one. */
-.nPill { white-space:nowrap; }
-[data-theme=dark] .nPill.on { color:#12161a; }
+/* the options-bar variant of .segmented: content-width segments and the bar's
+   smaller type, where the Settings variant is a fixed-width column control */
+.sortseg { flex:none; }
+.sortseg .seg { flex:0 0 auto; font-size:.78em; padding:3px 12px; }
 .nCount { color:var(--muted); font-size:.8em; white-space:nowrap; }
 
 .nGrp { font-size:.72em; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
@@ -150,6 +145,10 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 
 /* Codebook sidebar: filter with the AI action (sparkle menu) and a View menu
    beside it — the transcript-sidebar pattern (input + compact menu buttons). */
+/* the sidebar's list header, twinned here (sidebar.css scopes its own to #sidebar) */
+.cbSide .codeHead { display:flex; align-items:center; gap:6px; padding:0 4px 5px; }
+.cbSide .codeHead .codeTitle { font-weight:600; }
+.cbSide .codeHead .cnt { margin-right:auto; }
 .cbFilterRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:10px; }
 .cbFilterRow input[type=search] { flex:1; min-width:0; margin-bottom:0; }
 .cbMenuWrap { position:relative; flex:none; display:flex; }
@@ -161,11 +160,12 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .cbMenuWrap .cbMenu { position:absolute; left:auto; right:0; top:calc(100% + 4px); min-width:180px; }
 .cbMenu .cbMenuGrp { font-size:10px; text-transform:uppercase; letter-spacing:.06em;
   color:var(--muted); font-weight:700; margin:8px 8px 3px; padding-top:7px; border-top:1px solid var(--line); }
-.cbMenu .cbSwitch { display:flex; align-items:center; gap:9px; width:100%; background:none;
-  border:0; font:inherit; color:var(--fg); cursor:pointer; padding:7px 8px; }
 .cbMenu .cbChk { display:flex; align-items:center; gap:8px; padding:5px 8px; cursor:pointer; color:var(--fg); }
-.cbMenu .cbChk:hover, .cbMenu .cbSwitch:hover { background:var(--sel); border-radius:6px; }
-.cbMenu .cbChk input[type=checkbox] { width:1em; height:1em; accent-color:var(--accent); }
+.cbMenu .cbChk:hover { background:var(--sel); border-radius:6px; }
+/* font-size first: form controls don't inherit it, so a bare width:1em would
+   resolve against the UA's 13.33px and never grow with the panel */
+.cbMenu .cbChk input[type=checkbox], .cbMenu .cbChk input[type=radio] {
+  font-size:inherit; width:1em; height:1em; margin:0; accent-color:var(--accent); }
 
 /* ── Assist tab: merge-duplicate-codes proposals ── */
 .mList { display:flex; flex-direction:column; gap:10px; }
@@ -175,18 +175,8 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .mSw { display:inline-block; vertical-align:middle; width:.8em; height:.8em; border-radius:3px; flex:none; }
 /* group-by control in the Suggest sidebar: halves that split the full width, so
    the selected block is a fixed size and the row has no dead tail. Bigger target
-   than the .nPill pair it replaces — it's the first thing the panel asks you. */
+   than a pair of loose buttons — it's the first thing the panel asks you. */
 .aByLabel { font-size:.8em; color:var(--muted); margin:2px 0 5px; }
-.segmented { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
-.segmented .seg { flex:1 1 0; min-width:0; border:0; background:var(--bg); color:var(--muted);
-  font:inherit; padding:4px 2px; cursor:pointer; }
-.segmented .seg + .seg { border-left:1px solid var(--line); }
-.segmented .seg:hover { color:var(--fg); }
-/* the selected half takes its ink from the theme's accent, not a fixed white:
-   dark's --accent is a light lavender, where near-black reads ~6.7:1 and white
-   only ~2.7:1 (same treatment as .nPill / .nBtn.pri) */
-.segmented .seg.on { background:var(--accent); color:#fff; font-weight:600; }
-[data-theme=dark] .segmented .seg.on { color:#12161a; }
 /* Every segmented control in the Assist sidebar wraps WHOLE segments onto a
    second row rather than breaking or clipping a label: nowrap plus .segmented's
    overflow:hidden cut "Undefined" to "Undefine" and "Excerpts" to "Excerpt" at a
@@ -217,8 +207,7 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   overflow-wrap:anywhere; }
 /* the evidence count is a stat, right-aligned like everywhere else it appears
    (sidebar rows, codebook list) rather than crowding the code's name */
-.descHead .cnt { margin-left:auto; color:var(--muted); font-size:.85em;
-  font-variant-numeric:tabular-nums; }
+.descHead .cnt { margin-left:auto; }
 /* what a describe run wrote, listed on the receipt */
 .descWrote { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:10px; }
 .descWroteOne { display:inline-flex; align-items:center; gap:6px; font-size:.92em; }
@@ -245,6 +234,8 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .browse-left .nGrp.defGrp:hover { background:var(--panel); color:var(--fg); }
 .browse-left .nGrp.defGrp svg { flex:none; }
 .defGrpName { flex:1; }
+/* the group heading is .72em uppercase; 1.1em of that lands the count back on
+   the app-wide .8em rather than shrinking twice */
 .browse-left .nGrp .cnt { font-weight:400; letter-spacing:0; font-size:1.1em; }
 /* three segments in one narrow column: a touch smaller than the two-way controls */
 .defScope .seg { font-size:.92em; }
@@ -324,7 +315,8 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   letter-spacing:.05em; color:var(--muted); border:1px solid var(--line); border-radius:999px;
   padding:1px 7px; white-space:nowrap; }
 .mSwap { border:1px solid var(--line); background:var(--bg); color:var(--muted); cursor:pointer;
-  border-radius:6px; width:1.9em; height:1.6em; line-height:1; font-size:1.05em; flex:none; }
+  border-radius:6px; width:1.9em; height:1.6em; line-height:1; font-size:1.05em; flex:none;
+  display:inline-flex; align-items:center; justify-content:center; }
 .mSwap:hover { color:var(--fg); border-color:var(--accent); }
 .mWhy { color:var(--muted); font-size:.9em; line-height:1.4; margin:6px 0 0; }
 .mActs { display:flex; gap:6px; margin-top:8px; }

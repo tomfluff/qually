@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// How much evidence a code carries, and the orders you can put codes in. Shared
-// by the Draft-definitions picker and the Assist Definitions panel so a list of
-// codes reads the same wherever it appears.
+// How much evidence a code carries, and the orders you can put codes in. Every
+// list of codes in the app (transcript sidebar, Codebook, Assist Definitions,
+// Draft-definitions picker) reads the same because they all come through here —
+// and the first three share one ui.codeSort setting on top of it.
 import type { Segment } from "./state/store";
 
 export interface CodeStat { segs: number; pids: number }
@@ -24,10 +25,11 @@ export function codeStats(
   return out;
 }
 
+// labels name the ORDER, not just the key — "Excerpts" alone didn't say most-first
 export const SORTS = [
   { id: "name", label: "A–Z" },
-  { id: "excerpts", label: "Excerpts" },
-  { id: "transcripts", label: "Transcripts" },
+  { id: "excerpts", label: "Most excerpts" },
+  { id: "transcripts", label: "Most transcripts" },
 ] as const;
 export type SortBy = (typeof SORTS)[number]["id"];
 

@@ -16,6 +16,7 @@ import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll, renameScroll } from "../scrollMemory";
 import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
 import { announce } from "../announce";
+import { SORTS, type SortBy } from "../codeStats";
 
 // The code palette (codeColors.ts owns it, and the assignment logic with it).
 // The colour picker offers exactly what auto-assignment can hand out, so a
@@ -87,6 +88,9 @@ export interface Ui {
   // run down the session (what happened next) — the two ways anyone reads a log.
   eventListHeight: number;
   eventSort: "type" | "time";
+  // the transcript sidebar's code list order — the same three orders the Assist
+  // definitions panel offers, so a list of codes reads the same in both places
+  codeSort: SortBy;
   // chosen colours per event type (right-click the type). Unset = the stable hash
   // colour from markers.ts, so this stays empty until someone actually picks one.
   markerColors: Record<string, string>;
@@ -196,6 +200,10 @@ export interface State {
   nextMid: number;
   jump: { pid: string; line: number } | null;
   paletteOpen: boolean;
+  // an add-event card asked for from OUTSIDE the transcript rows — the video dock's
+  // mark button, or E with nothing selected. Transcript-clock seconds, so it goes
+  // into the card the same way a right-clicked line's time does. Session-only.
+  eventAt: number | null;
   formatOpen: boolean;
   search: Search;
   pendingImports: PendingImport[]; // re-imports awaiting a user decision
@@ -240,6 +248,7 @@ export interface State {
   clearJump: () => void;
   scrollToLine: (line: number) => void;
   setPalette: (v: boolean) => void;
+  setEventAt: (t: number | null) => void;
   setFormatOpen: (v: boolean) => void;
   openSearch: () => void;
   closeSearch: () => void;
@@ -457,10 +466,10 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {},
-      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, formatOpen: false,
+      selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
@@ -762,6 +771,7 @@ export const useStore = create<State>()(
       clearJump: () => set({ jump: null }),
       scrollToLine: (line) => set({ jump: { pid: get().active, line } }), // same-tab scroll, no selection change
       setPalette: (v) => set({ paletteOpen: v }),
+      setEventAt: (t) => set({ eventAt: t }),
       setFormatOpen: (v) => set({ formatOpen: v }),
       openSearch: () => set({ search: { ...get().search, open: true } }),
       closeSearch: () => set({ search: { open: false, query: "", scope: "tab", current: null } }),
@@ -1128,7 +1138,10 @@ export const useStore = create<State>()(
         const s = get();
         const marker: Marker = { mid: s.nextMid, pid, event: "marker",
           code: m.code.trim(), label: m.label.trim(), t: m.t, detail: "", raw: {} };
-        if (s.markers.some((x) => markerIdent(x) === markerIdent(marker))) return;
+        if (s.markers.some((x) => markerIdent(x) === markerIdent(marker))) {
+          announce("Already marked — an identical event exists at this time.");
+          return;
+        }
         get().pushUndo();
         set({ markers: [...s.markers, marker], nextMid: s.nextMid + 1 });
         announce("Event added");
@@ -1141,6 +1154,7 @@ export const useStore = create<State>()(
         if (next.t === cur.t && next.code === cur.code && next.label === cur.label) return; // no change, no undo entry
         get().pushUndo();
         set({ markers: get().markers.map((x) => x.mid === mid ? next : x) });
+        announce("Event updated");
       },
 
       // Rename every event of one type — the codebook's renameCode, for events.
@@ -1632,6 +1646,9 @@ export const useStore = create<State>()(
         s.aiGrounds ??= {};
         s.ui.assistPanel ??= "observations";
         s.ui.eventSort ??= "type";
+        // normalize, not just default: a corrupt persisted value would make the
+        // sidebar chip index SORTS with -1 and crash the whole sidebar
+        if (!SORTS.some((x) => x.id === s.ui.codeSort)) s.ui.codeSort = "name";
         s.ui.markerColors ??= {};
         s.ui.eventListHeight = clampEventHeight(s.ui.eventListHeight ?? 200);
         s.summaries ??= {};
