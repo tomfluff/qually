@@ -176,7 +176,7 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
             <ModelPicker modelId={modelId} onPick={setModelId} />
             {pid && (
               <>
-                <div className="ai-sec">Material <span className="ai-sec-hint">what the draft is grounded in — either alone works</span></div>
+                <div className="ai-sec">Material <span className="ai-sec-hint">what the draft is grounded in; either alone works</span></div>
                 <div className="ai-spks">
                   <label className="ai-spk">
                     <input type="checkbox" checked={incEvents} onChange={() => setIncEvents((v) => !v)} disabled={busy} />
@@ -187,7 +187,7 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
                     <span>coded excerpts <em>{excerpts.length}</em></span>
                   </label>
                 </div>
-                <div className="ai-sec">Additional context <span className="ai-sec-hint">optional — study background, what to attend to; it is sent too</span></div>
+                <div className="ai-sec">Additional context <span className="ai-sec-hint">optional study background; it is sent too</span></div>
                 <textarea className="sumCtx" value={context} disabled={busy}
                   placeholder="e.g. Third session with this participant; the task was chart reading with a screen reader."
                   onChange={(e) => setContext(e.target.value)} />
@@ -217,8 +217,7 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
                 </div>
                 {overwriting && (
                   <div className="settings-note" style={{ marginTop: 6 }}>
-                    <b>{pid}</b> already has a summary. The draft is shown first — nothing is
-                    replaced until you choose to use it.
+                    <b>{pid}</b> already has a summary. Nothing is replaced until you use the draft.
                   </div>
                 )}
               </>

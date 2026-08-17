@@ -147,8 +147,7 @@ export function MergeModal({ onProposals, onClose }: {
                   </div>
                   {model.id.includes("luna") && (
                     <div className="settings-note" style={{ marginTop: 6 }}>
-                      Spotting duplicates is interpretive — <b>Terra</b> usually judges
-                      code overlap better than Luna. Pick it above for this run.
+                      <b>Terra</b> usually judges code overlap better than Luna. Pick it above.
                     </div>
                   )}
                 </>

@@ -272,8 +272,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                   </div>
                   {model.id.includes("luna") && (
                     <div className="settings-note" style={{ marginTop: 6 }}>
-                      Applying a codebook is interpretive and this is the priciest run —
-                      <b> Terra</b> usually codes better than Luna. Pick it above for this run.
+                      The priciest run. <b>Terra</b> usually codes better than Luna. Pick it above.
                     </div>
                   )}
                 </>

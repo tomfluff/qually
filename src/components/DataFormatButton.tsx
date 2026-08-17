@@ -111,8 +111,8 @@ export function DataFormatButton() {
                     <tr><td><code>codes</code></td><td>Pre-existing codes, <code>;</code>-separated, or empty. Loaded as segments. Optional.</td></tr>
                   </tbody>
                 </table>
-                <p className="fmt-note">It's real CSV: any <code>text</code> with a comma, quote, or newline must be double-quoted. Don't hand-write it — let the prompt below do it.</p>
-                <p className="fmt-note">The interviewer's rows are dimmed automatically when the label is exactly <code>R</code>, <code>I</code>, <code>Interviewer</code>, <code>Moderator</code>, <code>Facilitator</code> (or <code>R1</code>, <code>R2</code>…) — a first guess you can change for any speaker in <b>Settings → Speakers</b>. A participant named “Rachel” stays a participant.</p>
+                <p className="fmt-note">Real CSV: any <code>text</code> with a comma, quote or newline must be double-quoted. Let the prompt below write it.</p>
+                <p className="fmt-note">Rows labelled exactly <code>R</code>, <code>I</code>, <code>Interviewer</code>, <code>Moderator</code>, <code>Facilitator</code> (or <code>R1</code>, <code>R2</code>…) are dimmed as the interviewer's. A guess; change it per speaker in <b>Settings → Speakers</b>.</p>
                 <button className="btn" onClick={downloadExample}>Download example-transcript.csv</button>
               </section>
 
@@ -121,18 +121,14 @@ export function DataFormatButton() {
                 <p>A separate CSV of markers and field notes recorded while the session ran.
                   Load it from the <b>transcript tab's right-click menu → Load events…</b>, so it
                   attaches to the participant you picked rather than to a guess from the filename.</p>
-                <p className="fmt-note">Only three things are needed: an <code>event</code> column,
-                  a time (<code>video_time_s</code>, <code>rec_offset_s</code>, or
-                  <code> video_time_hms</code>), and whatever text the row carries in
-                  <code> label</code>. A <code>code</code> column groups and colours the events.
-                  Every other column you send is kept and written back out on export.</p>
-                <p className="fmt-note">Times are read on the <b>video</b> clock, so events follow
-                  the offset you set in the video dock. Each one appears as its own row in the
-                  transcript, in the sidebar's <b>Events</b> list (drag its top edge to resize;
-                  switch between by-type and by-time), and as a coloured rule across the minimap.
-                  The text is editable (double-click), any event can be deleted, and right-clicking
-                  an event recolours its type. Add events by hand too: right-click a line (or
-                  press <kbd>E</kbd> on the selected line).</p>
+                <p className="fmt-note">Three things are needed: an <code>event</code> column, a time
+                  (<code>video_time_s</code>, <code>rec_offset_s</code> or <code>video_time_hms</code>),
+                  and the row's text in <code>label</code>. A <code>code</code> column groups and colours
+                  them. Other columns are kept and written back on export.</p>
+                <p className="fmt-note">Times are on the <b>video</b> clock, so events follow the dock's
+                  offset. Each appears as a row in the transcript, in the sidebar's <b>Events</b> list,
+                  and as a coloured rule on the minimap. Double-click to edit, right-click to recolour
+                  its type. Add one by hand with <kbd>E</kbd>, or right-click a line.</p>
               </section>
 
               <section>

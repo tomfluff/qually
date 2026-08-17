@@ -140,20 +140,20 @@ it round-trips everything, including corrections and AI marks.
       {open && (
         <div className="exmenu">
           <div className="exsec">Save &amp; continue</div>
-          {item("Project (.qually.json)", "Everything — transcripts, corrections, codes, AI marks. Load this to pick up where you left off.", doProject, true)}
+          {item("Project (.qually.json)", "Transcripts, corrections, codes, AI marks. Load it to pick up where you left off.", doProject, true)}
           <div className="exsec">Share &amp; publish</div>
           {item("All as CSVs (.zip)", "The whole bundle as spreadsheets, for a pipeline or a co-author.", doBundle)}
           {item("Coded segments (.csv)", "Segments with computed excerpts.", gated(() => { saveText(s().exportCSV(), "coded-segments.csv"); setOpen(false); }))}
           {item("Codebook (.csv)", "Codes with colors, definitions, status.", () => { saveText(s().exportCodebook(), "codebook.csv"); setOpen(false); })}
           {editCount > 0 && item(`Transcript edits (.csv) · ${editCount}`, "Every correction: original vs corrected.",
             () => { saveText(s().exportEdits(), "transcript-edits.csv"); setOpen(false); })}
-          {eventCount > 0 && item(`Session events (.csv) · ${eventCount}`, "Markers and field notes, with your edits — the columns you loaded.",
+          {eventCount > 0 && item(`Session events (.csv) · ${eventCount}`, "Markers and field notes, with your edits, in the columns you loaded.",
             () => { saveText(s().exportMarkers(), "events.csv"); setOpen(false); })}
           {noticeCount > 0 && item(`AI observations (.csv) · ${noticeCount}`, "Instances the AI marked for review.",
             () => { saveText(s().exportNotices(), "ai-observations.csv"); setOpen(false); })}
-          {answerCount > 0 && item(`Answers (.csv) · ${answerCount}`, "Every question you asked your material, one row per citation — joins to coded segments on the ref.",
+          {answerCount > 0 && item(`Answers (.csv) · ${answerCount}`, "One row per citation; joins to coded segments on the ref.",
             () => { saveText(s().exportAnswers(), "answers.csv"); setOpen(false); })}
-          {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost — your methods appendix.",
+          {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost. Your methods appendix.",
             () => { saveText(s().exportAiLog(), "ai-provenance.csv"); setOpen(false); })}
         </div>
       )}

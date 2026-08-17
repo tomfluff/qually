@@ -13,11 +13,12 @@
    scales only its font: the icons (fixed px `size` props) and the paddings stay put,
    so you get big labels in small boxes. Browser zoom is the interface scale here — it
    scales type, padding, icons, hit targets and borders together, which no font-size
-   knob can. Two dialogs opt UP on purpose (DefineHost, AddEventModal) because what you
-   type in them becomes codebook/transcript content; they set font-size inline.
+   knob can. Two dialogs override on purpose, inline: DefineHost opts UP to the
+   reading ramp (a definition is content), AddEventModal re-bases to the PANEL
+   ramp (a flow surface, like the code palette — see AiModal.tsx).
 
-   Widths stay in em so those two grow their BOX with their type instead of wrapping
-   36px text inside a hard 600px column. */
+   Widths stay in em so those two size their BOX with their type instead of wrapping
+   scaled text inside a hard 600px column. */
 .about { width:min(37.5em, 100%); max-height:84vh; display:flex; flex-direction:column;
   background:var(--bg); border:1px solid var(--line); border-radius:14px;
   box-shadow:0 20px 60px rgba(0,0,0,.45); padding:18px 20px; font-size:1rem; }

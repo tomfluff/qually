@@ -56,7 +56,7 @@ export function SummaryView() {
         <div className="bSideHead">Summary</div>
         <div className="cbList nicescroll">
           {allPids.length === 0 ? (
-            <div className="bSideNote">No transcripts loaded yet — import one and its session can be summarised here.</div>
+            <div className="bSideNote">No transcripts yet. Import one to summarise its session.</div>
           ) : allPids.map((p) => {
             const ev = markers.filter((m) => m.pid === p).length;
             const seg = segments.filter((s) => s.pid === p && s.status === "accepted").length;

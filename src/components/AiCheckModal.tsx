@@ -117,7 +117,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
   const run = async () => {
     const key = getKey();
     if (!key) {
-      const m = "No API key set. Add one in Settings → AI assistance.";
+      const m = "No API key set. Add one in Settings → AI.";
       setErr(m); announce(m, { assertive: true }); return;
     }
     setBusy(true); setErr(null);
@@ -214,7 +214,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
                   <em>the rest of {pid} is not sent, and is not scanned</em></span>
                 </label>
               )}
-              <div className="ai-sec">Look for <span className="ai-sec-hint">marks instances only — coding stays yours</span></div>
+              <div className="ai-sec">Look for <span className="ai-sec-hint">marks instances only; coding stays yours</span></div>
               <div className="ai-lenses">
                 {LENSES.map((l) => (
                   <label key={l.id} className="ai-lens">
@@ -270,8 +270,8 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
                   </div>
                   {redactions === 0 && ai.redactTerms.length === 0 && (
                     <div className="settings-note" style={{ marginTop: 6 }}>
-                      No redaction terms set. Add participant names, places, and organisations in
-                      Settings → AI so they're replaced before sending.
+                      No redaction terms set. Add names, places and organisations in
+                      Settings → AI to replace them before sending.
                     </div>
                   )}
                 </>

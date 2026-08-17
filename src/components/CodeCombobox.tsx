@@ -70,6 +70,7 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose, o
     onClose?.();
   };
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return; // an IME's confirm-Enter is not a pick
     if (e.key === "ArrowDown") { e.preventDefault(); wantScroll.current = true; setHl((h) => Math.min(h + 1, entries.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); wantScroll.current = true; setHl((h) => Math.max(h - 1, 0)); }
     else if (e.key === "Enter") { e.preventDefault(); const en = entries[Math.min(hl, entries.length - 1)]; if (en) choose(en); }

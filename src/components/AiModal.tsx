@@ -17,8 +17,9 @@ export function AiModal({ title, busy, onClose, children }: {
   // with ui.fontSize, the READING ramp (the transcript's 12–48px), which does not belong
   // to modal chrome: the consent gate rendered at up to 48px inside a fixed 680px box and
   // wrapped every lens label onto two lines. Scaling a dialog is browser zoom's job — it
-  // grows the icons and padding too, which a font-size setting cannot. DefineHost and
-  // AddEventModal do override, deliberately: what you type in those becomes content.
+  // grows the icons and padding too, which a font-size setting cannot. Two dialogs do
+  // override, deliberately: DefineHost takes the reading ramp (a definition is content),
+  // AddEventModal the panel ramp (a flow surface, like the code palette).
   // Every other dialog in the app closes on Escape; App's global handler bails
   // out on .about-backdrop, so these have to carry their own. Not while a run is
   // in flight — a stray Esc must not dismiss something being paid for.
@@ -51,7 +52,7 @@ export function AiModal({ title, busy, onClose, children }: {
 export function ModelPicker({ modelId, onPick }: { modelId: string; onPick: (id: string) => void }) {
   return (
     <>
-      <div className="ai-sec">Model <span className="ai-sec-hint">this run only — the default lives in Settings → AI</span></div>
+      <div className="ai-sec">Model <span className="ai-sec-hint">this run only; the default is in Settings → AI</span></div>
       <div className="ai-models">
         {MODELS.map((m) => (
           <button key={m.id} className={modelId === m.id ? "on" : ""}
