@@ -11,6 +11,20 @@ import type { Item } from "./TranscriptView";
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 export interface MinimapHandle { setRange: (start: number, end: number) => void; }
 const WARN = "#e0a020";
+// The glyph header naming each zone (design lab option 1, "Ruled zones"): 12px
+// spent once so the columns explain themselves — ◆ events · ¶ speech · ✦ AI
+// notices · ▮ code lanes. Every y below maps into the space UNDER it.
+const HDR = 12;
+// canvas needs concrete colours: blend `c` over `bg` at `p` (both computed rgb/hex)
+const parseC = (c: string): [number, number, number] => {
+  const m = c.match(/\d+(\.\d+)?/g);
+  if (c.startsWith("#")) return [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) as [number, number, number];
+  return m ? [+m[0], +m[1], +m[2]] : [128, 128, 128];
+};
+const blend = (c: string, bg: string, p: number) => {
+  const a = parseC(c), b = parseC(bg);
+  return `rgb(${a.map((v, i) => Math.round(v * p + b[i] * (1 - p))).join(",")})`;
+};
 
 // A zoomed-out lane view down the right edge. Drawn from the store (virtua only
 // mounts visible rows) onto a canvas; the viewport box is updated imperatively on
@@ -40,12 +54,14 @@ export const Minimap = forwardRef<MinimapHandle, {
 
   // virtua child indices include the top vpad (index 0), so groups start at 1
   const applyBox = (start: number, end: number) => {
-    const box = boxRef.current;
-    if (!box || !N) return;
+    const box = boxRef.current, wrap = wrapRef.current;
+    if (!box || !wrap || !N) return;
     const s = Math.max(0, start - 1);
     const e = Math.min(N - 1, end - 1);
-    box.style.top = `${(s / N) * 100}%`;
-    box.style.height = `${(Math.max(1, e - s + 1) / N) * 100}%`;
+    // px, not %: the content area starts under the glyph header
+    const mh = wrap.clientHeight - HDR;
+    box.style.top = `${HDR + (s / N) * mh}px`;
+    box.style.height = `${(Math.max(1, e - s + 1) / N) * mh}px`;
   };
   useImperativeHandle(ref, () => ({ setRange: applyBox }));
   // recompute the box from the list directly (used for mount/resize, when the
@@ -111,15 +127,19 @@ export const Minimap = forwardRef<MinimapHandle, {
       // said" signal, and the two colour systems (speaker, code) never share a column.
       const railW = simple ? 6 : 4;
       const railX = mkX + mkBandW + (mkBandW ? 2 : 0);
-      const laneAreaW = Math.min(w * (simple ? 0.6 : 0.5), cols * (simple ? 10 : 7));
-      const laneX = w - laneAreaW - 2;
-      const colW = laneAreaW / Math.max(1, cols);
       // AI-mark channel: WHERE the machine noticed something, next to WHO said it.
       // Its own thin strip in the lens's colour (amber = transcription error), so
       // machine marks never share a column with human coding.
       const noticeW = simple ? 5 : 3;
       const noticeX = railX + railW + 2;
       const textX = noticeX + noticeW + 3;
+      // lanes are sized from the right but must never cross INTO the notice
+      // strip: at 66px simplified with an events band the old math let the two
+      // overlap, and the new zone rules turned that quiet collision into a mess
+      const laneAreaW = Math.max(simple ? 8 : 6, Math.min(
+        w * (simple ? 0.6 : 0.5), cols * (simple ? 10 : 7), w - (noticeX + noticeW + 4)));
+      const laneX = w - laneAreaW - 2;
+      const colW = laneAreaW / Math.max(1, cols);
       // The rail costs the text bars width. At the narrowest minimap (44px, simplified)
       // textX runs PAST laneX and the bars would be drawn on top of the code lanes — so
       // below a usable width, drop the bars entirely: "who" and "which code" are worth
@@ -129,7 +149,32 @@ export const Minimap = forwardRef<MinimapHandle, {
       const textW = Math.max(4, textAvail);
       const codeMinH = simple ? 5 : 1.5;
       const warnMinH = simple ? 6 : 2.5;
-      const muted = getComputedStyle(cv).getPropertyValue("--muted").trim() || "#888";
+      const cs = getComputedStyle(cv);
+      const muted = cs.getPropertyValue("--muted").trim() || "#888";
+      const lineC = cs.getPropertyValue("--line").trim() || "#444";
+      const accentC = cs.getPropertyValue("--accent").trim() || "#6d28d9";
+      const panelC = cs.getPropertyValue("--panel").trim() || "#f6f6f6";
+      // content rows live UNDER the glyph header
+      const mh = h - HDR;
+      const yOf = (i: number) => HDR + (i / N) * mh;
+
+      // ── zone furniture (lab option 1, "Ruled zones"): a whisper of accent
+      // tint behind the machine zones (events 2.5%, AI + lanes 5%), a hairline
+      // between every zone, and a glyph cap naming each column group.
+      const tint5 = blend(accentC, panelC, 0.05), tint25 = blend(accentC, panelC, 0.025);
+      if (mkBandW) { ctx.fillStyle = tint25; ctx.fillRect(mkX - 1, 0, mkBandW + 2, h); }
+      ctx.fillStyle = tint5;
+      ctx.fillRect(noticeX - 1, 0, noticeW + 2, h);
+      ctx.fillRect(laneX - 1, 0, laneAreaW + 2, h);
+      ctx.fillStyle = lineC;
+      for (const rx of [mkX - 2, railX - 2, noticeX - 2, laneX - 2])
+        if (rx > 0) ctx.fillRect(Math.round(rx), 0, 1, h);
+      ctx.fillStyle = muted;
+      ctx.font = "9px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      if (mkBandW) ctx.fillText("\u25c6", mkX + mkBandW / 2, HDR / 2 - 1);      // ◆ events
+      if (showText) ctx.fillText("\u00b6", railX + (textX + textW - railX) / 2, HDR / 2 - 1); // ¶ speech
+      ctx.fillText("\u2726", noticeX + noticeW / 2, HDR / 2 - 1);                // ✦ AI
+      ctx.fillText("\u25ae", laneX + laneAreaW / 2, HDR / 2 - 1);                // ▮ codes
 
       ctx.fillStyle = muted;
       if (simple) {
@@ -137,7 +182,7 @@ export const Minimap = forwardRef<MinimapHandle, {
         // (avg line fill), tinted by the bucket's dominant speaker
         const bh = 6;
         const CAP = 80; // chars for a "full" line
-        const nb = Math.max(1, Math.ceil(h / bh));
+        const nb = Math.max(1, Math.ceil(mh / bh));
         // Each bucket keeps its DOMINANT speaker (most characters spoken in it) rather
         // than a P-vs-R split — that split assumed two speakers and the "R" convention,
         // and collapsed a whole focus group into "not the researcher".
@@ -148,7 +193,7 @@ export const Minimap = forwardRef<MinimapHandle, {
           const it = items[i];
           if (it.kind !== "g") continue; // event rows draw their own full-width mark below
           const g = it.g;
-          const k = Math.min(nb - 1, Math.floor(((i / N) * h) / bh));
+          const k = Math.min(nb - 1, Math.floor(((i / N) * mh) / bh));
           const len = g.lines.reduce((s, l) => s + l.text.trim().length, 0);
           const b = buckets[k];
           b.chars += len; b.n++;
@@ -162,13 +207,13 @@ export const Minimap = forwardRef<MinimapHandle, {
           const w = weightOf(ui, top);
           ctx.globalAlpha = 0.95; // rail = pure speaker identity; weight lives in the bar
           ctx.fillStyle = speakerColor(ui, top);
-          ctx.fillRect(railX, k * bh, railW, bh - 1);
+          ctx.fillRect(railX, HDR + k * bh, railW, bh - 1);
           if (showText) {
             // the bar's WIDTH is how much was said; its ALPHA is the speaker's
             // weight (quiet < normal < bold) — the one channel that carries weight
             ctx.globalAlpha = w === "bold" ? 0.85 : w === "quiet" ? 0.3 : 0.55;
             ctx.fillStyle = muted;
-            ctx.fillRect(textX, k * bh, Math.max(3, Math.min(1, b.chars / (b.n * CAP)) * textW), bh - 1);
+            ctx.fillRect(textX, HDR + k * bh, Math.max(3, Math.min(1, b.chars / (b.n * CAP)) * textW), bh - 1);
           }
         }
       } else {
@@ -183,7 +228,7 @@ export const Minimap = forwardRef<MinimapHandle, {
           if (it.kind !== "g") continue; // ditto
           const g = it.g;
           const w = weightOf(ui, g.speaker);
-          const y = (i / N) * h, bh = Math.max(0.6, (h / N) * 0.7);
+          const y = yOf(i), bh = Math.max(0.6, (mh / N) * 0.7);
           ctx.globalAlpha = 0.95; // rail = pure speaker identity
           ctx.fillStyle = speakerColor(ui, g.speaker);
           ctx.fillRect(railX, y, railW, Math.max(0.8, bh));
@@ -209,7 +254,7 @@ export const Minimap = forwardRef<MinimapHandle, {
           if (!colors.includes(c)) colors.push(c);
         }
         if (!colors.length) continue;
-        const y = (i / N) * h, bh = Math.max(noticeMinH, (h / N) * 0.85);
+        const y = yOf(i), bh = Math.max(noticeMinH, (mh / N) * 0.85);
         const seg = bh / Math.min(colors.length, 4);
         colors.slice(0, 4).forEach((c, k) => {
           ctx.globalAlpha = 1; ctx.fillStyle = c;
@@ -221,8 +266,8 @@ export const Minimap = forwardRef<MinimapHandle, {
       for (const s of laned) {
         const gi0 = m.get(s.start) ?? 0;
         const gi1 = m.get(s.end) ?? gi0;
-        const y0 = (gi0 / N) * h;
-        const y1 = ((gi1 + 1) / N) * h;
+        const y0 = yOf(gi0);
+        const y1 = yOf(gi1 + 1);
         ctx.globalAlpha = s.status === "rejected" ? 0.3 : s.status !== "accepted" ? 0.55 : 0.9;
         ctx.fillStyle = codebook[s.code]?.color || "#999";
         ctx.fillRect(laneX + s.lane * colW, y0, Math.max(1, colW - 1.5), Math.max(codeMinH, y1 - y0));
@@ -241,8 +286,8 @@ export const Minimap = forwardRef<MinimapHandle, {
         const key = markerKey(it.m);
         ctx.globalAlpha = 0.95;
         ctx.fillStyle = markerColor(key, ui.markerColors);
-        ctx.fillRect(mkX + (mkCol.get(key) ?? 0) * mkPitch, (i / N) * h,
-          mkW, Math.max(mkMinH, (h / N) * 0.85));
+        ctx.fillRect(mkX + (mkCol.get(key) ?? 0) * mkPitch, yOf(i),
+          mkW, Math.max(mkMinH, (mh / N) * 0.85));
       }
       ctx.globalAlpha = 1;
     };
@@ -271,7 +316,7 @@ export const Minimap = forwardRef<MinimapHandle, {
     if (!wrap || !v || !N) return;
     onNav?.();
     const r = wrap.getBoundingClientRect();
-    const f = Math.min(1, Math.max(0, (clientY - r.top) / r.height));
+    const f = Math.min(1, Math.max(0, (clientY - r.top - HDR) / (r.height - HDR)));
     v.scrollToIndex(Math.min(N - 1, Math.floor(f * N)) + 1, { align: "center" });
   };
   const onDown = (e: ReactMouseEvent) => {
