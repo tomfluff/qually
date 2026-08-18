@@ -166,9 +166,18 @@ export const Minimap = forwardRef<MinimapHandle, {
       ctx.fillStyle = tint5;
       ctx.fillRect(noticeX - 1, 0, noticeW + 2, h);
       ctx.fillRect(laneX - 1, 0, laneAreaW + 2, h);
+      // the glyph cap sits on its own ground (--bg against the map's --panel),
+      // closed by a hairline, so the header reads as a header and not as the
+      // first 12px of data
+      ctx.fillStyle = cs.getPropertyValue("--bg").trim() || "#fff";
+      ctx.fillRect(0, 0, w, HDR - 2);
       ctx.fillStyle = lineC;
+      ctx.fillRect(0, HDR - 2, w, 1);
+      // zone rules: doubled in the simplified view, whose marks are twice the
+      // weight — a 1px rule disappears next to them
+      const ruleW = simple ? 2 : 1;
       for (const rx of [mkX - 2, railX - 2, noticeX - 2, laneX - 2])
-        if (rx > 0) ctx.fillRect(Math.round(rx), 0, 1, h);
+        if (rx > 0) ctx.fillRect(Math.round(rx) - (ruleW - 1), 0, ruleW, h);
       ctx.fillStyle = muted;
       ctx.font = "9px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       if (mkBandW) ctx.fillText("\u25c6", mkX + mkBandW / 2, HDR / 2 - 1);      // ◆ events
