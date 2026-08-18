@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
+import { AUTHOR_AVATAR } from "../assets/avatar";
 
 const KEYS: [string, string][] = [
   ["Tab, then ↓", "Move focus into the transcript and select a line — no mouse needed"],
@@ -130,6 +131,16 @@ export function AboutButton() {
                   <li><b>Settings:</b> zen mode, theme &amp; primary color, text sizes, line numbers, short/full speaker names, merge partial lines, lane width, warning-badge size, and hotbar &amp; command-palette position.</li>
                   <li>Drag the panel dividers to resize; drag lane bars past 5 and the text reflows.</li>
                 </ul>
+              </section>
+
+              {/* the credit that used to be the app-wide footer strip */}
+              <section className="about-credit">
+                <span>Created with love and care by</span>
+                <a className="foot-author" href="https://tomfluff.github.io/" target="_blank" rel="noreferrer">
+                  <img className="foot-avatar" src={AUTHOR_AVATAR} alt="Yotam Sechayk" width={20} height={20} />
+                  <span>Yotam Sechayk</span>
+                </a>
+                <span>— reach out with any questions.</span>
               </section>
             </div>
           </div>

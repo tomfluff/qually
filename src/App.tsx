@@ -24,7 +24,6 @@ import { DefineHost } from "./components/CodeDef";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
-import { AUTHOR_AVATAR } from "./assets/avatar";
 import { LENSES, spanLens } from "./ai/flag";
 import { useCallback, useMemo, useRef } from "react";
 import { useDismiss, OVERLAY_SELECTOR } from "./usePopover";
@@ -275,14 +274,6 @@ export function App() {
             : <TranscriptView />}
         </div>
       </div>
-      <footer id="footer">
-        <span>Created with love and care by</span>
-        <a className="foot-author" href="https://tomfluff.github.io/" target="_blank" rel="noreferrer">
-          <img className="foot-avatar" src={AUTHOR_AVATAR} alt="Yotam Sechayk" width={20} height={20} />
-          <span>Yotam Sechayk</span>
-        </a>
-        <span>— reach out with any questions.</span>
-      </footer>
       {onTranscript && <HotbarDock />}
       <VideoDock />
       {zen && (

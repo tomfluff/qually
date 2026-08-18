@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
    Copyright (C) 2026 Yotam Sechayk */
 /* zen mode: hide chrome, keep transcript + video */
-#app.zen #toolbar, #app.zen #tabs, #app.zen #sidebar, #app.zen .hotbar, #app.zen #footer { display:none; }
+#app.zen #toolbar, #app.zen #tabs, #app.zen #sidebar, #app.zen .hotbar { display:none; }
 .zenexit { position:fixed; top:10px; left:12px; z-index:60;
   display:inline-flex; align-items:center; gap:.45em; padding:.4em .85em;
   background:var(--panel); border:1px solid var(--line); border-radius:999px;
