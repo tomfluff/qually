@@ -526,6 +526,29 @@ export function VideoDock() {
         <span style={{ flex: 1 }} />
         {cur && (
           <>
+            {/* minimised: the two transcript actions ride along as icon-only
+                buttons (their labelled forms live in the expanded control strip),
+                left of play, behind the same owning-transcript guard as up there */}
+            {shut && onTranscript && vidPid === pid && (
+              <>
+                <button className="vbtn icononly" onClick={syncToLine}
+                  title="Select the transcript line playing now, and scroll to it"
+                  aria-label="Go to the transcript line playing now">
+                  <Icon name="target" size={fs + 2} />
+                </button>
+                <button className="vbtn icononly accentline" disabled={playheadSec() === null}
+                  onClick={() => {
+                    const t = playheadSec();
+                    if (t !== null) useStore.getState().setEventAt(t);
+                  }}
+                  title={playheadSec() === null
+                    ? "The playhead is before the transcript starts \u2014 nothing to mark yet"
+                    : "Add a session event at the playhead"}
+                  aria-label="Add a session event at the playhead">
+                  <Icon name="bookmark" size={fs + 2} />
+                </button>
+              </>
+            )}
             <button className="vbtn playbtn" onClick={togglePlay} title="Play / pause"
               aria-label={playing ? "Pause" : "Play"}>
               <Icon name={playing ? "pause" : "play"} size={fs} />
