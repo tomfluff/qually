@@ -13,8 +13,8 @@ import { Icon } from "./Icon";
 // (An older persisted geom stored the LEFT edge as `x`; it has no `r`, so those
 // users get one reset to the default corner.)
 interface Geom { r: number | null; bottom: number | null; w: number; collapsed: boolean; rate: number; }
-const DEFAULT: Geom = { r: null, bottom: null, w: 220, collapsed: true, rate: 1 };
-const MIN_W = 220; // expanded minimum (collapsed shrinks to its controls) — must match video.css .vdock min-width
+const MIN_W = 230; // expanded minimum (collapsed shrinks to its controls); the ONLY width floor — video.css sets none
+const DEFAULT: Geom = { r: null, bottom: null, w: MIN_W, collapsed: true, rate: 1 };
 // Where an untouched dock rests: bottom right of the transcript surface, clear of
 // the minimap and to the LEFT of the focus button's column (the dock is
 // bottom-anchored and covers whatever it lands on at z 74, so the default has to
@@ -32,7 +32,7 @@ function loadGeom(): Geom {
     // and CONVERT a legacy left-edge position instead of discarding it
     const p = JSON.parse(localStorage.getItem("coding-app-dock") || "{}");
     const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-    const w = num(p.w) ? Math.max(MIN_W, p.w) : DEFAULT.w; // old min was 220
+    const w = num(p.w) ? Math.max(MIN_W, p.w) : DEFAULT.w; // persisted widths under the floor pull up
     const r = num(p.r) ? p.r
       : num(p.x) ? window.innerWidth - p.x - w // pre-right-anchor geom: same spot, new reference edge
       : DEFAULT.r;
