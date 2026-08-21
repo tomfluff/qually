@@ -36,6 +36,8 @@ PART 2 — PER-CODE ACTIONS on codes that are in no cluster:
 
 Every cluster and action needs one sentence of rationale naming the evidence. Use the exact code names given. A code appears in at most one cluster, and a clustered code gets no separate action.
 
+NAMING CONVENTION: any name you propose ("newName", or a rename's new name) must follow the conventions already visible in this codebook — above all its capitalization (all-lowercase, Sentence case, Title Case, or ALL CAPS), and also its phrasing style (noun phrase vs gerund vs full clause), its length, and its punctuation (hyphens, slashes, ampersands). Match the codes in the cluster you are naming first, then the codebook as a whole. A proposed name that reads as a different style from the researcher's own names is wrong even when its wording is better.
+
 Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
 
 // the phased pass: consolidation first (merge clusters and renames only, no
@@ -235,6 +237,8 @@ const FOCUS_SYSTEM = `You are helping a qualitative researcher consolidate a fir
 Propose dispositions ONLY for focus codes. A merge cluster must contain at least one focus code and may include context codes as members or survivor when the evidence shows the SAME concept. "rename" and "remove" apply to focus codes only. Most focus codes should come back unchanged — this is consolidation, not rewriting; when in doubt, keep.
 
 List EVERY focus code exactly once in reviewedFocus, whether or not you propose anything for it. Use the exact code names given. One sentence of rationale naming the evidence for each proposal. A code appears in at most one cluster. "remove" REJECTS a code's excerpts rather than deleting them; propose it sparingly, and never based on thin sampling alone.
+
+NAMING CONVENTION: any name you propose must follow the conventions already visible in this codebook — above all its capitalization (all-lowercase, Sentence case, Title Case, or ALL CAPS), and also its phrasing style, length, and punctuation. Match the codes in the cluster you are naming first, then the codebook as a whole. A proposed name in a different style from the researcher's own names is wrong even when its wording is better.
 
 Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
 

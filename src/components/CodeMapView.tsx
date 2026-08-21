@@ -53,6 +53,24 @@ const chipW = (fs: number, name: string, segs: number, pids: number) => {
   return Math.round(nameW + counts + 64);
 };
 
+// Captions (island and halo) float ABOVE their block and counter-scale against
+// the viewport, so zoomed out they are the widest thing on the map while the
+// blocks they name stay small — pack without reserving their room and the
+// names collide. Both dimensions are in WORLD units at a given zoom: the
+// caption's on-screen size is meant to hold steady, so its world size grows as
+// the zoom shrinks (capped, mirroring IslandNode/HaloNode).
+const captionFs = (fs: number, zoom: number, cap: number) => {
+  const base = fs * 1.3;
+  return Math.min(base * cap, Math.max(base, base / zoom));
+};
+const captionBox = (fs: number, zoom: number, cap: number, text: string, extraEm: number) => {
+  const size = captionFs(fs, zoom, cap);
+  const family = getComputedStyle(document.body).fontFamily;
+  measurer.font = `800 ${size}px ${family}`;
+  // extraEm covers the caption's trailing furniture (tag, count, buttons)
+  return { w: Math.round(measurer.measureText(text).width + size * extraEm), h: Math.round(size * 1.5) };
+};
+
 type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction };
 type ChipNodeT = Node<ChipData, "chip">;
 // lens islands are synthetic (gi indexes the LENS grouping, not codeGroups),
@@ -86,6 +104,9 @@ const remembered = {
   // hand-moves made while a lens is up: session-only, per lens, never written
   // to the store — switching back to normal restores the manual layout intact
   lensPos: {} as Partial<Record<"pids" | "segs" | "cooc" | "topics", Record<string, { x: number; y: number }>>>,
+  // the zoom the packing reserves caption room for: 1 until the researcher
+  // re-lays out at some other zoom ("spread this out so I can read it here")
+  layoutZoom: 1,
 };
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -376,7 +397,10 @@ function MapInner() {
   const setUi = useStore((s) => s.setUi);
   const mapPositions = useStore((s) => s.mapPositions);
   const mapIslandPos = useStore((s) => s.mapIslandPos);
-  const { setNodes: rfSetNodes, getNodes, getInternalNode, fitView } = useReactFlow();
+  const { setNodes: rfSetNodes, getNodes, getInternalNode, fitView, getZoom } = useReactFlow();
+  // packing reserves caption room for THIS zoom (see captionBox)
+  const [layoutZoom, setLayoutZoom] = useState(remembered.layoutZoom);
+  useEffect(() => { remembered.layoutZoom = layoutZoom; }, [layoutZoom]);
   // menu state carries the selection it acts on, captured at open — the menu
   // needs no live subscription
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[];
@@ -547,15 +571,21 @@ function MapInner() {
       // hand-placements live in remembered.lensPos (session, per lens), never
       // in the store, so Arrange: normal restores the manual layout intact
       const lp = remembered.lensPos[lens] ?? {};
-      const blocks = lensGroups.map((g, gi) => ({ name: g.name, gi, list: g.list, ...pack(g.list, near(g.list)) }));
+      const blocks = lensGroups.map((g, gi) => ({
+        name: g.name, gi, list: g.list, ...pack(g.list, near(g.list)),
+        // the caption reads "name · count" and carries no buttons
+        cap: captionBox(fs, layoutZoom, 7, `${g.name} · ${g.list.length}`, 1),
+      }));
       const rowW = Math.max(900, Math.sqrt(blocks.reduce((a, b) => a + (b.w + 2 * PAD + ISLAND_GAP) * (b.h + 2 * PAD + ISLAND_GAP), 0)) * 1.4);
       const islands: IslandNodeT[] = [];
       const children: ChipNodeT[] = [];
-      let ix = 0, iy = 0, rowH = 0;
+      let ix = 0, iy = blocks[0]?.cap.h ?? 0, rowH = 0;
       for (const b of blocks) {
         const key = `lens:${b.gi}`;
         const bw = b.w + 2 * PAD, bh = b.h + 2 * PAD;
-        if (ix > 0 && ix + bw > rowW) { ix = 0; iy += rowH + ISLAND_GAP; rowH = 0; }
+        // the caption overhangs a narrow island: reserve ITS width for spacing
+        const stepW = Math.max(bw, b.cap.w);
+        if (ix > 0 && ix + stepW > rowW) { ix = 0; iy += rowH + ISLAND_GAP + b.cap.h; rowH = 0; }
         islands.push({
           id: key, type: "island" as const,
           position: lp[key] ?? { x: ix, y: iy }, width: bw, height: bh,
@@ -564,7 +594,7 @@ function MapInner() {
           data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list },
         });
         for (const c of b.list) children.push({ ...chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key), position: lp[c] ?? { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y } });
-        ix += bw + ISLAND_GAP;
+        ix += stepW + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
       }
       return { nodes: [...islands, ...children] as MapNode[] };
@@ -591,12 +621,17 @@ function MapInner() {
           ? Math.max(1, Math.ceil(((c.rationale?.length ?? 0) + (c.desc?.length ?? 0)) * (fs * 0.52) / (cardW - 24)))
           : 0;
         const cardH = openCards.has(c.ci) ? ratLines * fs * 1.45 + fs * 5 + 22 : 0;
-        return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD, cardH };
+        // the halo caption carries the name plus tag, count and fold arrow
+        const cap = captionBox(fs, layoutZoom, 4.5, c.newName ?? c.survivor, c.newName ? 9 : 4);
+        return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD, cardH, cap };
       });
-      const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (b.w + HALO_GAP) * (b.h + b.cardH + HALO_GAP), 0)) * 1.5);
-      let x = 0, y = 40, rowH = 0;
+      const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (Math.max(b.w, b.cap.w) + HALO_GAP) * (b.h + b.cardH + b.cap.h + HALO_GAP), 0)) * 1.5);
+      let x = 0, y = 40 + (blocks[0]?.cap.h ?? 0), rowH = 0;
       for (const b of blocks) {
-        if (x > 0 && x + b.w > rowW) { x = 0; y += rowH + HALO_GAP; rowH = 0; }
+        // the halo caption is centered on the capsule and can overhang both
+        // sides — space by whichever is wider
+        const stepW = Math.max(b.w, b.cap.w);
+        if (x > 0 && x + stepW > rowW) { x = 0; y += rowH + HALO_GAP + b.cap.h; rowH = 0; }
         const key = `halo:${b.c.ci}`;
         haloNodes.push({
           id: key, type: "halo" as const,
@@ -627,7 +662,7 @@ function MapInner() {
             data: { ci: b.c.ci, gen: genCi === b.c.ci },
           });
         }
-        x += b.w + HALO_GAP;
+        x += stepW + HALO_GAP;
         rowH = Math.max(rowH, b.h + b.cardH);
       }
       // the untouched field below the halos
@@ -650,16 +685,19 @@ function MapInner() {
     }
     const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
       ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
-      .map((b) => ({ ...b, ...pack(b.list, near(b.list)) }));
+      .map((b) => ({ ...b, ...pack(b.list, near(b.list)),
+        // name plus the dissolve button; editable captions can also grow
+        cap: captionBox(fs, layoutZoom, 7, b.name, 2) }));
     const totalW = blocks.reduce((a, b) => a + b.w + 2 * PAD + ISLAND_GAP, 0);
-    const rowW = Math.max(900, Math.sqrt(totalW * (blocks[0] ? blocks[0].h + 160 : 1)) * 1.6, ...blocks.map((b) => b.w + 2 * PAD));
+    const rowW = Math.max(900, Math.sqrt(totalW * (blocks[0] ? blocks[0].h + 160 : 1)) * 1.6, ...blocks.map((b) => Math.max(b.w + 2 * PAD, b.cap.w)));
     const islands: IslandNodeT[] = [];
     const children: ChipNodeT[] = [];
-    let ix = 0, iy = 0, rowH = 0;
+    let ix = 0, iy = blocks[0]?.cap.h ?? 0, rowH = 0;
     for (const b of blocks) {
       const key = b.gi === -1 ? LOOSE : `island:${b.gi}`;
       const bw = b.w + 2 * PAD, bh = b.h + 2 * PAD;
-      if (ix > 0 && ix + bw > rowW) { ix = 0; iy += rowH + ISLAND_GAP; rowH = 0; }
+      const stepW = Math.max(bw, b.cap.w);
+      if (ix > 0 && ix + stepW > rowW) { ix = 0; iy += rowH + ISLAND_GAP + b.cap.h; rowH = 0; }
       islands.push({
         id: key,
         type: "island" as const,
@@ -670,12 +708,12 @@ function MapInner() {
         data: { name: b.name, gi: b.gi },
       });
       for (const c of b.list) children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
-      ix += bw + ISLAND_GAP;
+      ix += stepW + ISLAND_GAP;
       rowH = Math.max(rowH, bh);
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: [...islands, ...children] as MapNode[] };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, layoutZoom]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -1014,8 +1052,8 @@ function MapInner() {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setConfirmRelayout({ right: window.innerWidth - r.right, y: r.bottom + 8 });
           }}
-          title={lens !== "default" ? "A lens hides your layout — switch Arrange back to normal first"
-            : "Lay the whole map out fresh (replaces your hand-placed layout)"}>
+          title={lens !== "default" ? "A lens hides your layout — switch Arrange back to Normal first"
+            : "Lay the whole map out fresh, spread for your current zoom (replaces your hand-placed layout)"}>
           <Icon name="refresh" size={15} /> <span className="blabel">Re-layout</span>
         </button>
       </div>
@@ -1134,15 +1172,21 @@ function MapInner() {
           aria-describedby="relayout-confirm-text"
           style={{ right: confirmRelayout.right, top: confirmRelayout.y, fontSize: sidebarFontSize }}>
           <div className="mapAiConfirmText" id="relayout-confirm-text">
-            Lay the map out fresh? Every chip and group you placed by hand returns to the
-            packed layout. <b>One undo step brings it all back.</b>
+            Lay the map out fresh, spaced so the group names stay readable at your current
+            zoom ({Math.round(getZoom() * 100)}%)? Every chip and group you placed by hand
+            returns to the packed layout. <b>One undo step brings it all back.</b>
           </div>
           <div className="mapCardActions">
             <button className="btn primary" autoFocus
               onClick={() => {
                 setConfirmRelayout(null);
+                // zoomed out, captions grow to stay legible and start colliding —
+                // pack for THIS zoom, and hold the zoom afterwards (fitting the
+                // now-wider map would zoom out again and undo the spacing)
+                const z = getZoom();
+                setLayoutZoom(z);
                 if (useStore.getState().resetMapLayout())
-                  requestAnimationFrame(() => fitView({ duration: 200 }));
+                  requestAnimationFrame(() => fitView({ duration: 200, minZoom: z, maxZoom: z }));
               }}>Re-layout</button>
             <button className="btn" onClick={() => setConfirmRelayout(null)}>Cancel</button>
           </div>
