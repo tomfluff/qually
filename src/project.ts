@@ -61,6 +61,7 @@ export interface Project {
   projectName?: string;
   codeGroups?: { name: string; codes: string[]; rationale?: string }[];
   codePlan?: { code: string; action: "rename" | "merge" | "remove"; newName?: string; into?: string; rationale: string }[];
+  codeClusters?: { survivor: string; codes: string[]; newName?: string; rationale: string }[];
   // answers to questions asked of the coded material, each with the scope and
   // model it came from — optional: absent in files written before Ask existed
   answers?: Answer[];
@@ -130,6 +131,11 @@ export function parseProject(text: string): Project {
     codePlan: Array.isArray(p.codePlan)
       ? p.codePlan.filter((a): a is NonNullable<Project["codePlan"]>[number] =>
           !!a && typeof a.code === "string" && ["rename", "merge", "remove"].includes(a.action))
+      : [],
+    codeClusters: Array.isArray(p.codeClusters)
+      ? p.codeClusters.filter((c): c is NonNullable<Project["codeClusters"]>[number] =>
+          !!c && typeof c.survivor === "string" && Array.isArray(c.codes)
+          && c.codes.every((x: unknown) => typeof x === "string") && c.codes.length >= 2)
       : [],
     // hand-editable like everything else here: openProject maps over these and
     // derives nextAid from them, so a malformed entry would crash the load or

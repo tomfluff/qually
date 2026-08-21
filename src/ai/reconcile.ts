@@ -1,40 +1,49 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// Codebook reconciliation for the Code map: one pass that proposes BOTH the
-// similarity islands and a per-code revision plan (rename / merge / remove),
-// grounded in second-cycle coding practice — consolidating a first-cycle
-// inductive codebook so reflexive thematic analysis can build themes from
-// clean, well-evidenced codes. The AI only PROPOSES; every disposition is
-// reviewed on the map and applied (or skipped) by the researcher through the
-// existing undoable actions. "Remove" never deletes data: it rejects the
-// code's excerpts, which stay in the project file.
+// Codebook reconciliation for the Code map: one pass proposes merge-CLUSTERS
+// (2+ codes that are ONE concept — survivor plus members, optionally renamed)
+// and per-code renames/rejects, grounded in second-cycle coding practice.
+// Calibration matters more than coverage: effective codes each do distinct
+// analytic work, so consolidation removes redundancy (splinters, near-
+// synonyms) and NEVER richness — on a soundly coded book most codes come back
+// untouched. The AI only PROPOSES; every disposition is reviewed on the map
+// and applied by the researcher through undoable actions. "Remove" rejects a
+// code's excerpts; it never deletes data.
 import { callJson, estimateTokens, type Usage } from "./openai";
 import { restore, type Redaction } from "./redact";
 import { renderMergePayload, type MergeCodeInput } from "./dedupe";
-import { sanitizeClusterReply, type ClusterGroup } from "./cluster";
+import { norm } from "../contract/segments";
 
 export interface CodeAction {
   code: string;
-  action: "rename" | "merge" | "remove";
-  newName?: string;   // rename: the clearer name; merge: optional name for the merged concept
-  into?: string;      // merge: the code to fold into
+  action: "rename" | "merge" | "remove"; // "merge" is legacy: loaded, never emitted
+  newName?: string;
+  into?: string;
   rationale: string;
 }
-export interface ReconcilePlan { groups: ClusterGroup[]; actions: CodeAction[] }
+export interface ClusterProposal { survivor: string; codes: string[]; newName?: string; rationale: string }
+export interface ReconcilePlan { clusters: ClusterProposal[]; actions: CodeAction[] }
 
-const SYSTEM = `You are helping a qualitative researcher consolidate a first-cycle inductive codebook so it is ready for reflexive thematic analysis. Each entry has a code name, an optional definition, and sample excerpts the researcher coded with it. You do two jobs in one pass:
+const SYSTEM = `You are helping a qualitative researcher consolidate a first-cycle inductive codebook so it is ready for reflexive thematic analysis. Each entry has a code name, an optional definition, and sample excerpts the researcher coded with it. Propose a revision plan in two parts:
 
-JOB 1 — GROUP by usage similarity. Partition the codes into groups of similar usage: codes that mark the same kind of moment, target the same topic with the same analytic intent, or substantially overlap in application. Aim for HIGH coverage — most codes belong somewhere; leave a code out only when it is genuinely unlike everything else. Groups have 2 to 8 codes, every code in at most one group, names of 2-4 plain words (sentence case), one sentence of rationale each. This is usage grouping, not thematic hierarchy: the excerpts are the strongest evidence, then definitions, then names.
+PART 1 — MERGE CLUSTERS. A cluster is a set of 2 or more codes that are THE SAME CONCEPT — near-synonyms, splinters of one idea, duplicates under different labels. For each cluster name the "survivor" (the member with the better evidence and clearer name), and give "newName" ONLY when the merged concept deserves a clearer name than the survivor's. One sentence of rationale naming the evidence.
+Calibration: this is redundancy detection, NOT thematic grouping. Codes that are merely related, adjacent, or under the same theme are NOT a cluster — a cluster's members' excerpts could swap labels without anyone noticing. Most clusters have 2-3 members; a cluster of 5+ should be rare and obviously justified. On a well-coded book MOST codes belong to no cluster at all — that is the expected, good outcome. When in doubt, do not cluster.
 
-JOB 2 — REVISE. Propose per-code dispositions that reduce noise while keeping every analytic insight reachable:
-- "rename": the name misdescribes what the excerpts show, or is too vague/verbose to find again. Give a clearer, specific name (sentence case, concise).
-- "merge": the code duplicates or splinters another code's concept. Name the code to keep in "into" (prefer the better-evidenced, better-named side). If the merged concept deserves a clearer name than either, also give "newName".
-- "remove": the code carries no analytic value (an artifact, a stray, fully covered elsewhere with nothing of its own). Removal REJECTS the code's excerpts rather than deleting them, but propose it sparingly — a thin code that still says something unique is a keep, not a remove.
-- Codes that are fine as they are get NO action. Most codes should get no action; this is consolidation, not rewriting.
+PART 2 — PER-CODE ACTIONS on codes that are in no cluster:
+- "rename": the name misdescribes what the excerpts show, or is too vague to find again. Give a clearer, specific name (sentence case, concise).
+- "remove": the code carries no analytic value (an artifact, a stray, fully covered elsewhere with nothing of its own). Removal REJECTS the code's excerpts rather than deleting them; propose it sparingly — a thin code that still says something unique is a keep.
+- Codes that are fine get NO action. Most codes should get no action.
 
-Every action needs one sentence of rationale naming the evidence (what the excerpts show). Use the exact code names given. Never chain merges (if A merges into B, give B no action other than possibly "rename").
+Every cluster and action needs one sentence of rationale naming the evidence. Use the exact code names given. A code appears in at most one cluster, and a clustered code gets no separate action.
 
 Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
+
+// the phased pass: consolidation first (merge clusters and renames only, no
+// removals), the full revision when the researcher asks for it
+export type ReconcileMode = "consolidate" | "full";
+const CONSOLIDATE_SUFFIX = `
+
+PHASE: consolidation only. Propose ONLY clusters and "rename" actions — no "remove". Removal decisions come in a later pass.`;
 
 export const estimateReconcileTokens = (codes: MergeCodeInput[], r: Redaction) =>
   estimateTokens(SYSTEM) + estimateTokens(renderMergePayload(codes, r));
@@ -42,16 +51,17 @@ export const estimateReconcileTokens = (codes: MergeCodeInput[], r: Redaction) =
 const SCHEMA = {
   type: "object",
   properties: {
-    groups: {
+    clusters: {
       type: "array",
       items: {
         type: "object",
         properties: {
-          name: { type: "string", description: "2-4 word group name, sentence case" },
-          codes: { type: "array", items: { type: "string" }, description: "exact code names, 2-8 per group" },
-          rationale: { type: "string", description: "one sentence: the shared usage and the evidence" },
+          survivor: { type: "string", description: "exact name of the member to keep" },
+          codes: { type: "array", items: { type: "string" }, description: "exact names of ALL members including the survivor, 2+ per cluster" },
+          newName: { type: "string", description: "optional clearer name for the merged concept; empty to keep the survivor's name" },
+          rationale: { type: "string", description: "one sentence: the shared concept and the evidence" },
         },
-        required: ["name", "codes", "rationale"],
+        required: ["survivor", "codes", "newName", "rationale"],
         additionalProperties: false,
       },
     },
@@ -61,33 +71,25 @@ const SCHEMA = {
         type: "object",
         properties: {
           code: { type: "string", description: "exact name of the code this disposition is about" },
-          action: { type: "string", enum: ["rename", "merge", "remove"] },
-          newName: { type: "string", description: "rename: the clearer name; merge: optional name for the merged concept; else empty" },
-          into: { type: "string", description: "merge: exact name of the code to keep; else empty" },
+          action: { type: "string", enum: ["rename", "remove"] },
+          newName: { type: "string", description: "rename: the clearer name; else empty" },
           rationale: { type: "string", description: "one sentence naming the evidence" },
         },
-        required: ["code", "action", "newName", "into", "rationale"],
+        required: ["code", "action", "newName", "rationale"],
         additionalProperties: false,
       },
     },
   },
-  required: ["groups", "actions"],
+  required: ["clusters", "actions"],
   additionalProperties: false,
 } as const;
-
-// the phased pass: consolidation first (low-level cleanup — merge and rename
-// only, no removals), the full revision when the researcher asks for it
-export type ReconcileMode = "consolidate" | "full";
-const CONSOLIDATE_SUFFIX = `
-
-PHASE: consolidation only. Propose ONLY "rename" and "merge" actions — no "remove". The islands tend to hold theme-sized sets; this pass thins them into distinct, well-named codes, so be generous with merges of near-duplicate codes and with renames that sharpen vague names. Removal decisions come in a later pass.`;
 
 export async function reconcileCodes(opts: {
   key: string; model: string; codes: MergeCodeInput[]; redaction: Redaction;
   mode?: ReconcileMode; signal?: AbortSignal;
 }): Promise<{ plan: ReconcilePlan; usage: Usage }> {
   const consolidate = (opts.mode ?? "consolidate") === "consolidate";
-  const { data, usage } = await callJson<{ groups: ClusterGroup[]; actions: CodeAction[] }>({
+  const { data, usage } = await callJson<{ clusters: ClusterProposal[]; actions: CodeAction[] }>({
     key: opts.key,
     model: opts.model,
     system: consolidate ? SYSTEM + CONSOLIDATE_SUFFIX : SYSTEM,
@@ -96,22 +98,53 @@ export async function reconcileCodes(opts: {
     schema: SCHEMA,
     signal: opts.signal,
   });
+  const clusters = sanitizeClusters(opts.codes, data.clusters ?? [], opts.redaction);
+  const clustered = new Set(clusters.flatMap((c) => c.codes));
   const actions = sanitizeActions(opts.codes, data.actions ?? [], opts.redaction)
-    // belt and braces: the consolidation phase never removes, whatever the model says
+    // a clustered code gets no separate action; consolidation never removes
+    .filter((a) => !clustered.has(a.code))
     .filter((a) => !consolidate || a.action !== "remove");
-  return {
-    plan: {
-      groups: sanitizeClusterReply(opts.codes, data.groups ?? [], opts.redaction),
-      actions,
-    },
-    usage,
-  };
+  return { plan: { clusters, actions }, usage };
 }
 
-// The trust boundary, testable without the network: only codes we sent get
-// actions, one action per code, merge targets must be real codes that are not
-// themselves merge sources (no chains), renames need a usable new name, and
-// redaction placeholders are restored in everything human-facing.
+// The cluster trust boundary (doc invariants, testable without the network):
+// members must be real codes we sent; a code lands in at most one cluster
+// (first wins); the survivor must be one of the members (else first member);
+// a newName that norm-collides with any surviving code outside the cluster is
+// dropped (the cluster keeps the survivor's name); clusters below 2 valid
+// members drop; redactions restored in names and rationales.
+export function sanitizeClusters(
+  codes: MergeCodeInput[],
+  reply: ClusterProposal[],
+  r?: Redaction,
+): ClusterProposal[] {
+  const known = new Set(codes.map((c) => c.name));
+  const taken = new Set<string>();
+  const out: ClusterProposal[] = [];
+  for (const c of reply) {
+    const members = [...new Set((c.codes ?? []).map((x) => (x ?? "").trim()))]
+      .filter((x) => known.has(x) && !taken.has(x));
+    if (members.length < 2) continue;
+    const survivor = members.includes((c.survivor ?? "").trim()) ? (c.survivor ?? "").trim() : members[0];
+    members.forEach((x) => taken.add(x));
+    let newName: string | undefined = restore(r, (c.newName ?? "").trim()) || undefined;
+    if (newName && norm(newName) === norm(survivor)) newName = undefined;
+    // collision with a code that survives OUTSIDE this cluster -> keep survivor's name
+    if (newName) {
+      const outside = codes.map((x) => x.name).filter((n) => !members.includes(n));
+      if (outside.some((n) => norm(n) === norm(newName!))) newName = undefined;
+    }
+    out.push({
+      survivor, codes: members,
+      ...(newName ? { newName } : {}),
+      rationale: restore(r, (c.rationale ?? "").trim()),
+    });
+  }
+  return out;
+}
+
+// Per-code actions: only codes we sent, one action per code, renames need a
+// usable new name; "merge" never comes back from the model (legacy loads only).
 export function sanitizeActions(
   codes: MergeCodeInput[],
   reply: CodeAction[],
@@ -119,27 +152,30 @@ export function sanitizeActions(
 ): CodeAction[] {
   const known = new Set(codes.map((c) => c.name));
   const seen = new Set<string>();
-  const first: CodeAction[] = [];
+  const out: CodeAction[] = [];
   for (const a of reply) {
     const code = (a.code ?? "").trim();
     if (!known.has(code) || seen.has(code)) continue;
     const newName = restore(r, (a.newName ?? "").trim());
-    const into = (a.into ?? "").trim();
     const rationale = restore(r, (a.rationale ?? "").trim());
     if (a.action === "rename") {
       if (!newName || newName === code) continue;
       seen.add(code);
-      first.push({ code, action: "rename", newName, rationale });
-    } else if (a.action === "merge") {
-      if (!known.has(into) || into === code) continue;
-      seen.add(code);
-      first.push({ code, action: "merge", into, ...(newName && newName !== into ? { newName } : {}), rationale });
+      out.push({ code, action: "rename", newName, rationale });
     } else if (a.action === "remove") {
       seen.add(code);
-      first.push({ code, action: "remove", rationale });
+      out.push({ code, action: "remove", rationale });
     }
   }
-  // no chains: a merge target must not itself be a merge source
-  const sources = new Set(first.filter((a) => a.action === "merge").map((a) => a.code));
-  return first.filter((a) => a.action !== "merge" || !sources.has(a.into!));
+  return out;
+}
+
+// Island-scoped reruns merge into the pending state: pending clusters that
+// intersect the scoped subset are replaced by the new proposals (doc rule).
+export function mergeScopedClusters(
+  pending: ClusterProposal[],
+  subset: Set<string>,
+  fresh: ClusterProposal[],
+): ClusterProposal[] {
+  return [...pending.filter((c) => !c.codes.some((x) => subset.has(x))), ...fresh];
 }

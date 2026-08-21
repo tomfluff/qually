@@ -261,31 +261,46 @@ describe("cluster sanitize (Code map grouping)", () => {
   });
 });
 
-describe("reconcile sanitize (Code map revision plan)", () => {
-  it("one action per code, no merge chains, restores redactions", async () => {
-    const { sanitizeActions } = await import("./reconcile");
+
+describe("reconcile sanitize (cluster plan)", () => {
+  it("clusters: one per code, survivor in members, collisions drop newName, thin drops", async () => {
+    const { sanitizeClusters } = await import("./reconcile");
     const { redactor } = await import("./redact");
     const r = redactor(["Ann"]);
     const token = r.redact("Ann");
-    const codes = ["a", "b", "c", "d", "e"].map((name) => ({ name, def: "", excerpts: [] }));
-    const out = sanitizeActions(codes, [
-      { code: "a", action: "merge", into: "b", newName: "", rationale: `${token} says so.` },
-      { code: "b", action: "merge", into: "c", newName: "", rationale: "" },   // b is a's target AND a source -> a drops
-      { code: "c", action: "rename", newName: "clearer c", into: "", rationale: "" },
-      { code: "c", action: "remove", newName: "", into: "", rationale: "" },   // second action for c -> drops
-      { code: "ghost", action: "remove", newName: "", into: "", rationale: "" }, // unknown -> drops
-      { code: "d", action: "rename", newName: "d", into: "", rationale: "" },  // rename to itself -> drops
-      { code: "e", action: "remove", newName: "", into: "", rationale: "" },
+    const codes = ["a", "b", "c", "d", "outside"].map((name) => ({ name, def: "", excerpts: [] }));
+    const out = sanitizeClusters(codes, [
+      { survivor: "b", codes: ["a", "b", "ghost"], newName: "", rationale: `${token} said.` },
+      { survivor: "x", codes: ["c", "d"], newName: "Outside", rationale: "" }, // bad survivor -> first member; newName collides with 'outside' -> dropped
+      { survivor: "d", codes: ["d", "b"], newName: "", rationale: "" },        // d and b already taken -> thin -> drops
     ], r);
-    expect(out.map((a) => `${a.code}:${a.action}`)).toEqual(["b:merge", "c:rename", "e:remove"]);
-    const b = out.find((a) => a.code === "b")!;
-    expect(b.into).toBe("c");
+    expect(out).toHaveLength(2);
+    expect(out[0].survivor).toBe("b");
+    expect(out[0].codes).toEqual(["a", "b"]);
+    expect(out[0].rationale).toBe("Ann said.");
+    expect(out[1].survivor).toBe("c");
+    expect(out[1].newName).toBeUndefined();
   });
-  it("merge keeps an optional new name for the merged concept", async () => {
+  it("actions: rename/remove only, clustered codes excluded by the caller contract", async () => {
     const { sanitizeActions } = await import("./reconcile");
-    const codes = ["x", "y"].map((name) => ({ name, def: "", excerpts: [] }));
-    const [m] = sanitizeActions(codes, [
-      { code: "x", action: "merge", into: "y", newName: "better name", rationale: "" }]);
-    expect(m.newName).toBe("better name");
+    const codes = ["a", "b"].map((name) => ({ name, def: "", excerpts: [] }));
+    const out = sanitizeActions(codes, [
+      { code: "a", action: "rename", newName: "clearer a", rationale: "" },
+      { code: "a", action: "remove", rationale: "" },        // second action -> drops
+      { code: "ghost", action: "remove", rationale: "" },    // unknown -> drops
+      { code: "b", action: "rename", newName: "b", rationale: "" }, // rename to itself -> drops
+    ]);
+    expect(out.map((a) => `${a.code}:${a.action}`)).toEqual(["a:rename"]);
+  });
+  it("scoped rerun replaces pending clusters that intersect the subset", async () => {
+    const { mergeScopedClusters } = await import("./reconcile");
+    const pending = [
+      { survivor: "a", codes: ["a", "b"], rationale: "" },
+      { survivor: "x", codes: ["x", "y"], rationale: "" },
+    ];
+    const out = mergeScopedClusters(pending, new Set(["b", "q"]), [
+      { survivor: "q", codes: ["q", "b"], rationale: "" },
+    ]);
+    expect(out.map((c) => c.survivor)).toEqual(["x", "q"]);
   });
 });

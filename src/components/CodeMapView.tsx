@@ -27,7 +27,7 @@ import { preselectBrowse } from "./BrowseView";
 import { CodeCounts } from "./CodeCounts";
 import { Icon, countIconSize } from "./Icon";
 import { ReconcileModal } from "./ReconcileModal";
-import type { CodeAction, ReconcilePlan } from "../ai/reconcile";
+import { mergeScopedClusters, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -508,18 +508,17 @@ function MapInner() {
       {aiOpen && (
         <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope} onClose={() => setAiOpen(false)}
           onPlan={(p: ReconcilePlan, scope) => {
+            const st = useStore.getState();
             if (scope === "all") {
               remembered.positions = {}; remembered.islandPos = {};
-              setCodeGroups(p.groups);
+              st.setCodeClusters(p.clusters);
               setPlan(p.actions);
             } else {
-              // island-scoped refinement: the returned groups re-partition only
-              // that island's codes; everything else stays put
+              // island-scoped refinement merges into the pending state: pending
+              // clusters intersecting the subset are replaced (doc rule)
               const subset = new Set(codeGroups[scope]?.codes ?? []);
               subset.forEach((c) => delete remembered.positions[c]);
-              const rest = codeGroups.filter((_, i) => i !== scope)
-                .map((g) => ({ ...g, codes: g.codes.filter((c) => !subset.has(c)) }));
-              setCodeGroups([...rest, ...p.groups]);
+              st.setCodeClusters(mergeScopedClusters(st.codeClusters, subset, p.clusters));
               setPlan([...plan.filter((a) => !subset.has(a.code)), ...p.actions]);
             }
           }} />

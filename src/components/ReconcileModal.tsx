@@ -28,7 +28,7 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
   const codebook = useStore((s) => s.codebook);
   const ai = useStore((s) => s.ai);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ groups: number; actions: number; cost: number } | null>(null);
+  const [done, setDone] = useState<{ clusters: number; actions: number; cost: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [exN, setExN] = useState(8);
   const [scope, setScope] = useState<number | "all">(initialScope);
@@ -85,8 +85,8 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
       onPlan(plan, scope);
-      setDone({ groups: plan.groups.length, actions: plan.actions.length, cost: usage.costUsd });
-      announce(`${plan.groups.length} groups and ${plan.actions.length} revision proposals laid out on the map.`);
+      setDone({ clusters: plan.clusters.length, actions: plan.actions.length, cost: usage.costUsd });
+      announce(`${plan.clusters.length} merge cluster${plan.clusters.length === 1 ? "" : "s"} and ${plan.actions.length} action${plan.actions.length === 1 ? "" : "s"} laid out on the map.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
@@ -103,10 +103,11 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
           <>
             <div className="ai-body">
               <p className="about-lede">
-                Laid out <b>{done.groups} group{done.groups === 1 ? "" : "s"}</b> and proposed{" "}
-                <b>{done.actions} revision{done.actions === 1 ? "" : "s"}</b> — each one waits on the
-                map for your verdict (accept applies it, undoably; skip discards it). Nothing has
-                changed yet, and "remove" only rejects a code's excerpts — the data stays in the file.
+                Proposed <b>{done.clusters} merge cluster{done.clusters === 1 ? "" : "s"}</b> and{" "}
+                <b>{done.actions} rename/reject{done.actions === 1 ? "" : "s"}</b> — each waits on the
+                map as a constellation or badge for your verdict (accept applies it, undoably; skip
+                discards it). Nothing has changed yet, and "remove" only rejects a code's excerpts —
+                the data stays in the file.
               </p>
               <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
             </div>
@@ -116,11 +117,11 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
           <>
             <div className="ai-body nicescroll">
               <p className="about-lede">
-                Second-cycle consolidation: the AI reads each code's definition and excerpts, groups
-                codes by how they are USED, and proposes per-code revisions — clearer names, merges of
-                splintered concepts, rejection of codes with no analytic value — so themes can build
-                on clean, well-evidenced codes. You review every proposal on the map; coding stays yours.
-                {groups.length > 0 && scope === "all" && <> <b>Your current groups are replaced.</b></>}
+                Second-cycle consolidation: the AI reads each code's definition and excerpts and
+                proposes merge CLUSTERS — sets of codes that are the same concept, with a survivor —
+                plus clearer names and (in Full revision) rejections of codes with no analytic value.
+                On a well-coded book most codes come back untouched; clusters land as constellations
+                for your verdict, and coding stays yours.
               </p>
               {enough && (
                 <div className="ai-warn">
@@ -162,8 +163,8 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
                     onChange={(e) => setExN(+e.target.value)} />
                   <span className="sval">{exN}</span>
                 </label>
-                <div className="settings-note">More excerpts give the AI better evidence for each judgment — and cost more tokens. The estimate below updates as you adjust.</div>
               </div>
+              <div className="settings-note">More excerpts give the AI better evidence for each judgment — and cost more tokens. The estimate below updates as you adjust.</div>
               {!enough ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   Reconciling needs at least four codes with coded segments in scope. Code a bit
