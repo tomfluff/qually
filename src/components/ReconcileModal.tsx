@@ -128,7 +128,7 @@ export function ReconcileModal({ groups, onPlan, onClose }: {
                 </div>
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
-              <div className="srow" style={{ marginTop: 10 }}>
+              <div className="srow" style={{ marginTop: 12 }}>
                 <span>Scope</span>
                 <select className="settext" value={scope === "all" ? "all" : String(scope)}
                   onChange={(e) => setScope(e.target.value === "all" ? "all" : +e.target.value)}>
@@ -137,9 +137,10 @@ export function ReconcileModal({ groups, onPlan, onClose }: {
                 </select>
               </div>
               <label className="srow">
-                <span>Excerpts per code: <b>{exN}</b></span>
+                <span>Excerpts per code</span>
                 <input type="range" min={3} max={12} value={exN}
                   onChange={(e) => setExN(+e.target.value)} />
+                <span className="sval">{exN}</span>
               </label>
               <div className="settings-note">More excerpts give the AI better evidence for each judgment — and cost more tokens. The estimate below updates as you adjust.</div>
               {!enough ? (

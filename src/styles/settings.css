@@ -56,16 +56,16 @@
 /* control rows — rescoped from the old .settings-pop; behaviour unchanged */
 /* wrap, never a sideways scrollbar: when a row's control can't fit beside its
    label (heavy zoom, long speaker name), it drops to the next line whole */
-.set-modal .srow { display:flex; flex-wrap:wrap; align-items:center; gap:10px; min-height:26px; }
-.set-modal .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
-.set-modal .srow input[type=range] { font-size:inherit; width:10em; margin:0;
+.set-modal .srow, .ai-body .srow { display:flex; flex-wrap:wrap; align-items:center; gap:10px; min-height:26px; }
+.set-modal .srow > span:first-child, .ai-body .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
+.set-modal .srow input[type=range], .ai-body .srow input[type=range] { font-size:inherit; width:10em; margin:0;
   align-self:center; accent-color:var(--accent); }
   /* 10em (=160px at the floor), not 92px: a 92px track made every stop a couple of
      pixels apart — hostile at magnification, and this is the app FOR magnification.
      em rather than a fixed 160 so the track keeps that reasoning at every setting.
      font-size:inherit first — a form control is pinned to the UA's 13.333px, so
      without it the em resolves against THAT and the track never grows. */
-.set-modal .sval { min-width:2.2ch; padding:2px 4px; text-align:center; color:var(--fg);
+.set-modal .sval, .ai-body .sval { min-width:2.2ch; padding:2px 4px; text-align:center; color:var(--fg);
   font-variant-numeric:tabular-nums; background:var(--bg);
   border:1px solid var(--line); border-radius:5px; }
 /* a range input is a small drag target and has no way back to the default */
@@ -123,7 +123,7 @@
 .srow.aicheck input { margin:0; }
 .aikey, .airedact, .settext { width:100%; box-sizing:border-box; font:inherit; color:var(--fg);
   background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:5px 7px; }
-.set-modal .srow .settext { flex:1; width:auto; }
+.set-modal .srow .settext, .ai-body .srow .settext { flex:1; width:auto; }
 .airedact { resize:vertical; font-size:.95em; }
 .set-modal .segmented.aimodels { width:100%; }
 
