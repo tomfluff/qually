@@ -23,6 +23,7 @@ import { preselectBrowse } from "./BrowseView";
 import { CodeCounts } from "./CodeCounts";
 import { Icon, countIconSize } from "./Icon";
 import { ReconcileModal } from "./ReconcileModal";
+import { GroupModal } from "./GroupModal";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -326,6 +327,7 @@ function MapInner() {
     island?: { gi: number; name: string }; halo?: { ci: number; name: string } } | null>(null);
   // the modal, optionally pre-scoped to one island (island context menu)
   const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" }>(false);
+  const [themeAiOpen, setThemeAiOpen] = useState(false);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   const [hiddenNotes, setHiddenNotes] = useState<Set<number>>(remembered.hiddenNotes);
   useEffect(() => { remembered.openCards = openCards; remembered.hiddenNotes = hiddenNotes; }, [openCards, hiddenNotes]);
@@ -684,10 +686,17 @@ function MapInner() {
             aria-checked={stage === "themes"} onClick={() => setStageOverride("themes")}
             title="Group the cleaned codebook into theme islands">Themes</button>
         </div>
-        <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
-          title="AI proposes merge constellations and per-code revisions for your review">
-          <Icon name="sparkle" size={15} /> <span className="blabel">Reconcile with AI</span>
-        </button>
+        {stage === "reconcile" ? (
+          <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
+            title="AI proposes merge groups and per-code revisions for your review">
+            <Icon name="sparkle" size={15} /> <span className="blabel">Reconcile with AI</span>
+          </button>
+        ) : (
+          <button className="btn iconlabel" onClick={() => setThemeAiOpen(true)}
+            title="AI groups the cleaned codebook into theme islands for you to reshape">
+            <Icon name="sparkle" size={15} /> <span className="blabel">Group into themes with AI</span>
+          </button>
+        )}
         <button className="btn iconbtn" onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
           title="Move the minimap to the next corner">
           <Icon name="pip" size={15} />
@@ -748,6 +757,12 @@ function MapInner() {
           </ReactFlow>
         )}
       </div>
+      {themeAiOpen && (
+        <GroupModal
+          onClose={() => setThemeAiOpen(false)}
+          onReconcileInstead={() => { setThemeAiOpen(false); setStageOverride("reconcile"); }}
+          onGroups={(groups) => { useStore.getState().applyThemeGroups(groups); }} />
+      )}
       {aiOpen && (
         <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope} onClose={() => setAiOpen(false)}
           onPlan={(p: ReconcilePlan, scope) => {

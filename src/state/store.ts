@@ -333,6 +333,8 @@ export interface State {
   themesDrop: (code: string, pos: { x: number; y: number }, gi: number) => void;
   // a reconcile run landing: clusters + actions + fresh layout, ONE entry
   applyReconcilePlan: (clusters: CodeCluster[], actions: CodePlanAction[], resetLayout: boolean) => void;
+  // a Themes grouping run landing: islands + fresh layout, ONE entry
+  applyThemeGroups: (groups: CodeGroup[]) => void;
   // the whole cluster is applied as ONE undoable step
   applyCluster: (ci: number) => void;
   setLastPid: (pid: string) => void;
@@ -1464,6 +1466,13 @@ export const useStore = create<State>()(
       // every map mutation is one undoable history entry (design premise 7)
       setCodeGroups: (groups) => { get().pushUndo(); set({ codeGroups: groups.filter((g) => g.codes.length > 0) }); },
       setCodePlan: (plan) => { get().pushUndo(); set({ codePlan: plan }); },
+      applyThemeGroups: (groups) => {
+        get().pushUndo();
+        set({
+          codeGroups: groups.filter((g) => g.codes.length > 0),
+          mapPositions: {}, mapIslandPos: {},
+        });
+      },
       applyReconcilePlan: (clusters, actions, resetLayout) => {
         get().pushUndo();
         set({
