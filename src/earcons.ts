@@ -44,6 +44,13 @@ export const earcon = {
   join() { if (!on()) return; tone(440, 0, 0.09); tone(660, 0.07, 0.11); },
   // a code leaves a merge group: falling pair
   evict() { if (!on()) return; tone(520, 0, 0.09); tone(340, 0.07, 0.12); },
+  // drag telemetry, one notch quieter than the commits they preview:
+  // picking a chip up
+  grab() { if (!on()) return; tone(660, 0, 0.04, 0.02, "triangle"); },
+  // the held chip crosses INTO a group's field (would join on release)
+  hoverIn() { if (!on()) return; tone(587, 0, 0.06, 0.022); },
+  // the held chip crosses OUT of a group's field (would leave on release)
+  hoverOut() { if (!on()) return; tone(415, 0, 0.07, 0.022); },
   // an AI request left the device: one soft tick
   aiStart() { if (!on()) return; tone(880, 0, 0.05, 0.03, "triangle"); },
   // the AI result landed: gentle two-note resolve

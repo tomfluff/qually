@@ -60,8 +60,10 @@ export interface CodePlanAction {
 // as a sibling of codePlan so older app versions simply ignore it.
 export interface CodeCluster {
   survivor: string; codes: string[]; newName?: string; rationale: string;
-  // an AI-generated glimpse of what this group means (halo menu), persisted
+  // an AI-generated glimpse of what this group means (halo menu), persisted,
+  // with the membership it described — a drifted membership marks it stale
   desc?: string;
+  descCodes?: string[];
 }
 export interface Selection { pid: string | null; anchor: number | null; head: number | null; lines: Set<number>; }
 export interface Ui {
@@ -371,6 +373,7 @@ export interface State {
   undo: () => void;
   redo: () => void;
   renameCode: (code: string, newName: string) => void;
+  normalizeCodeCase: (style: "lower" | "capital") => void;
   deleteCode: (code: string) => void;
   mergeCode: (from: string, into: string) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
@@ -1729,6 +1732,36 @@ export const useStore = create<State>()(
             codes: c.codes.map((x) => x === code ? name : x) })),
         });
         set({ hotbarCache: hotbarCodes(get()) });
+      },
+      // One coherent first letter across the whole codebook (AI proposals tend
+      // to arrive Capitalized while hand-typed codes are often lowercase).
+      // First letter ONLY — the rest of a name is the researcher's wording.
+      // One history entry for the whole sweep; pure case changes can't collide
+      // (norm-equal names never coexist in the codebook), but guard anyway.
+      normalizeCodeCase: (style) => {
+        const s = get();
+        const tf = (n: string) =>
+          (style === "lower" ? n.charAt(0).toLowerCase() : n.charAt(0).toUpperCase()) + n.slice(1);
+        const ren = new Map<string, string>();
+        for (const k of Object.keys(s.codebook)) {
+          const next = tf(k);
+          if (next !== k && !(next in s.codebook)) ren.set(k, next);
+        }
+        if (!ren.size) { announce("Code names already match that style"); return; }
+        get().pushUndo();
+        const r = (n: string) => ren.get(n) ?? n;
+        const cb: State["codebook"] = {};
+        for (const k of Object.keys(s.codebook)) cb[r(k)] = s.codebook[k];
+        set({
+          codebook: cb,
+          segments: s.segments.map((x) => ren.has(x.code) ? { ...x, code: r(x.code) } : x),
+          hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.map(r) },
+          codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.map(r) })),
+          codePlan: s.codePlan.map((a) => ({ ...a, code: r(a.code), ...(a.into ? { into: r(a.into) } : {}) })),
+          codeClusters: s.codeClusters.map((c) => ({ ...c, survivor: r(c.survivor), codes: c.codes.map(r) })),
+        });
+        set({ hotbarCache: hotbarCodes(get()) });
+        announce(`${ren.size} code name${ren.size === 1 ? "" : "s"} now start ${style === "lower" ? "lowercase" : "with a capital"}`);
       },
       deleteCode: (code) => {
         const s = get();

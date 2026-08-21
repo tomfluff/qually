@@ -254,6 +254,20 @@ export function SettingsButton() {
                     onChange={(e) => setUi({ mapSounds: e.target.checked })} />
                 </label>
                 <div className="settings-note">Quiet sound-marks confirm Code map actions — joining or leaving a merge group, AI requests, accepts. Multimodal feedback that doesn't depend on catching a visual change.</div>
+                <div className="srow">
+                  <span>Code name style</span>
+                  <div className="segmented">
+                    <button className="seg" onClick={() => useStore.getState().normalizeCodeCase("lower")}
+                      title="Make every code name start with a lowercase letter — one undo step">
+                      start lowercase
+                    </button>
+                    <button className="seg" onClick={() => useStore.getState().normalizeCodeCase("capital")}
+                      title="Make every code name start with a capital letter — one undo step">
+                      Start with a capital
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-note">One coherent first letter across the codebook (AI proposals often arrive Capitalized while hand-typed codes start lowercase). Only the first letter changes; one undo step reverses the sweep.</div>
                 <label className="srow">
                   <span>Coder name</span>
                   <input type="text" className="settext" value={coderName} placeholder="Your name"

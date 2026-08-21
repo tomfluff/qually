@@ -62,11 +62,9 @@ type IslandData = { name: string; gi: number; lens?: boolean; list?: string[] };
 type IslandNodeT = Node<IslandData, "island">;
 type HaloData = { name: string; renamed: boolean; joins: boolean; ci: number; count: number; open: boolean };
 type HaloNodeT = Node<HaloData, "halo">;
-type CardData = { ci: number };
+type CardData = { ci: number; gen: boolean }; // gen: a glimpse is being written
 type CardNodeT = Node<CardData, "card">;
-type NoteData = { ci: number; text: string | null }; // null = generating
-type NoteNodeT = Node<NoteData, "note">;
-type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | NoteNodeT;
+type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT;
 
 // session view state that outlives the unmounting view; positions ride the
 // store's undo history and the camera persists in ui (across reloads)
@@ -74,17 +72,20 @@ const remembered = {
   // the stage override: null = derived (Reconcile while anything is pending)
   stage: null as null | "reconcile" | "themes",
   selected: new Set<string>(),
-  // which halos have their card unfolded / their note dismissed (session)
+  // which halos have their card unfolded (session)
   openCards: new Set<number>(),
-  hiddenNotes: new Set<number>(),
   // where the researcher parked the Revision plan panel (screen offset)
   planPos: { x: 0, y: 0 },
+  planMin: false,
   // the transient arrangement lens: a way of LOOKING, never written anywhere
   lens: "default" as "default" | "pids" | "segs" | "cooc" | "topics",
   topicGroups: [] as { name: string; codes: string[] }[],
   // the codebook signature the topics arrangement was computed from — a
   // mismatch means merges/renames happened since and the piles are stale
   topicFp: "",
+  // hand-moves made while a lens is up: session-only, per lens, never written
+  // to the store — switching back to normal restores the manual layout intact
+  lensPos: {} as Partial<Record<"pids" | "segs" | "cooc" | "topics", Record<string, { x: number; y: number }>>>,
 };
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -279,9 +280,10 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   );
 });
 
-// The stem card: reasoning and the verdict, nothing else — the halo's chips
-// already show membership and counts, so the card stays anticipatable. The
-// name lives on the caption (double-click it to rename the merged concept).
+// The stem card: reasoning, the AI glimpse (when asked for), and the verdict
+// — one foldable place for everything ABOUT the group; the halo's chips
+// already show membership and counts. The name lives on the caption
+// (double-click it to rename the merged concept).
 const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   const cluster = useStore((st) => st.codeClusters[data.ci]);
   if (!cluster) return null;
@@ -289,9 +291,21 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   const st = () => useStore.getState();
   const skip = () => { st().setCodeClusters(st().codeClusters.filter((_, i) => i !== data.ci)); earcon.skip(); };
   const canAccept = c.codes.length >= 2;
+  // the glimpse described a membership; if the group changed since, say so
+  // rather than silently presenting an outdated description
+  const stale = !!c.desc && !!c.descCodes &&
+    [...c.codes].sort().join("\n") !== [...c.descCodes].sort().join("\n");
   return (
     <div className="mapCardNode nodrag nowheel">
       <div className="mapCardRat">{c.rationale}</div>
+      {(data.gen || c.desc) && (
+        <div className="mapCardGlimpse">
+          <span className="mapNoteWho">AI glimpse{stale && <span className="mapGlimpseStale" title="The group's members changed after this was written — re-run “AI: describe this group” for a fresh one">may be outdated</span>}</span>
+          {data.gen
+            ? <div className="mapNoteGen">Reading the codes and their excerpts…</div>
+            : <div>{c.desc}</div>}
+        </div>
+      )}
       <div className="mapCardActions">
         <button className="btn primary" disabled={!canAccept}
           onClick={() => { st().applyCluster(data.ci); earcon.accept(); }}
@@ -304,25 +318,7 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   );
 });
 
-// The note: the group's AI glimpse, tethered to its halo — readable at map
-// level without opening anything. While generating, the note itself is the
-// progress indicator.
-const NoteNode = memo(function NoteNode({ data }: NodeProps<NoteNodeT>) {
-  return (
-    <div className="mapNote nodrag">
-      <div className="mapNoteWho">AI glimpse
-        {data.text !== null && (
-          <button className="mapNoteX" title="Hide this note (the text stays on the group)"
-            onClick={() => window.dispatchEvent(new CustomEvent("qually:hidenote", { detail: data.ci }))}>×</button>
-        )}
-      </div>
-      {data.text === null
-        ? <div className="mapNoteGen">Reading the codes and their excerpts…</div>
-        : <div className="mapNoteText">{data.text}</div>}
-    </div>
-  );
-});
-const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode, card: CardNode, note: NoteNode };
+const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode, card: CardNode };
 
 // React Flow commits its marquee through React on EVERY pointer event with no
 // rAF gate (verified in the installed v12.11.3 source with codex): a high-rate
@@ -395,27 +391,24 @@ function MapInner() {
   useEffect(() => { remembered.topicFp = topicFp; }, [topicFp]);
   const [topicAiOpen, setTopicAiOpen] = useState(false);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
-  const [hiddenNotes, setHiddenNotes] = useState<Set<number>>(remembered.hiddenNotes);
-  useEffect(() => { remembered.openCards = openCards; remembered.hiddenNotes = hiddenNotes; }, [openCards, hiddenNotes]);
+  useEffect(() => { remembered.openCards = openCards; }, [openCards]);
   const [genCi, setGenCi] = useState<number | null>(null);
   const [confirmAi, setConfirmAi] = useState<{ ci: number; x: number; y: number } | null>(null);
-  // card fold/unfold + note hide arrive from the node components as events
+  // card fold/unfold arrives from the node components as an event
   useEffect(() => {
     const onToggle = (e: Event) => setOpenCards((old) => {
       const ci = (e as CustomEvent<number>).detail;
       const n = new Set(old); n.has(ci) ? n.delete(ci) : n.add(ci); return n;
     });
-    const onHide = (e: Event) => setHiddenNotes((old) => new Set(old).add((e as CustomEvent<number>).detail));
     window.addEventListener("qually:togglecard", onToggle);
-    window.addEventListener("qually:hidenote", onHide);
-    return () => { window.removeEventListener("qually:togglecard", onToggle); window.removeEventListener("qually:hidenote", onHide); };
+    return () => window.removeEventListener("qually:togglecard", onToggle);
   }, []);
   // the pending revision plan is PROJECT data — it survives reloads and travels
   // in the file, so the review can continue in a later session
   const plan = useStore((st) => st.codePlan);
   const clusters = useStore((st) => st.codeClusters);
-  // openCards/hiddenNotes key clusters by INDEX; whenever the cluster at an
-  // index changes identity (shrink, wholesale replace by a focus run), stale
+  // openCards keys clusters by INDEX; whenever the cluster at an index
+  // changes identity (shrink, wholesale replace by a focus run), stale
   // entries would light the wrong halo — keep only the ones whose survivor
   // still matches
   const prevSurvivors = useRef(clusters.map((c) => c.survivor));
@@ -423,9 +416,7 @@ function MapInner() {
     const prev = prevSurvivors.current;
     const changed = clusters.length !== prev.length || clusters.some((c, i) => c.survivor !== prev[i]);
     if (changed) {
-      const keep = (ci: number) => clusters[ci]?.survivor === prev[ci];
-      setOpenCards((old) => new Set([...old].filter(keep)));
-      setHiddenNotes((old) => new Set([...old].filter(keep)));
+      setOpenCards((old) => new Set([...old].filter((ci) => clusters[ci]?.survivor === prev[ci])));
     }
     prevSurvivors.current = clusters.map((c) => c.survivor);
   }, [clusters]);
@@ -545,22 +536,27 @@ function MapInner() {
         const unpaired = codes.filter((c) => !grouped.has(c));
         if (unpaired.length) lensGroups.push({ name: "No co-occurrence signal", list: unpaired });
       }
-      // islands layout, read-only
+      // islands layout — structurally read-only, but everything still MOVES:
+      // hand-placements live in remembered.lensPos (session, per lens), never
+      // in the store, so Arrange: normal restores the manual layout intact
+      const lp = remembered.lensPos[lens] ?? {};
       const blocks = lensGroups.map((g, gi) => ({ name: g.name, gi, list: g.list, ...pack(g.list, near(g.list)) }));
       const rowW = Math.max(900, Math.sqrt(blocks.reduce((a, b) => a + (b.w + 2 * PAD + ISLAND_GAP) * (b.h + 2 * PAD + ISLAND_GAP), 0)) * 1.4);
       const islands: IslandNodeT[] = [];
       const children: ChipNodeT[] = [];
       let ix = 0, iy = 0, rowH = 0;
       for (const b of blocks) {
+        const key = `lens:${b.gi}`;
         const bw = b.w + 2 * PAD, bh = b.h + 2 * PAD;
         if (ix > 0 && ix + bw > rowW) { ix = 0; iy += rowH + ISLAND_GAP; rowH = 0; }
         islands.push({
-          id: `lens:${b.gi}`, type: "island" as const,
-          position: { x: ix, y: iy }, width: bw, height: bh,
-          draggable: false, selectable: false, focusable: false,
+          id: key, type: "island" as const,
+          position: lp[key] ?? { x: ix, y: iy }, width: bw, height: bh,
+          draggable: true, selectable: false, focusable: false,
+          dragHandle: ".mapIslandLabel",
           data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list },
         });
-        for (const c of b.list) children.push({ ...chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, `lens:${b.gi}`), position: { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y } });
+        for (const c of b.list) children.push({ ...chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key), position: lp[c] ?? { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y } });
         ix += bw + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
       }
@@ -576,25 +572,24 @@ function MapInner() {
 
       const haloNodes: HaloNodeT[] = [];
       const chipNodes: ChipNodeT[] = [];
-      const extraNodes: (CardNodeT | NoteNodeT)[] = [];
+      const extraNodes: CardNodeT[] = [];
       // capsule blocks: square-ish packed members + halo padding
       const blocks = live.map((c) => {
         const totalW = c.codes.reduce((a, x) => a + widths.get(x)! + GX, 0);
         const packed = pack(c.codes, Math.max(widths.get(c.codes[0])! + GX, Math.sqrt(totalW * (ch + GY)) * 1.15));
-        // reserve room for the unfolded card below and the note beside, so
-        // neighbors never sit under them
+        // reserve room for the unfolded card below (reasoning + glimpse +
+        // actions), so neighbors never sit under it
         const cardW = Math.max(280, Math.min(420, (packed.w + 2 * HALO_PAD) - 24));
         const ratLines = openCards.has(c.ci)
           ? Math.max(1, Math.ceil(((c.rationale?.length ?? 0) + (c.desc?.length ?? 0)) * (fs * 0.52) / (cardW - 24)))
           : 0;
         const cardH = openCards.has(c.ci) ? ratLines * fs * 1.45 + fs * 5 + 22 : 0;
-        const noteW = (genCi === c.ci || c.desc) && !hiddenNotes.has(c.ci) ? Math.max(240, fs * 15) + 26 : 0;
-        return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD, cardH, noteW };
+        return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD, cardH };
       });
-      const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (b.w + b.noteW + HALO_GAP) * (b.h + b.cardH + HALO_GAP), 0)) * 1.5);
+      const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (b.w + HALO_GAP) * (b.h + b.cardH + HALO_GAP), 0)) * 1.5);
       let x = 0, y = 40, rowH = 0;
       for (const b of blocks) {
-        if (x > 0 && x + b.w + b.noteW > rowW) { x = 0; y += rowH + HALO_GAP; rowH = 0; }
+        if (x > 0 && x + b.w > rowW) { x = 0; y += rowH + HALO_GAP; rowH = 0; }
         const key = `halo:${b.c.ci}`;
         haloNodes.push({
           id: key, type: "halo" as const,
@@ -614,27 +609,18 @@ function MapInner() {
         });
         for (const m of b.c.codes)
           chipNodes.push(chipNode(m, { x: HALO_PAD + b.packed.pos[m].x, y: HALO_PAD + b.packed.pos[m].y }, key));
-        // the unfolded verdict card hangs below its halo on a stem
+        // the unfolded card hangs below its halo on a stem — reasoning, the
+        // AI glimpse (or its loading pulse), and the verdict, all foldable
         if (openCards.has(b.c.ci)) {
           extraNodes.push({
             id: `card:${b.c.ci}`, type: "card" as const,
             position: { x: 12, y: b.h + 22 }, parentId: key,
             draggable: false, selectable: false, focusable: false,
             width: Math.max(280, Math.min(420, b.w - 24)),
-            data: { ci: b.c.ci },
+            data: { ci: b.c.ci, gen: genCi === b.c.ci },
           });
         }
-        // the AI glimpse rides beside the halo as a note (or its loading state)
-        if ((genCi === b.c.ci || b.c.desc) && !hiddenNotes.has(b.c.ci)) {
-          extraNodes.push({
-            id: `note:${b.c.ci}`, type: "note" as const,
-            position: { x: b.w + 26, y: 0 }, parentId: key,
-            draggable: false, selectable: false, focusable: false,
-            width: Math.max(240, fs * 15),
-            data: { ci: b.c.ci, text: genCi === b.c.ci ? null : b.c.desc ?? "" },
-          });
-        }
-        x += b.w + b.noteW + HALO_GAP;
+        x += b.w + HALO_GAP;
         rowH = Math.max(rowH, b.h + b.cardH);
       }
       // the untouched field below the halos
@@ -682,7 +668,7 @@ function MapInner() {
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: [...islands, ...children] as MapNode[] };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, hiddenNotes, genCi, lens, segments, topicGroups]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -726,7 +712,8 @@ function MapInner() {
     if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
     const red = redactor(st.ai.redactTerms);
     const inputs = glimpseInputs(ci);
-    setHiddenNotes((old) => { const n = new Set(old); n.delete(ci); return n; });
+    // the glimpse streams into the card — open it so the loading pulse shows
+    setOpenCards((old) => new Set(old).add(ci));
     setGenCi(ci);
     earcon.aiStart();
     try {
@@ -734,7 +721,8 @@ function MapInner() {
         key, model: st.ai.model, codes: inputs, redaction: red,
       });
       const s2 = useStore.getState();
-      s2.setCodeClusters(s2.codeClusters.map((c, i) => (i === ci ? { ...c, desc: glimpse } : c)));
+      s2.setCodeClusters(s2.codeClusters.map((c, i) =>
+        (i === ci ? { ...c, desc: glimpse, descCodes: [...c.codes] } : c)));
       s2.logAiCall({
         at: new Date().toISOString(), model: st.ai.model, task: "glimpse", pid: "(codebook)",
         lines: inputs.length, redactions: 0,
@@ -773,7 +761,19 @@ function MapInner() {
     getNodes().find((h) => h.type === "halo"
       && cx >= h.position.x && cx <= h.position.x + (h.width ?? 0)
       && cy >= h.position.y && cy <= h.position.y + (h.height ?? 0)) ?? null, [getNodes]);
+  // the halo under the held chip, tracked across the drag: the .will outline
+  // AND the crossing sounds key off transitions of this one value
+  const dragOver = useRef<string | null>(null);
+  const onNodeDragStart = useCallback((_: unknown, n: Node) => {
+    if (remembered.lens !== "default" || stage !== "reconcile" || n.type !== "chip") return;
+    const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
+    // seed with where the chip already sits, so lifting a member inside its
+    // own halo doesn't chirp "entered"
+    dragOver.current = haloAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2)?.id ?? null;
+    earcon.grab();
+  }, [stage, getInternalNode, haloAt]);
   const onNodeDrag = useCallback((_: unknown, n: Node) => {
+    if (remembered.lens !== "default") return; // no halos to highlight under a lens
     if (stage !== "reconcile" || n.type !== "chip" || dragFrame.current) return;
     dragFrame.current = requestAnimationFrame(() => {
       dragFrame.current = 0;
@@ -781,6 +781,13 @@ function MapInner() {
       const hit = haloAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2);
       clearWill();
       if (hit) document.querySelector(`.react-flow__node[data-id="${hit.id}"] .mapHalo`)?.classList.add("will");
+      const over = hit?.id ?? null;
+      if (over !== dragOver.current) {
+        // crossing a field boundary mid-drag: a quiet preview of what release
+        // would do (the louder join/evict marks confirm the actual drop)
+        (over ? earcon.hoverIn : earcon.hoverOut)();
+        dragOver.current = over;
+      }
     });
   }, [stage, getInternalNode, haloAt]);
 
@@ -789,7 +796,13 @@ function MapInner() {
   // out (absolute position) — one undoable entry either way. Themes: same
   // shape against islands.
   const onNodeDragStop = useCallback((_: unknown, n: Node) => {
-    if (lens !== "default") return; // a lens is for looking
+    if (lens !== "default") {
+      // moving under a lens is fine — parking, comparing, tidying a pile —
+      // but it stays in the lens's own session overlay: no store write, no
+      // membership change, and the normal layout comes back untouched
+      (remembered.lensPos[lens] ??= {})[n.id] = n.position;
+      return;
+    }
     const st = useStore.getState();
     if (n.type === "island" || n.type === "halo") { st.recordMapPosition(n.id, n.position, true); return; }
     const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
@@ -853,6 +866,8 @@ function MapInner() {
   // state commits once on release, clamped so the header stays reachable.
   const [planPos, setPlanPos] = useState(remembered.planPos);
   useEffect(() => { remembered.planPos = planPos; }, [planPos]);
+  const [planMin, setPlanMin] = useState(remembered.planMin);
+  useEffect(() => { remembered.planMin = planMin; }, [planMin]);
   const planDragAbort = useRef<AbortController | null>(null);
   useEffect(() => () => planDragAbort.current?.abort(), []);
   const dragPlan = useCallback((e: React.PointerEvent) => {
@@ -921,24 +936,26 @@ function MapInner() {
         <span className="mapTitle">Code map</span>
         <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
-        <select className="settext mapLens" aria-label="Arrange the map by"
-          value={lens} onChange={(e) => {
-            const v = e.target.value as typeof lens;
-            if (v === "topics" && topicGroups.length === 0) { setTopicAiOpen(true); return; }
-            setLens(v);
-            // the lens lays out from the world origin with different extents —
-            // without a fitView a zoomed-in camera lands on empty canvas
-            requestAnimationFrame(() => fitView({ duration: 200 }));
-            announce(v === "default" ? "Arranged normally — your layout is back."
-              : `Arranged by ${{ pids: "transcript buckets", segs: "excerpt buckets", cooc: "co-occurrence", topics: "AI topics" }[v]}. A transient lens; switch back to normal to edit.`);
-          }}
-          title="A transient lens: arranges the map for looking, changes nothing">
-          <option value="default">Arrange: normal</option>
-          <option value="pids">Arrange: transcript buckets</option>
-          <option value="segs">Arrange: excerpt buckets</option>
-          <option value="cooc">Arrange: co-occurrence</option>
-          <option value="topics">Arrange: AI topics</option>
-        </select>
+        <label className="mapLensWrap" title="A transient lens: arranges the map for looking, your own layout comes back on Normal">
+          <span className="mapLensLabel">Arrange</span>
+          <select className="settext mapLens" aria-label="Arrange the map by"
+            value={lens} onChange={(e) => {
+              const v = e.target.value as typeof lens;
+              if (v === "topics" && topicGroups.length === 0) { setTopicAiOpen(true); return; }
+              setLens(v);
+              // the lens lays out from the world origin with different extents —
+              // without a fitView a zoomed-in camera lands on empty canvas
+              requestAnimationFrame(() => fitView({ duration: 200 }));
+              announce(v === "default" ? "Arranged normally — your layout is back."
+                : `Arranged by ${{ pids: "transcript buckets", segs: "excerpt buckets", cooc: "co-occurrence", topics: "AI topics" }[v]}. A transient lens; switch back to Normal for your own layout.`);
+            }}>
+            <option value="default">Normal</option>
+            <option value="pids">Transcript buckets</option>
+            <option value="segs">Excerpt buckets</option>
+            <option value="cooc">Co-occurrence</option>
+            <option value="topics">AI topics</option>
+          </select>
+        </label>
         {lens === "topics" && (
           <button className="btn" onClick={() => setTopicAiOpen(true)}
             title={topicFp !== codes.join("\n")
@@ -997,13 +1014,12 @@ function MapInner() {
             defaultViewport={initialViewport ?? undefined}
             onMoveEnd={onMoveEnd}
             minZoom={0.1} maxZoom={3}
-            nodesDraggable={lens === "default"}
             selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
             autoPanOnSelection={false}
             onSelectionStart={onSelectionStart} onSelectionEnd={onSelectionEnd}
             elevateNodesOnSelect={false}
             multiSelectionKeyCode={["Control", "Meta"]}
-            onNodeDragStop={onNodeDragStop} onNodeDrag={onNodeDrag}
+            onNodeDragStart={onNodeDragStart} onNodeDragStop={onNodeDragStop} onNodeDrag={onNodeDrag}
             zoomOnDoubleClick={false} deleteKeyCode={null} nodesConnectable={false}
             onNodeDoubleClick={onNodeDoubleClick}
             onNodeContextMenu={onNodeContextMenu}
@@ -1022,15 +1038,23 @@ function MapInner() {
                   onDoubleClick={() => setPlanPos({ x: 0, y: 0 })}
                   title="Drag to move this panel; double-click to send it home">
                   <b>Revision plan</b> <span className="mapPlanCount">{plan.length}</span>
-                  <span className="mapPlanKey">✎ rename · ⊘ reject · merge groups show as halos</span>
-                  <button className="btn" disabled={lens !== "default"}
-                    title={lens !== "default" ? "Switch Arrange back to normal to apply the plan" : "Apply every remaining proposal"}
-                    onClick={() => { [...plan].forEach((a) => applyAction(a, false)); earcon.accept(); }}>Accept all</button>
-                  <button className="btn" disabled={lens !== "default"}
-                    onClick={() => setPlan([])}
-                    title={lens !== "default" ? "Switch Arrange back to normal to edit the plan" : "Discard every remaining proposal"}>Clear</button>
+                  {!planMin && <>
+                    <span className="mapPlanKey">✎ rename · ⊘ reject · merge groups show as halos</span>
+                    <button className="btn" disabled={lens !== "default"}
+                      title={lens !== "default" ? "Switch Arrange back to Normal to apply the plan" : "Apply every remaining proposal"}
+                      onClick={() => { [...plan].forEach((a) => applyAction(a, false)); earcon.accept(); }}>Accept all</button>
+                    <button className="btn" disabled={lens !== "default"}
+                      onClick={() => setPlan([])}
+                      title={lens !== "default" ? "Switch Arrange back to Normal to edit the plan" : "Discard every remaining proposal"}>Clear</button>
+                  </>}
+                  <button className="btn iconbtn mapPlanMin" onClick={() => setPlanMin((m) => !m)}
+                    aria-expanded={!planMin}
+                    aria-label={planMin ? "Expand the revision plan" : "Minimize the revision plan"}
+                    title={planMin ? "Expand the revision plan" : "Minimize to just the header"}>
+                    {planMin ? "▸" : "▾"}
+                  </button>
                 </div>
-                <div className="mapPlanList nicescroll">
+                {!planMin && <div className="mapPlanList nicescroll">
                   {plan.map((a, i) => (
                     <div key={`${a.code}:${i}`} className="mapPlanRow" title={a.rationale}>
                       <span className={"mapPlanKind " + a.action}>{a.action === "rename" ? "✎" : "⊘"}</span>
@@ -1042,7 +1066,7 @@ function MapInner() {
                       <button className="btn" disabled={lens !== "default"} onClick={() => skipAction(a)} title="Skip this proposal">✗</button>
                     </div>
                   ))}
-                </div>
+                </div>}
               </Panel>
             )}
 
@@ -1056,6 +1080,7 @@ function MapInner() {
           onGroups={(groups) => {
             setTopicGroups(groups.map((g) => ({ name: g.name, codes: g.codes })));
             setTopicFp(codes.join("\n"));
+            delete remembered.lensPos.topics; // fresh piles, fresh placement
             setLens("topics");
             requestAnimationFrame(() => fitView({ duration: 200 }));
           }} />
@@ -1140,14 +1165,6 @@ function MapInner() {
           <button role="menuitem" onClick={() => { setConfirmAi({ ci: menu.halo!.ci, x: menu.x, y: menu.y }); setMenu(null); }}>
             AI: describe this group…
           </button>
-          {clusters[menu.halo.ci]?.desc && hiddenNotes.has(menu.halo.ci) && (
-            <button role="menuitem" onClick={() => {
-              setHiddenNotes((old) => { const n = new Set(old); n.delete(menu.halo!.ci); return n; });
-              setMenu(null);
-            }}>
-              Show the description note
-            </button>
-          )}
         </div>
       )}
       {menu && menu.island && (
