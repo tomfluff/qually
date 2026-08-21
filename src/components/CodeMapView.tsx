@@ -184,13 +184,36 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   // the caption tracks the zoom (constant on-screen size while zooming out)
   // up to a generous ceiling — far out, the map must read as group names
   const fontSize = Math.min(base * 4.5, Math.max(base, base / zoom));
+  // the title IS the merged code's name: double-click to rename (clearing it
+  // falls back to the auto-picked survivor's name)
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(data.name);
+  const rename = () => {
+    const st = useStore.getState();
+    const name = draft.trim();
+    st.setCodeClusters(st.codeClusters.map((x, i) => i !== data.ci ? x
+      : name && name !== x.survivor ? { ...x, newName: name } : (({ newName: _drop, ...rest }) => rest)(x)));
+    setEditing(false);
+  };
   return (
     <div className="mapHalo">
       <div className="mapIslandLabel mapHaloLabel" style={{ fontSize }}>
-        <span className="mapIslandName">{data.name}</span>
-        {data.renamed && <span className="mapOrbitTag">new name</span>}
+        {editing ? (
+          <input className="mapIslandEdit nodrag" value={draft} autoFocus
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={rename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") rename();
+              if (e.key === "Escape") { e.stopPropagation(); setDraft(data.name); setEditing(false); }
+            }} />
+        ) : (
+          <span className="mapIslandName" title="The merged code's name — double-click to rename"
+            onDoubleClick={(e) => { e.stopPropagation(); setDraft(data.name); setEditing(true); }}>{data.name}</span>
+        )}
+        {data.renamed && !editing && <span className="mapOrbitTag">new name</span>}
         <span className="mapHaloCount">{data.count}</span>
-        <button className="mapHaloArrow nodrag" title={data.open ? "Fold the details" : "Reasoning, members, verdict"}
+        <button className="mapHaloArrow nodrag" title={data.open ? "Fold the details" : "Reasoning and the verdict"}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => toggleCard(data.ci)}>{data.open ? "▾" : "▸"}</button>
       </div>
@@ -198,43 +221,19 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   );
 });
 
-// The stem card: the halo's verdict surface, unfolded below it. Headerless on
-// purpose — the halo caption already names the merged code, and a fact gets
-// ONE home: name on the caption, reasoning + members + verdict here, the AI
-// glimpse on the note node.
+// The stem card: reasoning and the verdict, nothing else — the halo's chips
+// already show membership and counts, so the card stays anticipatable. The
+// name lives on the caption (double-click it to rename the merged concept).
 const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   const cluster = useStore((st) => st.codeClusters[data.ci]);
-  const segments = useStore((st) => st.segments);
-  const { getNodes } = useReactFlow();
   if (!cluster) return null;
   const c = cluster;
-  const segsOf = (code: string) => segments.filter((x) => x.code === code && x.status === "accepted").length;
   const st = () => useStore.getState();
-  const evict = (m: string) => {
-    const halo = getNodes().find((x) => x.id === `halo:${data.ci}`);
-    const pos = halo
-      ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y }
-      : { x: 0, y: 0 };
-    st().reconcileDrop(m, pos, null);
-  };
-  const crown = (m: string) => st().setCodeClusters(st().codeClusters.map((x, i) => i !== data.ci ? x : { ...x, survivor: m }));
   const skip = () => st().setCodeClusters(st().codeClusters.filter((_, i) => i !== data.ci));
   const canAccept = c.codes.length >= 2;
   return (
     <div className="mapCardNode nodrag nowheel">
       <div className="mapCardRat">{c.rationale}</div>
-      <div className="mapCardList">
-        {c.codes.map((m) => (
-          <label key={m} className="mapCardRow">
-            <input type="checkbox" checked onChange={() => evict(m)}
-              title="Untick to move this code out of the merge (it parks beside the group)" />
-            <input type="radio" name={`survivor:${data.ci}`} checked={c.survivor === m}
-              onChange={() => crown(m)} title="This code's identity survives the merge" />
-            <span className="mapCardName">{m}</span>
-            <span className="mapCardCount">{segsOf(m)}</span>
-          </label>
-        ))}
-      </div>
       <div className="mapCardActions">
         <button className="btn primary" disabled={!canAccept}
           onClick={() => st().applyCluster(data.ci)}
@@ -418,7 +417,7 @@ function MapInner() {
         const packed = pack(c.codes, Math.max(widths.get(c.codes[0])! + GX, Math.sqrt(totalW * (ch + GY)) * 1.15));
         // reserve room for the unfolded card below and the note beside, so
         // neighbors never sit under them
-        const cardH = openCards.has(c.ci) ? c.codes.length * (fs * 2.1) + fs * 8 + 22 : 0;
+        const cardH = openCards.has(c.ci) ? fs * 9 + 22 : 0;
         const noteW = (genCi === c.ci || c.desc) && !hiddenNotes.has(c.ci) ? Math.max(240, fs * 15) + 26 : 0;
         return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD, cardH, noteW };
       });

@@ -450,6 +450,18 @@ function restoreLine(get: () => State, set: (p: Partial<State>) => void,
   // to the edited transcript so the undo is never a silent off-screen change
   if (get().active !== o.pid && get().tabs.includes(o.pid)) set({ active: o.pid });
 }
+// The survivor auto-picks itself: the member with the most accepted excerpts
+// (the name still comes from the halo title / newName; this only chooses the
+// merge target and the fallback display name).
+function bestSurvivor(s: State, codes: string[]): string {
+  let best = codes[0], bestN = -1;
+  for (const c of codes) {
+    const n = s.segments.filter((x) => norm(x.code) === norm(c) && x.status === "accepted").length;
+    if (n > bestN) { best = c; bestN = n; }
+  }
+  return best;
+}
+
 // The merge itself, silent: no pushUndo, no announce — mergeCode wraps it for
 // the single-pair path, applyCluster composes several under ONE history entry.
 function mergeInto(get: () => State, set: (p: Partial<State>) => void, from: string, into: string) {
@@ -1496,7 +1508,7 @@ export const useStore = create<State>()(
             if (i === targetCi && !codes.includes(code)) codes = [...codes, code];
             return codes === c.codes ? c : { ...c, codes };
           })
-          .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: c.codes[0] })
+          .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: bestSurvivor(get(), c.codes) })
           .filter((c) => c.codes.length >= 2);
         }
         set({ codeClusters: clusters, mapPositions: { ...s.mapPositions, [code]: pos } });
@@ -1557,7 +1569,7 @@ export const useStore = create<State>()(
       setCodeClusters: (clusters) => { get().pushUndo(); set({ codeClusters: clusters
         // a cluster survives while 2+ members exist ANYWHERE in it (evicted ones
         // can re-attach); an evicted survivor hands the crown to the first member
-        .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: c.codes[0] })
+        .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: bestSurvivor(get(), c.codes) })
         .filter((c) => c.codes.length >= 2) }); },
       setLastPid: (pid) => set({ lastPid: pid }),
       // Newest first: the list is a record of what you asked, read most-recent
