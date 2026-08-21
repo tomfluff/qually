@@ -689,15 +689,17 @@ function MapInner() {
   // single confirmation, else N simultaneous envelopes stack into clipping.
   const applyAction = (a: CodeAction, sound = true) => {
     const st = useStore.getState();
-    // the row leaves the plan FIRST: renameCode rewrites every codePlan entry
-    // (store.ts, `.map(a => ({...a}))`), so a filter by reference afterwards
-    // would match nothing and the applied row would linger as a ghost
-    setPlan((ps) => ps.filter((x) => x !== a));
+    // the row leaves the plan FIRST, and by CODE, not by reference: renameCode
+    // rebuilds every codePlan entry (store.ts, `.map(a => ({...a}))`), so from
+    // the second rename of an "Accept all" onward the captured references are
+    // stale clones and a reference filter would leave ghost rows behind. One
+    // action per code is a sanitizer invariant, so the code is a stable key.
+    setPlan((ps) => ps.filter((x) => x.code !== a.code));
     if (a.action === "rename") st.renameCode(a.code, a.newName!);
     else if (a.action === "remove") st.rejectCode(a.code);
     if (sound) (a.action === "remove" ? earcon.reject : earcon.accept)();
   };
-  const skipAction = (a: CodeAction) => { setPlan((ps) => ps.filter((x) => x !== a)); earcon.skip(); };
+  const skipAction = (a: CodeAction) => { setPlan((ps) => ps.filter((x) => x.code !== a.code)); earcon.skip(); };
 
   // "describe this group": one-line confirm, default model, result lands on
   // the note node; the note's pulse IS the progress indicator

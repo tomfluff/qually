@@ -32,6 +32,24 @@ test("bestSurvivor picks the most-evidenced member, stable on ties", () => {
   expect(bestSurvivor(s, ["beta", "gamma"])).toBe("beta");    // tie -> first listed
 });
 
+// The trap behind the map's plan strip: applying one proposal rewrites the
+// OTHER entries, so anything holding captured references (an "Accept all"
+// loop) must key by code, never by object identity.
+test("renameCode replaces every codePlan entry object, not just the renamed one", () => {
+  const st = useStore.getState();
+  st.setCodePlan([
+    { code: "alpha", action: "rename", newName: "alpha renamed", rationale: "" },
+    { code: "beta", action: "rename", newName: "beta renamed", rationale: "" },
+  ]);
+  const before = useStore.getState().codePlan;
+  st.renameCode("alpha", "alpha renamed");
+  const after = useStore.getState().codePlan;
+  expect(after.some((x) => x === before[1])).toBe(false); // identity gone
+  expect(after.find((x) => x.code === "beta")?.newName).toBe("beta renamed"); // code survives
+  st.setCodePlan([]);
+  useStore.getState().renameCode("alpha renamed", "alpha"); // put the fixture back
+});
+
 test("a cluster with no valid survivor gets the evidence-based one", () => {
   const st = useStore.getState();
   st.setCodeClusters([{ survivor: "ghost", codes: ["beta", "alpha"], rationale: "" }]);
