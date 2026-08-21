@@ -378,3 +378,17 @@ describe("focus reconcile boundaries", () => {
     expect(out.replaced).toBe(0);
   });
 });
+
+describe("plan strip", () => {
+  it("dropAction removes the row by code, so a rewritten plan still loses it", async () => {
+    const { dropAction } = await import("./reconcile");
+    const plan = [
+      { code: "a", action: "rename" as const, newName: "a2", rationale: "" },
+      { code: "b", action: "remove" as const, rationale: "" },
+    ];
+    // the store hands back CLONES after any apply; identity is gone, code is not
+    const rewritten = plan.map((x) => ({ ...x }));
+    expect(dropAction(rewritten, "a").map((x) => x.code)).toEqual(["b"]);
+    expect(dropAction(rewritten, "missing")).toHaveLength(2);
+  });
+});

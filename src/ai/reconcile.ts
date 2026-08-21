@@ -185,6 +185,13 @@ export function sanitizeActions(
   return out;
 }
 
+// Taking one proposal off the plan, by CODE: applying a rename rewrites every
+// remaining entry object, so a caller holding references (an "accept all"
+// loop) cannot filter by identity. One action per code is an invariant of the
+// sanitizers above, so the code is the stable key.
+export const dropAction = (plan: CodeAction[], code: string): CodeAction[] =>
+  plan.filter((a) => a.code !== code);
+
 // Island-scoped reruns merge into the pending state: pending clusters that
 // intersect the scoped subset are replaced by the new proposals (doc rule).
 export function mergeScopedClusters(

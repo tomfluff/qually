@@ -31,9 +31,10 @@ import { segExcerpt } from "../contract/excerpt";
 import { type MergeCodeInput } from "../ai/dedupe";
 import { announce } from "../announce";
 import { onProjectSwap } from "../sessionReset";
+import { relaxBoxes } from "../mapRelax";
 import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
-import { mergeScopedClusters, estimateGlimpseTokens, glimpseCluster, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
+import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -113,12 +114,12 @@ const remembered = {
   // (a bucket boundary moves, topics re-run) the old spot is meaningless and
   // must be forgotten rather than re-applied against a different parent.
   lensPos: {} as Partial<Record<"pids" | "segs" | "cooc" | "topics", Record<string, { x: number; y: number }>>>,
-  // Spread: a reversible view state, like full-screen. Groups push apart by
-  // this factor so their counter-scaled captions stop colliding when zoomed
-  // out; 1 is the normal, contracted map. Only the SPACING between top-level
-  // things changes — nothing inside a group moves, nothing is written, and
-  // toggling back restores the exact layout (hand-placed or packed).
-  spread: 1,
+  // Spread: a reversible view state, like full-screen. Null is the normal,
+  // contracted map; otherwise it holds the nudged position of every top-level
+  // thing, computed once by overlap removal so nothing travels further than it
+  // must. Nothing inside a group moves, nothing is written to the project, and
+  // clearing it restores the exact layout (hand-placed or packed).
+  spreadPos: null as null | Record<string, { x: number; y: number }>,
 };
 
 // A project swap makes every one of these meaningless — they are keyed by
@@ -135,7 +136,7 @@ onProjectSwap(function forgetMapSession() {
   remembered.topicGroups = [];
   remembered.topicFp = "";
   remembered.lensPos = {};
-  remembered.spread = 1;
+  remembered.spreadPos = null;
 });
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -427,9 +428,9 @@ function MapInner() {
   const mapPositions = useStore((s) => s.mapPositions);
   const mapIslandPos = useStore((s) => s.mapIslandPos);
   const { setNodes: rfSetNodes, getNodes, getInternalNode, fitView, getZoom } = useReactFlow();
-  // the spread factor (1 = contracted); see `remembered.spread`
-  const [spread, setSpread] = useState(remembered.spread);
-  useEffect(() => { remembered.spread = spread; }, [spread]);
+  // the nudged positions while spread out (null = contracted)
+  const [spreadPos, setSpreadPos] = useState(remembered.spreadPos);
+  useEffect(() => { remembered.spreadPos = spreadPos; }, [spreadPos]);
   // menu state carries the selection it acts on, captured at open — the menu
   // needs no live subscription
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[];
@@ -524,13 +525,12 @@ function MapInner() {
       return Math.max(460, Math.sqrt(area) * 1.5);
     };
     const inBook = (c: string) => c in codebook;
-    // Spread pushes only TOP-LEVEL things apart (groups, halos, loose chips);
-    // a chip inside a group keeps its place in the frame, because captions —
-    // the thing that collides when zoomed out — belong to groups, not chips.
-    // Purely positional, so contracting is exact.
-    const spreadOut = (ns: MapNode[]): MapNode[] => spread === 1 ? ns
-      : ns.map((n) => n.parentId ? n
-        : { ...n, position: { x: n.position.x * spread, y: n.position.y * spread } });
+    // Spread applies the nudges computed on toggle to TOP-LEVEL things only
+    // (groups, halos, loose chips); a chip inside a group keeps its place in
+    // the frame, because the captions that collide belong to groups, not
+    // chips. Purely positional, so contracting is exact.
+    const spreadOut = (ns: MapNode[]): MapNode[] => !spreadPos ? ns
+      : ns.map((n) => n.parentId || !spreadPos[n.id] ? n : { ...n, position: spreadPos[n.id] });
     const actOf = new Map(plan.map((a) => [a.code, a]));
     const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
@@ -677,8 +677,12 @@ function MapInner() {
         const cardH = open
           ? (ratLines + glimpseLines) * fs * 1.45 + (showGlimpse ? fs * 1.1 + 26 : 0) + fs * 5 + 22
           : 0;
-        // the halo caption carries the name plus tag, count and fold arrow
-        const cap = captionBox(fs, 1, 4.5, c.newName ?? c.survivor, c.newName ? 9 : 4, family);
+        // the halo caption carries the name plus tag, count and fold arrow —
+        // and CSS clips it at max(200%, 30ch), so reserving its full measured
+        // width would just waste space on a long merged name
+        const capFull = captionBox(fs, 1, 4.5, c.newName ?? c.survivor, c.newName ? 9 : 4, family);
+        const blockW = packed.w + 2 * HALO_PAD;
+        const cap = { ...capFull, w: Math.min(capFull.w, Math.max(2 * blockW, 30 * 0.5 * captionFs(fs, 1, 4.5))) };
         return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD, cardH, cap };
       });
       const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (Math.max(b.w, b.cap.w) + HALO_GAP) * (b.h + b.cardH + b.cap.h + HALO_GAP), 0)) * 1.5);
@@ -691,7 +695,11 @@ function MapInner() {
         const key = `halo:${b.c.ci}`;
         haloNodes.push({
           id: key, type: "halo" as const,
-          position: mapIslandPos[key] ?? { x, y },
+          // the halo caption is CENTERED on the capsule (unlike an island's,
+          // which is left-aligned), so a name wider than its capsule bleeds
+          // backwards too — offset the capsule by half the overhang and both
+          // gaps come out at exactly HALO_GAP
+          position: mapIslandPos[key] ?? { x: x + Math.max(0, (b.cap.w - b.w) / 2), y },
           width: b.w, height: b.h,
           draggable: true, selectable: false, focusable: false,
           dragHandle: ".mapHaloLabel",
@@ -744,7 +752,7 @@ function MapInner() {
       .map((b) => ({ ...b, ...pack(b.list, near(b.list)),
         // name plus the dissolve button; editable captions can also grow
         cap: captionBox(fs, 1, 7, b.name, 2, family) }));
-    const totalW = blocks.reduce((a, b) => a + b.w + 2 * PAD + ISLAND_GAP, 0);
+    const totalW = blocks.reduce((a, b) => a + Math.max(b.w + 2 * PAD, b.cap.w) + ISLAND_GAP, 0);
     const rowW = Math.max(900, Math.sqrt(totalW * (blocks[0] ? blocks[0].h + 160 : 1)) * 1.6, ...blocks.map((b) => Math.max(b.w + 2 * PAD, b.cap.w)));
     const islands: IslandNodeT[] = [];
     const children: ChipNodeT[] = [];
@@ -769,7 +777,7 @@ function MapInner() {
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: spreadOut([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, spread]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, spreadPos]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -783,17 +791,14 @@ function MapInner() {
   // single confirmation, else N simultaneous envelopes stack into clipping.
   const applyAction = (a: CodeAction, sound = true) => {
     const st = useStore.getState();
-    // the row leaves the plan FIRST, and by CODE, not by reference: renameCode
-    // rebuilds every codePlan entry (store.ts, `.map(a => ({...a}))`), so from
-    // the second rename of an "Accept all" onward the captured references are
-    // stale clones and a reference filter would leave ghost rows behind. One
-    // action per code is a sanitizer invariant, so the code is a stable key.
-    setPlan((ps) => ps.filter((x) => x.code !== a.code));
+    // the row leaves the plan FIRST: renameCode rebuilds every entry object,
+    // so a filter afterwards would find only stale clones (see dropAction)
+    setPlan((ps) => dropAction(ps, a.code));
     if (a.action === "rename") st.renameCode(a.code, a.newName!);
     else if (a.action === "remove") st.rejectCode(a.code);
     if (sound) (a.action === "remove" ? earcon.reject : earcon.accept)();
   };
-  const skipAction = (a: CodeAction) => { setPlan((ps) => ps.filter((x) => x.code !== a.code)); earcon.skip(); };
+  const skipAction = (a: CodeAction) => { setPlan((ps) => dropAction(ps, a.code)); earcon.skip(); };
 
   // "describe this group": one-line confirm, default model, result lands on
   // the note node; the note's pulse IS the progress indicator
@@ -1117,27 +1122,40 @@ function MapInner() {
           title="Move the minimap to the next corner">
           <Icon name="pip" size={15} />
         </button>
-        <button className="btn iconlabel" aria-pressed={spread !== 1}
+        <button className="btn iconlabel" aria-pressed={!!spreadPos}
           onClick={() => {
-            if (spread !== 1) {
-              setSpread(1);
-              announce("Map contracted to its own layout");
-            } else {
-              // push apart by exactly the factor the captions grow by at this
-              // zoom, so names that were colliding get proportional room —
-              // the ceiling is the caption's own growth cap (IslandNode)
-              const f = Math.min(7, Math.max(1.35, 1 / getZoom()));
-              setSpread(f);
-              announce(`Map spread out ${f.toFixed(1)}× for reading at this zoom — toggle to contract`);
+            if (spreadPos) { setSpreadPos(null); announce("Map contracted to its own layout"); return; }
+            // Measure what is actually on screen — each top-level thing plus
+            // the caption floating above it, at THIS zoom — then nudge the
+            // boxes apart by the minimum that clears them. The camera is not
+            // touched: the map rearranges under a still view.
+            const zoom = getZoom();
+            const nodes = getNodes().filter((n) => !n.parentId && n.type !== "card");
+            const boxes = nodes.map((n) => {
+              const el = document.querySelector(`.react-flow__node[data-id="${CSS.escape(n.id)}"] .mapIslandLabel`);
+              const w = n.width ?? 0, h = n.height ?? 0;
+              if (!el) return { id: n.id, x: n.position.x, y: n.position.y, w, h };
+              const r = el.getBoundingClientRect();
+              const capW = r.width / zoom, capH = r.height / zoom;
+              // an island's caption is left-aligned, a halo's is centred
+              const left = n.type === "halo" ? n.position.x - Math.max(0, (capW - w) / 2) : n.position.x;
+              return { id: n.id, x: left, y: n.position.y - capH, w: Math.max(w, capW), h: h + capH };
+            });
+            const relaxed = relaxBoxes(boxes, Math.max(16, 24 / zoom));
+            const byId = new Map(boxes.map((b, i) => [b.id, { dx: relaxed[i].x - b.x, dy: relaxed[i].y - b.y }]));
+            const next: Record<string, { x: number; y: number }> = {};
+            for (const n of nodes) {
+              const d = byId.get(n.id)!;
+              next[n.id] = { x: n.position.x + d.dx, y: n.position.y + d.dy };
             }
-            const z = getZoom();
-            requestAnimationFrame(() => fitView({ duration: 250, minZoom: z, maxZoom: z }));
+            setSpreadPos(next);
+            announce("Map spread just enough to clear the group names — toggle to contract");
           }}
-          title={spread !== 1
+          title={spreadPos
             ? "Contract the map back to its own layout"
-            : "Spread the groups apart so their names stay readable at this zoom — nothing moves inside a group, and this toggles straight back"}>
-          <Icon name={spread !== 1 ? "arrows-in" : "arrows-out"} size={15} />
-          <span className="blabel">{spread !== 1 ? "Contract" : "Spread"}</span>
+            : "Nudge groups apart until their names stop overlapping at this zoom — the view stays put, nothing moves inside a group, and this toggles straight back"}>
+          <Icon name={spreadPos ? "arrows-in" : "arrows-out"} size={15} />
+          <span className="blabel">{spreadPos ? "Contract" : "Spread"}</span>
         </button>
         <button className="btn iconlabel" aria-label="Re-layout the map"
           disabled={lens !== "default"}
