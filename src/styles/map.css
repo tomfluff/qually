@@ -71,8 +71,3 @@
   border: 0;
   pointer-events: none;
 }
-/* perf probe (temporary): fps readout + stripped-down chips */
-.mapFps { min-width:6ch; text-align:right; color:var(--muted);
-  font-variant-numeric:tabular-nums; }
-.plainChips .mapChip { background:var(--panel); border-radius:0; overflow:visible; }
-.plainChips .mapChip .cnt { display:none; }
