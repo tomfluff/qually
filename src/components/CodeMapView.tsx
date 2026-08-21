@@ -16,7 +16,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
-  ViewportPortal, useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
+  useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -48,11 +48,15 @@ const chipW = (fs: number, name: string, segs: number, pids: number) => {
 
 type ChipData = { code: string; color: string; segs: number; pids: number };
 type ChipNodeT = Node<ChipData, "chip">;
+type IslandData = { name: string; gi: number };
+type IslandNodeT = Node<IslandData, "island">;
+type MapNode = ChipNodeT | IslandNodeT;
 
 // positions (drags survive), viewport and selection outlive the unmounting view
 const remembered = {
+  // chip positions are RELATIVE to their island (absolute when ungrouped/flat)
   positions: {} as Record<string, { x: number; y: number }>,
-  islandOffsets: {} as Record<string, { dx: number; dy: number }>,
+  islandPos: {} as Record<string, { x: number; y: number }>,
   viewport: null as Viewport | null,
   selected: new Set<string>(),
 };
@@ -68,7 +72,7 @@ const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>
     </div>
   );
 });
-const nodeTypes = { chip: ChipNode };
+const LOOSE = "\u0000loose";
 
 const NEXT_CORNER = {
   "bottom-right": "bottom-left", "bottom-left": "top-left",
@@ -84,7 +88,7 @@ const openInCodebook = (list: string[]) => {
 // equality check, so this re-renders exactly when membership changes —
 // and nothing else in the tree does.
 const selectedIdsSel = (s: { nodes: Node[] }) =>
-  s.nodes.filter((n) => n.selected).map((n) => n.id).join("\n");
+  s.nodes.filter((n) => n.selected && n.type === "chip").map((n) => n.id).join("\n");
 function SelectionHud() {
   const joined = useFlowStore(selectedIdsSel);
   const sel = useMemo(() => (joined ? joined.split("\n") : []), [joined]);
@@ -98,52 +102,60 @@ function SelectionHud() {
   );
 }
 
-// an island's caption: sits above the frame like a map label. Semantic zoom —
-// the world font counter-scales so the caption holds a readable on-screen size
-// while zoomed out (the abstraction level: far away you read GROUPS), clamped
-// at its base so zooming in grows it naturally. Base rides ABOVE the code text
-// size on purpose: titles outrank chips. Drag the caption to move the island;
-// double-click renames (a real group only); x dissolves.
+// Islands are real React Flow nodes and chips are their CHILDREN (RF
+// sub-flows): dragging an island by its caption is native RF node dragging,
+// so the whole family moves live and smoothly — no custom drag code. The node
+// body is click-through (box-select sweeps across it); only the caption is
+// live, and it is the drag handle. Semantic zoom: the caption counter-scales
+// against the viewport so it holds a readable on-screen size zoomed out (far
+// away the map reads as GROUP NAMES), clamping at a base deliberately above
+// the code text size — titles outrank chips.
 const zoomSel = (s: { transform: [number, number, number] }) => s.transform[2];
-function IslandLabel({ name, gi, onRename, onDissolve, onDragStart }: {
-  name: string; gi: number;
-  onRename: (gi: number, name: string) => void; onDissolve: (gi: number) => void;
-  onDragStart: (e: React.PointerEvent) => void;
-}) {
+const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const base = fs * 1.3;
   const fontSize = Math.min(base * 7, Math.max(base, base / zoom));
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(name);
-  if (gi === -1) {
-    return (
-      <div className="mapIslandLabel" style={{ fontSize }} onPointerDown={onDragStart}>
-        <span className="mapIslandName loose">{name}</span>
-      </div>
-    );
-  }
+  const [draft, setDraft] = useState(data.name);
+  const rename = () => {
+    const st = useStore.getState();
+    if (draft.trim()) st.setCodeGroups(st.codeGroups.map((g, i) => (i === data.gi ? { ...g, name: draft.trim() } : g)));
+    setEditing(false);
+  };
+  const dissolve = () => {
+    const st = useStore.getState();
+    st.codeGroups[data.gi]?.codes.forEach((c) => delete remembered.positions[c]);
+    st.setCodeGroups(st.codeGroups.filter((_, i) => i !== data.gi));
+  };
   return (
-    <div className="mapIslandLabel" style={{ fontSize }} onPointerDown={onDragStart}>
-      {editing ? (
-        <input className="mapIslandEdit" value={draft} autoFocus
-          onPointerDown={(e) => e.stopPropagation()}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => { onRename(gi, draft); setEditing(false); }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { onRename(gi, draft); setEditing(false); }
-            if (e.key === "Escape") { e.stopPropagation(); setDraft(name); setEditing(false); }
-          }} />
-      ) : (
-        <span className="mapIslandName" title="Double-click to rename"
-          onDoubleClick={() => { setDraft(name); setEditing(true); }}>{name}</span>
-      )}
-      <button className="mapIslandX" title="Dissolve this group (codes stay)"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => onDissolve(gi)}>×</button>
+    <div className={"mapIsland" + (data.gi === -1 ? " loose" : "")}>
+      <div className="mapIslandLabel" style={{ fontSize }}>
+        {data.gi === -1 ? (
+          <span className="mapIslandName loose">{data.name}</span>
+        ) : editing ? (
+          <input className="mapIslandEdit nodrag" value={draft} autoFocus
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={rename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") rename();
+              if (e.key === "Escape") { e.stopPropagation(); setDraft(data.name); setEditing(false); }
+            }} />
+        ) : (
+          <>
+            <span className="mapIslandName" title="Drag to move the group; double-click to rename"
+              onDoubleClick={() => { setDraft(data.name); setEditing(true); }}>{data.name}</span>
+            <button className="mapIslandX nodrag" title="Dissolve this group (codes stay)"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={dissolve}>×</button>
+          </>
+        )}
+      </div>
     </div>
   );
-}
+});
+const nodeTypes = { chip: ChipNode, island: IslandNode };
 
 // React Flow commits its marquee through React on EVERY pointer event with no
 // rAF gate (verified in the installed v12.11.3 source with codex): a high-rate
@@ -196,12 +208,11 @@ function MapInner() {
   const codeGroups = useStore((s) => s.codeGroups);
   const setCodeGroups = useStore((s) => s.setCodeGroups);
   const setUi = useStore((s) => s.setUi);
-  const { setNodes: rfSetNodes, getNodes } = useReactFlow();
+  const { setNodes: rfSetNodes, getNodes, getInternalNode } = useReactFlow();
   // menu state carries the selection it acts on, captured at open — the menu
   // needs no live subscription
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[] } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
-  const [islandRev, setIslandRev] = useState(0);
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   // biggest first: the codes doing the most work anchor the top of the map
@@ -212,6 +223,8 @@ function MapInner() {
 
   // Islands: each group packs its chips into a compact block; the blocks (plus
   // an Ungrouped block) shelf-pack across the canvas. No groups -> one flat map.
+  // Islands are parent nodes (before their children in the array, as RF
+  // requires); chips inside carry parentId and RELATIVE positions.
   const layout = useMemo(() => {
     const fs = sidebarFontSize;
     const ch = chipH(fs);
@@ -239,40 +252,48 @@ function MapInner() {
     const grouped = new Set(groups.flatMap((g) => g.codes));
     const loose = codes.filter((c) => !grouped.has(c));
 
-    const positions: Record<string, { x: number; y: number }> = {};
-    const regions: { name: string; gi: number; x: number; y: number; w: number; h: number }[] = [];
-    if (groups.length === 0) {
-      const flat = pack(codes, near(codes));
-      Object.assign(positions, flat.pos);
-    } else {
-      // island blocks (Ungrouped last, gi -1), shelf-packed with margins
-      const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
-        ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
-        .map((b) => ({ ...b, ...pack(b.list, near(b.list)) }));
-      const totalW = blocks.reduce((a, b) => a + b.w + 2 * PAD + ISLAND_GAP, 0);
-      const rowW = Math.max(900, Math.sqrt(totalW * (blocks[0] ? blocks[0].h + 160 : 1)) * 1.6, ...blocks.map((b) => b.w + 2 * PAD));
-      let ix = 0, iy = 0, rowH = 0;
-      for (const b of blocks) {
-        const off = remembered.islandOffsets[b.gi === -1 ? "\u0000loose" : b.name] ?? { dx: 0, dy: 0 };
-        const bw = b.w + 2 * PAD, bh = b.h + 2 * PAD;
-        if (ix > 0 && ix + bw > rowW) { ix = 0; iy += rowH + ISLAND_GAP; rowH = 0; }
-        regions.push({ name: b.name, gi: b.gi, x: ix + off.dx, y: iy + off.dy, w: bw, h: bh });
-        for (const c of b.list) positions[c] = { x: ix + off.dx + PAD + b.pos[c].x, y: iy + off.dy + PAD + b.pos[c].y };
-        ix += bw + ISLAND_GAP;
-        rowH = Math.max(rowH, bh);
-      }
-    }
-    const nodes: ChipNodeT[] = codes.map((c) => ({
+    const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
       type: "chip" as const,
-      position: remembered.positions[c] ?? positions[c],
+      position: remembered.positions[c] ?? position,
+      ...(parentId ? { parentId } : {}),
       width: widths.get(c)!, height: ch,
       selected: remembered.selected.has(c),
       data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
-    }));
-    return { nodes, regions };
-  // islandRev bumps when an island is dragged (offsets live outside React)
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, islandRev]); // eslint-disable-line react-hooks/exhaustive-deps
+    });
+
+    if (groups.length === 0) {
+      const flat = pack(codes, near(codes));
+      return { nodes: codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[] };
+    }
+    const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
+      ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
+      .map((b) => ({ ...b, ...pack(b.list, near(b.list)) }));
+    const totalW = blocks.reduce((a, b) => a + b.w + 2 * PAD + ISLAND_GAP, 0);
+    const rowW = Math.max(900, Math.sqrt(totalW * (blocks[0] ? blocks[0].h + 160 : 1)) * 1.6, ...blocks.map((b) => b.w + 2 * PAD));
+    const islands: IslandNodeT[] = [];
+    const children: ChipNodeT[] = [];
+    let ix = 0, iy = 0, rowH = 0;
+    for (const b of blocks) {
+      const key = b.gi === -1 ? LOOSE : `island:${b.gi}`;
+      const bw = b.w + 2 * PAD, bh = b.h + 2 * PAD;
+      if (ix > 0 && ix + bw > rowW) { ix = 0; iy += rowH + ISLAND_GAP; rowH = 0; }
+      islands.push({
+        id: key,
+        type: "island" as const,
+        position: remembered.islandPos[key] ?? { x: ix, y: iy },
+        width: bw, height: bh,
+        draggable: true, selectable: false, focusable: false,
+        dragHandle: ".mapIslandLabel",
+        data: { name: b.name, gi: b.gi },
+      });
+      for (const c of b.list) children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
+      ix += bw + ISLAND_GAP;
+      rowH = Math.max(rowH, bh);
+    }
+    // parents strictly before children (RF sub-flow requirement)
+    return { nodes: [...islands, ...children] as MapNode[] };
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -284,7 +305,7 @@ function MapInner() {
   // group editing: every mutation goes through the store so it lands in the file
   const moveToGroup = useCallback((code: string, gi: number) => {
     const cur = codeGroups.findIndex((g) => g.codes.includes(code));
-    if (cur === gi) return;
+    if (cur === gi) return; // includes the flat-map case: -1 === -1
     const next = codeGroups.map((g, i) => ({
       ...g,
       codes: i === gi ? [...g.codes, code] : g.codes.filter((c) => c !== code),
@@ -298,64 +319,23 @@ function MapInner() {
     setCodeGroups([...cleaned, { name: `Group ${codeGroups.length + 1}`, codes: sel }]);
     setMenu(null);
   };
-  // drag an island by its caption: the frame outline follows the pointer
-  // imperatively (no React work per move); release commits the offset, shifts
-  // any hand-placed member chips with it, and relayouts
-  const dragIsland = useCallback((e: React.PointerEvent, r: { name: string; gi: number }) => {
-    if (e.button !== 0) return;
-    e.preventDefault(); e.stopPropagation();
-    const el = (e.currentTarget as HTMLElement).closest(".mapIsland") as HTMLElement;
-    const zoom = remembered.viewport?.zoom ?? 1;
-    const sx = e.clientX, sy = e.clientY;
-    let ddx = 0, ddy = 0;
-    const base = el.style.transform;
-    el.classList.add("dragging");
-    const move = (ev: PointerEvent) => {
-      ddx = (ev.clientX - sx) / zoom; ddy = (ev.clientY - sy) / zoom;
-      el.style.transform = `${base} translate(${ddx}px, ${ddy}px)`;
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      el.classList.remove("dragging");
-      if (!ddx && !ddy) return;
-      const key = r.gi === -1 ? "\u0000loose" : r.name;
-      const off = remembered.islandOffsets[key] ?? { dx: 0, dy: 0 };
-      remembered.islandOffsets[key] = { dx: off.dx + ddx, dy: off.dy + ddy };
-      const members = r.gi === -1
-        ? codes.filter((c) => !codeGroups.some((g) => g.codes.includes(c)))
-        : codeGroups[r.gi]?.codes ?? [];
-      for (const c of members) {
-        const p = remembered.positions[c];
-        if (p) remembered.positions[c] = { x: p.x + ddx, y: p.y + ddy };
-      }
-      setIslandRev((v) => v + 1);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  }, [codes, codeGroups]);
-
-  const renameGroup = useCallback((gi: number, name: string) => {
-    if (!name.trim()) return;
-    setCodeGroups(codeGroups.map((g, i) => (i === gi ? { ...g, name: name.trim() } : g)));
-  }, [codeGroups, setCodeGroups]);
-  const dissolveGroup = useCallback((gi: number) => {
-    codeGroups[gi]?.codes.forEach((c) => delete remembered.positions[c]);
-    setCodeGroups(codeGroups.filter((_, i) => i !== gi));
-  }, [codeGroups, setCodeGroups]);
-
   // stable handlers (skill rule: memoize callback props)
   const onMoveEnd = useCallback((_: unknown, vp: Viewport) => { remembered.viewport = vp; }, []);
-  const onMove = useCallback((_: unknown, vp: Viewport) => { remembered.viewport = vp; }, []);
-  // a drag is a filing action once islands exist: the chip joins whichever
-  // island its center lands in (or leaves its group on open canvas)
+  // a drag is a filing action once islands exist: a chip joins whichever
+  // island its ABSOLUTE center lands in (or leaves its group on open canvas);
+  // an island just remembers where it was put (session aesthetics)
   const onNodeDragStop = useCallback((_: unknown, n: Node) => {
+    if (n.type === "island") { remembered.islandPos[n.id] = n.position; return; }
     remembered.positions[n.id] = n.position;
-    if (!layout.regions.length) return;
-    const cx = n.position.x + (n.width ?? 0) / 2, cy = n.position.y + (n.height ?? 0) / 2;
-    const hit = layout.regions.find((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
-    moveToGroup(n.id, hit ? hit.gi : -1);
-  }, [layout, moveToGroup]);
+    const islands = getNodes().filter((x) => x.type === "island");
+    if (!islands.length) return;
+    const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
+    const cx = abs.x + (n.width ?? 0) / 2, cy = abs.y + (n.height ?? 0) / 2;
+    const hit = islands.find((r) => cx >= r.position.x && cx <= r.position.x + (r.width ?? 0)
+      && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
+    const gi = hit ? (hit.data as IslandData).gi : -1;
+    moveToGroup(n.id, gi);
+  }, [getNodes, getInternalNode, moveToGroup]);
   const onNodeDoubleClick = useCallback((_: unknown, n: Node) => openInCodebook([n.id]), []);
   const selectionAt = useCallback((): string[] =>
     getNodes().filter((n) => n.selected).map((n) => n.id), [getNodes]);
@@ -372,7 +352,7 @@ function MapInner() {
   const [selecting, setSelecting] = useState(false);
   const onSelectionStart = useCallback(() => setSelecting(true), []);
   const onSelectionEnd = useCallback(() => setSelecting(false), []);
-  const nodeColor = useCallback((n: Node) => (n as ChipNodeT).data.color, []);
+  const nodeColor = useCallback((n: Node) => n.type === "chip" ? (n as ChipNodeT).data.color : "transparent", []);
 
   const mergeSel = (menuSel: string[], into: string) => {
     const mergeCode = useStore.getState().mergeCode;
@@ -409,12 +389,12 @@ function MapInner() {
         {codes.length === 0
           ? <div className="empty">No codes yet — the map draws itself as you code.</div>
           : (
-          <ReactFlow<ChipNodeT>
+          <ReactFlow<MapNode>
             defaultNodes={initialNodes} nodeTypes={nodeTypes}
             colorMode={dark ? "dark" : "light"}
             fitView={!remembered.viewport}
             defaultViewport={remembered.viewport ?? undefined}
-            onMoveEnd={onMoveEnd} onMove={onMove}
+            onMoveEnd={onMoveEnd}
             minZoom={0.1} maxZoom={3}
             selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
             autoPanOnSelection={false}
@@ -433,18 +413,7 @@ function MapInner() {
             {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <RafSelectionMarquee />
             <SelectionHud />
-            {/* island regions live in WORLD coordinates behind the chips */}
-            <ViewportPortal>
-              {layout.regions.map((r) => (
-                <div key={`${r.gi}:${r.name}`}
-                  className={"mapIsland" + (r.gi === -1 ? " loose" : "")}
-                  style={{ transform: `translate(${r.x}px, ${r.y}px)`, width: r.w, height: r.h }}>
-                  <IslandLabel name={r.name} gi={r.gi}
-                    onRename={renameGroup} onDissolve={dissolveGroup}
-                    onDragStart={(e) => dragIsland(e, r)} />
-                </div>
-              ))}
-            </ViewportPortal>
+
           </ReactFlow>
         )}
       </div>

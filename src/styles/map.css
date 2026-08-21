@@ -71,19 +71,20 @@
   border: 0;
   pointer-events: none;
 }
-/* islands: the group regions behind the chips, in world coordinates. The body
-   is click-through (canvas gestures pass); only the caption row is live. */
-.mapIsland { position:absolute; left:0; top:0; pointer-events:none;
+/* islands are RF parent nodes rendered behind their chip children. The node
+   body is click-through so box-select sweeps across it; only the caption is
+   live, and the caption is the RF drag handle for the whole family. */
+.react-flow__node-island { pointer-events:none !important; }
+.mapIsland { width:100%; height:100%; box-sizing:border-box;
   border:1px solid var(--line); border-radius:16px;
   background:color-mix(in srgb, var(--accent) 4%, transparent); }
 .mapIsland.loose { border-style:dashed; background:transparent; }
 /* the caption floats ABOVE the frame (Figma-style) so its semantic-zoom size
-   never disturbs the chip layout inside; it is also the island's drag handle */
+   never disturbs the chip layout inside */
 .mapIslandLabel { position:absolute; left:0; bottom:100%; padding:0 4px 4px;
   display:flex; align-items:center; gap:.4em; white-space:nowrap;
   pointer-events:auto; cursor:grab; user-select:none; }
-.mapIsland.dragging { border-color:var(--accent); }
-.mapIsland.dragging .mapIslandLabel { cursor:grabbing; }
+.react-flow__node-island.dragging .mapIslandLabel { cursor:grabbing; }
 .mapIslandName { font-weight:700; }
 .mapIslandName.loose { color:var(--muted); }
 .mapIslandEdit { pointer-events:auto; font:inherit; font-weight:700; color:var(--fg); max-width:14em;
