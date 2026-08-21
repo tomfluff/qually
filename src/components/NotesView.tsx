@@ -9,7 +9,7 @@
 import { useRef } from "react";
 import { useStore } from "../state/store";
 import { fmtTime } from "../markers";
-import { playheadSecFor } from "../video/seek";
+import { playheadSecFor, seekVideo } from "../video/seek";
 import { Icon } from "./Icon";
 
 // what you were doing, as one line: last transcript, its selected line, the
@@ -40,6 +40,31 @@ export function NotesView() {
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
+  // Ctrl/Cmd+click a stamp line: go back to its moment — open the transcript,
+  // select the line, seek the playhead. The breadcrumb is the way BACK, not
+  // just a record. (A plain click keeps editing; the hint says the modifier.)
+  const jumpFromStamp = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    const ta = taRef.current;
+    if (!ta) return;
+    // the click already placed the caret — read the line under it
+    const a = ta.selectionStart ?? 0;
+    const line = notes.slice(notes.lastIndexOf("\n", a - 1) + 1,
+      notes.indexOf("\n", a) === -1 ? notes.length : notes.indexOf("\n", a));
+    if (!line.startsWith("— ")) return;
+    const parts = line.slice(2).split(" · ").map((x) => x.trim());
+    const s = useStore.getState();
+    const pid = parts.find((x) => x in s.transcripts);
+    if (!pid) return;
+    e.preventDefault();
+    const ln = parts.find((x) => x.startsWith("line "));
+    const vid = parts.find((x) => x.startsWith("video "));
+    if (ln) s.jumpTo(pid, parseInt(ln.slice(5), 10));
+    else s.setActive(pid);
+    // seek AFTER the view switch so the dock's element is the one registered
+    if (vid) requestAnimationFrame(() => seekVideo(vid.slice(6)));
+  };
+
   const stamp = () => {
     const ta = taRef.current;
     const line = stampLine();
@@ -59,7 +84,7 @@ export function NotesView() {
     <div id="notes" style={{ fontSize }}>
       <div className="notesBar" style={{ fontSize: sidebarFontSize }}>
         <span className="notesTitle">Project notes</span>
-        <span className="notesHint">Memos, hunches, decisions — one document for the whole study. Saved as you type; travels with the project file.</span>
+        <span className="notesHint">Memos, hunches, decisions — one document for the whole study. Saved as you type; travels with the project file. <b>Ctrl+click</b> a stamp to jump back to its moment.</span>
         <button className="btn iconlabel" onClick={stamp}
           title="Insert a breadcrumb of what you were just doing (transcript, line, playhead)">
           <Icon name="pin" size={15} /> <span className="blabel">Stamp context</span>
@@ -69,6 +94,7 @@ export function NotesView() {
         aria-label="Project notes"
         // N types the letter while you write (as it must), so Escape is the
         // keyboard way back to where you were
+        onMouseDown={jumpFromStamp}
         onKeyDown={(e) => {
           if (e.key !== "Escape") return;
           e.stopPropagation();
