@@ -241,3 +241,22 @@ it("a summary payload redacts the event type and the excerpt ref, not just the f
     "", r);
   expect(out).not.toContain("Ann");
 });
+
+describe("cluster sanitize (Code map grouping)", () => {
+  it("keeps only real codes, one group each, drops thin groups, restores redactions", async () => {
+    const { sanitizeClusterReply } = await import("./cluster");
+    const { redactor } = await import("./redact");
+    const r = redactor(["Ann"]);
+    const token = r.redact("Ann");
+    const codes = ["a", "b", "c", "d"].map((name) => ({ name, def: "", excerpts: [] }));
+    const out = sanitizeClusterReply(codes, [
+      { name: `${token}'s things`, codes: ["a", "b", "ghost"], rationale: `About ${token}.` },
+      { name: "double dip", codes: ["b", "c"], rationale: "" },   // b already taken -> only c left -> drops
+      { name: "solo", codes: ["d"], rationale: "" },              // fewer than 2 -> drops
+    ], r);
+    expect(out).toHaveLength(1);
+    expect(out[0].codes).toEqual(["a", "b"]);
+    expect(out[0].name).toBe("Ann's things");
+    expect(out[0].rationale).toBe("About Ann.");
+  });
+});

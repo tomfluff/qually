@@ -25,6 +25,7 @@ import { codeStats } from "../codeStats";
 import { preselectBrowse } from "./BrowseView";
 import { CodeCounts } from "./CodeCounts";
 import { Icon, countIconSize } from "./Icon";
+import { GroupModal } from "./GroupModal";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -179,6 +180,7 @@ function MapInner() {
   // menu state carries the selection it acts on, captured at open — the menu
   // needs no live subscription
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[] } | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   // biggest first: the codes doing the most work anchor the top of the map
@@ -333,6 +335,10 @@ function MapInner() {
         <span className="mapTitle">Code map</span>
         <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+        <button className="btn iconlabel" onClick={() => setAiOpen(true)}
+          title="AI proposes similarity groups; they land as islands you can reshape">
+          <Icon name="sparkle" size={15} /> <span className="blabel">Group by similarity</span>
+        </button>
         <button className="btn iconbtn" onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
           title="Move the minimap to the next corner">
           <Icon name="pip" size={15} />
@@ -380,6 +386,14 @@ function MapInner() {
           </ReactFlow>
         )}
       </div>
+      {aiOpen && (
+        <GroupModal onClose={() => setAiOpen(false)}
+          onGroups={(groups) => {
+            // a fresh grouping owns the whole layout again
+            remembered.positions = {};
+            setCodeGroups(groups);
+          }} />
+      )}
       {menu && menu.sel.length > 0 && (
         <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
