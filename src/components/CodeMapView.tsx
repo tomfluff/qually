@@ -16,7 +16,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
-  useReactFlow, useStore as useFlowStore,
+  useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -116,6 +116,43 @@ function SelectionHud() {
       <button className="btn" onClick={() => openInCodebook(sel)}>Open in Codebook</button>
     </Panel>
   );
+}
+
+// React Flow commits its marquee through React on EVERY pointer event with no
+// rAF gate (verified in the installed v12.11.3 source with codex): a high-rate
+// mouse lands several unsynchronized commits per display frame, and the
+// rectangle judders while fps reads steady. RF keeps doing all the selection
+// logic; its own marquee is display:none, and this paints the latest rectangle
+// imperatively, at most once per animation frame.
+function RafSelectionMarquee() {
+  const flowStore = useFlowStoreApi();
+  const elementRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const initial = flowStore.getState();
+    let latest = initial.userSelectionActive ? initial.userSelectionRect : null;
+    let frame = 0;
+    const paint = () => {
+      frame = 0;
+      const element = elementRef.current;
+      if (!element) return;
+      const rect = latest;
+      if (!rect) { element.style.display = "none"; return; }
+      element.style.width = `${rect.width}px`;
+      element.style.height = `${rect.height}px`;
+      element.style.transform = `translate3d(${rect.x}px, ${rect.y}px, 0)`;
+      element.style.display = "block";
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(paint); };
+    const unsubscribe = flowStore.subscribe((state, previous) => {
+      if (state.userSelectionActive === previous.userSelectionActive &&
+          state.userSelectionRect === previous.userSelectionRect) return;
+      latest = state.userSelectionActive ? state.userSelectionRect : null;
+      schedule();
+    });
+    schedule();
+    return () => { unsubscribe(); if (frame) cancelAnimationFrame(frame); };
+  }, [flowStore]);
+  return <div ref={elementRef} className="mapRafMarquee" aria-hidden="true" />;
 }
 
 function MapInner() {
@@ -248,6 +285,7 @@ function MapInner() {
                 the duration of a box-drag costs one render at gesture start/end
                 instead of aggregate scans per membership change (codex consult) */}
             {!selecting && probe < 1 && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
+            <RafSelectionMarquee />
             <SelectionHud />
           </ReactFlow>
         )}

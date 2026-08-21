@@ -59,10 +59,13 @@
    swaps in after release, spanning the selection bounds; left styled, it
    reads as the marquee jumping, and it intercepts the next drag — so it is
    invisible and click-through. Selected chips already show the selection. */
-.mapCanvas .react-flow__selection {
-  background: transparent;
-  border: 2px solid var(--accent);
-}
+/* RF still performs selection; its React-driven marquee is not painted —
+   .mapRafMarquee below is the same rectangle, painted once per frame */
+.mapCanvas .react-flow__selection { display:none; }
+.mapCanvas .mapRafMarquee { display:none; position:absolute; top:0; left:0;
+  z-index:6; pointer-events:none; box-sizing:border-box;
+  background:transparent; border:2px solid var(--accent);
+  contain:layout paint; }
 .mapCanvas .react-flow__nodesselection-rect {
   background: transparent;
   border: 0;
