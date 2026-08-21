@@ -1,22 +1,28 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
    Copyright (C) 2026 Yotam Sechayk */
-/* Code map: the codebook as a pan/zoom surface. Chips live in world coordinates
-   inside .mapWorld; one transform pans and zooms everything at once, which is
-   what keeps a 200-code map snappy — layout never reflows, it only transforms. */
+/* Code map: the codebook on a React Flow canvas. The chips are ours; React
+   Flow owns the viewport (pan/zoom/box-select) and the minimap. Its stylesheet
+   is imported by the component; here we theme what shows and style the chips. */
 #codemap { display:flex; flex-direction:column; height:100%; min-width:0; }
 .mapBar { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
   padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
 .mapBar .mapTitle { font-weight:600; }
 .mapBar .mapHint { flex:1 1 20ch; min-width:0; color:var(--muted); font-size:.9em; }
 .mapBar .mapCount { color:var(--muted); }
-.mapCanvas { flex:1; min-height:0; position:relative; overflow:hidden;
-  background:var(--bg); cursor:grab; touch-action:none; }
-.mapCanvas:active { cursor:grabbing; }
+.mapCanvas { flex:1; min-height:0; position:relative; background:var(--bg); }
 .mapCanvas .empty { position:absolute; inset:0; display:grid; place-items:center;
   color:var(--muted); }
-.mapWorld { position:absolute; left:0; top:0; transform-origin:0 0; }
-.mapChip { position:absolute; display:flex; align-items:center; gap:8px;
-  padding:0 12px; background:var(--panel); color:var(--fg);
+/* our theme over React Flow's: the pane is the app ground, controls follow the
+   panel palette in both themes */
+.mapCanvas .react-flow { background:var(--bg); }
+.mapCanvas .react-flow__minimap { background:var(--panel); }
+.mapCanvas .react-flow__controls button { background:var(--panel); color:var(--fg);
+  border-bottom:1px solid var(--line); fill:currentColor; }
+.mapCanvas .react-flow__controls button:hover { background:var(--sel); }
+/* selection ring is drawn by the chip itself (RF's default node chrome is off
+   for custom node types, so there is nothing to double-draw) */
+.mapChip { display:flex; align-items:center; gap:8px; box-sizing:border-box;
+  padding:0 12px; height:100%; background:var(--panel); color:var(--fg);
   border:2px solid var(--line); border-radius:10px; cursor:pointer;
   font:inherit; text-align:left; }
 .mapChip:hover { border-color:var(--muted); }
@@ -26,9 +32,6 @@
 .mapChip .mapName { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
   white-space:nowrap; font-weight:600; }
 .mapChip .mapMeta { color:var(--muted); font-variant-numeric:tabular-nums; flex:none; }
-/* the shift-drag selection sweep, drawn in screen space over the canvas */
-.mapBox { position:absolute; pointer-events:none; border:1px solid var(--accent);
-  background:color-mix(in srgb, var(--accent) 12%, transparent); border-radius:2px; }
 /* the right-click menu rides the shared .ctxmenu chrome; only the extras here */
 .mapMenu .mapMenuHead { padding:6px 10px 2px; color:var(--muted); font-size:.85em; }
 .mapMenu .mapDot { display:inline-block; width:.8em; height:.8em; border-radius:3px;
