@@ -6,13 +6,16 @@
 // autosaved per keystroke), plus Stamp: a breadcrumb of what you were doing
 // when the thought arrived (transcript, selected line, playhead), inserted at
 // the cursor so future-you can re-find the moment behind the memo.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { fmtTime } from "../markers";
 import { playheadSecFor, seekVideo } from "../video/seek";
 import { Icon } from "./Icon";
 
 // a stamp line: starts with the em-dash marker and carries a clock time
+// where the document was parked, session-only (same pattern as Browse/Assist/Summary)
+let notesScroll = 0;
+
 const STAMP_RE = /^— .*\d{2}:\d{2}/;
 
 // what you were doing, as one line: last transcript, its selected line, the
@@ -45,6 +48,11 @@ export function NotesView() {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mRef = useRef<HTMLDivElement>(null);
   const findRef = useRef<HTMLInputElement>(null);
+  // restore before paint, so the document never flashes at the top on the way back
+  const setTa = useCallback((el: HTMLTextAreaElement | null) => {
+    taRef.current = el;
+    if (el) el.scrollTop = notesScroll;
+  }, []);
   const [findOpen, setFindOpen] = useState(false);
   const [find, setFind] = useState("");
   const [findIdx, setFindIdx] = useState(0);
@@ -189,7 +197,7 @@ export function NotesView() {
           {mirrorLines}
           {"​" /* keeps a final empty line the same height as the textarea's */}
         </div>
-        <textarea ref={taRef} className="notesText nicescroll" value={notes} autoFocus
+        <textarea ref={setTa} className="notesText nicescroll" value={notes} autoFocus
           aria-label="Project notes"
           // N types the letter while you write (as it must), so Escape is the
           // keyboard way back to where you were
@@ -213,7 +221,7 @@ export function NotesView() {
             st.setActive(st.lastPid || st.tabs[0] || "browse");
           }}
           placeholder={"What are you noticing across the study?\n\nStamp context drops a line like “— 21 Aug 2026 14:30 · P07 · line 214 · video 0:14:03” so a memo keeps the moment it came from."}
-          onScroll={(e) => { const m = mRef.current; if (m) m.scrollTop = e.currentTarget.scrollTop; }}
+          onScroll={(e) => { notesScroll = e.currentTarget.scrollTop; const m = mRef.current; if (m) m.scrollTop = e.currentTarget.scrollTop; }}
           onChange={(e) => setNotes(e.target.value)} />
         {findOpen && (
           <div className="notesFind" style={{ fontSize: sidebarFontSize }}>

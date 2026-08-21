@@ -62,6 +62,7 @@ const remembered = {
   // (or an "open") into a transcript and coming back landed at the top of a list
   // you were working down — the one thing the round trip can't reconstruct.
   scroll: {} as Record<string, number>,
+  leftScroll: {} as Record<string, number>,
 };
 type DefScope = "all" | "undefined" | "defined";
 // one word each: three segments in a 264px sidebar, and "No definition" wrapped
@@ -117,6 +118,9 @@ export function AssistView() {
   // restore before paint, so the list never flashes at the top on the way back
   const paneRef = useCallback((el: HTMLDivElement | null) => {
     if (el) el.scrollTop = remembered.scroll[panel] ?? 0;
+  }, [panel]);
+  const listRef = useCallback((el: HTMLDivElement | null) => {
+    if (el) el.scrollTop = remembered.leftScroll[panel] ?? 0;
   }, [panel]);
   // which code's definition is open in an editor right now (deliberately NOT
   // remembered across tab changes — the editor unmounts with the view)
@@ -324,7 +328,8 @@ export function AssistView() {
             list below scrolls inside cbList so the scrollbar clears the drag divider. */}
         <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
 
-        <div className="cbList nicescroll">
+        <div className="cbList nicescroll" ref={listRef}
+          onScroll={(e) => { remembered.leftScroll[panel] = e.currentTarget.scrollTop; }}>
         {panel === "observations" ? (
           <>
             {/* Same two ways in as the Suggest panel: a button that works in every

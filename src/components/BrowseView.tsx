@@ -31,12 +31,14 @@ const remembered = {
 // where the excerpt list was parked, for the same reason and in the same place
 // as the rest of this cache
 let excerptScroll = 0;
+let codeListScroll = 0;
 
 export function BrowseView() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
   const paneRef = useCallback((el: HTMLDivElement | null) => { if (el) el.scrollTop = excerptScroll; }, []);
+  const listRef = useCallback((el: HTMLDivElement | null) => { if (el) el.scrollTop = codeListScroll; }, []);
   const fontSize = useStore((s) => s.ui.fontSize);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
@@ -136,7 +138,8 @@ export function BrowseView() {
             {SORTS[sortIdx].label}
           </button>
         </div>
-        <div className="cbList nicescroll">
+        <div className="cbList nicescroll" ref={listRef}
+          onScroll={(e) => { codeListScroll = e.currentTarget.scrollTop; }}>
         {listed.map((c) => (
           <div key={c} className={"bCode" + (selected.has(c) ? " sel" : "")} tabIndex={0} role="button"
             aria-label={`Show excerpts for ${c}, ${counts[c]?.segs || 0} excerpt${counts[c]?.segs === 1 ? "" : "s"}`

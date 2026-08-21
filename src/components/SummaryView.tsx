@@ -132,6 +132,7 @@ export function SummaryView() {
 // transcript this list isn't virtualised, so the pixels mean the same thing every
 // time. Not persisted — it is view state for the session, not project data.
 const sumScroll: Record<string, number> = {};
+const sumTextScroll: Record<string, number> = {};
 
 function DetailPane({ pid }: { pid: string }) {
   const { items, lineOf, offset, tsSample } = useSummaryData(pid);
@@ -188,9 +189,13 @@ function DetailPane({ pid }: { pid: string }) {
 function TextPane({ pid }: { pid: string }) {
   const text = useStore((s) => s.summaries[pid] ?? "");
   const setSummary = useStore((s) => s.setSummary);
+  const taRef = useCallback((el: HTMLTextAreaElement | null) => {
+    if (el) el.scrollTop = sumTextScroll[pid] ?? 0;
+  }, [pid]);
   return (
     <div className="sumPane sumTextPane">
-      <textarea className="sumText" value={text} spellCheck
+      <textarea className="sumText" value={text} spellCheck ref={taRef}
+        onScroll={(e) => { sumTextScroll[pid] = e.currentTarget.scrollTop; }}
         aria-label={`Session summary for ${pid}`}
         placeholder="Write the session summary here — what happened, what was expressed and why, what was observed, highlights. Or let the AI draft one (Generate…) and edit it."
         onChange={(e) => setSummary(pid, e.target.value)} />
