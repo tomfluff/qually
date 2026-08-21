@@ -13,6 +13,7 @@ import { segExcerpt } from "../contract/excerpt";
 import { MERGE_EXEMPLARS, renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
 import { clusterCodes, estimateClusterTokens, type ClusterGroup } from "../ai/cluster";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
 export function GroupModal({ transient = false, onGroups, onReconcileInstead, onClose }: {
@@ -71,6 +72,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
     }
     setBusy(true); setErr(null);
     announce(`Grouping ${codes.length} codes by similarity…`);
+    earcon.aiStart();
     abort.current = new AbortController();
     try {
       const { groups, usage } = await clusterCodes({
@@ -83,6 +85,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
       });
       onGroups(groups);
       setDone({ found: groups.length, cost: usage.costUsd });
+      earcon.aiDone();
       announce(groups.length
         ? `${groups.length} similarity group${groups.length === 1 ? "" : "s"} laid out on the map.`
         : "No similarity groups stood out.");
@@ -90,6 +93,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
+      earcon.error();
       announce(`Grouping failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);
@@ -103,9 +107,13 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
             <div className="ai-body">
               <p className="about-lede">
                 {done.found === 0
-                  ? <>No similarity groups stood out — the codebook reads as distinct usages.</>
-                  : <>Laid out <b>{done.found} group{done.found === 1 ? "" : "s"}</b> as islands on the map —
-                    drag codes between them, rename or dissolve any of them. The codes themselves are untouched.</>}
+                  ? <>No {transient ? "topic neighborhoods" : "similarity groups"} stood out — the codebook reads as distinct usages.</>
+                  : transient
+                    ? <>Arranged the map into <b>{done.found} topic pile{done.found === 1 ? "" : "s"}</b> — a
+                      transient lens for triaging merges. Select codes in a pile and ask where they belong;
+                      switch Arrange back to Default to return to your layout. Nothing was saved or changed.</>
+                    : <>Laid out <b>{done.found} group{done.found === 1 ? "" : "s"}</b> as islands on the map —
+                      drag codes between them, rename or dissolve any of them. The codes themselves are untouched.</>}
               </p>
               <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
             </div>
@@ -125,7 +133,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
                     merged, or removed.</>}
                 {!transient && hasGroups && <> <b>Your current groups are replaced.</b></>}
               </p>
-              {pending > 0 && (
+              {pending > 0 && !transient && (
                 <div className="ai-warn">
                   <b>{pending} reconciliation proposal{pending === 1 ? " is" : "s are"} still pending.</b>{" "}
                   Theming an uncleaned codebook bakes redundancy into the themes — consider finishing

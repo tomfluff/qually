@@ -7,10 +7,23 @@
 import { useStore } from "./state/store";
 
 let ctx: AudioContext | null = null;
-const ac = () => (ctx ??= new AudioContext());
+// Lifecycle guard: construction can throw (no WebAudio), and a context can sit
+// suspended (created outside a user gesture, or auto-suspended in a background
+// tab) — a suspended clock would queue tones that burst on resume. Sounds must
+// never break the action they decorate, so failure means silence.
+const ac = (): AudioContext | null => {
+  try {
+    ctx ??= new AudioContext();
+  } catch {
+    return null;
+  }
+  if (ctx.state === "suspended") void ctx.resume();
+  return ctx.state === "running" ? ctx : null;
+};
 
 function tone(freq: number, at: number, dur: number, gain = 0.05, type: OscillatorType = "sine") {
   const a = ac();
+  if (!a) return;
   const t0 = a.currentTime + at;
   const o = a.createOscillator();
   const g = a.createGain();
@@ -37,6 +50,9 @@ export const earcon = {
   aiDone() { if (!on()) return; tone(587, 0, 0.1, 0.04); tone(880, 0.09, 0.16, 0.04); },
   // a merge was accepted: settled low-high confirmation
   accept() { if (!on()) return; tone(330, 0, 0.1, 0.05); tone(494, 0.08, 0.14, 0.05); tone(659, 0.16, 0.18, 0.04); },
+  // a reject proposal was applied: settled DOWNWARD confirmation — done, but
+  // something was set aside (distinct from the affirming accept)
+  reject() { if (!on()) return; tone(392, 0, 0.1, 0.05); tone(294, 0.08, 0.16, 0.05); },
   // a proposal was skipped/dismissed: muted tap
   skip() { if (!on()) return; tone(300, 0, 0.06, 0.03, "triangle"); },
   // something failed: low buzz

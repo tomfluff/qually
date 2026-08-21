@@ -338,7 +338,7 @@ export interface State {
   // a Themes grouping run landing: islands + fresh layout, ONE entry
   applyThemeGroups: (groups: CodeGroup[]) => void;
   // wipe every hand-placed position: the packer lays the stage out fresh (one entry)
-  resetMapLayout: () => void;
+  resetMapLayout: () => boolean;
   // the whole cluster is applied as ONE undoable step
   applyCluster: (ci: number) => void;
   setLastPid: (pid: string) => void;
@@ -456,14 +456,28 @@ function restoreLine(get: () => State, set: (p: Partial<State>) => void,
 }
 // The survivor auto-picks itself: the member with the most accepted excerpts
 // (the name still comes from the halo title / newName; this only chooses the
-// merge target and the fallback display name).
-export function bestSurvivor(s: State, codes: string[]): string {
+// merge target and the fallback display name). A `preferred` survivor wins
+// when it is a member — the AI's focus answer and a persisted plan both carry
+// a deliberate choice of merge DIRECTION that evidence-count must not invert.
+export function bestSurvivor(s: State, codes: string[], preferred?: string): string {
+  if (preferred && codes.includes(preferred)) return preferred;
   let best = codes[0], bestN = -1;
   for (const c of codes) {
     const n = s.segments.filter((x) => norm(x.code) === norm(c) && x.status === "accepted").length;
     if (n > bestN) { best = c; bestN = n; }
   }
   return best;
+}
+
+// Every cluster that enters the store from OUTSIDE a live gesture (project
+// open, persisted-session rehydration, migration) passes through here: dead
+// members drop, thin clusters drop, and the survivor policy applies with the
+// persisted choice preserved when still valid.
+export function normalizeClusters(s: State, clusters: CodeCluster[]): CodeCluster[] {
+  return clusters
+    .map((c) => ({ ...c, codes: c.codes.filter((k) => !!s.codebook[k]) }))
+    .filter((c) => c.codes.length >= 2)
+    .map((c) => ({ ...c, survivor: bestSurvivor(s, c.codes, c.survivor) }));
 }
 
 // The merge itself, silent: no pushUndo, no announce — mergeCode wraps it for
@@ -1420,7 +1434,10 @@ export const useStore = create<State>()(
           nextMid: Math.max(0, ...(p.markers ?? []).map((x) => x.mid)) + 1,
           nextAid: Math.max(0, ...(p.answers ?? []).map((x) => x.aid)) + 1,
         });
-        set({ hotbarCache: hotbarCodes(get()) });
+        set({
+          hotbarCache: hotbarCodes(get()),
+          codeClusters: normalizeClusters(get(), get().codeClusters),
+        });
         forgetScroll(); // every pid in the new project is a different transcript
       },
 
@@ -1485,11 +1502,12 @@ export const useStore = create<State>()(
       resetMapLayout: () => {
         const s = get();
         if (!Object.keys(s.mapPositions).length && !Object.keys(s.mapIslandPos).length) {
-          announce("The map is already in its packed layout"); return;
+          announce("The map is already in its packed layout"); return false;
         }
         get().pushUndo();
         set({ mapPositions: {}, mapIslandPos: {} });
         announce("Map laid out fresh");
+        return true;
       },
       applyThemeGroups: (groups) => {
         get().pushUndo();
@@ -1501,8 +1519,10 @@ export const useStore = create<State>()(
       applyReconcilePlan: (clusters, actions, resetLayout) => {
         get().pushUndo();
         set({
+          // the sanitizer already enforced a valid member survivor; keep that
+          // deliberate direction, fall back to evidence only when it broke
           codeClusters: clusters.filter((c) => c.codes.length >= 2)
-            .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes) })),
+            .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) })),
           codePlan: actions,
           ...(resetLayout ? { mapPositions: {}, mapIslandPos: {} } : {}),
         });
@@ -1916,6 +1936,7 @@ export const useStore = create<State>()(
             }))];
           s.codePlan = s.codePlan.filter((a) => a.action !== "merge");
         }
+        s.codeClusters = normalizeClusters(s as State, s.codeClusters);
         s.answers ??= [];
         s.nextAid = Math.max(0, ...s.answers.map((x) => x.aid)) + 1;
         s.ui.summaryLayout ??= "side";

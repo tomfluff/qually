@@ -31,6 +31,7 @@ import { segExcerpt } from "../contract/excerpt";
 import { type MergeCodeInput } from "../ai/dedupe";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
+import { norm } from "../contract/segments";
 import { mergeScopedClusters, estimateGlimpseTokens, glimpseCluster, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
@@ -54,7 +55,10 @@ const chipW = (fs: number, name: string, segs: number, pids: number) => {
 
 type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction };
 type ChipNodeT = Node<ChipData, "chip">;
-type IslandData = { name: string; gi: number; lens?: boolean };
+// lens islands are synthetic (gi indexes the LENS grouping, not codeGroups),
+// so they carry their member list — the context menu must never reach into
+// saved theme groups through a lens island's gi
+type IslandData = { name: string; gi: number; lens?: boolean; list?: string[] };
 type IslandNodeT = Node<IslandData, "island">;
 type HaloData = { name: string; renamed: boolean; joins: boolean; ci: number; count: number; open: boolean };
 type HaloNodeT = Node<HaloData, "halo">;
@@ -78,6 +82,9 @@ const remembered = {
   // the transient arrangement lens: a way of LOOKING, never written anywhere
   lens: "default" as "default" | "pids" | "segs" | "cooc" | "topics",
   topicGroups: [] as { name: string; codes: string[] }[],
+  // the codebook signature the topics arrangement was computed from — a
+  // mismatch means merges/renames happened since and the piles are stale
+  topicFp: "",
 };
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -114,13 +121,15 @@ const openInCodebook = (list: string[]) => {
 // and nothing else in the tree does.
 const selectedIdsSel = (s: { nodes: Node[] }) =>
   s.nodes.filter((n) => n.selected && n.type === "chip").map((n) => n.id).join("\n");
-function SelectionHud() {
+function SelectionHud({ lensOn }: { lensOn: boolean }) {
   const joined = useFlowStore(selectedIdsSel);
   const sel = useMemo(() => (joined ? joined.split("\n") : []), [joined]);
   useEffect(() => { remembered.selected = new Set(sel); }, [sel]);
   const clusters = useStore((st) => st.codeClusters);
   const { getNodes } = useReactFlow();
-  // the keyboard path for eviction: dragging out is pointer-only, this is not
+  // the keyboard path for eviction: dragging out is pointer-only, this is not.
+  // Hidden under a lens — halos aren't rendered there, so eviction would park
+  // chips at the world origin with no visible effect.
   const inMerge = sel.filter((c) => clusters.some((x) => x.codes.includes(c)));
   const evictSelected = () => {
     const st = useStore.getState();
@@ -131,13 +140,16 @@ function SelectionHud() {
       const pos = halo ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y } : { x: 0, y: 0 };
       st.reconcileDrop(code, pos, null);
     }
-    if (inMerge.length) earcon.evict();
+    if (inMerge.length) {
+      earcon.evict();
+      announce(`Removed ${inMerge.length} code${inMerge.length === 1 ? "" : "s"} from their merge groups`);
+    }
   };
   return (
     <Panel position="top-right" className="mapSelPanel"
       style={{ visibility: sel.length > 0 ? "visible" : "hidden" }}>
       <span className="mapSelCount">{sel.length} selected</span>
-      {inMerge.length > 0 && (
+      {inMerge.length > 0 && !lensOn && (
         <button className="btn" onClick={evictSelected}
           title="Move the selected codes out of their merge groups (they park beside them)">
           Remove from merge
@@ -164,8 +176,12 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
   const fontSize = Math.min(base * 7, Math.max(base, base / zoom));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.name);
+  // rename affordances close back to a focused span — on a canvas of hundreds
+  // of tabbable chips, losing focus to <body> is losing your place
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const refocus = () => requestAnimationFrame(() => spanRef.current?.focus());
   const rename = () => {
-    setEditing(false);
+    setEditing(false); refocus();
     const st = useStore.getState();
     const name = draft.trim();
     if (!name || st.codeGroups[data.gi]?.name === name) return; // no change, no history entry
@@ -187,13 +203,13 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
             onBlur={rename}
             onKeyDown={(e) => {
               if (e.key === "Enter") rename();
-              if (e.key === "Escape") { e.stopPropagation(); setDraft(data.name); setEditing(false); }
+              if (e.key === "Escape") { e.stopPropagation(); setDraft(data.name); setEditing(false); refocus(); }
             }} />
         ) : (
           <>
             <span className="mapIslandName" title="Drag to move the group; double-click or Enter to rename"
-              tabIndex={0} role="button"
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "F2") { e.preventDefault(); setDraft(data.name); setEditing(true); } }}
+              tabIndex={0} role="button" ref={spanRef} aria-label={`Rename ${data.name}`}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "F2" || e.key === " ") { e.preventDefault(); setDraft(data.name); setEditing(true); } }}
               onDoubleClick={() => { setDraft(data.name); setEditing(true); }}>{data.name}</span>
             <button className="mapIslandX nodrag" title="Dissolve this group (codes stay)"
               onPointerDown={(e) => e.stopPropagation()}
@@ -219,8 +235,10 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   // falls back to the auto-picked survivor's name)
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.name);
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const refocus = () => requestAnimationFrame(() => spanRef.current?.focus());
   const rename = () => {
-    setEditing(false);
+    setEditing(false); refocus();
     const st = useStore.getState();
     const cur = st.codeClusters[data.ci];
     if (!cur) return;
@@ -240,12 +258,15 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
             onBlur={rename}
             onKeyDown={(e) => {
               if (e.key === "Enter") rename();
-              if (e.key === "Escape") { e.stopPropagation(); setDraft(data.name); setEditing(false); }
+              if (e.key === "Escape") { e.stopPropagation(); setDraft(data.name); setEditing(false); refocus(); }
             }} />
         ) : (
-          <span className="mapIslandName nodrag" title="The merged code's name — double-click or Enter to rename"
-            tabIndex={0} role="button"
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "F2") { e.preventDefault(); setDraft(data.name); setEditing(true); } }}
+          // NO `nodrag` here: the caption is the halo's documented drag handle,
+          // and the name is most of the caption — RF's own drag threshold
+          // separates a click from a drag
+          <span className="mapIslandName" title="The merged code's name — double-click or Enter to rename"
+            tabIndex={0} role="button" ref={spanRef} aria-label={`Rename ${data.name}`}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "F2" || e.key === " ") { e.preventDefault(); setDraft(data.name); setEditing(true); } }}
             onDoubleClick={(e) => { e.stopPropagation(); setDraft(data.name); setEditing(true); }}>{data.name}</span>
         )}
         {data.renamed && !editing && <span className="mapOrbitTag">{data.joins ? "joins existing" : "new name"}</span>}
@@ -370,6 +391,8 @@ function MapInner() {
   useEffect(() => { remembered.lens = lens; }, [lens]);
   const [topicGroups, setTopicGroups] = useState(remembered.topicGroups);
   useEffect(() => { remembered.topicGroups = topicGroups; }, [topicGroups]);
+  const [topicFp, setTopicFp] = useState(remembered.topicFp);
+  useEffect(() => { remembered.topicFp = topicFp; }, [topicFp]);
   const [topicAiOpen, setTopicAiOpen] = useState(false);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   const [hiddenNotes, setHiddenNotes] = useState<Set<number>>(remembered.hiddenNotes);
@@ -391,15 +414,21 @@ function MapInner() {
   // in the file, so the review can continue in a later session
   const plan = useStore((st) => st.codePlan);
   const clusters = useStore((st) => st.codeClusters);
-  // openCards/hiddenNotes key clusters by INDEX; when the list shrinks the
-  // indices reshuffle, so stale entries would light the wrong halo
-  const prevClusterCount = useRef(clusters.length);
+  // openCards/hiddenNotes key clusters by INDEX; whenever the cluster at an
+  // index changes identity (shrink, wholesale replace by a focus run), stale
+  // entries would light the wrong halo — keep only the ones whose survivor
+  // still matches
+  const prevSurvivors = useRef(clusters.map((c) => c.survivor));
   useEffect(() => {
-    if (clusters.length < prevClusterCount.current) {
-      setOpenCards(new Set()); setHiddenNotes(new Set());
+    const prev = prevSurvivors.current;
+    const changed = clusters.length !== prev.length || clusters.some((c, i) => c.survivor !== prev[i]);
+    if (changed) {
+      const keep = (ci: number) => clusters[ci]?.survivor === prev[ci];
+      setOpenCards((old) => new Set([...old].filter(keep)));
+      setHiddenNotes((old) => new Set([...old].filter(keep)));
     }
-    prevClusterCount.current = clusters.length;
-  }, [clusters.length]);
+    prevSurvivors.current = clusters.map((c) => c.survivor);
+  }, [clusters]);
   // stage: Reconcile while ANYTHING is pending, Themes on an empty plan —
   // unless the researcher flipped the toggle this session
   const [stageOverride, setStageOverride] = useState(remembered.stage);
@@ -475,7 +504,8 @@ function MapInner() {
         lensGroups = topicGroups
           .map((g) => ({ name: g.name, list: g.codes.filter(inBook) }))
           .filter((g) => g.list.length > 0);
-        lensGroups.push({ name: "No topic", list: codes.filter((c) => !grouped.has(c)) });
+        const untopiced = codes.filter((c) => !grouped.has(c));
+        if (untopiced.length) lensGroups.push({ name: "No topic", list: untopiced });
       } else {
         // co-occurrence: codes whose accepted excerpts cover largely the SAME
         // lines are prime merge candidates (they always appear together)
@@ -512,7 +542,8 @@ function MapInner() {
         const together = [...new Set(groupOf.values())].sort((a, b) => b.length - a.length);
         const grouped = new Set(together.flat());
         lensGroups = together.map((g, i) => ({ name: `Always together ${i + 1}`, list: g }));
-        lensGroups.push({ name: "No co-occurrence signal", list: codes.filter((c) => !grouped.has(c)) });
+        const unpaired = codes.filter((c) => !grouped.has(c));
+        if (unpaired.length) lensGroups.push({ name: "No co-occurrence signal", list: unpaired });
       }
       // islands layout, read-only
       const blocks = lensGroups.map((g, gi) => ({ name: g.name, gi, list: g.list, ...pack(g.list, near(g.list)) }));
@@ -527,7 +558,7 @@ function MapInner() {
           id: `lens:${b.gi}`, type: "island" as const,
           position: { x: ix, y: iy }, width: bw, height: bh,
           draggable: false, selectable: false, focusable: false,
-          data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true },
+          data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list },
         });
         for (const c of b.list) children.push({ ...chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, `lens:${b.gi}`), position: { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y } });
         ix += bw + ISLAND_GAP;
@@ -573,7 +604,11 @@ function MapInner() {
           dragHandle: ".mapHaloLabel",
           data: {
             name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName,
-            joins: !!b.c.newName && Object.keys(codebook).some((k) => k === b.c.newName && !b.c.codes.includes(k)),
+            // norm(), not exact equality: acceptance resolves the target with
+            // norm(), so a case/whitespace variant of an outside code IS a
+            // silent three-way merge and must show "joins existing"
+            joins: !!b.c.newName && Object.keys(codebook).some((k) =>
+              norm(k) === norm(b.c.newName!) && !b.c.codes.some((m) => norm(m) === norm(k))),
             ci: b.c.ci, count: b.c.codes.length, open: openCards.has(b.c.ci),
           },
         });
@@ -656,13 +691,15 @@ function MapInner() {
   const [initialNodes] = useState(build);
   useEffect(() => { rfSetNodes(build()); }, [build, rfSetNodes]);
 
-  // plan strip verdicts (renames and rejects only — merges are halos)
-  const applyAction = (a: CodeAction) => {
+  // plan strip verdicts (renames and rejects only — merges are halos). One
+  // earcon per GESTURE: "Accept all" silences the per-item marks and plays a
+  // single confirmation, else N simultaneous envelopes stack into clipping.
+  const applyAction = (a: CodeAction, sound = true) => {
     const st = useStore.getState();
     if (a.action === "rename") st.renameCode(a.code, a.newName!);
     else if (a.action === "remove") st.rejectCode(a.code);
     setPlan((ps) => ps.filter((x) => x !== a));
-    earcon.accept();
+    if (sound) (a.action === "remove" ? earcon.reject : earcon.accept)();
   };
   const skipAction = (a: CodeAction) => { setPlan((ps) => ps.filter((x) => x !== a)); earcon.skip(); };
 
@@ -786,6 +823,14 @@ function MapInner() {
     e.preventDefault();
     if (n.type === "island") {
       const d = n.data as IslandData;
+      // a lens island's gi indexes the LENS grouping — acting through
+      // codeGroups[gi] would open/reconcile an unrelated saved theme. Its
+      // member list becomes a plain selection menu instead.
+      if (d.lens) {
+        const list = (d.list ?? []).filter((c) => c in codebook);
+        if (list.length) setMenu({ x: e.clientX, y: e.clientY, sel: list });
+        return;
+      }
       setMenu({ x: e.clientX, y: e.clientY, sel: [], island: { gi: d.gi, name: d.name } });
       return;
     }
@@ -800,7 +845,7 @@ function MapInner() {
       rfSetNodes((ns) => ns.map((x) => ({ ...x, selected: x.type === "chip" && x.id === n.id })));
     }
     setMenu({ x: e.clientX, y: e.clientY, sel });
-  }, [selectionAt, rfSetNodes]);
+  }, [selectionAt, rfSetNodes, codebook]);
   const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => e.preventDefault(), []);
   const [selecting, setSelecting] = useState(false);
   // the Revision plan floats: drag it by its header anywhere on the canvas.
@@ -817,20 +862,31 @@ function MapInner() {
     const canvas = panel?.closest(".mapCanvas") as HTMLElement | null;
     if (!panel || !canvas) return;
     const pid = e.pointerId;
+    const head = e.currentTarget as HTMLElement;
     const sx = e.clientX - planPos.x, sy = e.clientY - planPos.y;
     let last = planPos;
     let frame = 0;
+    // a previous drag still live (missed release) must fully wind down first
+    planDragAbort.current?.abort();
     const ac = new AbortController();
     planDragAbort.current = ac;
     const paint = () => { frame = 0; panel.style.transform = `translate(${last.x}px, ${last.y}px)`; };
+    let finished = false;
     const finish = () => {
+      if (finished) return;
+      finished = true;
       ac.abort();
+      if (frame) cancelAnimationFrame(frame);
       const c = canvas.getBoundingClientRect();
       setPlanPos({
         x: Math.max(-8, Math.min(last.x, c.width - 120)),
         y: Math.max(-8, Math.min(last.y, c.height - 60)),
       });
     };
+    // capture the pointer so a release outside the window still reaches us;
+    // lostpointercapture is the catch-all end signal either way
+    try { head.setPointerCapture(pid); } catch { /* capture is best-effort */ }
+    head.addEventListener("lostpointercapture", finish, { signal: ac.signal });
     window.addEventListener("pointermove", (ev) => {
       if (ev.pointerId !== pid) return;
       last = { x: ev.clientX - sx, y: ev.clientY - sy };
@@ -870,6 +926,11 @@ function MapInner() {
             const v = e.target.value as typeof lens;
             if (v === "topics" && topicGroups.length === 0) { setTopicAiOpen(true); return; }
             setLens(v);
+            // the lens lays out from the world origin with different extents —
+            // without a fitView a zoomed-in camera lands on empty canvas
+            requestAnimationFrame(() => fitView({ duration: 200 }));
+            announce(v === "default" ? "Arranged normally — your layout is back."
+              : `Arranged by ${{ pids: "transcript buckets", segs: "excerpt buckets", cooc: "co-occurrence", topics: "AI topics" }[v]}. A transient lens; switch back to normal to edit.`);
           }}
           title="A transient lens: arranges the map for looking, changes nothing">
           <option value="default">Arrange: normal</option>
@@ -878,6 +939,14 @@ function MapInner() {
           <option value="cooc">Arrange: co-occurrence</option>
           <option value="topics">Arrange: AI topics</option>
         </select>
+        {lens === "topics" && (
+          <button className="btn" onClick={() => setTopicAiOpen(true)}
+            title={topicFp !== codes.join("\n")
+              ? "The codebook changed since these piles were computed — re-run to refresh them"
+              : "Ask the AI to recompute the topic piles"}>
+            {topicFp !== codes.join("\n") ? "Topics are stale — re-run…" : "Re-run topics…"}
+          </button>
+        )}
         <div className="segmented mapStage" role="radiogroup" aria-label="Map stage">
           <button className={"seg" + (stage === "reconcile" ? " on" : "")} role="radio"
             aria-checked={stage === "reconcile"} onClick={() => setStageOverride("reconcile")}
@@ -888,12 +957,16 @@ function MapInner() {
         </div>
         {stage === "reconcile" ? (
           <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
-            title="AI proposes merge groups and per-code revisions for your review">
+            disabled={lens !== "default"}
+            title={lens !== "default" ? "Switch Arrange back to normal first — the result lands on the normal layout"
+              : "AI proposes merge groups and per-code revisions for your review"}>
             <Icon name="sparkle" size={15} /> <span className="blabel">Reconcile with AI</span>
           </button>
         ) : (
           <button className="btn iconlabel" onClick={() => setThemeAiOpen(true)}
-            title="AI groups the cleaned codebook into theme islands for you to reshape">
+            disabled={lens !== "default"}
+            title={lens !== "default" ? "Switch Arrange back to normal first — the islands land on the normal layout"
+              : "AI groups the cleaned codebook into theme islands for you to reshape"}>
             <Icon name="sparkle" size={15} /> <span className="blabel">Group into themes with AI</span>
           </button>
         )}
@@ -902,11 +975,14 @@ function MapInner() {
           title="Move the minimap to the next corner">
           <Icon name="pip" size={15} />
         </button>
-        <button className="btn iconlabel" aria-label="Re-layout the map" onClick={(e) => {
+        <button className="btn iconlabel" aria-label="Re-layout the map"
+          disabled={lens !== "default"}
+          onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setConfirmRelayout({ right: window.innerWidth - r.right, y: r.bottom + 8 });
           }}
-          title="Lay the whole map out fresh (replaces your hand-placed layout)">
+          title={lens !== "default" ? "A lens hides your layout — switch Arrange back to normal first"
+            : "Lay the whole map out fresh (replaces your hand-placed layout)"}>
           <Icon name="refresh" size={15} /> <span className="blabel">Re-layout</span>
         </button>
       </div>
@@ -938,7 +1014,7 @@ function MapInner() {
                 instead of aggregate scans per membership change (codex consult) */}
             {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <RafSelectionMarquee />
-            <SelectionHud />
+            <SelectionHud lensOn={lens !== "default"} />
             {stage === "reconcile" && plan.length > 0 && (
               <Panel position="top-left" className="mapPlan"
                 style={{ transform: `translate(${planPos.x}px, ${planPos.y}px)` }}>
@@ -947,8 +1023,12 @@ function MapInner() {
                   title="Drag to move this panel; double-click to send it home">
                   <b>Revision plan</b> <span className="mapPlanCount">{plan.length}</span>
                   <span className="mapPlanKey">✎ rename · ⊘ reject · merge groups show as halos</span>
-                  <button className="btn" onClick={() => { [...plan].forEach(applyAction); }}>Accept all</button>
-                  <button className="btn" onClick={() => setPlan([])} title="Discard every remaining proposal">Clear</button>
+                  <button className="btn" disabled={lens !== "default"}
+                    title={lens !== "default" ? "Switch Arrange back to normal to apply the plan" : "Apply every remaining proposal"}
+                    onClick={() => { [...plan].forEach((a) => applyAction(a, false)); earcon.accept(); }}>Accept all</button>
+                  <button className="btn" disabled={lens !== "default"}
+                    onClick={() => setPlan([])}
+                    title={lens !== "default" ? "Switch Arrange back to normal to edit the plan" : "Discard every remaining proposal"}>Clear</button>
                 </div>
                 <div className="mapPlanList nicescroll">
                   {plan.map((a, i) => (
@@ -958,8 +1038,8 @@ function MapInner() {
                         {a.action === "rename" ? <><b>{a.code}</b> → {a.newName}</>
                           : <>reject <b>{a.code}</b>'s excerpts</>}
                       </span>
-                      <button className="btn ok" onClick={() => applyAction(a)} title={"Apply — " + a.rationale}>✓</button>
-                      <button className="btn" onClick={() => skipAction(a)} title="Skip this proposal">✗</button>
+                      <button className="btn ok" disabled={lens !== "default"} onClick={() => applyAction(a)} title={"Apply — " + a.rationale}>✓</button>
+                      <button className="btn" disabled={lens !== "default"} onClick={() => skipAction(a)} title="Skip this proposal">✗</button>
                     </div>
                   ))}
                 </div>
@@ -975,7 +1055,9 @@ function MapInner() {
           onReconcileInstead={() => { setTopicAiOpen(false); setStageOverride("reconcile"); }}
           onGroups={(groups) => {
             setTopicGroups(groups.map((g) => ({ name: g.name, codes: g.codes })));
+            setTopicFp(codes.join("\n"));
             setLens("topics");
+            requestAnimationFrame(() => fitView({ duration: 200 }));
           }} />
       )}
       {themeAiOpen && (
@@ -1017,8 +1099,8 @@ function MapInner() {
             <button className="btn primary" autoFocus
               onClick={() => {
                 setConfirmRelayout(null);
-                useStore.getState().resetMapLayout();
-                requestAnimationFrame(() => fitView({ duration: 200 }));
+                if (useStore.getState().resetMapLayout())
+                  requestAnimationFrame(() => fitView({ duration: 200 }));
               }}>Re-layout</button>
             <button className="btn" onClick={() => setConfirmRelayout(null)}>Cancel</button>
           </div>
@@ -1095,17 +1177,20 @@ function MapInner() {
               AI: where {menu.sel.length === 1 ? "does this code" : "do these codes"} belong…
             </button>
           )}
-          {menu.sel.length > 1 && stage === "reconcile" && (
+          {/* structural edits stay off under a lens — their effect (halos,
+              islands, direct merges) is invisible until Arrange goes back to
+              normal; the focus-reconcile ask above is the lens's own workflow */}
+          {menu.sel.length > 1 && stage === "reconcile" && lens === "default" && (
             <button role="menuitem" onClick={() => clusterSelection(menu.sel)}>
               Propose merging these {menu.sel.length} codes
             </button>
           )}
-          {menu.sel.length > 1 && stage === "themes" && (
+          {menu.sel.length > 1 && stage === "themes" && lens === "default" && (
             <button role="menuitem" onClick={() => groupSelection(menu.sel)}>
               Group {menu.sel.length} codes together
             </button>
           )}
-          {menu.sel.length > 1 && <>
+          {menu.sel.length > 1 && lens === "default" && <>
             <div className="mapMenuHead">Merge {menu.sel.length} into…</div>
             {menu.sel.map((c) => (
               <button key={c} role="menuitem" onClick={() => mergeSel(menu.sel, c)}>

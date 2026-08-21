@@ -13,8 +13,9 @@ import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
-import { reconcileCodes, reconcileFocus, estimateReconcileTokens, estimateFocusTokens, mergeFocusResults, type ReconcilePlan, type ReconcileMode } from "../ai/reconcile";
+import { reconcileCodes, reconcileFocus, estimateReconcileTokens, estimateFocusTokens, renderFocusPayload, mergeFocusResults, type ReconcilePlan, type ReconcileMode } from "../ai/reconcile";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
 export type ReconcileScope = number | "all" | { focus: string[] };
@@ -71,7 +72,9 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
   const contextCodes = useMemo<MergeCodeInput[]>(() => {
     if (!focusMode) return [];
     const rest = new Set(Object.keys(codebook).filter((c) => !focusSet!.has(c)));
-    return gather(rest, 2, false);
+    // includeEmpty: "the WHOLE codebook" means it — a definition-only code
+    // with no excerpts yet is often exactly the right home for a stray
+    return gather(rest, 2, true);
   }, [gather, focusMode, focusSet, codebook]);
 
   const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0)
@@ -79,11 +82,12 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
   const inTok = useMemo(() => focusMode
     ? estimateFocusTokens(codes, contextCodes, red)
     : estimateReconcileTokens(codes, red), [focusMode, codes, contextCodes, red]);
-  const redactions = useMemo(() => codes.reduce((n, c) =>
-    n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [codes, red]);
+  const redactions = useMemo(() => [...codes, ...contextCodes].reduce((n, c) =>
+    n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [codes, contextCodes, red]);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 30)));
+  // the preview IS the payload — same renderer the request uses
   const preview = focusMode
-    ? `FOCUS CODES:\n\n${renderMergePayload(codes, red)}\n\nCONTEXT CODEBOOK (2 excerpts each):\n\n${renderMergePayload(contextCodes, red)}`
+    ? renderFocusPayload(codes, contextCodes, red)
     : renderMergePayload(codes, red);
   const enough = focusMode ? codes.length >= 1 && contextCodes.length >= 1 : codes.length >= 4;
 
@@ -95,19 +99,24 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
     }
     setBusy(true); setErr(null);
     announce(`Reconciling ${codes.length} codes…`);
+    earcon.aiStart();
     abort.current = new AbortController();
     try {
       let plan: ReconcilePlan; let usage: { inTok: number; outTok: number; costUsd: number };
+      let fresh: { clusters: number; actions: number } | undefined;
       let meta: { replaced: number; unreviewed: string[] } | undefined;
       if (focusMode) {
         const r = await reconcileFocus({
           key, model: model.id, focus: codes, context: contextCodes,
           redaction: red, mode, signal: abort.current.signal,
         });
-        plan = r.plan; usage = r.usage;
+        usage = r.usage;
+        fresh = { clusters: r.plan.clusters.length, actions: r.plan.actions.length };
         const st = useStore.getState();
+        // only the exactly-once-reviewed set may evict pending work — an
+        // omitted code's pending proposal survives the model's oversight
         const merged = mergeFocusResults(st.codeClusters, st.codePlan, r.plan,
-          new Set(codes.map((c) => c.name)));
+          new Set(r.reviewed));
         meta = { replaced: merged.replaced, unreviewed: r.unreviewed };
         plan = { clusters: merged.clusters, actions: merged.actions };
       } else {
@@ -124,12 +133,18 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
       onPlan(plan, scope, meta);
-      setDone({ clusters: plan.clusters.length, actions: plan.actions.length, cost: usage.costUsd, ...(meta ? { replaced: meta.replaced, unreviewed: meta.unreviewed.length } : {}) });
-      announce(`${plan.clusters.length} merge cluster${plan.clusters.length === 1 ? "" : "s"} and ${plan.actions.length} action${plan.actions.length === 1 ? "" : "s"} laid out on the map.`);
+      // report what THIS run produced; the merged plan (with pre-existing
+      // pending work) still goes to the map via onPlan
+      const nC = fresh ? fresh.clusters : plan.clusters.length;
+      const nA = fresh ? fresh.actions : plan.actions.length;
+      setDone({ clusters: nC, actions: nA, cost: usage.costUsd, ...(meta ? { replaced: meta.replaced, unreviewed: meta.unreviewed.length } : {}) });
+      earcon.aiDone();
+      announce(`${nC} merge cluster${nC === 1 ? "" : "s"} and ${nA} action${nA === 1 ? "" : "s"} laid out on the map.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
+      earcon.error();
       announce(`Reconciliation failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);
@@ -228,8 +243,9 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
               <div className="settings-note">More excerpts give the AI better evidence for each judgment — and cost more tokens. The estimate below updates as you adjust.</div>
               {!enough ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
-                  Reconciling needs at least four codes with coded segments in scope. Code a bit
-                  more (or widen the scope), then come back.
+                  {focusMode
+                    ? "None of the selected codes are still in the codebook (or there are no other codes to review them against). Close this and select codes on the map."
+                    : "Reconciling needs at least four codes with coded segments in scope. Code a bit more (or widen the scope), then come back."}
                 </p>
               ) : (
                 <>

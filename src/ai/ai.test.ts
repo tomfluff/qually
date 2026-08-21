@@ -292,6 +292,25 @@ describe("reconcile sanitize (cluster plan)", () => {
     ]);
     expect(out.map((a) => `${a.code}:${a.action}`)).toEqual(["a:rename"]);
   });
+  it("actions: a rename landing on another code (or an avoided/duplicate name) drops — it would apply as a silent merge", async () => {
+    const { sanitizeActions } = await import("./reconcile");
+    const codes = ["a", "b", "c", "d"].map((name) => ({ name, def: "", excerpts: [] }));
+    const out = sanitizeActions(codes, [
+      { code: "a", action: "rename", newName: "B", rationale: "" },       // norm-collides with code b -> drops
+      { code: "b", action: "rename", newName: "taken", rationale: "" },   // in avoid -> drops
+      { code: "c", action: "rename", newName: "fresh", rationale: "" },   // ok
+      { code: "d", action: "rename", newName: "Fresh", rationale: "" },   // duplicate of an earlier grant -> drops
+    ], undefined, new Set(["taken"]));
+    expect(out.map((a) => a.code)).toEqual(["c"]);
+  });
+  it("clusters: a CASE-ONLY newName of the survivor is a real rename and survives the boundary", async () => {
+    const { sanitizeClusters } = await import("./reconcile");
+    const codes = ["API Friction", "api pain"].map((name) => ({ name, def: "", excerpts: [] }));
+    const out = sanitizeClusters(codes, [
+      { survivor: "API Friction", codes: ["API Friction", "api pain"], newName: "API friction", rationale: "" },
+    ]);
+    expect(out[0].newName).toBe("API friction");
+  });
   it("scoped rerun replaces pending clusters that intersect the subset", async () => {
     const { mergeScopedClusters } = await import("./reconcile");
     const pending = [
@@ -336,5 +355,26 @@ describe("focus reconcile boundaries", () => {
     expect(out.clusters.map((c) => c.survivor)).toEqual(["p", "x"]);
     expect(out.actions.map((a) => a.code)).toEqual(["p"]);
     expect(out.replaced).toBe(2);
+  });
+  it("landing: a fresh ACTION also evicts the pending work on its code", async () => {
+    const { mergeFocusResults } = await import("./reconcile");
+    const pending = [{ survivor: "x", codes: ["x", "y"], rationale: "" }];
+    const fresh = {
+      clusters: [],
+      actions: [{ code: "x", action: "rename" as const, newName: "z", rationale: "" }],
+    };
+    // x was NOT echoed as reviewed, but the fresh action on it must still win
+    const out = mergeFocusResults(pending, [], fresh, new Set());
+    expect(out.clusters).toHaveLength(0);
+    expect(out.actions.map((a) => a.code)).toEqual(["x"]);
+  });
+  it("landing: an UNREVIEWED focus code's pending work survives the model's oversight", async () => {
+    const { mergeFocusResults } = await import("./reconcile");
+    const pending = [{ survivor: "b", codes: ["a", "b"], rationale: "" }];
+    // focus was {a}; the model neither echoed nor proposed anything for it —
+    // the caller passes only the exactly-once-reviewed set (empty here)
+    const out = mergeFocusResults(pending, [], { clusters: [], actions: [] }, new Set());
+    expect(out.clusters.map((c) => c.survivor)).toEqual(["b"]);
+    expect(out.replaced).toBe(0);
   });
 });

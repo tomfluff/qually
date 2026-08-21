@@ -38,6 +38,34 @@ test("every cluster entering the store gets the evidence-based survivor", () => 
   expect(useStore.getState().codeClusters[0].survivor).toBe("alpha");
 });
 
+test("a preferred survivor wins when it is a member — merge direction is deliberate", () => {
+  const s = useStore.getState();
+  expect(bestSurvivor(s, ["beta", "alpha"], "beta")).toBe("beta");   // valid preference holds
+  expect(bestSurvivor(s, ["beta", "alpha"], "ghost")).toBe("alpha"); // invalid -> evidence policy
+});
+
+test("applyReconcilePlan keeps the sanitizer's chosen survivor (focus merge direction)", () => {
+  const st = useStore.getState();
+  // beta has less evidence than alpha, but the plan deliberately folds alpha INTO beta
+  st.applyReconcilePlan([{ survivor: "beta", codes: ["beta", "alpha"], rationale: "" }], [], false);
+  expect(useStore.getState().codeClusters[0].survivor).toBe("beta");
+  st.setCodeClusters([]);
+});
+
+test("normalizeClusters (load path): dead members drop, thin clusters drop, valid survivor persists", async () => {
+  const { normalizeClusters } = await import("./state/store");
+  const s = useStore.getState();
+  const out = normalizeClusters(s, [
+    { survivor: "beta", codes: ["beta", "alpha", "vanished"], rationale: "" }, // dead member filtered, survivor kept
+    { survivor: "gamma", codes: ["gamma", "vanished"], rationale: "" },        // thin after filter -> drops
+    { survivor: "vanished", codes: ["beta", "alpha"], rationale: "" },         // dead survivor -> evidence policy
+  ]);
+  expect(out).toHaveLength(2);
+  expect(out[0].codes).toEqual(["beta", "alpha"]);
+  expect(out[0].survivor).toBe("beta");
+  expect(out[1].survivor).toBe("alpha");
+});
+
 test("resetMapLayout: no-op on packed map, one undo entry otherwise", () => {
   const st = useStore.getState();
   st.setCodePlan([]); // isolate history around the calls below

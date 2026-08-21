@@ -100,7 +100,8 @@ export async function reconcileCodes(opts: {
   });
   const clusters = sanitizeClusters(opts.codes, data.clusters ?? [], opts.redaction);
   const clustered = new Set(clusters.flatMap((c) => c.codes));
-  const actions = sanitizeActions(opts.codes, data.actions ?? [], opts.redaction)
+  const clusterNames = new Set(clusters.flatMap((c) => (c.newName ? [norm(c.newName)] : [])));
+  const actions = sanitizeActions(opts.codes, data.actions ?? [], opts.redaction, clusterNames)
     // a clustered code gets no separate action; consolidation never removes
     .filter((a) => !clustered.has(a.code))
     .filter((a) => !consolidate || a.action !== "remove");
@@ -128,7 +129,9 @@ export function sanitizeClusters(
     const survivor = members.includes((c.survivor ?? "").trim()) ? (c.survivor ?? "").trim() : members[0];
     members.forEach((x) => taken.add(x));
     let newName: string | undefined = restore(r, (c.newName ?? "").trim()) || undefined;
-    if (newName && norm(newName) === norm(survivor)) newName = undefined;
+    // exact equality only: a case/whitespace variant of the survivor's own
+    // name is a legitimate rename, not a no-op
+    if (newName === survivor) newName = undefined;
     // collision with a code that survives OUTSIDE this cluster -> keep survivor's name
     if (newName) {
       const outside = codes.map((x) => x.name).filter((n) => !members.includes(n));
@@ -145,13 +148,19 @@ export function sanitizeClusters(
 
 // Per-code actions: only codes we sent, one action per code, renames need a
 // usable new name; "merge" never comes back from the model (legacy loads only).
+// A rename whose target norm-collides with another sent code, a name in
+// `avoid` (normed: e.g. context codes, fresh cluster newNames), or an earlier
+// rename in the same reply is dropped — applying it would silently become a
+// merge, which must always ride an explicit reviewed cluster.
 export function sanitizeActions(
   codes: MergeCodeInput[],
   reply: CodeAction[],
   r?: Redaction,
+  avoid?: Set<string>,
 ): CodeAction[] {
   const known = new Set(codes.map((c) => c.name));
   const seen = new Set<string>();
+  const grantedNames = new Set<string>();
   const out: CodeAction[] = [];
   for (const a of reply) {
     const code = (a.code ?? "").trim();
@@ -160,6 +169,10 @@ export function sanitizeActions(
     const rationale = restore(r, (a.rationale ?? "").trim());
     if (a.action === "rename") {
       if (!newName || newName === code) continue;
+      const n = norm(newName);
+      if ([...known].some((k) => k !== code && norm(k) === n)) continue;
+      if (avoid?.has(n) || grantedNames.has(n)) continue;
+      grantedNames.add(n);
       seen.add(code);
       out.push({ code, action: "rename", newName, rationale });
     } else if (a.action === "remove") {
@@ -274,7 +287,7 @@ export async function reconcileFocus(opts: {
   key: string; model: string;
   focus: MergeCodeInput[]; context: MergeCodeInput[];
   redaction: Redaction; mode?: ReconcileMode; signal?: AbortSignal;
-}): Promise<{ plan: ReconcilePlan; unreviewed: string[]; usage: Usage }> {
+}): Promise<{ plan: ReconcilePlan; reviewed: string[]; unreviewed: string[]; usage: Usage }> {
   const consolidate = (opts.mode ?? "consolidate") === "consolidate";
   const { data, usage } = await callJson<{ reviewedFocus: string[]; clusters: ClusterProposal[]; actions: CodeAction[] }>({
     key: opts.key,
@@ -289,12 +302,25 @@ export async function reconcileFocus(opts: {
   const all = [...opts.focus, ...opts.context];
   const clusters = sanitizeFocusClusters(all, focusNames, data.clusters ?? [], opts.redaction);
   const clustered = new Set(clusters.flatMap((c) => c.codes));
-  const actions = sanitizeActions(opts.focus, data.actions ?? [], opts.redaction)
+  // a rename landing on ANY other code in the book (or a name a fresh cluster
+  // claims) would apply as a silent merge — reject at the boundary
+  const avoid = new Set([
+    ...opts.context.map((c) => norm(c.name)),
+    ...clusters.flatMap((c) => (c.newName ? [norm(c.newName)] : [])),
+  ]);
+  const actions = sanitizeActions(opts.focus, data.actions ?? [], opts.redaction, avoid)
     .filter((a) => focusNames.has(a.code) && !clustered.has(a.code))
     .filter((a) => !consolidate || a.action !== "remove");
-  const reviewed = new Set((data.reviewedFocus ?? []).map((x) => (x ?? "").trim()));
-  const unreviewed = [...focusNames].filter((f) => !reviewed.has(f));
-  return { plan: { clusters, actions }, unreviewed, usage };
+  // "exactly once" is the invariant: an omitted OR duplicated echo marks the
+  // code unreviewed, and only the exactly-once set may replace pending work
+  const echoCounts = new Map<string, number>();
+  for (const x of data.reviewedFocus ?? []) {
+    const t = (x ?? "").trim();
+    echoCounts.set(t, (echoCounts.get(t) ?? 0) + 1);
+  }
+  const reviewed = [...focusNames].filter((f) => echoCounts.get(f) === 1);
+  const unreviewed = [...focusNames].filter((f) => echoCounts.get(f) !== 1);
+  return { plan: { clusters, actions }, reviewed, unreviewed, usage };
 }
 
 // Focus clusters, the stricter boundary (codex-reviewed rules): members must
@@ -321,7 +347,7 @@ export function sanitizeFocusClusters(
     if (!members.includes(survivor)) continue;
     members.forEach((x) => taken.add(x));
     let newName: string | undefined = restore(r, (c.newName ?? "").trim()) || undefined;
-    if (newName && norm(newName) === norm(survivor)) newName = undefined;
+    if (newName === survivor) newName = undefined;
     if (newName) {
       const outside = all.map((x) => x.name).filter((n) => !members.includes(n));
       if (outside.some((n) => norm(n) === norm(newName!))) newName = undefined;
@@ -336,16 +362,22 @@ export function sanitizeFocusClusters(
 }
 
 // Landing a focus run into a pending plan (codex-reviewed): the conflict set
-// is the reviewed focus PLUS every code the fresh clusters touch — a fresh
-// "focus A + context X" cluster must evict X from any old cluster. Pending
-// clusters are atomic: they drop whole, never lose just a member.
+// is the reviewed focus PLUS every code the fresh output touches (cluster
+// members AND action targets — a proposal for a code the model forgot to echo
+// must still evict the old one, or two live actions land on one code). An
+// unreviewed focus code stays OUT of the conflict set so its pending work
+// survives the model's oversight. Pending clusters are atomic: they drop
+// whole, never lose just a member.
 export function mergeFocusResults(
   pendingClusters: ClusterProposal[],
   pendingActions: CodeAction[],
   fresh: ReconcilePlan,
   reviewedFocus: Set<string>,
 ): { clusters: ClusterProposal[]; actions: CodeAction[]; replaced: number } {
-  const freshMembers = new Set(fresh.clusters.flatMap((c) => c.codes));
+  const freshMembers = new Set([
+    ...fresh.clusters.flatMap((c) => c.codes),
+    ...fresh.actions.map((a) => a.code),
+  ]);
   const conflict = new Set([...reviewedFocus, ...freshMembers]);
   const keptClusters = pendingClusters.filter((c) => !c.codes.some((code) => conflict.has(code)));
   const keptActions = pendingActions.filter((a) => !conflict.has(a.code));
