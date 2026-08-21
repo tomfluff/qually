@@ -149,3 +149,34 @@
 .mapCardName { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mapCardCount { color:var(--muted); font-variant-numeric:tabular-nums; }
 .mapCardActions { display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--line); }
+/* the halo's fold arrow: the door to reasoning, members and the verdict */
+.mapHaloArrow { pointer-events:auto; border:1px solid var(--line); border-radius:6px;
+  background:var(--panel); color:var(--muted); font:inherit; font-size:.6em;
+  padding:.05em .5em; cursor:pointer; }
+.mapHaloArrow:hover { color:var(--fg); border-color:var(--muted); }
+/* the stem card node: headerless (the halo caption names the merge) */
+.react-flow__node-card { pointer-events:auto !important; }
+.mapCardNode { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  box-shadow:0 6px 18px rgba(0,0,0,.28); width:100%; box-sizing:border-box; position:relative; }
+.mapCardNode::before { content:""; position:absolute; left:36px; top:-22px; width:2px; height:22px;
+  background:var(--line); }
+.mapCardNode .mapCardRat { padding-top:8px; }
+/* the glimpse note: tethered beside its halo */
+.react-flow__node-note { pointer-events:auto !important; }
+.mapNote { background:#20242c; border:1px solid var(--line); border-top:3px solid var(--accent);
+  border-radius:8px; padding:8px 11px; box-sizing:border-box; width:100%;
+  line-height:1.45; box-shadow:0 6px 16px rgba(0,0,0,.28); position:relative; }
+.mapNote::before { content:""; position:absolute; left:-27px; top:20px; width:26px; height:2px;
+  background:var(--line); }
+.mapNoteWho { color:var(--accent); font-size:.72em; font-weight:700; letter-spacing:.4px;
+  display:flex; align-items:center; }
+.mapNoteX { margin-left:auto; border:none; background:none; color:var(--muted); font:inherit;
+  cursor:pointer; padding:0 2px; }
+.mapNoteX:hover { color:var(--fg); }
+@keyframes notePulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+.mapNoteGen { color:var(--muted); font-style:italic; animation:notePulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .mapNoteGen { animation:none } }
+/* the one-line AI confirm */
+.mapAiConfirm { max-width:40ch; padding:8px 4px 2px; }
+.mapAiConfirmText { padding:0 10px 4px; line-height:1.4; }
+.mapAiConfirmText b { font-variant-numeric:tabular-nums; }

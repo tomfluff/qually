@@ -23,8 +23,13 @@ import { preselectBrowse } from "./BrowseView";
 import { CodeCounts } from "./CodeCounts";
 import { Icon, countIconSize } from "./Icon";
 import { ReconcileModal } from "./ReconcileModal";
-import { GlimpseModal } from "./GlimpseModal";
-import { mergeScopedClusters, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
+import { getKey } from "../ai/key";
+import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { redactor } from "../ai/redact";
+import { segExcerpt } from "../contract/excerpt";
+import { type MergeCodeInput } from "../ai/dedupe";
+import { announce } from "../announce";
+import { mergeScopedClusters, estimateGlimpseTokens, glimpseCluster, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -49,9 +54,13 @@ type ChipData = { code: string; color: string; segs: number; pids: number; act?:
 type ChipNodeT = Node<ChipData, "chip">;
 type IslandData = { name: string; gi: number };
 type IslandNodeT = Node<IslandData, "island">;
-type HaloData = { name: string; renamed: boolean; ci: number; count: number };
+type HaloData = { name: string; renamed: boolean; ci: number; count: number; open: boolean };
 type HaloNodeT = Node<HaloData, "halo">;
-type MapNode = ChipNodeT | IslandNodeT | HaloNodeT;
+type CardData = { ci: number };
+type CardNodeT = Node<CardData, "card">;
+type NoteData = { ci: number; text: string | null }; // null = generating
+type NoteNodeT = Node<NoteData, "note">;
+type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | NoteNodeT;
 
 // session view state that outlives the unmounting view; positions ride the
 // store's undo history and the camera persists in ui (across reloads)
@@ -59,6 +68,9 @@ const remembered = {
   // the stage override: null = derived (Reconcile while anything is pending)
   stage: null as null | "reconcile" | "themes",
   selected: new Set<string>(),
+  // which halos have their card unfolded / their note dismissed (session)
+  openCards: new Set<number>(),
+  hiddenNotes: new Set<number>(),
 };
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -163,6 +175,7 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
 // A halo: the capsule field that IS the merge proposal. Containment is
 // membership; the caption above names the merged code and is the halo's drag
 // handle and right-click target.
+const toggleCard = (ci: number) => window.dispatchEvent(new CustomEvent("qually:togglecard", { detail: ci }));
 const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = useStore((s) => s.ui.sidebarFontSize);
@@ -176,11 +189,82 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
         <span className="mapIslandName">{data.name}</span>
         {data.renamed && <span className="mapOrbitTag">new name</span>}
         <span className="mapHaloCount">{data.count}</span>
+        <button className="mapHaloArrow nodrag" title={data.open ? "Fold the details" : "Reasoning, members, verdict"}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => toggleCard(data.ci)}>{data.open ? "▾" : "▸"}</button>
       </div>
     </div>
   );
 });
-const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode };
+
+// The stem card: the halo's verdict surface, unfolded below it. Headerless on
+// purpose — the halo caption already names the merged code, and a fact gets
+// ONE home: name on the caption, reasoning + members + verdict here, the AI
+// glimpse on the note node.
+const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
+  const cluster = useStore((st) => st.codeClusters[data.ci]);
+  const segments = useStore((st) => st.segments);
+  const { getNodes } = useReactFlow();
+  if (!cluster) return null;
+  const c = cluster;
+  const segsOf = (code: string) => segments.filter((x) => x.code === code && x.status === "accepted").length;
+  const st = () => useStore.getState();
+  const evict = (m: string) => {
+    const halo = getNodes().find((x) => x.id === `halo:${data.ci}`);
+    const pos = halo
+      ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y }
+      : { x: 0, y: 0 };
+    st().reconcileDrop(m, pos, null);
+  };
+  const crown = (m: string) => st().setCodeClusters(st().codeClusters.map((x, i) => i !== data.ci ? x : { ...x, survivor: m }));
+  const skip = () => st().setCodeClusters(st().codeClusters.filter((_, i) => i !== data.ci));
+  const canAccept = c.codes.length >= 2;
+  return (
+    <div className="mapCardNode nodrag nowheel">
+      <div className="mapCardRat">{c.rationale}</div>
+      <div className="mapCardList">
+        {c.codes.map((m) => (
+          <label key={m} className="mapCardRow">
+            <input type="checkbox" checked onChange={() => evict(m)}
+              title="Untick to move this code out of the merge (it parks beside the group)" />
+            <input type="radio" name={`survivor:${data.ci}`} checked={c.survivor === m}
+              onChange={() => crown(m)} title="This code's identity survives the merge" />
+            <span className="mapCardName">{m}</span>
+            <span className="mapCardCount">{segsOf(m)}</span>
+          </label>
+        ))}
+      </div>
+      <div className="mapCardActions">
+        <button className="btn primary" disabled={!canAccept}
+          onClick={() => st().applyCluster(data.ci)}
+          title={canAccept ? `Merge ${c.codes.length} codes into ${c.newName ?? c.survivor} — one undo step` : "A merge needs at least 2 members"}>
+          Accept merge
+        </button>
+        <button className="btn" onClick={skip} title="Discard this proposal (codes stay as they are)">Skip</button>
+      </div>
+    </div>
+  );
+});
+
+// The note: the group's AI glimpse, tethered to its halo — readable at map
+// level without opening anything. While generating, the note itself is the
+// progress indicator.
+const NoteNode = memo(function NoteNode({ data }: NodeProps<NoteNodeT>) {
+  return (
+    <div className="mapNote nodrag">
+      <div className="mapNoteWho">AI glimpse
+        {data.text !== null && (
+          <button className="mapNoteX" title="Hide this note (the text stays on the group)"
+            onClick={() => window.dispatchEvent(new CustomEvent("qually:hidenote", { detail: data.ci }))}>×</button>
+        )}
+      </div>
+      {data.text === null
+        ? <div className="mapNoteGen">Reading the codes and their excerpts…</div>
+        : <div className="mapNoteText">{data.text}</div>}
+    </div>
+  );
+});
+const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode, card: CardNode, note: NoteNode };
 
 // React Flow commits its marquee through React on EVERY pointer event with no
 // rAF gate (verified in the installed v12.11.3 source with codex): a high-rate
@@ -223,62 +307,6 @@ function RafSelectionMarquee() {
   return <div ref={elementRef} className="mapRafMarquee" aria-hidden="true" />;
 }
 
-// The cluster card: verdicts on the halo of the currently selected chip.
-// Narrow subscriptions; every mutation is one undoable store entry.
-const firstSelectedSel = (s: { nodes: Node[] }) =>
-  s.nodes.find((n) => n.selected && n.type === "chip")?.id ?? "";
-function ClusterCard() {
-  const selected = useFlowStore(firstSelectedSel);
-  const clusters = useStore((st) => st.codeClusters);
-  const segments = useStore((st) => st.segments);
-  const { getNodes } = useReactFlow();
-  const ci = clusters.findIndex((c) => c.codes.includes(selected));
-  if (ci < 0) return null;
-  const c = clusters[ci];
-  const segsOf = (code: string) => segments.filter((x) => x.code === code && x.status === "accepted").length;
-  const st = () => useStore.getState();
-  const evict = (m: string) => {
-    // out is just out: the chip parks beside its old halo, position kept
-    const halo = getNodes().find((x) => x.id === `halo:${ci}`);
-    const pos = halo
-      ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y }
-      : { x: 0, y: 0 };
-    st().reconcileDrop(m, pos, null);
-  };
-  const crown = (m: string) => st().setCodeClusters(clusters.map((x, i) => i !== ci ? x : { ...x, survivor: m }));
-  const skip = () => st().setCodeClusters(clusters.filter((_, i) => i !== ci));
-  const canAccept = c.codes.length >= 2;
-  return (
-    <Panel position="bottom-left" className="mapCard">
-      <div className="mapCardHead">
-        <b>{c.newName ?? c.survivor}</b>
-        {c.newName && <span className="mapOrbitTag">new name</span>}
-      </div>
-      <div className="mapCardRat">{c.desc ?? c.rationale}</div>
-      <div className="mapCardList">
-        {c.codes.map((m) => (
-          <label key={m} className="mapCardRow">
-            <input type="checkbox" checked onChange={() => evict(m)}
-              title="Untick to move this code out of the merge (it parks beside the group)" />
-            <input type="radio" name="survivor" checked={c.survivor === m}
-              onChange={() => crown(m)} title="This code's identity survives the merge" />
-            <span className="mapCardName">{m}</span>
-            <span className="mapCardCount">{segsOf(m)}</span>
-          </label>
-        ))}
-      </div>
-      <div className="mapCardActions">
-        <button className="btn primary" disabled={!canAccept}
-          onClick={() => st().applyCluster(ci)}
-          title={canAccept ? `Merge ${c.codes.length} codes into ${c.newName ?? c.survivor} — one undo step` : "A merge needs at least 2 members"}>
-          Accept merge
-        </button>
-        <button className="btn" onClick={skip} title="Discard this proposal (codes stay as they are)">Skip</button>
-      </div>
-    </Panel>
-  );
-}
-
 function MapInner() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
@@ -298,7 +326,22 @@ function MapInner() {
     island?: { gi: number; name: string }; halo?: { ci: number; name: string } } | null>(null);
   // the modal, optionally pre-scoped to one island (island context menu)
   const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" }>(false);
-  const [glimpseCi, setGlimpseCi] = useState<number | null>(null);
+  const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
+  const [hiddenNotes, setHiddenNotes] = useState<Set<number>>(remembered.hiddenNotes);
+  useEffect(() => { remembered.openCards = openCards; remembered.hiddenNotes = hiddenNotes; }, [openCards, hiddenNotes]);
+  const [genCi, setGenCi] = useState<number | null>(null);
+  const [confirmAi, setConfirmAi] = useState<{ ci: number; x: number; y: number } | null>(null);
+  // card fold/unfold + note hide arrive from the node components as events
+  useEffect(() => {
+    const onToggle = (e: Event) => setOpenCards((old) => {
+      const ci = (e as CustomEvent<number>).detail;
+      const n = new Set(old); n.has(ci) ? n.delete(ci) : n.add(ci); return n;
+    });
+    const onHide = (e: Event) => setHiddenNotes((old) => new Set(old).add((e as CustomEvent<number>).detail));
+    window.addEventListener("qually:togglecard", onToggle);
+    window.addEventListener("qually:hidenote", onHide);
+    return () => { window.removeEventListener("qually:togglecard", onToggle); window.removeEventListener("qually:hidenote", onHide); };
+  }, []);
   // the pending revision plan is PROJECT data — it survives reloads and travels
   // in the file, so the review can continue in a later session
   const plan = useStore((st) => st.codePlan);
@@ -366,16 +409,21 @@ function MapInner() {
 
       const haloNodes: HaloNodeT[] = [];
       const chipNodes: ChipNodeT[] = [];
+      const extraNodes: (CardNodeT | NoteNodeT)[] = [];
       // capsule blocks: square-ish packed members + halo padding
       const blocks = live.map((c) => {
         const totalW = c.codes.reduce((a, x) => a + widths.get(x)! + GX, 0);
         const packed = pack(c.codes, Math.max(widths.get(c.codes[0])! + GX, Math.sqrt(totalW * (ch + GY)) * 1.15));
-        return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD };
+        // reserve room for the unfolded card below and the note beside, so
+        // neighbors never sit under them
+        const cardH = openCards.has(c.ci) ? c.codes.length * (fs * 2.1) + fs * 8 + 22 : 0;
+        const noteW = (genCi === c.ci || c.desc) && !hiddenNotes.has(c.ci) ? Math.max(240, fs * 15) + 26 : 0;
+        return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD, cardH, noteW };
       });
-      const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (b.w + HALO_GAP) * (b.h + HALO_GAP), 0)) * 1.5);
+      const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (b.w + b.noteW + HALO_GAP) * (b.h + b.cardH + HALO_GAP), 0)) * 1.5);
       let x = 0, y = 40, rowH = 0;
       for (const b of blocks) {
-        if (x > 0 && x + b.w > rowW) { x = 0; y += rowH + HALO_GAP; rowH = 0; }
+        if (x > 0 && x + b.w + b.noteW > rowW) { x = 0; y += rowH + HALO_GAP; rowH = 0; }
         const key = `halo:${b.c.ci}`;
         haloNodes.push({
           id: key, type: "halo" as const,
@@ -383,19 +431,39 @@ function MapInner() {
           width: b.w, height: b.h,
           draggable: true, selectable: false, focusable: false,
           dragHandle: ".mapHaloLabel",
-          data: { name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName, ci: b.c.ci, count: b.c.codes.length },
+          data: { name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName, ci: b.c.ci, count: b.c.codes.length, open: openCards.has(b.c.ci) },
         });
         for (const m of b.c.codes)
           chipNodes.push(chipNode(m, { x: HALO_PAD + b.packed.pos[m].x, y: HALO_PAD + b.packed.pos[m].y }, key));
-        x += b.w + HALO_GAP;
-        rowH = Math.max(rowH, b.h);
+        // the unfolded verdict card hangs below its halo on a stem
+        if (openCards.has(b.c.ci)) {
+          extraNodes.push({
+            id: `card:${b.c.ci}`, type: "card" as const,
+            position: { x: 12, y: b.h + 22 }, parentId: key,
+            draggable: false, selectable: false, focusable: false,
+            width: Math.max(280, Math.min(420, b.w - 24)),
+            data: { ci: b.c.ci },
+          });
+        }
+        // the AI glimpse rides beside the halo as a note (or its loading state)
+        if ((genCi === b.c.ci || b.c.desc) && !hiddenNotes.has(b.c.ci)) {
+          extraNodes.push({
+            id: `note:${b.c.ci}`, type: "note" as const,
+            position: { x: b.w + 26, y: 0 }, parentId: key,
+            draggable: true, selectable: false, focusable: false,
+            width: Math.max(240, fs * 15),
+            data: { ci: b.c.ci, text: genCi === b.c.ci ? null : b.c.desc ?? "" },
+          });
+        }
+        x += b.w + b.noteW + HALO_GAP;
+        rowH = Math.max(rowH, b.h + b.cardH);
       }
       // the untouched field below the halos
       const flat = pack(singles, near(singles));
       const offY = blocks.length ? y + rowH + HALO_GAP : 0;
       for (const c of singles)
         chipNodes.push(chipNode(c, { x: flat.pos[c].x, y: offY + flat.pos[c].y }));
-      return { nodes: [...haloNodes, ...chipNodes] as MapNode[] };
+      return { nodes: [...haloNodes, ...chipNodes, ...extraNodes] as MapNode[] };
     }
 
     const groups = codeGroups
@@ -435,7 +503,7 @@ function MapInner() {
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: [...islands, ...children] as MapNode[] };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, hiddenNotes, genCi]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -452,6 +520,51 @@ function MapInner() {
     setPlan((ps) => ps.filter((x) => x !== a));
   };
   const skipAction = (a: CodeAction) => setPlan((ps) => ps.filter((x) => x !== a));
+
+  // "describe this group": one-line confirm, default model, result lands on
+  // the note node; the note's pulse IS the progress indicator
+  const glimpseInputs = useCallback((ci: number): MergeCodeInput[] => {
+    const st = useStore.getState();
+    const member = new Set(st.codeClusters[ci]?.codes ?? []);
+    const byCode = new Map<string, string[]>();
+    for (const seg of st.segments) {
+      if (seg.status !== "accepted" || !member.has(seg.code) || !st.transcripts[seg.pid]) continue;
+      const arr = byCode.get(seg.code) ?? [];
+      if (arr.length >= 4) continue;
+      const ex = segExcerpt(seg, st.transcripts[seg.pid].lines).excerpt;
+      if (ex) { arr.push(ex); byCode.set(seg.code, arr); }
+    }
+    return [...member].map((name) => ({
+      name, def: st.codebook[name]?.def ?? "", excerpts: byCode.get(name) ?? [],
+    }));
+  }, []);
+  const runGlimpse = useCallback(async (ci: number) => {
+    const st = useStore.getState();
+    const key = getKey();
+    if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
+    const red = redactor(st.ai.redactTerms);
+    const inputs = glimpseInputs(ci);
+    setHiddenNotes((old) => { const n = new Set(old); n.delete(ci); return n; });
+    setGenCi(ci);
+    try {
+      const { glimpse, usage } = await glimpseCluster({
+        key, model: st.ai.model, codes: inputs, redaction: red,
+      });
+      const s2 = useStore.getState();
+      s2.setCodeClusters(s2.codeClusters.map((c, i) => (i === ci ? { ...c, desc: glimpse } : c)));
+      s2.logAiCall({
+        at: new Date().toISOString(), model: st.ai.model, task: "glimpse", pid: "(codebook)",
+        lines: inputs.length, redactions: 0,
+        inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
+      });
+      announce("Group description ready.");
+    } catch (e) {
+      const msg = e instanceof AiError ? e.message : (e as Error).message;
+      announce(`Describe failed: ${msg}`, { assertive: true });
+    } finally {
+      setGenCi(null);
+    }
+  }, [glimpseInputs]);
 
   const groupSelection = (sel: string[]) => {
     const cleaned = codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => !sel.includes(c)) }));
@@ -512,6 +625,7 @@ function MapInner() {
   }, [getNodes, getInternalNode, stage, haloAt]);
   const onNodeDoubleClick = useCallback((_: unknown, n: Node) => {
     if (n.type === "chip") openInCodebook([n.id]);
+    if (n.type === "halo") toggleCard((n.data as HaloData).ci);
   }, []);
   const selectionAt = useCallback((): string[] =>
     getNodes().filter((n) => n.selected && n.type === "chip").map((n) => n.id), [getNodes]);
@@ -548,13 +662,13 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu) return;
-    const down = (e: MouseEvent) => { if (!(e.target as Element).closest(".mapMenu")) setMenu(null); };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setMenu(null); } };
+    if (!menu && !confirmAi) return;
+    const down = (e: MouseEvent) => { if (!(e.target as Element).closest(".mapMenu")) { setMenu(null); setConfirmAi(null); } };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setMenu(null); setConfirmAi(null); } };
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu]);
+  }, [menu, confirmAi]);
 
   return (
     <div id="codemap" className={"stage-" + stage} style={{ fontSize: sidebarFontSize }}>
@@ -607,7 +721,6 @@ function MapInner() {
             {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <RafSelectionMarquee />
             <SelectionHud />
-            {stage === "reconcile" && <ClusterCard />}
             {stage === "reconcile" && plan.length > 0 && (
               <Panel position="top-left" className="mapPlan">
                 <div className="mapPlanHead">
@@ -652,9 +765,28 @@ function MapInner() {
             }
           }} />
       )}
-      {glimpseCi !== null && clusters[glimpseCi] && (
-        <GlimpseModal ci={glimpseCi} onClose={() => setGlimpseCi(null)} />
-      )}
+      {confirmAi && (() => {
+        const st = useStore.getState();
+        const red = redactor(st.ai.redactTerms);
+        const inputs = glimpseInputs(confirmAi.ci);
+        const inTok = estimateGlimpseTokens(inputs, red);
+        const model = modelOf(st.ai.model);
+        const cost = costOf(model, inTok, estimateTokens(" ".repeat(80)));
+        return (
+          <div className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm AI request"
+            style={{ left: confirmAi.x, top: confirmAi.y, fontSize: sidebarFontSize }}>
+            <div className="mapAiConfirmText">
+              Describe with AI — sends <b>{inputs.length} codes · ≈{inTok.toLocaleString()} tokens
+              · ≈${cost.toFixed(4)}</b> to OpenAI ({model.id}).
+            </div>
+            <div className="mapCardActions">
+              <button className="btn primary" autoFocus
+                onClick={() => { const ci = confirmAi.ci; setConfirmAi(null); void runGlimpse(ci); }}>Send</button>
+              <button className="btn" onClick={() => setConfirmAi(null)}>Cancel</button>
+            </div>
+          </div>
+        );
+      })()}
       {menu && menu.halo && (
         <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => {
@@ -663,9 +795,17 @@ function MapInner() {
           }}>
             Open these codes in Codebook
           </button>
-          <button role="menuitem" onClick={() => { setGlimpseCi(menu.halo!.ci); setMenu(null); }}>
+          <button role="menuitem" onClick={() => { setConfirmAi({ ci: menu.halo!.ci, x: menu.x, y: menu.y }); setMenu(null); }}>
             AI: describe this group…
           </button>
+          {clusters[menu.halo.ci]?.desc && hiddenNotes.has(menu.halo.ci) && (
+            <button role="menuitem" onClick={() => {
+              setHiddenNotes((old) => { const n = new Set(old); n.delete(menu.halo!.ci); return n; });
+              setMenu(null);
+            }}>
+              Show the description note
+            </button>
+          )}
         </div>
       )}
       {menu && menu.island && (

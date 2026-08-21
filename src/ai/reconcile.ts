@@ -179,3 +179,32 @@ export function mergeScopedClusters(
 ): ClusterProposal[] {
   return [...pending.filter((c) => !c.codes.some((x) => subset.has(x))), ...fresh];
 }
+
+// The halo's "describe this group": one small request, two plain sentences of
+// what the group means. Default model, minimal ceremony — the map confirms
+// with a one-line cost note instead of the full consent modal (the payload is
+// the same shape the reconcile run already discloses).
+const GLIMPSE_SYSTEM = `You are helping a qualitative researcher revise a codebook. The codes below are proposed to merge into one. In TWO sentences, plain language: what kind of moment do these codes mark, and what unites their excerpts? This is a glimpse for the researcher deciding the merge — describe the shared usage, do not evaluate the merge. Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
+const GLIMPSE_SCHEMA = {
+  type: "object",
+  properties: { glimpse: { type: "string", description: "two plain sentences" } },
+  required: ["glimpse"], additionalProperties: false,
+} as const;
+
+export const estimateGlimpseTokens = (codes: MergeCodeInput[], r: Redaction) =>
+  estimateTokens(GLIMPSE_SYSTEM) + estimateTokens(renderMergePayload(codes, r));
+
+export async function glimpseCluster(opts: {
+  key: string; model: string; codes: MergeCodeInput[]; redaction: Redaction; signal?: AbortSignal;
+}): Promise<{ glimpse: string; usage: Usage }> {
+  const { data, usage } = await callJson<{ glimpse: string }>({
+    key: opts.key,
+    model: opts.model,
+    system: GLIMPSE_SYSTEM,
+    user: renderMergePayload(opts.codes, opts.redaction),
+    schemaName: "glimpse_group",
+    schema: GLIMPSE_SCHEMA,
+    signal: opts.signal,
+  });
+  return { glimpse: restore(opts.redaction, (data.glimpse ?? "").trim()), usage };
+}
