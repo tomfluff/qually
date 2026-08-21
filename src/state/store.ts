@@ -26,7 +26,7 @@ export const COLORS = PALETTE;
 // `active` is a transcript pid or one of these reserved view keys (Codebook / Assist).
 // Both are non-transcript surfaces, so transcript-only chrome and selection bookkeeping
 // gate on isTranscriptView.
-export const RESERVED_VIEWS = ["browse", "assist", "summary"] as const;
+export const RESERVED_VIEWS = ["browse", "assist", "summary", "notes"] as const;
 export const isTranscriptView = (active: string) => !RESERVED_VIEWS.includes(active as typeof RESERVED_VIEWS[number]);
 
 // orig = the imported text, present only while an in-app correction differs from it
@@ -188,6 +188,13 @@ export interface State {
   // per-transcript session summary (the Summary tab's text pane): written by the
   // researcher, or AI-drafted and then owned by the researcher. Project data.
   summaries: Record<string, string>;
+  // the project memo document (Notes tab): one free-form text, analytic memos +
+  // stamped breadcrumbs. Study data — travels with the project file.
+  projectNotes: string;
+  // the transcript you were last ON (session-only): the Notes stamp and other
+  // "what was I just doing" readers need it after you switch to a reserved view
+  lastPid: string;
+
   // Answers to questions asked of the coded material (Assist -> Ask). Study
   // artifacts, not chat: each carries the scope and model it came from, because
   // an answer whose corpus can't be reconstructed is evidence of nothing.
@@ -284,6 +291,8 @@ export interface State {
   exportMarkers: () => string;
   // the Summary tab's text pane (per keystroke — no undo entry, like setNotes)
   setSummary: (pid: string, text: string) => void;
+  setProjectNotes: (text: string) => void; // per keystroke — no undo entry, like setSummary
+  setLastPid: (pid: string) => void;
   addAnswer: (a: Omit<Answer, "aid" | "at">) => void;
   deleteAnswer: (aid: number) => void;
   exportAnswers: () => string;
@@ -471,7 +480,7 @@ export const useStore = create<State>()(
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {},
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -485,7 +494,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {},
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1245,6 +1254,7 @@ export const useStore = create<State>()(
           markers: s.markers, // session events + field notes: study data, not a preference
           markerColors: s.ui.markerColors,
           summaries: s.summaries, // session summaries: the researcher's artifact, study data
+          projectNotes: s.projectNotes, // the project memo document — ditto
           answers: s.answers,     // …and so are the questions asked of the material
           // the speaker map rides along even though it lives in `ui`: who the
           // interviewer is belongs to the study, not to my font size (see project.ts)
@@ -1279,6 +1289,7 @@ export const useStore = create<State>()(
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
           markers: p.markers ?? [],
           summaries: p.summaries ?? {},
+          projectNotes: p.projectNotes ?? "",
           answers: p.answers ?? [],
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
@@ -1337,6 +1348,8 @@ export const useStore = create<State>()(
       // per keystroke, like notes. Summaries aren't in the undo snapshot, so no
       // redo invalidation is needed — undo/redo never touch them.
       setSummary: (pid, text) => set({ summaries: { ...get().summaries, [pid]: text } }),
+      setProjectNotes: (text) => set({ projectNotes: text }),
+      setLastPid: (pid) => set({ lastPid: pid }),
       // Newest first: the list is a record of what you asked, read most-recent
       // down. Not undoable — an answer costs an API call, and Ctrl+Z after some
       // unrelated edit must never be able to spend it again.
@@ -1628,7 +1641,7 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
-        markers: s.markers, summaries: s.summaries, answers: s.answers,
+        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, answers: s.answers,
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
@@ -1655,6 +1668,7 @@ export const useStore = create<State>()(
         s.ui.markerColors ??= {};
         s.ui.eventListHeight = clampEventHeight(s.ui.eventListHeight ?? 200);
         s.summaries ??= {};
+        s.projectNotes ??= "";
         s.answers ??= [];
         s.nextAid = Math.max(0, ...s.answers.map((x) => x.aid)) + 1;
         s.ui.summaryLayout ??= "side";

@@ -1,0 +1,15 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Yotam Sechayk */
+/* Notes tab: the project memo document. One column of writing — the editor IS
+   the surface, so it gets the reading font and the reading text size; the bar
+   above it is chrome and rides the panel ramp. */
+#notes { display:flex; flex-direction:column; height:100%; min-width:0; }
+.notesBar { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+.notesBar .notesTitle { font-weight:600; }
+.notesBar .notesHint { flex:1 1 20ch; min-width:0; color:var(--muted); font-size:.9em; }
+.notesText { flex:1; min-height:0; width:100%; border:none; resize:none; outline:none;
+  padding:18px max(24px, calc((100% - 75ch) / 2)); /* a reading measure, centred when wide */
+  background:var(--bg); color:var(--fg); font-family:var(--read-font);
+  font-size:inherit; line-height:1.55; }
+.notesText::placeholder { color:var(--muted); }

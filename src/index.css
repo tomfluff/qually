@@ -18,6 +18,7 @@
 @import "./styles/events.css";      /* session event rows + the sidebar index */
 @import "./styles/browse.css";      /* browse view */
 @import "./styles/summary.css";     /* summary tab: session record + summary panes */
+@import "./styles/notes.css";       /* notes tab: the project memo document */
 @import "./styles/settings.css";
 @import "./styles/zen.css";
 @import "./styles/hotbar.css";

@@ -11,6 +11,7 @@ import { TranscriptView } from "./components/TranscriptView";
 import { BrowseView } from "./components/BrowseView";
 import { AssistView } from "./components/AssistView";
 import { SummaryView } from "./components/SummaryView";
+import { NotesView } from "./components/NotesView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
@@ -130,6 +131,10 @@ export function App() {
   // one wheel handler for every scrolling surface in the app (see scrollSpeed.ts)
   useEffect(installScrollSpeed, []);
 
+  // remember the transcript you were last on — the Notes stamp reads it after
+  // you've switched to a reserved view
+  useEffect(() => { if (onTranscript) useStore.getState().setLastPid(active); }, [active, onTranscript]);
+
   // minimap width drives its own width + the search bar/toggle offset
   useEffect(() => {
     document.documentElement.style.setProperty("--mm-w", `${minimapWidth}px`);
@@ -205,6 +210,12 @@ export function App() {
       // plain digits only — Ctrl+0 (zoom reset), Ctrl+1-9 (tab switch), Alt+digit stay with the browser
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "0") { e.preventDefault(); s.setPalette(true); return; }
+      // N: the Notes tab, and back — a mid-playback thought shouldn't need the mouse
+      if ((e.key === "n" || e.key === "N") && s.tabs.length + Object.keys(s.transcripts).length > 0) {
+        e.preventDefault();
+        s.setActive(s.active === "notes" ? (s.lastPid || s.tabs[0] || "browse") : "notes");
+        return;
+      }
       // E with a line selected is the transcript list's own (it knows which group
       // the head sits in). With nothing selected and media loaded, it means the
       // other thing you could be marking: where the playhead is.
@@ -271,6 +282,7 @@ export function App() {
             : active === "browse" ? <BrowseView />
             : active === "summary" ? <SummaryView />
             : active === "assist" ? <AssistView />
+            : active === "notes" ? <NotesView />
             : <TranscriptView />}
         </div>
       </div>

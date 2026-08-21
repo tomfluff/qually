@@ -20,6 +20,7 @@ const KEYS: [string, string][] = [
   ["Space", "Play / pause the loaded media (except while typing)"],
   ["[  /  ]", "Slow down / speed up media playback"],
   ["E", "Add a session event: after the selected line, or at the playhead when nothing is selected"],
+  ["N", "Project notes (Esc returns) — memos with a Stamp of what you were doing"],
   ["M", "Open the selected line's AI mark (apply fix / dismiss); again cycles its marks"],
   ["Double-click a line", "Fix its transcription in place; Enter saves, Esc cancels"],
   ["Ctrl + C", "Copy the selected lines (speaker-grouped)"],

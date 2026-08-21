@@ -136,6 +136,11 @@ export function Tabs() {
         title="Per-transcript session record and summary">
         <Icon name="file-text" size={14} /> Summary
       </button>
+      <button className={"tab browsetab" + (active === "notes" ? " active" : "")}
+        role="tab" aria-selected={active === "notes"} onClick={() => setActive("notes")}
+        title="Project notes: analytic memos with context stamps (N)">
+        <Icon name="pencil" size={14} /> Notes
+      </button>
       {/* Assist tab: click to open, the chevron opens a menu to pick which panel
           (Observations / Merge / Suggest) shows. Right-click opens it too. */}
       <div className={"tab assisttab" + (active === "assist" ? " active" : "")}

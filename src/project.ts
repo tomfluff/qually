@@ -56,6 +56,8 @@ export interface Project {
   markerColors?: Record<string, string>;
   // per-transcript session summaries (Summary tab) — the researcher's own artifact
   summaries?: Record<string, string>;
+  // the project memo document (Notes tab) — optional: absent before it existed
+  projectNotes?: string;
   // answers to questions asked of the coded material, each with the scope and
   // model it came from — optional: absent in files written before Ask existed
   answers?: Answer[];
@@ -116,6 +118,7 @@ export function parseProject(text: string): Project {
     markers: p.markers ?? [],
     markerColors: p.markerColors ?? {},
     summaries: p.summaries ?? {},
+    projectNotes: typeof p.projectNotes === "string" ? p.projectNotes : "",
     // hand-editable like everything else here: openProject maps over these and
     // derives nextAid from them, so a malformed entry would crash the load or
     // poison the counter

@@ -251,7 +251,9 @@ export function VideoDock() {
   // floating: then it stays as its collapsed pill, so the play/pause, speed and
   // pop-back controls keep reaching the window on your other screen while you
   // work in the Codebook, Summary or Assist tab.
-  if (!onTranscript && !(pip && cur)) return null;
+  // Notes is the one reserved view that keeps the dock: its whole point is a
+  // thought mid-playback — audio keeps going, and the Stamp keeps its playhead
+  if (!onTranscript && !(pip && cur) && !(pid === "notes" && cur)) return null;
   // One flag for "show only the pill": collapsed by choice, or showing a video
   // that isn't this tab's — off a transcript entirely, or floating another
   // transcript's media. The offset and sync-to-line controls read the ACTIVE
