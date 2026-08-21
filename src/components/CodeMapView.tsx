@@ -1,24 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// The Code map: the whole codebook as a spatial surface — pan, zoom, select,
-// then act (open the selection in the Codebook, or merge it down). Built on
-// React Flow, uncontrolled, following its performance playbook for hundreds
-// of nodes (see .agents/skills/react-flow):
-//   - RF owns the node array (defaultNodes); the codebook effect rebuilds it
-//     through the instance API only when codes actually change.
-//   - NOTHING at this level subscribes to selection. The floating action panel
-//     is its own component with a narrow RF-store subscription, so a box-drag
-//     re-renders that one strip — never the 180 chips, the MiniMap, or the
-//     selection rectangle's ancestors. (A controlled version re-rendered the
-//     world per membership change and the rectangle lagged the pointer.)
-//   - Custom node is memo'd; nodeTypes/handlers are stable references.
-// AI grouping lands on this surface next.
+// The Code map: the whole codebook as a spatial surface, in two explicit
+// stages on one canvas. RECONCILE lays every pending merge-cluster out as a
+// HALO — a capsule field hugging its packed member chips, captioned above
+// with the proposed name of the merged code. Membership is containment:
+// inside the halo is in the merge, outside is out, and a dropped chip KEEPS
+// the spot you gave it (park a code beside a group until you decide). While
+// you hold a chip, the halo it would join outlines in the accent. THEMES
+// shows the islands (groups) and never any merge structure.
+// Performance shape per the react-flow skill: uncontrolled flow, narrow
+// per-component subscriptions, memo'd nodes, imperative marquee.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
-  Handle, Position, MarkerType,
   useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
-  type Node, type NodeProps, type Viewport, type Edge,
+  type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useStore } from "../state/store";
@@ -27,6 +23,7 @@ import { preselectBrowse } from "./BrowseView";
 import { CodeCounts } from "./CodeCounts";
 import { Icon, countIconSize } from "./Icon";
 import { ReconcileModal } from "./ReconcileModal";
+import { GlimpseModal } from "./GlimpseModal";
 import { mergeScopedClusters, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
@@ -34,7 +31,7 @@ import { mergeScopedClusters, type CodeAction, type ReconcilePlan } from "../ai/
 // (uniform padding would leave a field of dead air around short names), and
 // everything scales with the sidebar text ramp so large accessible settings
 // never clip. Rows are shelf-packed toward a near-square map.
-const GX = 14, GY = 12, PAD = 18, ISLAND_GAP = 64, RING_BAND = 56;
+const GX = 14, GY = 12, PAD = 18, ISLAND_GAP = 64, HALO_PAD = 26, HALO_GAP = 72;
 const chipH = (fs: number) => Math.round(fs * 2.4);
 const measurer = document.createElement("canvas").getContext("2d")!;
 const chipW = (fs: number, name: string, segs: number, pids: number) => {
@@ -52,16 +49,15 @@ type ChipData = { code: string; color: string; segs: number; pids: number; act?:
 type ChipNodeT = Node<ChipData, "chip">;
 type IslandData = { name: string; gi: number };
 type IslandNodeT = Node<IslandData, "island">;
-type MapNode = ChipNodeT | IslandNodeT;
+type HaloData = { name: string; renamed: boolean; ci: number; count: number };
+type HaloNodeT = Node<HaloData, "halo">;
+type MapNode = ChipNodeT | IslandNodeT | HaloNodeT;
 
-// positions (drags survive), viewport and selection outlive the unmounting view
+// session view state that outlives the unmounting view; positions ride the
+// store's undo history and the camera persists in ui (across reloads)
 const remembered = {
   // the stage override: null = derived (Reconcile while anything is pending)
   stage: null as null | "reconcile" | "themes",
-  // chip positions are RELATIVE to their island (absolute when ungrouped/flat)
-  positions: {} as Record<string, { x: number; y: number }>,
-  islandPos: {} as Record<string, { x: number; y: number }>,
-  viewport: null as Viewport | null,
   selected: new Set<string>(),
 };
 
@@ -71,10 +67,6 @@ const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>
     <div className={"mapChip" + (selected ? " sel" : "")}
       style={{ "--chip-c": data.color } as React.CSSProperties}
       title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}`}>
-      {/* invisible anchors for proposal edges (opacity, not display:none —
-          hidden handles break RF's edge geometry) */}
-      <Handle type="target" position={Position.Left} className="mapHandle" isConnectable={false} />
-      <Handle type="source" position={Position.Right} className="mapHandle" isConnectable={false} />
       <span className="mapName">{data.code}</span>
       {data.act && data.act.action !== "merge" && (
         <span className={"mapActBadge " + data.act.action}
@@ -139,7 +131,6 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
   };
   const dissolve = () => {
     const st = useStore.getState();
-    st.codeGroups[data.gi]?.codes.forEach((c) => delete remembered.positions[c]);
     st.setCodeGroups(st.codeGroups.filter((_, i) => i !== data.gi));
   };
   return (
@@ -169,29 +160,27 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
     </div>
   );
 });
-// a constellation's region: a circular field with the proposed concept's name
-// captioned above (same semantic zoom as island captions). Read-only body —
-// click-through so box-select and chip drags pass; the caption names the
-// PROPOSED merged concept (newName if given, else the survivor's name).
-type OrbitData = { name: string; renamed: boolean; ci: number };
-type OrbitNodeT = Node<OrbitData, "orbit">;
-const OrbitNode = memo(function OrbitNode({ data }: NodeProps<OrbitNodeT>) {
+// A halo: the capsule field that IS the merge proposal. Containment is
+// membership; the caption above names the merged code and is the halo's drag
+// handle and right-click target.
+const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const base = fs * 1.3;
-  // lower ceiling than island captions: 25 orbits sit far denser than a few
-  // islands, and 7x labels collided across rows at far zoom
-  const fontSize = Math.min(base * 3.5, Math.max(base, base / zoom));
+  // tight ceiling: halos hug their chips, so a caption much larger than its
+  // capsule collides with neighbors long before it helps legibility
+  const fontSize = Math.min(base * 2, Math.max(base, base / zoom));
   return (
-    <div className="mapOrbit">
-      <div className="mapIslandLabel mapOrbitLabel" style={{ fontSize }}>
+    <div className="mapHalo">
+      <div className="mapIslandLabel mapHaloLabel" style={{ fontSize }}>
         <span className="mapIslandName">{data.name}</span>
-        {data.renamed && <span className="mapOrbitTag">renamed</span>}
+        {data.renamed && <span className="mapOrbitTag">new name</span>}
+        <span className="mapHaloCount">{data.count}</span>
       </div>
     </div>
   );
 });
-const nodeTypes = { chip: ChipNode, island: IslandNode, orbit: OrbitNode };
+const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode };
 
 // React Flow commits its marquee through React on EVERY pointer event with no
 // rAF gate (verified in the installed v12.11.3 source with codex): a high-rate
@@ -234,57 +223,54 @@ function RafSelectionMarquee() {
   return <div ref={elementRef} className="mapRafMarquee" aria-hidden="true" />;
 }
 
-// The cluster card: verdict surface for the constellation of the currently
-// selected chip. Its own component with narrow subscriptions (skill rule) —
-// selection from RF's store, clusters from the app store — so drag-time churn
-// never re-renders the map around it. Toggles mirror the geometry: unticking
-// evicts to the ring, ticking re-attaches, the radio crowns a survivor.
+// The cluster card: verdicts on the halo of the currently selected chip.
+// Narrow subscriptions; every mutation is one undoable store entry.
 const firstSelectedSel = (s: { nodes: Node[] }) =>
   s.nodes.find((n) => n.selected && n.type === "chip")?.id ?? "";
-function ClusterCard({ onAccept }: { onAccept: (ci: number) => void }) {
+function ClusterCard() {
   const selected = useFlowStore(firstSelectedSel);
   const clusters = useStore((st) => st.codeClusters);
-  const codebook = useStore((st) => st.codebook);
   const segments = useStore((st) => st.segments);
-  const ci = clusters.findIndex((c) => c.codes.includes(selected) || (c.out ?? []).includes(selected));
+  const { getNodes } = useReactFlow();
+  const ci = clusters.findIndex((c) => c.codes.includes(selected));
   if (ci < 0) return null;
   const c = clusters[ci];
   const segsOf = (code: string) => segments.filter((x) => x.code === code && x.status === "accepted").length;
-  const setClusters = (next: typeof clusters) => useStore.getState().setCodeClusters(next);
-  const toggle = (m: string, on: boolean) => {
-    const upd = clusters.map((x, i) => i !== ci ? x : (on
-      ? { ...x, codes: [...x.codes, m], out: (x.out ?? []).filter((y) => y !== m) }
-      : { ...x, codes: x.codes.filter((y) => y !== m), out: [...(x.out ?? []), m] }));
-    setClusters(upd);
+  const st = () => useStore.getState();
+  const evict = (m: string) => {
+    // out is just out: the chip parks beside its old halo, position kept
+    const halo = getNodes().find((x) => x.id === `halo:${ci}`);
+    const pos = halo
+      ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y }
+      : { x: 0, y: 0 };
+    st().reconcileDrop(m, pos, null);
   };
-  const crown = (m: string) => setClusters(clusters.map((x, i) => i !== ci ? x : { ...x, survivor: m }));
-  const skip = () => setClusters(clusters.filter((_, i) => i !== ci));
+  const crown = (m: string) => st().setCodeClusters(clusters.map((x, i) => i !== ci ? x : { ...x, survivor: m }));
+  const skip = () => st().setCodeClusters(clusters.filter((_, i) => i !== ci));
   const canAccept = c.codes.length >= 2;
   return (
     <Panel position="bottom-left" className="mapCard">
       <div className="mapCardHead">
         <b>{c.newName ?? c.survivor}</b>
-        {c.newName && <span className="mapOrbitTag">renamed</span>}
+        {c.newName && <span className="mapOrbitTag">new name</span>}
       </div>
-      <div className="mapCardRat">{c.rationale}</div>
+      <div className="mapCardRat">{c.desc ?? c.rationale}</div>
       <div className="mapCardList">
-        {[...c.codes, ...(c.out ?? []).filter((m) => m in codebook)].map((m) => {
-          const on = c.codes.includes(m);
-          return (
-            <label key={m} className={"mapCardRow" + (on ? "" : " off")}>
-              <input type="checkbox" checked={on} onChange={(e) => toggle(m, e.target.checked)}
-                title={on ? "Untick to evict from the merge" : "Tick to re-attach"} />
-              <input type="radio" name="survivor" checked={c.survivor === m} disabled={!on}
-                onChange={() => crown(m)} title="Keep this code as the survivor" />
-              <span className="mapCardName">{m}</span>
-              <span className="mapCardCount">{segsOf(m)}</span>
-            </label>
-          );
-        })}
+        {c.codes.map((m) => (
+          <label key={m} className="mapCardRow">
+            <input type="checkbox" checked onChange={() => evict(m)}
+              title="Untick to move this code out of the merge (it parks beside the group)" />
+            <input type="radio" name="survivor" checked={c.survivor === m}
+              onChange={() => crown(m)} title="This code's identity survives the merge" />
+            <span className="mapCardName">{m}</span>
+            <span className="mapCardCount">{segsOf(m)}</span>
+          </label>
+        ))}
       </div>
       <div className="mapCardActions">
-        <button className="btn primary" disabled={!canAccept} onClick={() => onAccept(ci)}
-          title={canAccept ? `Merge ${c.codes.length} codes into ${c.newName ?? c.survivor} (undoable)` : "A merge needs at least 2 ticked members"}>
+        <button className="btn primary" disabled={!canAccept}
+          onClick={() => st().applyCluster(ci)}
+          title={canAccept ? `Merge ${c.codes.length} codes into ${c.newName ?? c.survivor} — one undo step` : "A merge needs at least 2 members"}>
           Accept merge
         </button>
         <button className="btn" onClick={skip} title="Discard this proposal (codes stay as they are)">Skip</button>
@@ -303,12 +289,16 @@ function MapInner() {
   const codeGroups = useStore((s) => s.codeGroups);
   const setCodeGroups = useStore((s) => s.setCodeGroups);
   const setUi = useStore((s) => s.setUi);
+  const mapPositions = useStore((s) => s.mapPositions);
+  const mapIslandPos = useStore((s) => s.mapIslandPos);
   const { setNodes: rfSetNodes, getNodes, getInternalNode } = useReactFlow();
   // menu state carries the selection it acts on, captured at open — the menu
   // needs no live subscription
-  const [menu, setMenu] = useState<{ x: number; y: number; sel: string[]; island?: { gi: number; name: string } } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; sel: string[];
+    island?: { gi: number; name: string }; halo?: { ci: number; name: string } } | null>(null);
   // the modal, optionally pre-scoped to one island (island context menu)
   const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" }>(false);
+  const [glimpseCi, setGlimpseCi] = useState<number | null>(null);
   // the pending revision plan is PROJECT data — it survives reloads and travels
   // in the file, so the review can continue in a later session
   const plan = useStore((st) => st.codePlan);
@@ -360,7 +350,7 @@ function MapInner() {
     const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
       type: "chip" as const,
-      position,
+      position: mapPositions[c] ?? position,
       ...(parentId ? { parentId } : {}),
       width: widths.get(c)!, height: ch,
       selected: remembered.selected.has(c),
@@ -368,68 +358,44 @@ function MapInner() {
     });
 
     if (stage === "reconcile") {
-      // valid clusters only: members still in the book, survivor present, 2+
       const live = clusters
         .map((c, ci) => ({ ...c, ci, codes: c.codes.filter(inBook) }))
-        .filter((c) => c.codes.length >= 2 && c.codes.includes(c.survivor));
-      const clustered = new Set(live.flatMap((c) => [...c.codes, ...(c.out ?? [])]));
+        .filter((c) => c.codes.length >= 2);
+      const clustered = new Set(live.flatMap((c) => c.codes));
       const singles = codes.filter((c) => !clustered.has(c));
 
-      const orbitNodes: OrbitNodeT[] = [];
+      const haloNodes: HaloNodeT[] = [];
       const chipNodes: ChipNodeT[] = [];
-      // radial blocks: hub center, members equally spaced on the orbit ring.
-      // RING_BAND is reserved empty space outside the orbit — the eviction
-      // ring — so the packer keeps neighbors clear of it (design premise 3).
+      // capsule blocks: square-ish packed members + halo padding
       const blocks = live.map((c) => {
-        const members = c.codes.filter((x) => x !== c.survivor);
-        const all = [...c.codes, ...(c.out ?? []).filter(inBook)];
-        const maxW = Math.max(...all.map((x) => widths.get(x)!));
-        const hubW = widths.get(c.survivor)!;
-        const r = Math.max(120, hubW / 2 + maxW / 2 + fs * 3.2);
-        const size = 2 * (r + maxW / 2 + RING_BAND);
-        return { c, members, r, size };
+        const totalW = c.codes.reduce((a, x) => a + widths.get(x)! + GX, 0);
+        const packed = pack(c.codes, Math.max(widths.get(c.codes[0])! + GX, Math.sqrt(totalW * (ch + GY)) * 1.15));
+        return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD };
       });
-      const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (b.size + GX) ** 2 / (b.size + GX), 0)) * 0 +
-        Math.sqrt(blocks.reduce((a, b) => a + (b.size + ISLAND_GAP) * (b.size + ISLAND_GAP), 0)) * 1.4);
-      let x = 0, y = 0, rowH = 0;
+      const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (b.w + HALO_GAP) * (b.h + HALO_GAP), 0)) * 1.5);
+      let x = 0, y = 40, rowH = 0;
       for (const b of blocks) {
-        if (x > 0 && x + b.size > rowW) { x = 0; y += rowH + ISLAND_GAP; rowH = 0; }
-        const key = `orbit:${b.c.ci}`;
-        orbitNodes.push({
-          id: key, type: "orbit" as const,
-          position: remembered.islandPos[key] ?? { x, y },
-          width: b.size, height: b.size,
-          draggable: false, selectable: false, focusable: false,
-          data: { name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName, ci: b.c.ci },
+        if (x > 0 && x + b.w > rowW) { x = 0; y += rowH + HALO_GAP; rowH = 0; }
+        const key = `halo:${b.c.ci}`;
+        haloNodes.push({
+          id: key, type: "halo" as const,
+          position: mapIslandPos[key] ?? { x, y },
+          width: b.w, height: b.h,
+          draggable: true, selectable: false, focusable: false,
+          dragHandle: ".mapHaloLabel",
+          data: { name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName, ci: b.c.ci, count: b.c.codes.length },
         });
-        const cx = b.size / 2, cy = b.size / 2;
-        const hub = { x: cx - widths.get(b.c.survivor)! / 2, y: cy - ch / 2 };
-        chipNodes.push(chipNode(b.c.survivor, hub, key));
-        b.members.forEach((m, i) => {
-          const ang = -Math.PI / 2 + (i * 2 * Math.PI) / b.members.length;
-          const px = cx + b.r * Math.cos(ang) - widths.get(m)! / 2;
-          const py = cy + b.r * Math.sin(ang) - ch / 2;
-          chipNodes.push(chipNode(m, { x: px, y: py }, key));
-        });
-        // evicted members sit on the eviction ring — outside the attach
-        // region, still re-attachable by dragging back in
-        const outs = (b.c.out ?? []).filter(inBook);
-        const rRing = b.size / 2 - RING_BAND / 2;
-        outs.forEach((m, i) => {
-          const ang = -Math.PI / 2 + ((i + 0.5) * 2 * Math.PI) / Math.max(outs.length, 3);
-          const px = cx + rRing * Math.cos(ang) - widths.get(m)! / 2;
-          const py = cy + rRing * Math.sin(ang) - ch / 2;
-          chipNodes.push(chipNode(m, { x: px, y: py }, key));
-        });
-        x += b.size + ISLAND_GAP;
-        rowH = Math.max(rowH, b.size);
+        for (const m of b.c.codes)
+          chipNodes.push(chipNode(m, { x: HALO_PAD + b.packed.pos[m].x, y: HALO_PAD + b.packed.pos[m].y }, key));
+        x += b.w + HALO_GAP;
+        rowH = Math.max(rowH, b.h);
       }
-      // the untouched field: everything not in a cluster, flat-packed below
+      // the untouched field below the halos
       const flat = pack(singles, near(singles));
-      const offY = (blocks.length ? y + rowH + ISLAND_GAP + 40 : 0);
+      const offY = blocks.length ? y + rowH + HALO_GAP : 0;
       for (const c of singles)
-        chipNodes.push(chipNode(c, remembered.positions[c] ?? { x: flat.pos[c].x, y: offY + flat.pos[c].y }));
-      return { nodes: [...orbitNodes, ...chipNodes] as MapNode[] };
+        chipNodes.push(chipNode(c, { x: flat.pos[c].x, y: offY + flat.pos[c].y }));
+      return { nodes: [...haloNodes, ...chipNodes] as MapNode[] };
     }
 
     const groups = codeGroups
@@ -440,7 +406,7 @@ function MapInner() {
 
     if (groups.length === 0) {
       const flat = pack(codes, near(codes));
-      return { nodes: codes.map((c) => chipNode(c, remembered.positions[c] ?? flat.pos[c])) as MapNode[] };
+      return { nodes: codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[] };
     }
     const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
       ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
@@ -457,19 +423,19 @@ function MapInner() {
       islands.push({
         id: key,
         type: "island" as const,
-        position: remembered.islandPos[key] ?? { x: ix, y: iy },
+        position: mapIslandPos[key] ?? { x: ix, y: iy },
         width: bw, height: bh,
         draggable: true, selectable: false, focusable: false,
         dragHandle: ".mapIslandLabel",
         data: { name: b.name, gi: b.gi },
       });
-      for (const c of b.list) children.push(chipNode(c, remembered.positions[c] ?? { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
+      for (const c of b.list) children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
       ix += bw + ISLAND_GAP;
       rowH = Math.max(rowH, bh);
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: [...islands, ...children] as MapNode[] };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -478,150 +444,75 @@ function MapInner() {
   const [initialNodes] = useState(build);
   useEffect(() => { rfSetNodes(build()); }, [build, rfSetNodes]);
 
-  // group editing: every mutation goes through the store so it lands in the file
-  // spokes: every cluster member points at its survivor. Edges exist ONLY in
-  // Reconcile mode — Themes never shows merge structure (design premise 1).
-  const spokeEdges = useMemo<Edge[]>(() => {
-    if (stage !== "reconcile") return [];
-    return clusters.flatMap((c, ci) =>
-      c.codes.filter((m) => m !== c.survivor && m in codebook && c.survivor in codebook)
-        .map((m) => ({
-          id: `spoke:${ci}:${m}`,
-          source: m, target: c.survivor,
-          animated: true, selectable: false, focusable: false,
-          markerEnd: { type: MarkerType.ArrowClosed, color: "var(--accent)" },
-          style: { stroke: "var(--accent)", strokeWidth: 2 },
-        })));
-  }, [stage, clusters, codebook]);
-
-  // one verdict at a time; each accept is an existing undoable store action.
-  // After a rename, pending merges that pointed at the old name follow it.
+  // plan strip verdicts (renames and rejects only — merges are halos)
   const applyAction = (a: CodeAction) => {
     const st = useStore.getState();
-    if (a.action === "rename") {
-      st.renameCode(a.code, a.newName!);
-      setPlan((ps) => ps.filter((x) => x !== a).map((x) =>
-        x.action === "merge" && x.into === a.code ? { ...x, into: a.newName! } : x));
-      return;
-    }
-    if (a.action === "merge") {
-      st.mergeCode(a.code, a.into!);
-      if (a.newName) st.renameCode(a.into!, a.newName);
-      const finalName = a.newName || a.into!;
-      setPlan((ps) => ps.filter((x) => x !== a).map((x) =>
-        x.action === "merge" && x.into === a.code ? { ...x, into: finalName } : x));
-      return;
-    }
-    st.rejectCode(a.code);
+    if (a.action === "rename") st.renameCode(a.code, a.newName!);
+    else if (a.action === "remove") st.rejectCode(a.code);
     setPlan((ps) => ps.filter((x) => x !== a));
   };
   const skipAction = (a: CodeAction) => setPlan((ps) => ps.filter((x) => x !== a));
-  // sequential apply for now — the single-undo-step batch op lands with the
-  // snapshot-extension step of the design (steps 7-8)
-  const acceptCluster = useCallback((ci: number) => {
-    const st = useStore.getState();
-    const c = st.codeClusters[ci];
-    if (!c || c.codes.length < 2) return;
-    // the proposal leaves the plan first (evicted members included), then the
-    // merges + rename apply through the store's own integrity
-    st.setCodeClusters(st.codeClusters.filter((_, i) => i !== ci));
-    for (const m of c.codes) if (m !== c.survivor) useStore.getState().mergeCode(m, c.survivor);
-    if (c.newName) useStore.getState().renameCode(c.survivor, c.newName);
-  }, []);
 
-  const moveToGroup = useCallback((code: string, gi: number) => {
-    const cur = codeGroups.findIndex((g) => g.codes.includes(code));
-    if (cur === gi) return; // includes the flat-map case: -1 === -1
-    const next = codeGroups.map((g, i) => ({
-      ...g,
-      codes: i === gi ? [...g.codes, code] : g.codes.filter((c) => c !== code),
-    }));
-    delete remembered.positions[code]; // the packer files it into its new island
-    setCodeGroups(next);
-  }, [codeGroups, setCodeGroups]);
   const groupSelection = (sel: string[]) => {
     const cleaned = codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => !sel.includes(c)) }));
-    sel.forEach((c) => delete remembered.positions[c]);
     setCodeGroups([...cleaned, { name: `Group ${codeGroups.length + 1}`, codes: sel }]);
     setMenu(null);
   };
-  // stable handlers (skill rule: memoize callback props)
-  const onMoveEnd = useCallback((_: unknown, vp: Viewport) => { remembered.viewport = vp; }, []);
-  // Themes: a drag files a chip into whichever island its center lands in.
-  // Reconcile: geometry is the pending plan — drop on the hub crowns a new
-  // survivor, drop outside the attach circle evicts (snap to ring), drop
-  // inside snaps back into orbit. Free positions are never kept in Reconcile.
-  const onNodeDragStop = useCallback((_: unknown, n: Node) => {
-    if (n.type !== "chip") { if (n.type === "island") remembered.islandPos[n.id] = n.position; return; }
-    if (stage === "reconcile") {
-      const st = useStore.getState();
-      const ci = st.codeClusters.findIndex((c) => c.codes.includes(n.id) || (c.out ?? []).includes(n.id));
-      const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
-      const ccx = abs.x + (n.width ?? 0) / 2, ccy = abs.y + (n.height ?? 0) / 2;
-      const bump = () => rfSetNodes(build()); // relayout: geometry owns positions
-      if (ci < 0) { bump(); return; } // singles just snap back
-      const c = st.codeClusters[ci];
-      const orbit = getNodes().find((x) => x.id === `orbit:${ci}`);
-      if (!orbit) { bump(); return; }
-      const ox = orbit.position.x + (orbit.width ?? 0) / 2, oy = orbit.position.y + (orbit.height ?? 0) / 2;
-      const dist = Math.hypot(ccx - ox, ccy - oy);
-      const attachR = (orbit.width ?? 0) / 2 - RING_BAND;
-      const inCodes = c.codes.includes(n.id);
-      // crown: a member dropped with its center over the survivor's chip
-      const hubNode = getNodes().find((x) => x.id === c.survivor);
-      const hubAbs = hubNode ? getInternalNode(c.survivor)?.internals.positionAbsolute : null;
-      if (inCodes && n.id !== c.survivor && hubNode && hubAbs
-          && ccx >= hubAbs.x && ccx <= hubAbs.x + (hubNode.width ?? 0)
-          && ccy >= hubAbs.y && ccy <= hubAbs.y + (hubNode.height ?? 0)) {
-        st.setCodeClusters(st.codeClusters.map((x, i) => i !== ci ? x : { ...x, survivor: n.id }));
-        return;
-      }
-      if (inCodes && dist > attachR) {
-        // evict (pending): member -> out; layout snaps it to the ring
-        st.setCodeClusters(st.codeClusters.map((x, i) => i !== ci ? x
-          : { ...x, codes: x.codes.filter((y) => y !== n.id), out: [...(x.out ?? []), n.id] }));
-        return;
-      }
-      if (!inCodes && dist <= attachR) {
-        // re-attach: out -> codes
-        st.setCodeClusters(st.codeClusters.map((x, i) => i !== ci ? x
-          : { ...x, codes: [...x.codes, n.id], out: (x.out ?? []).filter((y) => y !== n.id) }));
-        return;
-      }
-      bump();
-      return;
-    }
-    remembered.positions[n.id] = n.position;
-    const islands = getNodes().filter((x) => x.type === "island");
-    if (!islands.length) return;
-    const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
-    const cx = abs.x + (n.width ?? 0) / 2, cy = abs.y + (n.height ?? 0) / 2;
-    const hit = islands.find((r) => cx >= r.position.x && cx <= r.position.x + (r.width ?? 0)
-      && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
-    const gi = hit ? (hit.data as IslandData).gi : -1;
-    moveToGroup(n.id, gi);
-  }, [getNodes, getInternalNode, moveToGroup, stage, rfSetNodes, build]);
-  const onNodeDoubleClick = useCallback((_: unknown, n: Node) => openInCodebook([n.id]), []);
-  // the spoke IS the live membership signal while dragging: rAF-coalesced
-  // imperative toggle of the edge's visibility (no React work per move)
+  // by-hand merge proposal: a new halo from the selection
+  const clusterSelection = (sel: string[]) => {
+    const st = useStore.getState();
+    st.setCodeClusters([...st.codeClusters, { survivor: sel[0], codes: sel, rationale: "Grouped by hand on the map." }]);
+    setMenu(null);
+  };
+  // the camera persists across tab switches AND reloads
+  const [initialViewport] = useState(() => useStore.getState().ui.mapViewport);
+  const onMoveEnd = useCallback((_: unknown, vp: Viewport) => { setUi({ mapViewport: vp }); }, [setUi]);
+  // While you hold a chip (Reconcile), the halo it would join outlines in the
+  // accent — rAF-coalesced imperative class toggle, no React work per move.
   const dragFrame = useRef(0);
+  const clearWill = () => document.querySelectorAll(".mapHalo.will").forEach((el) => el.classList.remove("will"));
+  const haloAt = useCallback((cx: number, cy: number) =>
+    getNodes().find((h) => h.type === "halo"
+      && cx >= h.position.x && cx <= h.position.x + (h.width ?? 0)
+      && cy >= h.position.y && cy <= h.position.y + (h.height ?? 0)) ?? null, [getNodes]);
   const onNodeDrag = useCallback((_: unknown, n: Node) => {
     if (stage !== "reconcile" || n.type !== "chip" || dragFrame.current) return;
     dragFrame.current = requestAnimationFrame(() => {
       dragFrame.current = 0;
-      const st = useStore.getState();
-      const ci = st.codeClusters.findIndex((c) => c.codes.includes(n.id));
-      if (ci < 0) return;
-      const orbit = getNodes().find((x) => x.id === `orbit:${ci}`);
       const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
-      if (!orbit) return;
-      const ox = orbit.position.x + (orbit.width ?? 0) / 2, oy = orbit.position.y + (orbit.height ?? 0) / 2;
-      const inside = Math.hypot(abs.x + (n.width ?? 0) / 2 - ox, abs.y + (n.height ?? 0) / 2 - oy)
-        <= (orbit.width ?? 0) / 2 - RING_BAND;
-      const el = document.querySelector<SVGGElement>(`.react-flow__edge[data-id="spoke:${ci}:${n.id}"]`);
-      if (el) el.style.opacity = inside ? "" : "0.15";
+      const hit = haloAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2);
+      clearWill();
+      if (hit) document.querySelector(`.react-flow__node[data-id="${hit.id}"] .mapHalo`)?.classList.add("will");
     });
-  }, [stage, getNodes, getInternalNode]);
+  }, [stage, getInternalNode, haloAt]);
+
+  // A drop is a filing action, and the chip KEEPS the spot you gave it.
+  // Reconcile: inside a halo = in that merge (relative position), outside =
+  // out (absolute position) — one undoable entry either way. Themes: same
+  // shape against islands.
+  const onNodeDragStop = useCallback((_: unknown, n: Node) => {
+    const st = useStore.getState();
+    if (n.type === "island" || n.type === "halo") { st.recordMapPosition(n.id, n.position, true); return; }
+    const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
+    if (stage === "reconcile") {
+      clearWill();
+      const hit = haloAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2);
+      const targetCi = hit ? (hit.data as HaloData).ci : null;
+      const pos = hit ? { x: abs.x - hit.position.x, y: abs.y - hit.position.y } : abs;
+      st.reconcileDrop(n.id, pos, targetCi);
+      return;
+    }
+    const islands = getNodes().filter((x) => x.type === "island");
+    if (!islands.length) { st.recordMapPosition(n.id, n.position); return; }
+    const cx = abs.x + (n.width ?? 0) / 2, cy = abs.y + (n.height ?? 0) / 2;
+    const hitIsl = islands.find((r) => cx >= r.position.x && cx <= r.position.x + (r.width ?? 0)
+      && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
+    const gi = hitIsl ? (hitIsl.data as IslandData).gi : -1;
+    st.themesDrop(n.id, n.position, gi);
+  }, [getNodes, getInternalNode, stage, haloAt]);
+  const onNodeDoubleClick = useCallback((_: unknown, n: Node) => {
+    if (n.type === "chip") openInCodebook([n.id]);
+  }, []);
   const selectionAt = useCallback((): string[] =>
     getNodes().filter((n) => n.selected && n.type === "chip").map((n) => n.id), [getNodes]);
   const onNodeContextMenu = useCallback((e: React.MouseEvent, n: Node) => {
@@ -629,6 +520,11 @@ function MapInner() {
     if (n.type === "island") {
       const d = n.data as IslandData;
       setMenu({ x: e.clientX, y: e.clientY, sel: [], island: { gi: d.gi, name: d.name } });
+      return;
+    }
+    if (n.type === "halo") {
+      const d = n.data as HaloData;
+      setMenu({ x: e.clientX, y: e.clientY, sel: [], halo: { ci: d.ci, name: d.name } });
       return;
     }
     let sel = selectionAt();
@@ -689,10 +585,9 @@ function MapInner() {
           : (
           <ReactFlow<MapNode>
             defaultNodes={initialNodes} nodeTypes={nodeTypes}
-            edges={spokeEdges}
             colorMode={dark ? "dark" : "light"}
-            fitView={!remembered.viewport}
-            defaultViewport={remembered.viewport ?? undefined}
+            fitView={!initialViewport}
+            defaultViewport={initialViewport ?? undefined}
             onMoveEnd={onMoveEnd}
             minZoom={0.1} maxZoom={3}
             selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
@@ -712,24 +607,21 @@ function MapInner() {
             {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <RafSelectionMarquee />
             <SelectionHud />
-            {stage === "reconcile" && <ClusterCard onAccept={acceptCluster} />}
+            {stage === "reconcile" && <ClusterCard />}
             {stage === "reconcile" && plan.length > 0 && (
               <Panel position="top-left" className="mapPlan">
                 <div className="mapPlanHead">
                   <b>Revision plan</b> <span className="mapPlanCount">{plan.length}</span>
-                  <span className="mapPlanKey">✎ rename · ⊘ reject · merges draw as arrows</span>
+                  <span className="mapPlanKey">✎ rename · ⊘ reject · merge groups show as halos</span>
                   <button className="btn" onClick={() => { [...plan].forEach(applyAction); }}>Accept all</button>
                   <button className="btn" onClick={() => setPlan([])} title="Discard every remaining proposal">Clear</button>
                 </div>
                 <div className="mapPlanList nicescroll">
                   {plan.map((a, i) => (
                     <div key={`${a.code}:${i}`} className="mapPlanRow" title={a.rationale}>
-                      <span className={"mapPlanKind " + a.action}>
-                        {a.action === "rename" ? "✎" : a.action === "merge" ? "⇥" : "⊘"}
-                      </span>
+                      <span className={"mapPlanKind " + a.action}>{a.action === "rename" ? "✎" : "⊘"}</span>
                       <span className="mapPlanText">
                         {a.action === "rename" ? <><b>{a.code}</b> → {a.newName}</>
-                          : a.action === "merge" ? <><b>{a.code}</b> ⇥ {a.into}{a.newName ? <> → {a.newName}</> : null}</>
                           : <>reject <b>{a.code}</b>'s excerpts</>}
                       </span>
                       <button className="btn ok" onClick={() => applyAction(a)} title={"Apply — " + a.rationale}>✓</button>
@@ -748,18 +640,33 @@ function MapInner() {
           onPlan={(p: ReconcilePlan, scope) => {
             const st = useStore.getState();
             if (scope === "all") {
-              remembered.positions = {}; remembered.islandPos = {};
-              st.setCodeClusters(p.clusters);
-              setPlan(p.actions);
+              st.applyReconcilePlan(p.clusters, p.actions, true);
             } else {
               // island-scoped refinement merges into the pending state: pending
               // clusters intersecting the subset are replaced (doc rule)
               const subset = new Set(codeGroups[scope]?.codes ?? []);
-              subset.forEach((c) => delete remembered.positions[c]);
-              st.setCodeClusters(mergeScopedClusters(st.codeClusters, subset, p.clusters));
-              setPlan([...plan.filter((a) => !subset.has(a.code)), ...p.actions]);
+              st.applyReconcilePlan(
+                mergeScopedClusters(st.codeClusters, subset, p.clusters),
+                [...st.codePlan.filter((a) => !subset.has(a.code)), ...p.actions],
+                false);
             }
           }} />
+      )}
+      {glimpseCi !== null && clusters[glimpseCi] && (
+        <GlimpseModal ci={glimpseCi} onClose={() => setGlimpseCi(null)} />
+      )}
+      {menu && menu.halo && (
+        <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
+          <button role="menuitem" onClick={() => {
+            const list = clusters[menu.halo!.ci]?.codes.filter((c) => c in codebook) ?? [];
+            openInCodebook(list); setMenu(null);
+          }}>
+            Open these codes in Codebook
+          </button>
+          <button role="menuitem" onClick={() => { setGlimpseCi(menu.halo!.ci); setMenu(null); }}>
+            AI: describe this group…
+          </button>
+        </div>
       )}
       {menu && menu.island && (
         <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
@@ -778,12 +685,17 @@ function MapInner() {
           )}
         </div>
       )}
-      {menu && !menu.island && menu.sel.length > 0 && (
+      {menu && !menu.island && !menu.halo && menu.sel.length > 0 && (
         <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>
-          {menu.sel.length > 1 && (
+          {menu.sel.length > 1 && stage === "reconcile" && (
+            <button role="menuitem" onClick={() => clusterSelection(menu.sel)}>
+              Propose merging these {menu.sel.length} codes
+            </button>
+          )}
+          {menu.sel.length > 1 && stage === "themes" && (
             <button role="menuitem" onClick={() => groupSelection(menu.sel)}>
               Group {menu.sel.length} codes together
             </button>

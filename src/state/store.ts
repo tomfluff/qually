@@ -60,14 +60,15 @@ export interface CodePlanAction {
 // as a sibling of codePlan so older app versions simply ignore it.
 export interface CodeCluster {
   survivor: string; codes: string[]; newName?: string; rationale: string;
-  // members evicted from the proposal but still re-attachable (pending-out);
-  // Accept applies `codes` only
-  out?: string[];
+  // an AI-generated glimpse of what this group means (halo menu), persisted
+  desc?: string;
 }
 export interface Selection { pid: string | null; anchor: number | null; head: number | null; lines: Set<number>; }
 export interface Ui {
   fontSize: number; sidebarFontSize: number; dark: boolean; zen: boolean;
   sidebarWidth: number; browseLeftWidth: number;
+  // the Code map's camera: survives tab switches AND reloads
+  mapViewport: { x: number; y: number; zoom: number } | null;
   mapMinimap: "top-left" | "top-right" | "bottom-left" | "bottom-right";
   // where popup cards open — the code palette (0) AND the add-event card:
   // "auto" anchors to the lines/dock they are about, "centered" always centers.
@@ -327,6 +328,11 @@ export interface State {
   setCodeClusters: (clusters: CodeCluster[]) => void;
   // one undoable entry per completed map gesture
   recordMapPosition: (id: string, pos: { x: number; y: number }, island?: boolean) => void;
+  reconcileDrop: (code: string, pos: { x: number; y: number }, targetCi: number | null) => void;
+  // Themes-stage drop: position + island membership, ONE entry. gi -1 = no island.
+  themesDrop: (code: string, pos: { x: number; y: number }, gi: number) => void;
+  // a reconcile run landing: clusters + actions + fresh layout, ONE entry
+  applyReconcilePlan: (clusters: CodeCluster[], actions: CodePlanAction[], resetLayout: boolean) => void;
   // the whole cluster is applied as ONE undoable step
   applyCluster: (ci: number) => void;
   setLastPid: (pid: string) => void;
@@ -467,8 +473,7 @@ function mergeInto(get: () => State, set: (p: Partial<State>) => void, from: str
       .filter((g) => g.codes.length > 0),
     codePlan: s.codePlan.filter((a) => a.code !== from && a.into !== from),
     codeClusters: s.codeClusters
-      .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== from),
-        ...(c.out ? { out: c.out.filter((x) => x !== from) } : {}) }))
+      .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== from) }))
       .filter((c) => c.survivor !== from && c.codes.length >= 2),
   });
 }
@@ -560,7 +565,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codePlan: [], codeClusters: [], mapPositions: {}, mapIslandPos: {}, lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
@@ -1459,6 +1464,49 @@ export const useStore = create<State>()(
       // every map mutation is one undoable history entry (design premise 7)
       setCodeGroups: (groups) => { get().pushUndo(); set({ codeGroups: groups.filter((g) => g.codes.length > 0) }); },
       setCodePlan: (plan) => { get().pushUndo(); set({ codePlan: plan }); },
+      applyReconcilePlan: (clusters, actions, resetLayout) => {
+        get().pushUndo();
+        set({
+          codeClusters: clusters.filter((c) => c.codes.length >= 2 && c.codes.includes(c.survivor)),
+          codePlan: actions,
+          ...(resetLayout ? { mapPositions: {}, mapIslandPos: {} } : {}),
+        });
+      },
+      // a completed Reconcile drop: position + membership change, ONE entry.
+      // targetCi === null leaves whatever cluster the code was in (outside is
+      // just outside); a number joins that cluster (leaving any other).
+      reconcileDrop: (code, pos, targetCi) => {
+        get().pushUndo();
+        const s = get();
+        const cur = s.codeClusters.findIndex((c) => c.codes.includes(code));
+        let clusters = s.codeClusters;
+        if (cur !== targetCi) {
+          clusters = clusters.map((c, i) => {
+            let codes = c.codes;
+            if (i === cur) codes = codes.filter((x) => x !== code);
+            if (i === targetCi && !codes.includes(code)) codes = [...codes, code];
+            return codes === c.codes ? c : { ...c, codes };
+          })
+          .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: c.codes[0] })
+          .filter((c) => c.codes.length >= 2);
+        }
+        set({ codeClusters: clusters, mapPositions: { ...s.mapPositions, [code]: pos } });
+      },
+      themesDrop: (code, pos, gi) => {
+        get().pushUndo();
+        const s = get();
+        const cur = s.codeGroups.findIndex((g) => g.codes.includes(code));
+        const positions = { ...s.mapPositions };
+        if (cur === gi) positions[code] = pos; // same home: the drop position holds
+        else delete positions[code];           // new home: the packer files it in
+        set({
+          mapPositions: positions,
+          codeGroups: cur === gi ? s.codeGroups : s.codeGroups.map((g, i) => ({
+            ...g,
+            codes: i === gi ? [...g.codes, code] : g.codes.filter((c) => c !== code),
+          })).filter((g) => g.codes.length > 0),
+        });
+      },
       recordMapPosition: (id, pos, island) => {
         get().pushUndo();
         set(island
@@ -1490,8 +1538,7 @@ export const useStore = create<State>()(
               codePlan: s1.codePlan.map((a) => ({ ...a, code: a.code === c.survivor ? c.newName! : a.code })),
               codeClusters: s1.codeClusters.map((x) => ({ ...x,
                 survivor: x.survivor === c.survivor ? c.newName! : x.survivor,
-                codes: x.codes.map((y) => y === c.survivor ? c.newName! : y),
-                ...(x.out ? { out: x.out.map((y) => y === c.survivor ? c.newName! : y) } : {}) })),
+                codes: x.codes.map((y) => y === c.survivor ? c.newName! : y) })),
             });
           }
         }
@@ -1502,7 +1549,7 @@ export const useStore = create<State>()(
         // a cluster survives while 2+ members exist ANYWHERE in it (evicted ones
         // can re-attach); an evicted survivor hands the crown to the first member
         .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: c.codes[0] })
-        .filter((c) => c.codes.length + (c.out?.length ?? 0) >= 2 && c.codes.length >= 1) }); },
+        .filter((c) => c.codes.length >= 2) }); },
       setLastPid: (pid) => set({ lastPid: pid }),
       // Newest first: the list is a record of what you asked, read most-recent
       // down. Not undoable — an answer costs an API call, and Ctrl+Z after some
@@ -1623,8 +1670,7 @@ export const useStore = create<State>()(
             ...(a.into === code ? { into: name } : {}) })),
           codeClusters: s.codeClusters.map((c) => ({ ...c,
             survivor: c.survivor === code ? name : c.survivor,
-            codes: c.codes.map((x) => x === code ? name : x),
-            ...(c.out ? { out: c.out.map((x) => x === code ? name : x) } : {}) })),
+            codes: c.codes.map((x) => x === code ? name : x) })),
         });
         set({ hotbarCache: hotbarCodes(get()) });
       },
@@ -1643,8 +1689,7 @@ export const useStore = create<State>()(
           // a deleted member leaves its cluster; a deleted survivor (or a
           // cluster thinned below 2) drops the whole proposal
           codeClusters: s.codeClusters
-            .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== code),
-              ...(c.out ? { out: c.out.filter((x) => x !== code) } : {}) }))
+            .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== code) }))
             .filter((c) => c.survivor !== code && c.codes.length >= 2),
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
@@ -1839,6 +1884,7 @@ export const useStore = create<State>()(
         s.nextAid = Math.max(0, ...s.answers.map((x) => x.aid)) + 1;
         s.ui.summaryLayout ??= "side";
         s.ui.mapMinimap ??= "bottom-right";
+        s.ui.mapViewport ??= null;
         s.ui.summarySplit = clampSummarySplit(s.ui.summarySplit ?? 0.5);
         s.ui.groundBold ??= true;
         s.ui.groundWash ??= true;

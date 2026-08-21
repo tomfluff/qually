@@ -114,20 +114,23 @@
 .mapActBadge.rename, .mapActBadge.merge { color:var(--accent); }
 /* the chip's pending-proposal marker */
 .mapActBadge { flex:none; }
-/* proposal-edge anchors: present for geometry, invisible to the eye */
-.mapChip .mapHandle { opacity:0; pointer-events:none; width:1px; height:1px;
-  min-width:1px; min-height:1px; border:0; }
 /* stage toggle rides the bar */
 .mapBar .mapStage { flex:none; }
 .mapBar .mapStage .seg { padding:4px 12px; font-weight:500; }
-/* constellation region: circular field; the reserved outer band (eviction
-   ring) is part of the node's box, so the packer keeps neighbors clear */
-.mapOrbit { width:100%; height:100%; box-sizing:border-box; border-radius:50%;
-  border:1px solid var(--line);
-  background:color-mix(in srgb, var(--accent) 5%, transparent); }
-.react-flow__node-orbit { pointer-events:none !important; }
-.mapOrbitLabel { left:50%; transform:translateX(-50%); max-width:130%; }
-.mapOrbitLabel .mapIslandName { overflow:hidden; text-overflow:ellipsis; }
+/* the halo: a capsule field hugging its packed member chips — containment IS
+   membership. The body is click-through; the caption (drag handle + menu
+   target) is the live part. While a chip is held over it, .will outlines it
+   in the accent — the "this will join" signal. */
+.mapHalo { width:100%; height:100%; box-sizing:border-box; border-radius:26px;
+  border:1.5px solid var(--line);
+  background:color-mix(in srgb, var(--accent) 6%, transparent); }
+.mapHalo.will { border-color:var(--accent); }
+.react-flow__node-halo { pointer-events:none !important; }
+.react-flow__node-halo .mapHaloLabel { pointer-events:auto; }
+.mapHaloLabel { left:50%; transform:translateX(-50%);
+  max-width:max(200%, 30ch); cursor:grab; }
+.mapHaloLabel .mapIslandName { overflow:hidden; text-overflow:ellipsis; }
+.mapHaloCount { color:var(--muted); font-size:.6em; font-weight:700; }
 .mapOrbitTag { color:var(--accent); font-size:.55em; font-weight:600;
   border:1px solid var(--accent); border-radius:99px; padding:.1em .6em; }
 /* badges are Reconcile-stage furniture */
