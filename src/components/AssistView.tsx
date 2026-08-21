@@ -607,7 +607,7 @@ export function AssistView() {
         </div>
       </div>
 
-      <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(160, Math.min(520, w)) })} />
+      <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(sidebarFontSize * 14, Math.min(520, w)) })} />
 
       <div className="browse-right nicescroll" ref={paneRef}
         onScroll={(e) => { remembered.scroll[panel] = e.currentTarget.scrollTop; }}>

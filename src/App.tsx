@@ -266,7 +266,7 @@ export function App() {
         {hasData && onTranscript && (
           <>
             <CodeSidebar />
-            <Resizer onWidth={(w) => useStore.getState().setUi({ sidebarWidth: Math.max(160, Math.min(560, w)) })} />
+            <Resizer onWidth={(w) => { const st = useStore.getState(); st.setUi({ sidebarWidth: Math.max(st.ui.sidebarFontSize * 14, Math.min(560, w)) }); }} />
           </>
         )}
         <div id="content">

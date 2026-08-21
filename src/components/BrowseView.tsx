@@ -179,7 +179,7 @@ export function BrowseView() {
         </div>
       </div>
 
-      <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(160, Math.min(520, w)) })} />
+      <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(sidebarFontSize * 14, Math.min(520, w)) })} />
 
       {/* the excerpt list keeps its place across a trip into a transcript: its
           refs are links out, and the view unmounts on a tab change (see

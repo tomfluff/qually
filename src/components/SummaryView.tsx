@@ -75,7 +75,7 @@ export function SummaryView() {
         </div>
       </div>
 
-      <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(160, Math.min(520, w)) })} />
+      <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(sidebarFontSize * 14, Math.min(520, w)) })} />
 
       {pid ? (
         <div className="sumRight">
