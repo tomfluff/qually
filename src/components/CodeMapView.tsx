@@ -329,7 +329,7 @@ function MapInner() {
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[];
     island?: { gi: number; name: string }; halo?: { ci: number; name: string } } | null>(null);
   // the modal, optionally pre-scoped to one island (island context menu)
-  const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" }>(false);
+  const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" | { focus: string[] } }>(false);
   const [themeAiOpen, setThemeAiOpen] = useState(false);
   const [confirmRelayout, setConfirmRelayout] = useState<{ x: number; y: number } | null>(null);
   // the arrangement lens: transient bucket/co-occurrence views for triage
@@ -883,10 +883,14 @@ function MapInner() {
             const st = useStore.getState();
             if (scope === "all") {
               st.applyReconcilePlan(p.clusters, p.actions, true);
+            } else if (typeof scope === "object") {
+              // focus run: the modal already merged into the pending state
+              // (replace-intersecting incl. fresh context targets)
+              st.applyReconcilePlan(p.clusters, p.actions, false);
             } else {
               // island-scoped refinement merges into the pending state: pending
               // clusters intersecting the subset are replaced (doc rule)
-              const subset = new Set(codeGroups[scope]?.codes ?? []);
+              const subset = new Set<string>(codeGroups[scope]?.codes ?? []);
               st.applyReconcilePlan(
                 mergeScopedClusters(st.codeClusters, subset, p.clusters),
                 [...st.codePlan.filter((a) => !subset.has(a.code)), ...p.actions],
@@ -973,6 +977,11 @@ function MapInner() {
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>
+          {stage === "reconcile" && (
+            <button role="menuitem" onClick={() => { setAiOpen({ scope: { focus: menu.sel } }); setMenu(null); }}>
+              AI: where {menu.sel.length === 1 ? "does this code" : "do these codes"} belong…
+            </button>
+          )}
           {menu.sel.length > 1 && stage === "reconcile" && (
             <button role="menuitem" onClick={() => clusterSelection(menu.sel)}>
               Propose merging these {menu.sel.length} codes

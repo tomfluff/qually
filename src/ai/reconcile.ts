@@ -208,3 +208,150 @@ export async function glimpseCluster(opts: {
   });
   return { glimpse: restore(opts.redaction, (data.glimpse ?? "").trim()), usage };
 }
+
+// ---------------------------------------------------------------------------
+// FOCUS reconcile: the researcher selects a handful of codes and asks where
+// they belong — against the WHOLE codebook. Asymmetric evidence keeps the
+// payload honest per token: focus codes carry up to 8 excerpts, every other
+// code rides along as context with its definition and 2 excerpts. Focus and
+// context stay in separate, stably-ordered sections (long-context position
+// bias). The model must echo every focus code in reviewedFocus so silence is
+// never ambiguous.
+const FOCUS_SYSTEM = `You are helping a qualitative researcher consolidate a first-cycle inductive codebook. The payload has two sections: FOCUS CODES — the codes under review — and CONTEXT CODEBOOK — every other code, as merge targets and context only.
+
+Propose dispositions ONLY for focus codes. A merge cluster must contain at least one focus code and may include context codes as members or survivor when the evidence shows the SAME concept. "rename" and "remove" apply to focus codes only. Most focus codes should come back unchanged — this is consolidation, not rewriting; when in doubt, keep.
+
+List EVERY focus code exactly once in reviewedFocus, whether or not you propose anything for it. Use the exact code names given. One sentence of rationale naming the evidence for each proposal. A code appears in at most one cluster. "remove" REJECTS a code's excerpts rather than deleting them; propose it sparingly, and never based on thin sampling alone.
+
+Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
+
+export const renderFocusPayload = (
+  focus: MergeCodeInput[], context: MergeCodeInput[], r: Redaction,
+): string =>
+  `FOCUS CODES (propose dispositions for these only):\n\n${renderMergePayload(focus, r)}\n\nCONTEXT CODEBOOK (merge targets and context only):\n\n${renderMergePayload(context, r)}`;
+
+export const estimateFocusTokens = (focus: MergeCodeInput[], context: MergeCodeInput[], r: Redaction) =>
+  estimateTokens(FOCUS_SYSTEM) + estimateTokens(renderFocusPayload(focus, context, r));
+
+const FOCUS_SCHEMA = {
+  type: "object",
+  properties: {
+    reviewedFocus: { type: "array", items: { type: "string" }, description: "every focus code name, exactly once" },
+    clusters: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          survivor: { type: "string" },
+          codes: { type: "array", items: { type: "string" } },
+          newName: { type: "string" },
+          rationale: { type: "string" },
+        },
+        required: ["survivor", "codes", "newName", "rationale"],
+        additionalProperties: false,
+      },
+    },
+    actions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          code: { type: "string" },
+          action: { type: "string", enum: ["rename", "remove"] },
+          newName: { type: "string" },
+          rationale: { type: "string" },
+        },
+        required: ["code", "action", "newName", "rationale"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["reviewedFocus", "clusters", "actions"],
+  additionalProperties: false,
+} as const;
+
+export async function reconcileFocus(opts: {
+  key: string; model: string;
+  focus: MergeCodeInput[]; context: MergeCodeInput[];
+  redaction: Redaction; mode?: ReconcileMode; signal?: AbortSignal;
+}): Promise<{ plan: ReconcilePlan; unreviewed: string[]; usage: Usage }> {
+  const consolidate = (opts.mode ?? "consolidate") === "consolidate";
+  const { data, usage } = await callJson<{ reviewedFocus: string[]; clusters: ClusterProposal[]; actions: CodeAction[] }>({
+    key: opts.key,
+    model: opts.model,
+    system: consolidate ? FOCUS_SYSTEM + CONSOLIDATE_SUFFIX : FOCUS_SYSTEM,
+    user: renderFocusPayload(opts.focus, opts.context, opts.redaction),
+    schemaName: "reconcile_focus",
+    schema: FOCUS_SCHEMA,
+    signal: opts.signal,
+  });
+  const focusNames = new Set(opts.focus.map((c) => c.name));
+  const all = [...opts.focus, ...opts.context];
+  const clusters = sanitizeFocusClusters(all, focusNames, data.clusters ?? [], opts.redaction);
+  const clustered = new Set(clusters.flatMap((c) => c.codes));
+  const actions = sanitizeActions(opts.focus, data.actions ?? [], opts.redaction)
+    .filter((a) => focusNames.has(a.code) && !clustered.has(a.code))
+    .filter((a) => !consolidate || a.action !== "remove");
+  const reviewed = new Set((data.reviewedFocus ?? []).map((x) => (x ?? "").trim()));
+  const unreviewed = [...focusNames].filter((f) => !reviewed.has(f));
+  return { plan: { clusters, actions }, unreviewed, usage };
+}
+
+// Focus clusters, the stricter boundary (codex-reviewed rules): members must
+// be real codes anywhere in the book; every cluster contains at least one
+// focus code (context-only clusters drop); an invalid survivor DROPS the
+// cluster — no first-member fallback, which would bias toward destruction;
+// one cluster per code globally; a newName colliding with an outside code
+// drops the newName.
+export function sanitizeFocusClusters(
+  all: MergeCodeInput[],
+  focus: Set<string>,
+  reply: ClusterProposal[],
+  r?: Redaction,
+): ClusterProposal[] {
+  const known = new Set(all.map((c) => c.name));
+  const taken = new Set<string>();
+  const out: ClusterProposal[] = [];
+  for (const c of reply) {
+    const members = [...new Set((c.codes ?? []).map((x) => (x ?? "").trim()))]
+      .filter((x) => known.has(x) && !taken.has(x));
+    if (members.length < 2) continue;
+    if (!members.some((m) => focus.has(m))) continue;
+    const survivor = (c.survivor ?? "").trim();
+    if (!members.includes(survivor)) continue;
+    members.forEach((x) => taken.add(x));
+    let newName: string | undefined = restore(r, (c.newName ?? "").trim()) || undefined;
+    if (newName && norm(newName) === norm(survivor)) newName = undefined;
+    if (newName) {
+      const outside = all.map((x) => x.name).filter((n) => !members.includes(n));
+      if (outside.some((n) => norm(n) === norm(newName!))) newName = undefined;
+    }
+    out.push({
+      survivor, codes: members,
+      ...(newName ? { newName } : {}),
+      rationale: restore(r, (c.rationale ?? "").trim()),
+    });
+  }
+  return out;
+}
+
+// Landing a focus run into a pending plan (codex-reviewed): the conflict set
+// is the reviewed focus PLUS every code the fresh clusters touch — a fresh
+// "focus A + context X" cluster must evict X from any old cluster. Pending
+// clusters are atomic: they drop whole, never lose just a member.
+export function mergeFocusResults(
+  pendingClusters: ClusterProposal[],
+  pendingActions: CodeAction[],
+  fresh: ReconcilePlan,
+  reviewedFocus: Set<string>,
+): { clusters: ClusterProposal[]; actions: CodeAction[]; replaced: number } {
+  const freshMembers = new Set(fresh.clusters.flatMap((c) => c.codes));
+  const conflict = new Set([...reviewedFocus, ...freshMembers]);
+  const keptClusters = pendingClusters.filter((c) => !c.codes.some((code) => conflict.has(code)));
+  const keptActions = pendingActions.filter((a) => !conflict.has(a.code));
+  return {
+    clusters: [...keptClusters, ...fresh.clusters],
+    actions: [...keptActions, ...fresh.actions],
+    replaced: (pendingClusters.length - keptClusters.length) + (pendingActions.length - keptActions.length),
+  };
+}

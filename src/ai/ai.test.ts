@@ -304,3 +304,37 @@ describe("reconcile sanitize (cluster plan)", () => {
     expect(out.map((c) => c.survivor)).toEqual(["x", "q"]);
   });
 });
+
+describe("focus reconcile boundaries", () => {
+  const mk = (names: string[]) => names.map((name) => ({ name, def: "", excerpts: [] }));
+  it("focus clusters: context-only drops, bad survivor drops, one cluster per code", async () => {
+    const { sanitizeFocusClusters } = await import("./reconcile");
+    const all = mk(["f1", "f2", "c1", "c2", "c3"]);
+    const focus = new Set(["f1", "f2"]);
+    const out = sanitizeFocusClusters(all, focus, [
+      { survivor: "c1", codes: ["c1", "c2"], rationale: "" },          // context-only -> drops
+      { survivor: "ghost", codes: ["f1", "c1"], rationale: "" },       // survivor not a member -> drops
+      { survivor: "c3", codes: ["f1", "c3"], newName: "c2", rationale: "" }, // newName collides outside -> name dropped, cluster kept
+      { survivor: "f2", codes: ["f2", "c3"], rationale: "" },          // c3 already taken -> thin -> drops
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].survivor).toBe("c3");
+    expect(out[0].newName).toBeUndefined();
+  });
+  it("landing: pending clusters touching fresh members drop whole", async () => {
+    const { mergeFocusResults } = await import("./reconcile");
+    const pending = [
+      { survivor: "x", codes: ["x", "y"], rationale: "" },   // x touched by fresh -> drops whole
+      { survivor: "p", codes: ["p", "q"], rationale: "" },   // untouched -> stays
+    ];
+    const pendingActions = [
+      { code: "f1", action: "rename" as const, newName: "z", rationale: "" }, // focus -> superseded
+      { code: "p", action: "rename" as const, newName: "pp", rationale: "" }, // untouched -> stays
+    ];
+    const fresh = { clusters: [{ survivor: "x", codes: ["f1", "x"], rationale: "" }], actions: [] };
+    const out = mergeFocusResults(pending, pendingActions, fresh, new Set(["f1", "f2"]));
+    expect(out.clusters.map((c) => c.survivor)).toEqual(["p", "x"]);
+    expect(out.actions.map((a) => a.code)).toEqual(["p"]);
+    expect(out.replaced).toBe(2);
+  });
+});

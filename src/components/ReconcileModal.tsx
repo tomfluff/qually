@@ -13,14 +13,15 @@ import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
-import { reconcileCodes, estimateReconcileTokens, type ReconcilePlan, type ReconcileMode } from "../ai/reconcile";
+import { reconcileCodes, reconcileFocus, estimateReconcileTokens, estimateFocusTokens, mergeFocusResults, type ReconcilePlan, type ReconcileMode } from "../ai/reconcile";
 import { announce } from "../announce";
 import { AiModal, ModelPicker } from "./AiModal";
 
+export type ReconcileScope = number | "all" | { focus: string[] };
 export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }: {
   groups: CodeGroup[];
-  initialScope?: number | "all";
-  onPlan: (plan: ReconcilePlan, scope: number | "all") => void;
+  initialScope?: ReconcileScope;
+  onPlan: (plan: ReconcilePlan, scope: ReconcileScope, meta?: { replaced: number; unreviewed: string[] }) => void;
   onClose: () => void;
 }) {
   const segments = useStore((s) => s.segments);
@@ -28,10 +29,10 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
   const codebook = useStore((s) => s.codebook);
   const ai = useStore((s) => s.ai);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ clusters: number; actions: number; cost: number } | null>(null);
+  const [done, setDone] = useState<{ clusters: number; actions: number; cost: number; replaced?: number; unreviewed?: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [exN, setExN] = useState(8);
-  const [scope, setScope] = useState<number | "all">(initialScope);
+  const [scope, setScope] = useState<ReconcileScope>(initialScope);
   const [mode, setMode] = useState<ReconcileMode>("consolidate");
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
@@ -40,30 +41,51 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
   const [modelId, setModelId] = useState(ai.model);
   const model = modelOf(modelId);
 
-  // one input per in-scope code with accepted segments — name + def + up to exN excerpts
+  const focusMode = typeof scope === "object";
+  // excerpt gatherer: cap excerpts per code; include zero-evidence codes when asked
+  const gather = useMemo(() => {
+    return (only: Set<string> | null, cap: number, includeEmpty: boolean): MergeCodeInput[] => {
+      const byCode = new Map<string, string[]>();
+      for (const s of segments) {
+        if (s.status !== "accepted" || !transcripts[s.pid]) continue;
+        if (only && !only.has(s.code)) continue;
+        const arr = byCode.get(s.code) ?? [];
+        if (arr.length >= cap) continue;
+        const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
+        if (ex) { arr.push(ex); byCode.set(s.code, arr); }
+      }
+      const names = includeEmpty && only ? [...only].filter((n) => n in codebook) : [...byCode.keys()];
+      return names.map((name) => ({ name, def: codebook[name]?.def ?? "", excerpts: byCode.get(name) ?? [] }));
+    };
+  }, [segments, transcripts, codebook]);
+  // one input per in-scope code — name + def + up to exN excerpts. Focus mode:
+  // focus codes carry the full evidence dial (zero-evidence ones included),
+  // the REST of the codebook rides as context with 2 excerpts each.
+  const focusSet = useMemo(() => (focusMode ? new Set((scope as { focus: string[] }).focus.filter((c) => c in codebook)) : null),
+    [focusMode, scope, codebook]);
   const codes = useMemo<MergeCodeInput[]>(() => {
-    const only = scope === "all" ? null : new Set(groups[scope]?.codes ?? []);
-    const byCode = new Map<string, string[]>();
-    for (const s of segments) {
-      if (s.status !== "accepted" || !transcripts[s.pid]) continue;
-      if (only && !only.has(s.code)) continue;
-      const arr = byCode.get(s.code) ?? [];
-      if (arr.length >= exN) continue;
-      const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
-      if (ex) { arr.push(ex); byCode.set(s.code, arr); }
-    }
-    return [...byCode.entries()].map(([name, excerpts]) => ({
-      name, def: codebook[name]?.def ?? "", excerpts,
-    }));
-  }, [segments, transcripts, codebook, exN, scope, groups]);
+    if (focusMode) return gather(focusSet, exN, true);
+    const only = scope === "all" ? null : new Set(groups[scope as number]?.codes ?? []);
+    return gather(only, exN, false);
+  }, [gather, focusMode, focusSet, exN, scope, groups]);
+  const contextCodes = useMemo<MergeCodeInput[]>(() => {
+    if (!focusMode) return [];
+    const rest = new Set(Object.keys(codebook).filter((c) => !focusSet!.has(c)));
+    return gather(rest, 2, false);
+  }, [gather, focusMode, focusSet, codebook]);
 
-  const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0);
-  const inTok = useMemo(() => estimateReconcileTokens(codes, red), [codes, red]);
+  const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0)
+    + contextCodes.reduce((n, c) => n + c.excerpts.length, 0);
+  const inTok = useMemo(() => focusMode
+    ? estimateFocusTokens(codes, contextCodes, red)
+    : estimateReconcileTokens(codes, red), [focusMode, codes, contextCodes, red]);
   const redactions = useMemo(() => codes.reduce((n, c) =>
     n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [codes, red]);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 30)));
-  const preview = renderMergePayload(codes, red);
-  const enough = codes.length >= 4;
+  const preview = focusMode
+    ? `FOCUS CODES:\n\n${renderMergePayload(codes, red)}\n\nCONTEXT CODEBOOK (2 excerpts each):\n\n${renderMergePayload(contextCodes, red)}`
+    : renderMergePayload(codes, red);
+  const enough = focusMode ? codes.length >= 1 && contextCodes.length >= 1 : codes.length >= 4;
 
   const run = async () => {
     const key = getKey();
@@ -75,17 +97,34 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
     announce(`Reconciling ${codes.length} codes…`);
     abort.current = new AbortController();
     try {
-      const { plan, usage } = await reconcileCodes({
-        key, model: model.id, codes, redaction: red, mode, signal: abort.current.signal,
-      });
+      let plan: ReconcilePlan; let usage: { inTok: number; outTok: number; costUsd: number };
+      let meta: { replaced: number; unreviewed: string[] } | undefined;
+      if (focusMode) {
+        const r = await reconcileFocus({
+          key, model: model.id, focus: codes, context: contextCodes,
+          redaction: red, mode, signal: abort.current.signal,
+        });
+        plan = r.plan; usage = r.usage;
+        const st = useStore.getState();
+        const merged = mergeFocusResults(st.codeClusters, st.codePlan, r.plan,
+          new Set(codes.map((c) => c.name)));
+        meta = { replaced: merged.replaced, unreviewed: r.unreviewed };
+        plan = { clusters: merged.clusters, actions: merged.actions };
+      } else {
+        const r = await reconcileCodes({
+          key, model: model.id, codes, redaction: red, mode, signal: abort.current.signal,
+        });
+        plan = r.plan; usage = r.usage;
+      }
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "reconcile",
-        pid: scope === "all" ? "(codebook)" : `(island: ${groups[scope]?.name})`,
-        lines: codes.length, redactions,
+        pid: focusMode ? `(focus: ${codes.length} codes)`
+          : scope === "all" ? "(codebook)" : `(island: ${groups[scope as number]?.name})`,
+        lines: codes.length + contextCodes.length, redactions,
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
-      onPlan(plan, scope);
-      setDone({ clusters: plan.clusters.length, actions: plan.actions.length, cost: usage.costUsd });
+      onPlan(plan, scope, meta);
+      setDone({ clusters: plan.clusters.length, actions: plan.actions.length, cost: usage.costUsd, ...(meta ? { replaced: meta.replaced, unreviewed: meta.unreviewed.length } : {}) });
       announce(`${plan.clusters.length} merge cluster${plan.clusters.length === 1 ? "" : "s"} and ${plan.actions.length} action${plan.actions.length === 1 ? "" : "s"} laid out on the map.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -109,6 +148,12 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
                 discards it). Nothing has changed yet, and "remove" only rejects a code's excerpts —
                 the data stays in the file.
               </p>
+              {done.replaced != null && done.replaced > 0 && (
+                <div className="settings-note">Replaced {done.replaced} pending proposal{done.replaced === 1 ? "" : "s"} that touched the reviewed codes.</div>
+              )}
+              {done.unreviewed != null && done.unreviewed > 0 && (
+                <div className="settings-note"><b>{done.unreviewed}</b> focus code{done.unreviewed === 1 ? "" : "s"} came back unreviewed — treat their absence as oversight, not a keep.</div>
+              )}
               <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
             </div>
             <div className="imp-actions"><button className="btn primary" onClick={onClose}>Review on the map</button></div>
@@ -125,9 +170,16 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
               </p>
               {enough && (
                 <div className="ai-warn">
-                  <b>This sends {codes.length} code{codes.length === 1 ? "" : "s"} — names, definitions,
-                  and up to {exN} excerpts each — to OpenAI.</b> Excerpts are participant
-                  data; make sure this is allowed by your consent form and ethics approval.
+                  {focusMode ? (
+                    <><b>This sends the WHOLE codebook — {codes.length} focus code{codes.length === 1 ? "" : "s"} with
+                    up to {exN} excerpts each, plus {contextCodes.length} context codes with definitions and 2 excerpts
+                    each — to OpenAI.</b> Excerpts are participant data; make sure this is allowed by your
+                    consent form and ethics approval.</>
+                  ) : (
+                    <><b>This sends {codes.length} code{codes.length === 1 ? "" : "s"} — names, definitions,
+                    and up to {exN} excerpts each — to OpenAI.</b> Excerpts are participant
+                    data; make sure this is allowed by your consent form and ethics approval.</>
+                  )}
                 </div>
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
@@ -149,14 +201,23 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
                     </button>
                   </div>
                 </div>
-                <div className="srow">
-                  <span>Scope</span>
-                  <select className="settext" value={scope === "all" ? "all" : String(scope)}
-                    onChange={(e) => setScope(e.target.value === "all" ? "all" : +e.target.value)}>
-                    <option value="all">Whole codebook</option>
-                    {groups.map((g, i) => <option key={i} value={i}>Island: {g.name}</option>)}
-                  </select>
-                </div>
+                {focusMode ? (
+                  <div className="srow">
+                    <span>Scope</span>
+                    <span className="settings-note" style={{ margin: 0 }}>
+                      Where do these belong: {codes.map((c) => c.name).join(", ")} — reviewed against the whole codebook.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="srow">
+                    <span>Scope</span>
+                    <select className="settext" value={scope === "all" ? "all" : String(scope)}
+                      onChange={(e) => setScope(e.target.value === "all" ? "all" : +e.target.value)}>
+                      <option value="all">Whole codebook</option>
+                      {groups.map((g, i) => <option key={i} value={i}>Island: {g.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <label className="srow">
                   <span>Excerpts per code</span>
                   <input type="range" min={3} max={12} value={exN}
