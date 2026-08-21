@@ -180,9 +180,9 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const base = fs * 1.3;
-  // tight ceiling: halos hug their chips, so a caption much larger than its
-  // capsule collides with neighbors long before it helps legibility
-  const fontSize = Math.min(base * 2, Math.max(base, base / zoom));
+  // the caption tracks the zoom (constant on-screen size while zooming out)
+  // up to a generous ceiling — far out, the map must read as group names
+  const fontSize = Math.min(base * 4.5, Math.max(base, base / zoom));
   return (
     <div className="mapHalo">
       <div className="mapIslandLabel mapHaloLabel" style={{ fontSize }}>
@@ -450,7 +450,7 @@ function MapInner() {
           extraNodes.push({
             id: `note:${b.c.ci}`, type: "note" as const,
             position: { x: b.w + 26, y: 0 }, parentId: key,
-            draggable: true, selectable: false, focusable: false,
+            draggable: false, selectable: false, focusable: false,
             width: Math.max(240, fs * 15),
             data: { ci: b.c.ci, text: genCi === b.c.ci ? null : b.c.desc ?? "" },
           });

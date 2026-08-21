@@ -180,3 +180,7 @@
 .mapAiConfirm { max-width:40ch; padding:8px 4px 2px; }
 .mapAiConfirmText { padding:0 10px 4px; line-height:1.4; }
 .mapAiConfirmText b { font-variant-numeric:tabular-nums; }
+/* research text is quotable: the card's reasoning and the glimpse select like
+   text (RF disables selection on nodes by default) */
+.mapCardNode .mapCardRat, .mapNote .mapNoteText, .mapNote .mapNoteGen {
+  user-select:text; -webkit-user-select:text; cursor:text; }
