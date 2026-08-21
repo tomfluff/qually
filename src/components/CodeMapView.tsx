@@ -55,7 +55,7 @@ type ChipData = { code: string; color: string; segs: number; pids: number; act?:
 type ChipNodeT = Node<ChipData, "chip">;
 type IslandData = { name: string; gi: number; lens?: boolean };
 type IslandNodeT = Node<IslandData, "island">;
-type HaloData = { name: string; renamed: boolean; ci: number; count: number; open: boolean };
+type HaloData = { name: string; renamed: boolean; joins: boolean; ci: number; count: number; open: boolean };
 type HaloNodeT = Node<HaloData, "halo">;
 type CardData = { ci: number };
 type CardNodeT = Node<CardData, "card">;
@@ -116,10 +116,30 @@ function SelectionHud() {
   const joined = useFlowStore(selectedIdsSel);
   const sel = useMemo(() => (joined ? joined.split("\n") : []), [joined]);
   useEffect(() => { remembered.selected = new Set(sel); }, [sel]);
+  const clusters = useStore((st) => st.codeClusters);
+  const { getNodes } = useReactFlow();
+  // the keyboard path for eviction: dragging out is pointer-only, this is not
+  const inMerge = sel.filter((c) => clusters.some((x) => x.codes.includes(c)));
+  const evictSelected = () => {
+    const st = useStore.getState();
+    for (const code of inMerge) {
+      const ci = st.codeClusters.findIndex((x) => x.codes.includes(code));
+      if (ci < 0) continue;
+      const halo = getNodes().find((x) => x.id === `halo:${ci}`);
+      const pos = halo ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y } : { x: 0, y: 0 };
+      st.reconcileDrop(code, pos, null);
+    }
+  };
   return (
     <Panel position="top-right" className="mapSelPanel"
       style={{ visibility: sel.length > 0 ? "visible" : "hidden" }}>
       <span className="mapSelCount">{sel.length} selected</span>
+      {inMerge.length > 0 && (
+        <button className="btn" onClick={evictSelected}
+          title="Move the selected codes out of their merge groups (they park beside them)">
+          Remove from merge
+        </button>
+      )}
       <button className="btn" onClick={() => openInCodebook(sel)}>Open in Codebook</button>
     </Panel>
   );
@@ -142,9 +162,11 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.name);
   const rename = () => {
-    const st = useStore.getState();
-    if (draft.trim()) st.setCodeGroups(st.codeGroups.map((g, i) => (i === data.gi ? { ...g, name: draft.trim() } : g)));
     setEditing(false);
+    const st = useStore.getState();
+    const name = draft.trim();
+    if (!name || st.codeGroups[data.gi]?.name === name) return; // no change, no history entry
+    st.setCodeGroups(st.codeGroups.map((g, i) => (i === data.gi ? { ...g, name } : g)));
   };
   const dissolve = () => {
     const st = useStore.getState();
@@ -166,7 +188,9 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
             }} />
         ) : (
           <>
-            <span className="mapIslandName" title="Drag to move the group; double-click to rename"
+            <span className="mapIslandName" title="Drag to move the group; double-click or Enter to rename"
+              tabIndex={0} role="button"
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "F2") { e.preventDefault(); setDraft(data.name); setEditing(true); } }}
               onDoubleClick={() => { setDraft(data.name); setEditing(true); }}>{data.name}</span>
             <button className="mapIslandX nodrag" title="Dissolve this group (codes stay)"
               onPointerDown={(e) => e.stopPropagation()}
@@ -193,11 +217,15 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.name);
   const rename = () => {
-    const st = useStore.getState();
-    const name = draft.trim();
-    st.setCodeClusters(st.codeClusters.map((x, i) => i !== data.ci ? x
-      : name && name !== x.survivor ? { ...x, newName: name } : (({ newName: _drop, ...rest }) => rest)(x)));
     setEditing(false);
+    const st = useStore.getState();
+    const cur = st.codeClusters[data.ci];
+    if (!cur) return;
+    const name = draft.trim();
+    const next = name && name !== cur.survivor ? name : undefined;
+    if (next === cur.newName) return; // no change, no history entry
+    st.setCodeClusters(st.codeClusters.map((x, i) => i !== data.ci ? x
+      : next ? { ...x, newName: next } : (({ newName: _drop, ...rest }) => rest)(x)));
   };
   return (
     <div className="mapHalo">
@@ -212,10 +240,12 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
               if (e.key === "Escape") { e.stopPropagation(); setDraft(data.name); setEditing(false); }
             }} />
         ) : (
-          <span className="mapIslandName" title="The merged code's name — double-click to rename"
+          <span className="mapIslandName nodrag" title="The merged code's name — double-click or Enter to rename"
+            tabIndex={0} role="button"
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "F2") { e.preventDefault(); setDraft(data.name); setEditing(true); } }}
             onDoubleClick={(e) => { e.stopPropagation(); setDraft(data.name); setEditing(true); }}>{data.name}</span>
         )}
-        {data.renamed && !editing && <span className="mapOrbitTag">new name</span>}
+        {data.renamed && !editing && <span className="mapOrbitTag">{data.joins ? "joins existing" : "new name"}</span>}
         <span className="mapHaloCount">{data.count}</span>
         <button className="mapHaloArrow nodrag" title={data.open ? "Fold the details" : "Reasoning and the verdict"}
           onPointerDown={(e) => e.stopPropagation()}
@@ -323,7 +353,7 @@ function MapInner() {
   const setUi = useStore((s) => s.setUi);
   const mapPositions = useStore((s) => s.mapPositions);
   const mapIslandPos = useStore((s) => s.mapIslandPos);
-  const { setNodes: rfSetNodes, getNodes, getInternalNode } = useReactFlow();
+  const { setNodes: rfSetNodes, getNodes, getInternalNode, fitView } = useReactFlow();
   // menu state carries the selection it acts on, captured at open — the menu
   // needs no live subscription
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[];
@@ -331,7 +361,7 @@ function MapInner() {
   // the modal, optionally pre-scoped to one island (island context menu)
   const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" | { focus: string[] } }>(false);
   const [themeAiOpen, setThemeAiOpen] = useState(false);
-  const [confirmRelayout, setConfirmRelayout] = useState<{ x: number; y: number } | null>(null);
+  const [confirmRelayout, setConfirmRelayout] = useState<{ right: number; y: number } | null>(null);
   // the arrangement lens: transient bucket/co-occurrence views for triage
   const [lens, setLens] = useState(remembered.lens);
   useEffect(() => { remembered.lens = lens; }, [lens]);
@@ -355,6 +385,15 @@ function MapInner() {
   // in the file, so the review can continue in a later session
   const plan = useStore((st) => st.codePlan);
   const clusters = useStore((st) => st.codeClusters);
+  // openCards/hiddenNotes key clusters by INDEX; when the list shrinks the
+  // indices reshuffle, so stale entries would light the wrong halo
+  const prevClusterCount = useRef(clusters.length);
+  useEffect(() => {
+    if (clusters.length < prevClusterCount.current) {
+      setOpenCards(new Set()); setHiddenNotes(new Set());
+    }
+    prevClusterCount.current = clusters.length;
+  }, [clusters.length]);
   // stage: Reconcile while ANYTHING is pending, Themes on an empty plan —
   // unless the researcher flipped the toggle this session
   const [stageOverride, setStageOverride] = useState(remembered.stage);
@@ -501,7 +540,11 @@ function MapInner() {
         const packed = pack(c.codes, Math.max(widths.get(c.codes[0])! + GX, Math.sqrt(totalW * (ch + GY)) * 1.15));
         // reserve room for the unfolded card below and the note beside, so
         // neighbors never sit under them
-        const cardH = openCards.has(c.ci) ? fs * 9 + 22 : 0;
+        const cardW = Math.max(280, Math.min(420, (packed.w + 2 * HALO_PAD) - 24));
+        const ratLines = openCards.has(c.ci)
+          ? Math.max(1, Math.ceil(((c.rationale?.length ?? 0) + (c.desc?.length ?? 0)) * (fs * 0.52) / (cardW - 24)))
+          : 0;
+        const cardH = openCards.has(c.ci) ? ratLines * fs * 1.45 + fs * 5 + 22 : 0;
         const noteW = (genCi === c.ci || c.desc) && !hiddenNotes.has(c.ci) ? Math.max(240, fs * 15) + 26 : 0;
         return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD, cardH, noteW };
       });
@@ -516,7 +559,11 @@ function MapInner() {
           width: b.w, height: b.h,
           draggable: true, selectable: false, focusable: false,
           dragHandle: ".mapHaloLabel",
-          data: { name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName, ci: b.c.ci, count: b.c.codes.length, open: openCards.has(b.c.ci) },
+          data: {
+            name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName,
+            joins: !!b.c.newName && Object.keys(codebook).some((k) => k === b.c.newName && !b.c.codes.includes(k)),
+            ci: b.c.ci, count: b.c.codes.length, open: openCards.has(b.c.ci),
+          },
         });
         for (const m of b.c.codes)
           chipNodes.push(chipNode(m, { x: HALO_PAD + b.packed.pos[m].x, y: HALO_PAD + b.packed.pos[m].y }, key));
@@ -736,17 +783,41 @@ function MapInner() {
   }, [selectionAt, rfSetNodes]);
   const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => e.preventDefault(), []);
   const [selecting, setSelecting] = useState(false);
-  // the Revision plan floats: drag it by its header anywhere on the canvas
+  // the Revision plan floats: drag it by its header anywhere on the canvas.
+  // The drag paints imperatively (the marquee lesson: no React work per move);
+  // state commits once on release, clamped so the header stays reachable.
   const [planPos, setPlanPos] = useState(remembered.planPos);
   useEffect(() => { remembered.planPos = planPos; }, [planPos]);
+  const planDragAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => planDragAbort.current?.abort(), []);
   const dragPlan = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0 || (e.target as Element).closest("button")) return;
     e.preventDefault();
+    const panel = (e.currentTarget as HTMLElement).closest(".mapPlan") as HTMLElement | null;
+    const canvas = panel?.closest(".mapCanvas") as HTMLElement | null;
+    if (!panel || !canvas) return;
+    const pid = e.pointerId;
     const sx = e.clientX - planPos.x, sy = e.clientY - planPos.y;
-    const move = (ev: PointerEvent) => setPlanPos({ x: ev.clientX - sx, y: ev.clientY - sy });
-    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    let last = planPos;
+    let frame = 0;
+    const ac = new AbortController();
+    planDragAbort.current = ac;
+    const paint = () => { frame = 0; panel.style.transform = `translate(${last.x}px, ${last.y}px)`; };
+    const finish = () => {
+      ac.abort();
+      const c = canvas.getBoundingClientRect();
+      setPlanPos({
+        x: Math.max(-8, Math.min(last.x, c.width - 120)),
+        y: Math.max(-8, Math.min(last.y, c.height - 60)),
+      });
+    };
+    window.addEventListener("pointermove", (ev) => {
+      if (ev.pointerId !== pid) return;
+      last = { x: ev.clientX - sx, y: ev.clientY - sy };
+      if (!frame) frame = requestAnimationFrame(paint);
+    }, { signal: ac.signal });
+    window.addEventListener("pointerup", (ev) => { if (ev.pointerId === pid) finish(); }, { signal: ac.signal });
+    window.addEventListener("pointercancel", (ev) => { if (ev.pointerId === pid) finish(); }, { signal: ac.signal });
   }, [planPos]);
   const onSelectionStart = useCallback(() => setSelecting(true), []);
   const onSelectionEnd = useCallback(() => setSelecting(false), []);
@@ -801,16 +872,17 @@ function MapInner() {
             <Icon name="sparkle" size={15} /> <span className="blabel">Group into themes with AI</span>
           </button>
         )}
-        <button className="btn iconbtn" onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
+        <button className="btn iconbtn" aria-label="Move the minimap to the next corner"
+          onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
           title="Move the minimap to the next corner">
           <Icon name="pip" size={15} />
         </button>
-        <button className="btn iconbtn" onClick={(e) => {
+        <button className="btn iconlabel" aria-label="Re-layout the map" onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setConfirmRelayout({ x: Math.max(8, r.right - 340), y: r.bottom + 8 });
+            setConfirmRelayout({ right: window.innerWidth - r.right, y: r.bottom + 8 });
           }}
           title="Lay the whole map out fresh (replaces your hand-placed layout)">
-          <Icon name="refresh" size={15} />
+          <Icon name="refresh" size={15} /> <span className="blabel">Re-layout</span>
         </button>
       </div>
       <div className="mapCanvas">
@@ -846,7 +918,8 @@ function MapInner() {
               <Panel position="top-left" className="mapPlan"
                 style={{ transform: `translate(${planPos.x}px, ${planPos.y}px)` }}>
                 <div className="mapPlanHead" onPointerDown={dragPlan}
-                  title="Drag to move this panel">
+                  onDoubleClick={() => setPlanPos({ x: 0, y: 0 })}
+                  title="Drag to move this panel; double-click to send it home">
                   <b>Revision plan</b> <span className="mapPlanCount">{plan.length}</span>
                   <span className="mapPlanKey">✎ rename · ⊘ reject · merge groups show as halos</span>
                   <button className="btn" onClick={() => { [...plan].forEach(applyAction); }}>Accept all</button>
@@ -900,14 +973,19 @@ function MapInner() {
       )}
       {confirmRelayout && (
         <div className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm re-layout"
-          style={{ left: confirmRelayout.x, top: confirmRelayout.y, fontSize: sidebarFontSize }}>
-          <div className="mapAiConfirmText">
+          aria-describedby="relayout-confirm-text"
+          style={{ right: confirmRelayout.right, top: confirmRelayout.y, fontSize: sidebarFontSize }}>
+          <div className="mapAiConfirmText" id="relayout-confirm-text">
             Lay the map out fresh? Every chip and group you placed by hand returns to the
             packed layout. <b>One undo step brings it all back.</b>
           </div>
           <div className="mapCardActions">
             <button className="btn primary" autoFocus
-              onClick={() => { setConfirmRelayout(null); useStore.getState().resetMapLayout(); }}>Re-layout</button>
+              onClick={() => {
+                setConfirmRelayout(null);
+                useStore.getState().resetMapLayout();
+                requestAnimationFrame(() => fitView({ duration: 200 }));
+              }}>Re-layout</button>
             <button className="btn" onClick={() => setConfirmRelayout(null)}>Cancel</button>
           </div>
         </div>
@@ -921,8 +999,9 @@ function MapInner() {
         const cost = costOf(model, inTok, estimateTokens(" ".repeat(80)));
         return (
           <div className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm AI request"
+            aria-describedby="ai-confirm-text"
             style={{ left: confirmAi.x, top: confirmAi.y, fontSize: sidebarFontSize }}>
-            <div className="mapAiConfirmText">
+            <div className="mapAiConfirmText" id="ai-confirm-text">
               Describe with AI — sends <b>{inputs.length} codes · ≈{inTok.toLocaleString()} tokens
               · ≈${cost.toFixed(4)}</b> to OpenAI ({model.id}).
             </div>

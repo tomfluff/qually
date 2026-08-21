@@ -455,7 +455,7 @@ function restoreLine(get: () => State, set: (p: Partial<State>) => void,
 // The survivor auto-picks itself: the member with the most accepted excerpts
 // (the name still comes from the halo title / newName; this only chooses the
 // merge target and the fallback display name).
-function bestSurvivor(s: State, codes: string[]): string {
+export function bestSurvivor(s: State, codes: string[]): string {
   let best = codes[0], bestN = -1;
   for (const c of codes) {
     const n = s.segments.filter((x) => norm(x.code) === norm(c) && x.status === "accepted").length;
@@ -1481,6 +1481,10 @@ export const useStore = create<State>()(
       setCodeGroups: (groups) => { get().pushUndo(); set({ codeGroups: groups.filter((g) => g.codes.length > 0) }); },
       setCodePlan: (plan) => { get().pushUndo(); set({ codePlan: plan }); },
       resetMapLayout: () => {
+        const s = get();
+        if (!Object.keys(s.mapPositions).length && !Object.keys(s.mapIslandPos).length) {
+          announce("The map is already in its packed layout"); return;
+        }
         get().pushUndo();
         set({ mapPositions: {}, mapIslandPos: {} });
         announce("Map laid out fresh");
@@ -1495,7 +1499,8 @@ export const useStore = create<State>()(
       applyReconcilePlan: (clusters, actions, resetLayout) => {
         get().pushUndo();
         set({
-          codeClusters: clusters.filter((c) => c.codes.length >= 2 && c.codes.includes(c.survivor)),
+          codeClusters: clusters.filter((c) => c.codes.length >= 2)
+            .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes) })),
           codePlan: actions,
           ...(resetLayout ? { mapPositions: {}, mapIslandPos: {} } : {}),
         });
@@ -1515,8 +1520,8 @@ export const useStore = create<State>()(
             if (i === targetCi && !codes.includes(code)) codes = [...codes, code];
             return codes === c.codes ? c : { ...c, codes };
           })
-          .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: bestSurvivor(get(), c.codes) })
-          .filter((c) => c.codes.length >= 2);
+          .filter((c) => c.codes.length >= 2)
+          .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes) }));
         }
         set({ codeClusters: clusters, mapPositions: { ...s.mapPositions, [code]: pos } });
       },
@@ -1551,9 +1556,9 @@ export const useStore = create<State>()(
         // the whole cluster is ONE history entry
         set({ codeClusters: s0.codeClusters.filter((_, i) => i !== ci) });
         for (const m of c.codes) if (m !== c.survivor) mergeInto(get, set, m, c.survivor);
-        if (c.newName && norm(c.newName) !== norm(c.survivor)) {
+        if (c.newName && c.newName !== c.survivor) {
           const s1 = get();
-          const existing = Object.keys(s1.codebook).find((k) => norm(k) === norm(c.newName!));
+          const existing = Object.keys(s1.codebook).find((k) => norm(k) === norm(c.newName!) && k !== c.survivor);
           if (existing) mergeInto(get, set, c.survivor, existing);
           else {
             const cb: State["codebook"] = {};
@@ -1574,10 +1579,11 @@ export const useStore = create<State>()(
         announce(`Merged ${c.codes.length} codes into ${c.newName ?? c.survivor}`);
       },
       setCodeClusters: (clusters) => { get().pushUndo(); set({ codeClusters: clusters
-        // a cluster survives while 2+ members exist ANYWHERE in it (evicted ones
-        // can re-attach); an evicted survivor hands the crown to the first member
-        .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: bestSurvivor(get(), c.codes) })
-        .filter((c) => c.codes.length >= 2) }); },
+        // with the survivor control gone, the survivor is ALWAYS the
+        // best-evidenced member — one policy, applied to every cluster that
+        // enters the store, AI-made and hand-made alike
+        .filter((c) => c.codes.length >= 2)
+        .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes) })) }); },
       setLastPid: (pid) => set({ lastPid: pid }),
       // Newest first: the list is a record of what you asked, read most-recent
       // down. Not undoable — an answer costs an API call, and Ctrl+Z after some
