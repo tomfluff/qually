@@ -189,3 +189,5 @@
 .mapPlanHead:active { cursor:grabbing; }
 /* the minimap must not sit ON the zoom controls when both share bottom-left */
 .mapCanvas .react-flow__minimap.bottom.left { margin-left:56px; }
+/* the lens select rides the bar compactly */
+.mapBar .mapLens { flex:none; width:auto; padding:4px 8px; }

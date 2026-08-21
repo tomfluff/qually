@@ -53,7 +53,7 @@ const chipW = (fs: number, name: string, segs: number, pids: number) => {
 
 type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction };
 type ChipNodeT = Node<ChipData, "chip">;
-type IslandData = { name: string; gi: number };
+type IslandData = { name: string; gi: number; lens?: boolean };
 type IslandNodeT = Node<IslandData, "island">;
 type HaloData = { name: string; renamed: boolean; ci: number; count: number; open: boolean };
 type HaloNodeT = Node<HaloData, "halo">;
@@ -74,6 +74,8 @@ const remembered = {
   hiddenNotes: new Set<number>(),
   // where the researcher parked the Revision plan panel (screen offset)
   planPos: { x: 0, y: 0 },
+  // the transient arrangement lens: a way of LOOKING, never written anywhere
+  lens: "default" as "default" | "pids" | "segs" | "cooc",
 };
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -151,8 +153,8 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
   return (
     <div className={"mapIsland" + (data.gi === -1 ? " loose" : "")}>
       <div className="mapIslandLabel" style={{ fontSize }}>
-        {data.gi === -1 ? (
-          <span className="mapIslandName loose">{data.name}</span>
+        {data.lens || data.gi === -1 ? (
+          <span className={"mapIslandName" + (data.gi === -1 ? " loose" : "")}>{data.name}</span>
         ) : editing ? (
           <input className="mapIslandEdit nodrag" value={draft} autoFocus
             onPointerDown={(e) => e.stopPropagation()}
@@ -330,6 +332,9 @@ function MapInner() {
   const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" }>(false);
   const [themeAiOpen, setThemeAiOpen] = useState(false);
   const [confirmRelayout, setConfirmRelayout] = useState<{ x: number; y: number } | null>(null);
+  // the arrangement lens: transient bucket/co-occurrence views for triage
+  const [lens, setLens] = useState(remembered.lens);
+  useEffect(() => { remembered.lens = lens; }, [lens]);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   const [hiddenNotes, setHiddenNotes] = useState<Set<number>>(remembered.hiddenNotes);
   useEffect(() => { remembered.openCards = openCards; remembered.hiddenNotes = hiddenNotes; }, [openCards, hiddenNotes]);
@@ -403,6 +408,82 @@ function MapInner() {
       selected: remembered.selected.has(c),
       data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c) },
     });
+
+    if (lens !== "default") {
+      // buckets from counts, or co-occurrence components — computed locally,
+      // arranged as read-only islands; nothing is written anywhere
+      let lensGroups: { name: string; list: string[] }[] = [];
+      if (lens === "pids" || lens === "segs") {
+        const val = (c: string) => (lens === "pids" ? stats[c]?.pids ?? 0 : stats[c]?.segs ?? 0);
+        const buckets: [string, (n: number) => boolean][] = lens === "pids"
+          ? [["1 transcript", (n) => n <= 1], ["2–4 transcripts", (n) => n <= 4], ["5+ transcripts", () => true]]
+          : [["1 excerpt", (n) => n <= 1], ["2–5 excerpts", (n) => n <= 5], ["6–15 excerpts", (n) => n <= 15], ["16+ excerpts", () => true]];
+        lensGroups = buckets.map(([name]) => ({ name, list: [] as string[] }));
+        for (const c of codes) {
+          const n = val(c);
+          const bi = buckets.findIndex(([, fits]) => fits(n));
+          lensGroups[bi].list.push(c);
+        }
+        lensGroups = lensGroups.filter((g) => g.list.length > 0);
+      } else {
+        // co-occurrence: codes whose accepted excerpts cover largely the SAME
+        // lines are prime merge candidates (they always appear together)
+        const lines = new Map<string, Set<string>>();
+        for (const seg of segments) {
+          if (seg.status !== "accepted" || !(seg.code in codebook)) continue;
+          const set = lines.get(seg.code) ?? new Set<string>();
+          for (let l = seg.start; l <= seg.end; l++) set.add(`${seg.pid}:${l}`);
+          lines.set(seg.code, set);
+        }
+        const names = [...lines.keys()].filter((c) => (lines.get(c)?.size ?? 0) >= 2);
+        // pairwise, NOT transitive: A~B and B~C must not chain A into C's
+        // group. Greedy from the strongest pairs; a code may extend a group
+        // only if it co-occurs with EVERY member.
+        const score = (a: string, b: string) => {
+          const A = lines.get(a)!, B = lines.get(b)!;
+          let inter = 0;
+          for (const x of A) if (B.has(x)) inter++;
+          return inter / Math.min(A.size, B.size);
+        };
+        const pairs: [number, string, string][] = [];
+        for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
+          const sc = score(names[i], names[j]);
+          if (sc >= 0.6) pairs.push([sc, names[i], names[j]]);
+        }
+        pairs.sort((a, b) => b[0] - a[0]);
+        const groupOf = new Map<string, string[]>();
+        for (const [, a, b] of pairs) {
+          const ga = groupOf.get(a), gb = groupOf.get(b);
+          if (!ga && !gb) { const g = [a, b]; groupOf.set(a, g); groupOf.set(b, g); }
+          else if (ga && !gb && ga.every((m) => score(m, b) >= 0.6)) { ga.push(b); groupOf.set(b, ga); }
+          else if (gb && !ga && gb.every((m) => score(m, a) >= 0.6)) { gb.push(a); groupOf.set(a, gb); }
+        }
+        const together = [...new Set(groupOf.values())].sort((a, b) => b.length - a.length);
+        const grouped = new Set(together.flat());
+        lensGroups = together.map((g, i) => ({ name: `Always together ${i + 1}`, list: g }));
+        lensGroups.push({ name: "No co-occurrence signal", list: codes.filter((c) => !grouped.has(c)) });
+      }
+      // islands layout, read-only
+      const blocks = lensGroups.map((g, gi) => ({ name: g.name, gi, list: g.list, ...pack(g.list, near(g.list)) }));
+      const rowW = Math.max(900, Math.sqrt(blocks.reduce((a, b) => a + (b.w + 2 * PAD + ISLAND_GAP) * (b.h + 2 * PAD + ISLAND_GAP), 0)) * 1.4);
+      const islands: IslandNodeT[] = [];
+      const children: ChipNodeT[] = [];
+      let ix = 0, iy = 0, rowH = 0;
+      for (const b of blocks) {
+        const bw = b.w + 2 * PAD, bh = b.h + 2 * PAD;
+        if (ix > 0 && ix + bw > rowW) { ix = 0; iy += rowH + ISLAND_GAP; rowH = 0; }
+        islands.push({
+          id: `lens:${b.gi}`, type: "island" as const,
+          position: { x: ix, y: iy }, width: bw, height: bh,
+          draggable: false, selectable: false, focusable: false,
+          data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true },
+        });
+        for (const c of b.list) children.push({ ...chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, `lens:${b.gi}`), position: { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y } });
+        ix += bw + ISLAND_GAP;
+        rowH = Math.max(rowH, bh);
+      }
+      return { nodes: [...islands, ...children] as MapNode[] };
+    }
 
     if (stage === "reconcile") {
       const live = clusters
@@ -507,7 +588,7 @@ function MapInner() {
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: [...islands, ...children] as MapNode[] };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, hiddenNotes, genCi]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, hiddenNotes, genCi, lens, segments]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -608,6 +689,7 @@ function MapInner() {
   // out (absolute position) — one undoable entry either way. Themes: same
   // shape against islands.
   const onNodeDragStop = useCallback((_: unknown, n: Node) => {
+    if (lens !== "default") return; // a lens is for looking
     const st = useStore.getState();
     if (n.type === "island" || n.type === "halo") { st.recordMapPosition(n.id, n.position, true); return; }
     const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
@@ -626,7 +708,7 @@ function MapInner() {
       && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
     const gi = hitIsl ? (hitIsl.data as IslandData).gi : -1;
     st.themesDrop(n.id, n.position, gi);
-  }, [getNodes, getInternalNode, stage, haloAt]);
+  }, [getNodes, getInternalNode, stage, haloAt, lens]);
   const onNodeDoubleClick = useCallback((_: unknown, n: Node) => {
     if (n.type === "chip") openInCodebook([n.id]);
     if (n.type === "halo") toggleCard((n.data as HaloData).ci);
@@ -692,6 +774,14 @@ function MapInner() {
         <span className="mapTitle">Code map</span>
         <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+        <select className="settext mapLens" aria-label="Arrange the map by"
+          value={lens} onChange={(e) => setLens(e.target.value as typeof lens)}
+          title="A transient lens: arranges the map for looking, changes nothing">
+          <option value="default">Arrange: normal</option>
+          <option value="pids">Arrange: transcript buckets</option>
+          <option value="segs">Arrange: excerpt buckets</option>
+          <option value="cooc">Arrange: co-occurrence</option>
+        </select>
         <div className="segmented mapStage" role="radiogroup" aria-label="Map stage">
           <button className={"seg" + (stage === "reconcile" ? " on" : "")} role="radio"
             aria-checked={stage === "reconcile"} onClick={() => setStageOverride("reconcile")}
@@ -734,6 +824,7 @@ function MapInner() {
             defaultViewport={initialViewport ?? undefined}
             onMoveEnd={onMoveEnd}
             minZoom={0.1} maxZoom={3}
+            nodesDraggable={lens === "default"}
             selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
             autoPanOnSelection={false}
             onSelectionStart={onSelectionStart} onSelectionEnd={onSelectionEnd}
