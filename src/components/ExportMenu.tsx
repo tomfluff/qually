@@ -98,7 +98,7 @@ ai-provenance.csv     every AI request made: model, lines sent, cost
 
 These CSVs are for pipelines, co-authors, and appendices.
 To CONTINUE this work in QuAlly, use the project file (.qually.json) —
-it round-trips everything, including corrections and AI marks.
+it round-trips everything, including corrections and AI observations.
 ` },
       { name: "coded-segments.csv", text: st.exportCSV() },
       { name: "codebook.csv", text: st.exportCodebook() },
@@ -140,7 +140,7 @@ it round-trips everything, including corrections and AI marks.
       {open && (
         <div className="exmenu">
           <div className="exsec">Save &amp; continue</div>
-          {item("Project (.qually.json)", "Transcripts, corrections, codes, AI marks. Load it to pick up where you left off.", doProject, true)}
+          {item("Project (.qually.json)", "Transcripts, corrections, codes, AI observations. Load it to pick up where you left off.", doProject, true)}
           <div className="exsec">Share &amp; publish</div>
           {item("All as CSVs (.zip)", "The whole bundle as spreadsheets, for a pipeline or a co-author.", doBundle)}
           {item("Coded segments (.csv)", "Segments with computed excerpts.", gated(() => { saveText(s().exportCSV(), "coded-segments.csv"); setOpen(false); }))}

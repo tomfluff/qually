@@ -23,7 +23,7 @@ const KEYS: [string, string][] = [
   ["N", "Project notes (Esc returns) — memos with a Stamp of what you were doing"],
   ["Ctrl + M", "In Notes: insert a context stamp at the cursor"],
   ["Ctrl + F", "In Notes: find in the document"],
-  ["M", "Open the selected line's AI mark (apply fix / dismiss); again cycles its marks"],
+  ["M", "Open the selected line's AI observation (apply fix / dismiss); again cycles them"],
   ["Double-click a line", "Fix its transcription in place; Enter saves, Esc cancels"],
   ["Ctrl + C", "Copy the selected lines (speaker-grouped)"],
   ["Ctrl + Z  /  Ctrl + Shift + Z", "Undo / redo"],

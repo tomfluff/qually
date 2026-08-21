@@ -725,7 +725,7 @@ export function TranscriptView() {
           drop role=option/aria-selected for the same reason. */}
       <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
         tabIndex={0} onKeyDown={onListKeyDown}
-        aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line, M to review the selected line's AI marks.`}
+        aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line, M to review the selected line's AI observations.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
         {[
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line

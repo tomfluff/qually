@@ -337,7 +337,7 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
 // Assist tab rather than inside the view, so switching panels is one click from
 // anywhere and the choice persists (ui.assistPanel). Selecting also opens the tab.
 const ASSIST_PANELS = [
-  { id: "observations", label: "Observations", hint: "AI marks to triage into codes" },
+  { id: "observations", label: "Observations", hint: "AI observations to triage into codes" },
   { id: "merge", label: "Merge codes", hint: "near-duplicate codes to fold together" },
   { id: "describe", label: "Definitions", hint: "AI-drafted code definitions from your excerpts" },
   { id: "suggest", label: "Suggest codes", hint: "candidate codings from your codebook" },

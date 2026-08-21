@@ -43,7 +43,7 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose, onCycle }: {
       // focus lives in here while open, so the transcript's own M handler can't
       // hear the key — forward it to keep the open→cycle→cycle rhythm working
       onKeyDown={(e) => { if (e.key === "m" || e.key === "M") { e.preventDefault(); onCycle?.(); } }}
-      aria-label={`${lens?.label ?? "AI mark"} on line ${line}`}
+      aria-label={`${lens?.label ?? "AI observation"} on line ${line}`}
       style={{ left: Math.min(x, window.innerWidth - 300), top: Math.min(y, window.innerHeight - 200), fontSize: sidebarFontSize }}>
       <div className="row aipop-head">
         <span className="swatch" style={{ background: lens?.color ?? "#999" }} aria-hidden="true" />
@@ -53,7 +53,7 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose, onCycle }: {
           announce("Mark dismissed");
           onClose();
         }} data-tip="Dismiss this mark (it won't return on re-scan)"
-          aria-label="Dismiss this mark"><Icon name="trash" size={16} /></button>
+          aria-label="Dismiss this observation"><Icon name="trash" size={16} /></button>
         <button className="btn iconclose" onClick={onClose} data-tip="close" aria-label="Close"><Icon name="x" size={16} /></button>
       </div>
       <div className="aipop-quote">“{span.quote}”</div>
