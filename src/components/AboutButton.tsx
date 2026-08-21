@@ -21,6 +21,7 @@ const KEYS: [string, string][] = [
   ["[  /  ]", "Slow down / speed up media playback"],
   ["E", "Add a session event: after the selected line, or at the playhead when nothing is selected"],
   ["N", "Project notes (Esc returns) — memos with a Stamp of what you were doing"],
+  ["Ctrl + M", "In Notes: insert a context stamp at the cursor"],
   ["M", "Open the selected line's AI mark (apply fix / dismiss); again cycles its marks"],
   ["Double-click a line", "Fix its transcription in place; Enter saves, Esc cancels"],
   ["Ctrl + C", "Copy the selected lines (speaker-grouped)"],

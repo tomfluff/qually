@@ -86,7 +86,7 @@ export function NotesView() {
         <span className="notesTitle">Project notes</span>
         <span className="notesHint">Memos, hunches, decisions — one document for the whole study. Saved as you type; travels with the project file. <b>Ctrl+click</b> a stamp to jump back to its moment.</span>
         <button className="btn iconlabel" onClick={stamp}
-          title="Insert a breadcrumb of what you were just doing (transcript, line, playhead)">
+          title="Insert a breadcrumb of what you were just doing — transcript, line, playhead (Ctrl+M)">
           <Icon name="pin" size={15} /> <span className="blabel">Stamp context</span>
         </button>
       </div>
@@ -96,6 +96,10 @@ export function NotesView() {
         // keyboard way back to where you were
         onMouseDown={jumpFromStamp}
         onKeyDown={(e) => {
+          // Ctrl/Cmd+M: stamp without leaving the keyboard (M for moment)
+          if ((e.ctrlKey || e.metaKey) && (e.key === "m" || e.key === "M")) {
+            e.preventDefault(); stamp(); return;
+          }
           if (e.key !== "Escape") return;
           e.stopPropagation();
           const st = useStore.getState();
