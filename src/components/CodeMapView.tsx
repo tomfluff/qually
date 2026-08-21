@@ -30,6 +30,7 @@ import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { type MergeCodeInput } from "../ai/dedupe";
 import { announce } from "../announce";
+import { onProjectSwap } from "../sessionReset";
 import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
 import { mergeScopedClusters, estimateGlimpseTokens, glimpseCluster, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
@@ -63,10 +64,11 @@ const captionFs = (fs: number, zoom: number, cap: number) => {
   const base = fs * 1.3;
   return Math.min(base * cap, Math.max(base, base / zoom));
 };
-const captionBox = (fs: number, zoom: number, cap: number, text: string, extraEm: number) => {
+const captionBox = (fs: number, zoom: number, cap: number, text: string, extraEm: number, family?: string) => {
   const size = captionFs(fs, zoom, cap);
-  const family = getComputedStyle(document.body).fontFamily;
-  measurer.font = `800 ${size}px ${family}`;
+  // the family read forces a style recalc — the layout memo hoists it and
+  // passes it in rather than paying that per block
+  measurer.font = `800 ${size}px ${family ?? getComputedStyle(document.body).fontFamily}`;
   // extraEm covers the caption's trailing furniture (tag, count, buttons)
   return { w: Math.round(measurer.measureText(text).width + size * extraEm), h: Math.round(size * 1.5) };
 };
@@ -76,7 +78,10 @@ type ChipNodeT = Node<ChipData, "chip">;
 // lens islands are synthetic (gi indexes the LENS grouping, not codeGroups),
 // so they carry their member list — the context menu must never reach into
 // saved theme groups through a lens island's gi
-type IslandData = { name: string; gi: number; lens?: boolean; list?: string[] };
+type IslandData = { name: string; gi: number; lens?: boolean; list?: string[];
+  // lens islands only: the grouping's own name, without the count suffix —
+  // the stable key session positions hang off (gi is just row order)
+  gkey?: string };
 type IslandNodeT = Node<IslandData, "island">;
 type HaloData = { name: string; renamed: boolean; joins: boolean; ci: number; count: number; open: boolean };
 type HaloNodeT = Node<HaloData, "halo">;
@@ -102,12 +107,36 @@ const remembered = {
   // mismatch means merges/renames happened since and the piles are stale
   topicFp: "",
   // hand-moves made while a lens is up: session-only, per lens, never written
-  // to the store — switching back to normal restores the manual layout intact
+  // to the store — switching back to normal restores the manual layout intact.
+  // Keys are `i:<group>` and `c:<code>@<group>`, NOT node ids: a chip's
+  // position is relative to its pile, so when the grouping shifts under it
+  // (a bucket boundary moves, topics re-run) the old spot is meaningless and
+  // must be forgotten rather than re-applied against a different parent.
   lensPos: {} as Partial<Record<"pids" | "segs" | "cooc" | "topics", Record<string, { x: number; y: number }>>>,
-  // the zoom the packing reserves caption room for: 1 until the researcher
-  // re-lays out at some other zoom ("spread this out so I can read it here")
-  layoutZoom: 1,
+  // Spread: a reversible view state, like full-screen. Groups push apart by
+  // this factor so their counter-scaled captions stop colliding when zoomed
+  // out; 1 is the normal, contracted map. Only the SPACING between top-level
+  // things changes — nothing inside a group moves, nothing is written, and
+  // toggling back restores the exact layout (hand-placed or packed).
+  spread: 1,
 };
+
+// A project swap makes every one of these meaningless — they are keyed by
+// code and group NAMES, which the next project reuses with different
+// meanings. The map is remounted by then, so the reset only has to clear the
+// module state the next mount reads.
+onProjectSwap(function forgetMapSession() {
+  remembered.stage = null;
+  remembered.selected = new Set();
+  remembered.openCards = new Set();
+  remembered.planPos = { x: 0, y: 0 };
+  remembered.planMin = false;
+  remembered.lens = "default";
+  remembered.topicGroups = [];
+  remembered.topicFp = "";
+  remembered.lensPos = {};
+  remembered.spread = 1;
+});
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
   const fs = useStore((s) => s.ui.sidebarFontSize);
@@ -398,9 +427,9 @@ function MapInner() {
   const mapPositions = useStore((s) => s.mapPositions);
   const mapIslandPos = useStore((s) => s.mapIslandPos);
   const { setNodes: rfSetNodes, getNodes, getInternalNode, fitView, getZoom } = useReactFlow();
-  // packing reserves caption room for THIS zoom (see captionBox)
-  const [layoutZoom, setLayoutZoom] = useState(remembered.layoutZoom);
-  useEffect(() => { remembered.layoutZoom = layoutZoom; }, [layoutZoom]);
+  // the spread factor (1 = contracted); see `remembered.spread`
+  const [spread, setSpread] = useState(remembered.spread);
+  useEffect(() => { remembered.spread = spread; }, [spread]);
   // menu state carries the selection it acts on, captured at open — the menu
   // needs no live subscription
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[];
@@ -476,6 +505,7 @@ function MapInner() {
   const layout = useMemo(() => {
     const fs = sidebarFontSize;
     const ch = chipH(fs);
+    const family = getComputedStyle(document.body).fontFamily; // read once per rebuild
     const widths = new Map(codes.map((c) => [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0)]));
     const pack = (list: string[], targetW: number) => {
       let x = 0, y = 0, maxW = 0;
@@ -494,6 +524,13 @@ function MapInner() {
       return Math.max(460, Math.sqrt(area) * 1.5);
     };
     const inBook = (c: string) => c in codebook;
+    // Spread pushes only TOP-LEVEL things apart (groups, halos, loose chips);
+    // a chip inside a group keeps its place in the frame, because captions —
+    // the thing that collides when zoomed out — belong to groups, not chips.
+    // Purely positional, so contracting is exact.
+    const spreadOut = (ns: MapNode[]): MapNode[] => spread === 1 ? ns
+      : ns.map((n) => n.parentId ? n
+        : { ...n, position: { x: n.position.x * spread, y: n.position.y * spread } });
     const actOf = new Map(plan.map((a) => [a.code, a]));
     const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
@@ -574,9 +611,10 @@ function MapInner() {
       const blocks = lensGroups.map((g, gi) => ({
         name: g.name, gi, list: g.list, ...pack(g.list, near(g.list)),
         // the caption reads "name · count" and carries no buttons
-        cap: captionBox(fs, layoutZoom, 7, `${g.name} · ${g.list.length}`, 1),
+        cap: captionBox(fs, 1, 7, `${g.name} · ${g.list.length}`, 1, family),
       }));
-      const rowW = Math.max(900, Math.sqrt(blocks.reduce((a, b) => a + (b.w + 2 * PAD + ISLAND_GAP) * (b.h + 2 * PAD + ISLAND_GAP), 0)) * 1.4);
+      const rowW = Math.max(900, Math.sqrt(blocks.reduce((a, b) => a + (Math.max(b.w + 2 * PAD, b.cap.w) + ISLAND_GAP) * (b.h + 2 * PAD + ISLAND_GAP), 0)) * 1.4,
+        ...blocks.map((b) => b.cap.w));
       const islands: IslandNodeT[] = [];
       const children: ChipNodeT[] = [];
       let ix = 0, iy = blocks[0]?.cap.h ?? 0, rowH = 0;
@@ -586,18 +624,26 @@ function MapInner() {
         // the caption overhangs a narrow island: reserve ITS width for spacing
         const stepW = Math.max(bw, b.cap.w);
         if (ix > 0 && ix + stepW > rowW) { ix = 0; iy += rowH + ISLAND_GAP + b.cap.h; rowH = 0; }
+        // positions hang off the pile's NAME: gi is row order, and a bucket
+        // emptying or the cooc piles re-sorting would hand one pile's spot to
+        // another
         islands.push({
           id: key, type: "island" as const,
-          position: lp[key] ?? { x: ix, y: iy }, width: bw, height: bh,
+          position: lp[`i:${b.name}`] ?? { x: ix, y: iy }, width: bw, height: bh,
           draggable: true, selectable: false, focusable: false,
           dragHandle: ".mapIslandLabel",
-          data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list },
+          data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list, gkey: b.name },
         });
-        for (const c of b.list) children.push({ ...chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key), position: lp[c] ?? { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y } });
+        for (const c of b.list) {
+          const home = { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y };
+          // a chip's session spot is only valid inside the pile it was
+          // dropped in — the key carries that pile, so a regrouping forgets it
+          children.push({ ...chipNode(c, home, key), position: lp[`c:${c}@${b.name}`] ?? home });
+        }
         ix += stepW + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
       }
-      return { nodes: [...islands, ...children] as MapNode[] };
+      return { nodes: spreadOut([...islands, ...children] as MapNode[]) };
     }
 
     if (stage === "reconcile") {
@@ -617,12 +663,22 @@ function MapInner() {
         // reserve room for the unfolded card below (reasoning + glimpse +
         // actions), so neighbors never sit under it
         const cardW = Math.max(280, Math.min(420, (packed.w + 2 * HALO_PAD) - 24));
-        const ratLines = openCards.has(c.ci)
-          ? Math.max(1, Math.ceil(((c.rationale?.length ?? 0) + (c.desc?.length ?? 0)) * (fs * 0.52) / (cardW - 24)))
+        const open = openCards.has(c.ci);
+        const showGlimpse = genCi === c.ci || !!c.desc;
+        const lines = (text: string, width: number) =>
+          text ? Math.ceil(text.length * (fs * 0.52) / width) : 0;
+        // the glimpse sits in its own inset block (margins + padding + rule)
+        // under an "AI glimpse" header, so it neither shares the rationale's
+        // width nor comes free — and while it generates, the pulse line stands
+        // in for text that isn't there yet
+        const ratLines = open ? Math.max(1, lines(c.rationale ?? "", cardW - 24)) : 0;
+        const glimpseLines = open && showGlimpse
+          ? Math.max(1, lines(genCi === c.ci ? "" : c.desc ?? "", cardW - 41)) : 0;
+        const cardH = open
+          ? (ratLines + glimpseLines) * fs * 1.45 + (showGlimpse ? fs * 1.1 + 26 : 0) + fs * 5 + 22
           : 0;
-        const cardH = openCards.has(c.ci) ? ratLines * fs * 1.45 + fs * 5 + 22 : 0;
         // the halo caption carries the name plus tag, count and fold arrow
-        const cap = captionBox(fs, layoutZoom, 4.5, c.newName ?? c.survivor, c.newName ? 9 : 4);
+        const cap = captionBox(fs, 1, 4.5, c.newName ?? c.survivor, c.newName ? 9 : 4, family);
         return { c, packed, w: packed.w + 2 * HALO_PAD, h: packed.h + 2 * HALO_PAD, cardH, cap };
       });
       const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (Math.max(b.w, b.cap.w) + HALO_GAP) * (b.h + b.cardH + b.cap.h + HALO_GAP), 0)) * 1.5);
@@ -670,7 +726,7 @@ function MapInner() {
       const offY = blocks.length ? y + rowH + HALO_GAP : 0;
       for (const c of singles)
         chipNodes.push(chipNode(c, { x: flat.pos[c].x, y: offY + flat.pos[c].y }));
-      return { nodes: [...haloNodes, ...chipNodes, ...extraNodes] as MapNode[] };
+      return { nodes: spreadOut([...haloNodes, ...chipNodes, ...extraNodes] as MapNode[]) };
     }
 
     const groups = codeGroups
@@ -681,13 +737,13 @@ function MapInner() {
 
     if (groups.length === 0) {
       const flat = pack(codes, near(codes));
-      return { nodes: codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[] };
+      return { nodes: spreadOut(codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[]) };
     }
     const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
       ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
       .map((b) => ({ ...b, ...pack(b.list, near(b.list)),
         // name plus the dissolve button; editable captions can also grow
-        cap: captionBox(fs, layoutZoom, 7, b.name, 2) }));
+        cap: captionBox(fs, 1, 7, b.name, 2, family) }));
     const totalW = blocks.reduce((a, b) => a + b.w + 2 * PAD + ISLAND_GAP, 0);
     const rowW = Math.max(900, Math.sqrt(totalW * (blocks[0] ? blocks[0].h + 160 : 1)) * 1.6, ...blocks.map((b) => Math.max(b.w + 2 * PAD, b.cap.w)));
     const islands: IslandNodeT[] = [];
@@ -712,8 +768,8 @@ function MapInner() {
       rowH = Math.max(rowH, bh);
     }
     // parents strictly before children (RF sub-flow requirement)
-    return { nodes: [...islands, ...children] as MapNode[] };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, layoutZoom]);
+    return { nodes: spreadOut([...islands, ...children] as MapNode[]) };
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, spread]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -849,12 +905,25 @@ function MapInner() {
   // Reconcile: inside a halo = in that merge (relative position), outside =
   // out (absolute position) — one undoable entry either way. Themes: same
   // shape against islands.
-  const onNodeDragStop = useCallback((_: unknown, n: Node) => {
+  const onNodeDragStop = useCallback((_: unknown, n: Node, dragged: Node[]) => {
+    // the last onNodeDrag's frame is still pending: let it run and it repaints
+    // a stale .will outline and chirps a crossing on top of the drop's own mark
+    if (dragFrame.current) { cancelAnimationFrame(dragFrame.current); dragFrame.current = 0; }
+    dragOver.current = null;
     if (lens !== "default") {
       // moving under a lens is fine — parking, comparing, tidying a pile —
       // but it stays in the lens's own session overlay: no store write, no
-      // membership change, and the normal layout comes back untouched
-      (remembered.lensPos[lens] ??= {})[n.id] = n.position;
+      // membership change, and the normal layout comes back untouched.
+      // RF reports a multi-selection drag once, with the whole set in the
+      // third argument — record every node, or the rest snap back.
+      const store = (remembered.lensPos[lens] ??= {});
+      for (const x of (dragged?.length ? dragged : [n])) {
+        const parent = x.parentId ? getNodes().find((p) => p.id === x.parentId) : null;
+        const gkey = (parent?.data as IslandData | undefined)?.gkey;
+        // key by IDENTITY, not node id: a chip's spot is relative to its pile,
+        // so when the grouping shifts under it the old spot is meaningless
+        store[gkey ? `c:${x.id}@${gkey}` : `i:${(x.data as IslandData).gkey ?? x.id}`] = x.position;
+      }
       return;
     }
     const st = useStore.getState();
@@ -880,6 +949,8 @@ function MapInner() {
     const gi = hitIsl ? (hitIsl.data as IslandData).gi : -1;
     st.themesDrop(n.id, n.position, gi);
   }, [getNodes, getInternalNode, stage, haloAt, lens]);
+  // a drag can end by unmount too; never leave a frame pointed at dead nodes
+  useEffect(() => () => { if (dragFrame.current) cancelAnimationFrame(dragFrame.current); }, []);
   const onNodeDoubleClick = useCallback((_: unknown, n: Node) => {
     if (n.type === "chip") openInCodebook([n.id]);
     if (n.type === "halo") toggleCard((n.data as HaloData).ci);
@@ -1046,6 +1117,28 @@ function MapInner() {
           title="Move the minimap to the next corner">
           <Icon name="pip" size={15} />
         </button>
+        <button className="btn iconlabel" aria-pressed={spread !== 1}
+          onClick={() => {
+            if (spread !== 1) {
+              setSpread(1);
+              announce("Map contracted to its own layout");
+            } else {
+              // push apart by exactly the factor the captions grow by at this
+              // zoom, so names that were colliding get proportional room —
+              // the ceiling is the caption's own growth cap (IslandNode)
+              const f = Math.min(7, Math.max(1.35, 1 / getZoom()));
+              setSpread(f);
+              announce(`Map spread out ${f.toFixed(1)}× for reading at this zoom — toggle to contract`);
+            }
+            const z = getZoom();
+            requestAnimationFrame(() => fitView({ duration: 250, minZoom: z, maxZoom: z }));
+          }}
+          title={spread !== 1
+            ? "Contract the map back to its own layout"
+            : "Spread the groups apart so their names stay readable at this zoom — nothing moves inside a group, and this toggles straight back"}>
+          <Icon name={spread !== 1 ? "arrows-in" : "arrows-out"} size={15} />
+          <span className="blabel">{spread !== 1 ? "Contract" : "Spread"}</span>
+        </button>
         <button className="btn iconlabel" aria-label="Re-layout the map"
           disabled={lens !== "default"}
           onClick={(e) => {
@@ -1053,7 +1146,7 @@ function MapInner() {
             setConfirmRelayout({ right: window.innerWidth - r.right, y: r.bottom + 8 });
           }}
           title={lens !== "default" ? "A lens hides your layout — switch Arrange back to Normal first"
-            : "Lay the whole map out fresh, spread for your current zoom (replaces your hand-placed layout)"}>
+            : "Lay the whole map out fresh (replaces your hand-placed layout)"}>
           <Icon name="refresh" size={15} /> <span className="blabel">Re-layout</span>
         </button>
       </div>
@@ -1172,21 +1265,15 @@ function MapInner() {
           aria-describedby="relayout-confirm-text"
           style={{ right: confirmRelayout.right, top: confirmRelayout.y, fontSize: sidebarFontSize }}>
           <div className="mapAiConfirmText" id="relayout-confirm-text">
-            Lay the map out fresh, spaced so the group names stay readable at your current
-            zoom ({Math.round(getZoom() * 100)}%)? Every chip and group you placed by hand
-            returns to the packed layout. <b>One undo step brings it all back.</b>
+            Lay the map out fresh? Every chip and group you placed by hand returns to the
+            packed layout. <b>One undo step brings it all back.</b>
           </div>
           <div className="mapCardActions">
             <button className="btn primary" autoFocus
               onClick={() => {
                 setConfirmRelayout(null);
-                // zoomed out, captions grow to stay legible and start colliding —
-                // pack for THIS zoom, and hold the zoom afterwards (fitting the
-                // now-wider map would zoom out again and undo the spacing)
-                const z = getZoom();
-                setLayoutZoom(z);
                 if (useStore.getState().resetMapLayout())
-                  requestAnimationFrame(() => fitView({ duration: 200, minZoom: z, maxZoom: z }));
+                  requestAnimationFrame(() => fitView({ duration: 200 }));
               }}>Re-layout</button>
             <button className="btn" onClick={() => setConfirmRelayout(null)}>Cancel</button>
           </div>

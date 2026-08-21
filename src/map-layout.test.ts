@@ -124,3 +124,32 @@ test("resetMapLayout: no-op on packed map, one undo entry otherwise", () => {
   useStore.getState().undo();
   expect(useStore.getState().mapPositions.alpha).toEqual({ x: 5, y: 7 });
 });
+
+// The casing sweep touches every code-keyed table; a rename that forgets one
+// of them silently throws away work the researcher did by hand.
+test("normalizeCodeCase carries map placements, glimpse membership and the plan", () => {
+  const st = useStore.getState();
+  st.recordMapPosition("alpha", { x: 11, y: 22 });
+  st.setCodeClusters([{ survivor: "alpha", codes: ["alpha", "beta"], rationale: "",
+    desc: "a glimpse", descCodes: ["alpha", "beta"] }]);
+  st.setCodePlan([{ code: "gamma", action: "rename", newName: "gamma clearer", rationale: "" }]);
+  st.normalizeCodeCase("capital");
+  const s = useStore.getState();
+  expect(Object.keys(s.codebook).sort()).toEqual(["Alpha", "Beta", "Gamma"]);
+  expect(s.mapPositions.Alpha).toEqual({ x: 11, y: 22 });   // layout followed the rename
+  expect(s.mapPositions.alpha).toBeUndefined();
+  expect(s.codeClusters[0].codes).toEqual(["Alpha", "Beta"]);
+  expect(s.codeClusters[0].descCodes).toEqual(["Alpha", "Beta"]); // same members: NOT stale
+  expect(s.codePlan[0].code).toBe("Gamma");
+  useStore.getState().undo();
+  expect(Object.keys(useStore.getState().codebook).sort()).toEqual(["alpha", "beta", "gamma"]);
+  const back = useStore.getState();
+  back.setCodeClusters([]); back.setCodePlan([]); back.resetMapLayout();
+});
+
+test("normalizeCodeCase on an already-conforming book is a no-op with no history entry", () => {
+  const st = useStore.getState();
+  const depth = useStore.getState().undoStack.length;
+  st.normalizeCodeCase("lower");
+  expect(useStore.getState().undoStack.length).toBe(depth);
+});

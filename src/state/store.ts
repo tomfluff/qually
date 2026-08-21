@@ -14,6 +14,7 @@ import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll, renameScroll } from "../scrollMemory";
+import { projectSwapped } from "../sessionReset";
 import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
 import { announce } from "../announce";
 import { SORTS, type SortBy } from "../codeStats";
@@ -483,6 +484,12 @@ export function normalizeClusters(s: State, clusters: CodeCluster[]): CodeCluste
     .map((c) => ({ ...c, survivor: bestSurvivor(s, c.codes, c.survivor) }));
 }
 
+// Code-keyed side tables (map placements) follow their code through a rename:
+// the map's hand-placed spots are the researcher's own work, and a rename that
+// orphans them throws that work away silently.
+const renameKey = <T,>(rec: Record<string, T>, from: string, to: string): Record<string, T> =>
+  from in rec ? Object.fromEntries(Object.entries(rec).map(([k, v]) => [k === from ? to : k, v])) : rec;
+
 // The merge itself, silent: no pushUndo, no announce — mergeCode wraps it for
 // the single-pair path, applyCluster composes several under ONE history entry.
 function mergeInto(get: () => State, set: (p: Partial<State>) => void, from: string, into: string) {
@@ -627,6 +634,7 @@ export const useStore = create<State>()(
           nextSid: 1, nextMid: 1,
         });
         forgetScroll();
+        projectSwapped();
       },
 
       importFiles: async (files) => {
@@ -1442,6 +1450,7 @@ export const useStore = create<State>()(
           codeClusters: normalizeClusters(get(), get().codeClusters),
         });
         forgetScroll(); // every pid in the new project is a different transcript
+        projectSwapped(); // ...and view session state keyed by code names goes too
       },
 
       exportEdits: () => {
@@ -1733,7 +1742,12 @@ export const useStore = create<State>()(
             ...(a.into === code ? { into: name } : {}) })),
           codeClusters: s.codeClusters.map((c) => ({ ...c,
             survivor: c.survivor === code ? name : c.survivor,
-            codes: c.codes.map((x) => x === code ? name : x) })),
+            codes: c.codes.map((x) => x === code ? name : x),
+            // the glimpse still describes the same members under a new name
+            ...(c.descCodes ? { descCodes: c.descCodes.map((x) => x === code ? name : x) } : {}) })),
+          // the map's hand-placed spots are keyed by code name: miss this and
+          // a rename silently throws the researcher's layout away
+          mapPositions: renameKey(s.mapPositions, code, name),
         });
         set({ hotbarCache: hotbarCodes(get()) });
       },
@@ -1762,7 +1776,11 @@ export const useStore = create<State>()(
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.map(r) },
           codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.map(r) })),
           codePlan: s.codePlan.map((a) => ({ ...a, code: r(a.code), ...(a.into ? { into: r(a.into) } : {}) })),
-          codeClusters: s.codeClusters.map((c) => ({ ...c, survivor: r(c.survivor), codes: c.codes.map(r) })),
+          codeClusters: s.codeClusters.map((c) => ({ ...c, survivor: r(c.survivor), codes: c.codes.map(r),
+            // same members under new spelling: the glimpse is NOT stale
+            ...(c.descCodes ? { descCodes: c.descCodes.map(r) } : {}) })),
+          // a case sweep must not cost the researcher their map layout
+          mapPositions: Object.fromEntries(Object.entries(s.mapPositions).map(([k, v]) => [r(k), v])),
         });
         set({ hotbarCache: hotbarCodes(get()) });
         announce(`${ren.size} code name${ren.size === 1 ? "" : "s"} now start ${style === "lower" ? "lowercase" : "with a capital"}`);

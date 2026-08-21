@@ -42,6 +42,9 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   "file-plus": { d: ["M14 3v4a1 1 0 0 0 1 1h4", "M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z", "M12 11l0 6", "M9 14l6 0"] },
   "grip-horizontal": { d: ["M5 9h.01", "M5 15h.01", "M12 9h.01", "M12 15h.01", "M19 9h.01", "M19 15h.01"] },
   "arrows-exchange": { d: ["M7 10h14l-4 -4", "M17 14h-14l4 4"] },
+  // the Code map's spread/contract toggle: arrows out of, and into, a centre
+  "arrows-out": { d: ["M4 9v-5h5", "M20 9v-5h-5", "M4 15v5h5", "M20 15v5h-5", "M9 9l-5 -5", "M15 9l5 -5", "M9 15l-5 5", "M15 15l5 5"] },
+  "arrows-in": { d: ["M9 4v5h-5", "M15 4v5h5", "M9 20v-5h-5", "M15 20v-5h5", "M4 4l5 5", "M20 4l-5 5", "M4 20l5 -5", "M20 20l-5 -5"] },
   reload: { d: ["M19.933 13.041a8 8 0 1 1 -9.925 -8.788c3.899 -1 7.935 1.007 9.425 4.747", "M20 4v5h-5"]},
   bookmark: { d: ["M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4z"] },
   dots: { d: ["M5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M19 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"] },
