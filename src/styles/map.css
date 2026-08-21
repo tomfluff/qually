@@ -77,10 +77,16 @@
   border:1px solid var(--line); border-radius:16px;
   background:color-mix(in srgb, var(--accent) 4%, transparent); }
 .mapIsland.loose { border-style:dashed; background:transparent; }
-.mapIslandLabel { display:flex; align-items:center; gap:8px; padding:8px 14px 0; }
-.mapIslandName { font-weight:700; pointer-events:auto; cursor:text; }
-.mapIslandName.loose { color:var(--muted); cursor:default; }
-.mapIslandEdit { pointer-events:auto; font:inherit; font-weight:700; color:var(--fg);
+/* the caption floats ABOVE the frame (Figma-style) so its semantic-zoom size
+   never disturbs the chip layout inside; it is also the island's drag handle */
+.mapIslandLabel { position:absolute; left:0; bottom:100%; padding:0 4px 4px;
+  display:flex; align-items:center; gap:.4em; white-space:nowrap;
+  pointer-events:auto; cursor:grab; user-select:none; }
+.mapIsland.dragging { border-color:var(--accent); }
+.mapIsland.dragging .mapIslandLabel { cursor:grabbing; }
+.mapIslandName { font-weight:700; }
+.mapIslandName.loose { color:var(--muted); }
+.mapIslandEdit { pointer-events:auto; font:inherit; font-weight:700; color:var(--fg); max-width:14em;
   background:var(--bg); border:1px solid var(--accent); border-radius:6px; padding:0 6px; }
 .mapIslandX { pointer-events:auto; border:none; background:none; color:var(--muted);
   font:inherit; font-size:1.1em; cursor:pointer; padding:0 4px; }

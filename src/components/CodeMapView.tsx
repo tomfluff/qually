@@ -32,7 +32,7 @@ import { GroupModal } from "./GroupModal";
 // (uniform padding would leave a field of dead air around short names), and
 // everything scales with the sidebar text ramp so large accessible settings
 // never clip. Rows are shelf-packed toward a near-square map.
-const GX = 14, GY = 12, PAD = 18, LABEL_H = 40, ISLAND_GAP = 52;
+const GX = 14, GY = 12, PAD = 18, ISLAND_GAP = 64;
 const chipH = (fs: number) => Math.round(fs * 2.4);
 const measurer = document.createElement("canvas").getContext("2d")!;
 const chipW = (fs: number, name: string, segs: number, pids: number) => {
@@ -52,6 +52,7 @@ type ChipNodeT = Node<ChipData, "chip">;
 // positions (drags survive), viewport and selection outlive the unmounting view
 const remembered = {
   positions: {} as Record<string, { x: number; y: number }>,
+  islandOffsets: {} as Record<string, { dx: number; dy: number }>,
   viewport: null as Viewport | null,
   selected: new Set<string>(),
 };
@@ -97,18 +98,36 @@ function SelectionHud() {
   );
 }
 
-// an island's caption: double-click to rename (a real group only), x dissolves
-function IslandLabel({ name, gi, onRename, onDissolve }: {
+// an island's caption: sits above the frame like a map label. Semantic zoom —
+// the world font counter-scales so the caption holds a readable on-screen size
+// while zoomed out (the abstraction level: far away you read GROUPS), clamped
+// at its base so zooming in grows it naturally. Base rides ABOVE the code text
+// size on purpose: titles outrank chips. Drag the caption to move the island;
+// double-click renames (a real group only); x dissolves.
+const zoomSel = (s: { transform: [number, number, number] }) => s.transform[2];
+function IslandLabel({ name, gi, onRename, onDissolve, onDragStart }: {
   name: string; gi: number;
   onRename: (gi: number, name: string) => void; onDissolve: (gi: number) => void;
+  onDragStart: (e: React.PointerEvent) => void;
 }) {
+  const zoom = useFlowStore(zoomSel);
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const base = fs * 1.3;
+  const fontSize = Math.min(base * 7, Math.max(base, base / zoom));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
-  if (gi === -1) return <div className="mapIslandLabel"><span className="mapIslandName loose">{name}</span></div>;
+  if (gi === -1) {
+    return (
+      <div className="mapIslandLabel" style={{ fontSize }} onPointerDown={onDragStart}>
+        <span className="mapIslandName loose">{name}</span>
+      </div>
+    );
+  }
   return (
-    <div className="mapIslandLabel">
+    <div className="mapIslandLabel" style={{ fontSize }} onPointerDown={onDragStart}>
       {editing ? (
         <input className="mapIslandEdit" value={draft} autoFocus
+          onPointerDown={(e) => e.stopPropagation()}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => { onRename(gi, draft); setEditing(false); }}
           onKeyDown={(e) => {
@@ -120,6 +139,7 @@ function IslandLabel({ name, gi, onRename, onDissolve }: {
           onDoubleClick={() => { setDraft(name); setEditing(true); }}>{name}</span>
       )}
       <button className="mapIslandX" title="Dissolve this group (codes stay)"
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={() => onDissolve(gi)}>×</button>
     </div>
   );
@@ -181,6 +201,7 @@ function MapInner() {
   // needs no live subscription
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[] } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [islandRev, setIslandRev] = useState(0);
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   // biggest first: the codes doing the most work anchor the top of the map
@@ -232,10 +253,11 @@ function MapInner() {
       const rowW = Math.max(900, Math.sqrt(totalW * (blocks[0] ? blocks[0].h + 160 : 1)) * 1.6, ...blocks.map((b) => b.w + 2 * PAD));
       let ix = 0, iy = 0, rowH = 0;
       for (const b of blocks) {
-        const bw = b.w + 2 * PAD, bh = b.h + PAD + LABEL_H;
+        const off = remembered.islandOffsets[b.gi === -1 ? "\u0000loose" : b.name] ?? { dx: 0, dy: 0 };
+        const bw = b.w + 2 * PAD, bh = b.h + 2 * PAD;
         if (ix > 0 && ix + bw > rowW) { ix = 0; iy += rowH + ISLAND_GAP; rowH = 0; }
-        regions.push({ name: b.name, gi: b.gi, x: ix, y: iy, w: bw, h: bh });
-        for (const c of b.list) positions[c] = { x: ix + PAD + b.pos[c].x, y: iy + LABEL_H + b.pos[c].y };
+        regions.push({ name: b.name, gi: b.gi, x: ix + off.dx, y: iy + off.dy, w: bw, h: bh });
+        for (const c of b.list) positions[c] = { x: ix + off.dx + PAD + b.pos[c].x, y: iy + off.dy + PAD + b.pos[c].y };
         ix += bw + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
       }
@@ -249,7 +271,8 @@ function MapInner() {
       data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
     }));
     return { nodes, regions };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups]);
+  // islandRev bumps when an island is dragged (offsets live outside React)
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, islandRev]); // eslint-disable-line react-hooks/exhaustive-deps
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -275,6 +298,43 @@ function MapInner() {
     setCodeGroups([...cleaned, { name: `Group ${codeGroups.length + 1}`, codes: sel }]);
     setMenu(null);
   };
+  // drag an island by its caption: the frame outline follows the pointer
+  // imperatively (no React work per move); release commits the offset, shifts
+  // any hand-placed member chips with it, and relayouts
+  const dragIsland = useCallback((e: React.PointerEvent, r: { name: string; gi: number }) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const el = (e.currentTarget as HTMLElement).closest(".mapIsland") as HTMLElement;
+    const zoom = remembered.viewport?.zoom ?? 1;
+    const sx = e.clientX, sy = e.clientY;
+    let ddx = 0, ddy = 0;
+    const base = el.style.transform;
+    el.classList.add("dragging");
+    const move = (ev: PointerEvent) => {
+      ddx = (ev.clientX - sx) / zoom; ddy = (ev.clientY - sy) / zoom;
+      el.style.transform = `${base} translate(${ddx}px, ${ddy}px)`;
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      el.classList.remove("dragging");
+      if (!ddx && !ddy) return;
+      const key = r.gi === -1 ? "\u0000loose" : r.name;
+      const off = remembered.islandOffsets[key] ?? { dx: 0, dy: 0 };
+      remembered.islandOffsets[key] = { dx: off.dx + ddx, dy: off.dy + ddy };
+      const members = r.gi === -1
+        ? codes.filter((c) => !codeGroups.some((g) => g.codes.includes(c)))
+        : codeGroups[r.gi]?.codes ?? [];
+      for (const c of members) {
+        const p = remembered.positions[c];
+        if (p) remembered.positions[c] = { x: p.x + ddx, y: p.y + ddy };
+      }
+      setIslandRev((v) => v + 1);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }, [codes, codeGroups]);
+
   const renameGroup = useCallback((gi: number, name: string) => {
     if (!name.trim()) return;
     setCodeGroups(codeGroups.map((g, i) => (i === gi ? { ...g, name: name.trim() } : g)));
@@ -286,6 +346,7 @@ function MapInner() {
 
   // stable handlers (skill rule: memoize callback props)
   const onMoveEnd = useCallback((_: unknown, vp: Viewport) => { remembered.viewport = vp; }, []);
+  const onMove = useCallback((_: unknown, vp: Viewport) => { remembered.viewport = vp; }, []);
   // a drag is a filing action once islands exist: the chip joins whichever
   // island its center lands in (or leaves its group on open canvas)
   const onNodeDragStop = useCallback((_: unknown, n: Node) => {
@@ -353,7 +414,7 @@ function MapInner() {
             colorMode={dark ? "dark" : "light"}
             fitView={!remembered.viewport}
             defaultViewport={remembered.viewport ?? undefined}
-            onMoveEnd={onMoveEnd}
+            onMoveEnd={onMoveEnd} onMove={onMove}
             minZoom={0.1} maxZoom={3}
             selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
             autoPanOnSelection={false}
@@ -379,7 +440,8 @@ function MapInner() {
                   className={"mapIsland" + (r.gi === -1 ? " loose" : "")}
                   style={{ transform: `translate(${r.x}px, ${r.y}px)`, width: r.w, height: r.h }}>
                   <IslandLabel name={r.name} gi={r.gi}
-                    onRename={renameGroup} onDissolve={dissolveGroup} />
+                    onRename={renameGroup} onDissolve={dissolveGroup}
+                    onDragStart={(e) => dragIsland(e, r)} />
                 </div>
               ))}
             </ViewportPortal>
