@@ -8,8 +8,29 @@
   padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
 .notesBar .notesTitle { font-weight:600; }
 .notesBar .notesHint { flex:1 1 20ch; min-width:0; color:var(--muted); font-size:.9em; }
-.notesText { flex:1; min-height:0; width:100%; border:none; resize:none; outline:none;
+/* The editor is a textarea stacked on a mirror div with IDENTICAL text metrics
+   (same class carries font, size, line-height, padding, wrapping, and — via
+   nicescroll + scrollbar-gutter — the same content width). The mirror renders
+   the same text with transparent glyphs and paints a chip behind each stamp
+   line; the textarea above stays the single source of truth for editing, so a
+   stamp remains plain text you can select, edit, and delete like any other. */
+.notesWrap { flex:1; min-height:0; position:relative; background:var(--bg); }
+.notesText { position:absolute; inset:0; border:none; resize:none; outline:none;
   padding:18px max(24px, calc((100% - 75ch) / 2)); /* a reading measure, centred when wide */
-  background:var(--bg); color:var(--fg); font-family:var(--read-font);
-  font-size:inherit; line-height:1.55; }
+  color:var(--fg); font-family:var(--read-font);
+  font-size:inherit; line-height:1.55;
+  /* wrap exactly like a soft-wrapping textarea, and reserve the scrollbar's
+     width on both layers even before either overflows */
+  white-space:pre-wrap; overflow-wrap:break-word;
+  overflow-y:auto; scrollbar-gutter:stable; }
+textarea.notesText { background:transparent; }
 .notesText::placeholder { color:var(--muted); }
+.notesMirror { background:var(--bg); color:transparent; pointer-events:none; }
+/* the mirror's own scrollbar must OCCUPY the same width as the textarea's but
+   never be seen (the textarea's draws on top of the same gutter) */
+.notesMirror::-webkit-scrollbar-thumb { background:transparent; }
+/* the stamp chip: an accent-tinted pill behind the breadcrumb line. Padding
+   cancelled by negative margin so the mirror's glyph positions don't shift. */
+.stampchip { background:color-mix(in srgb, var(--accent) 11%, var(--bg));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius:6px; padding:1px 5px; margin:-1px -5px; }

@@ -33,12 +33,16 @@ export function stampLine(): string {
   return parts.join(" · ");
 }
 
+// a stamp line: starts with the em-dash marker and carries a clock time
+const STAMP_RE = /^\u2014 .*\d{2}:\d{2}/;
+
 export function NotesView() {
   const notes = useStore((s) => s.projectNotes);
   const setNotes = useStore((s) => s.setProjectNotes);
   const fontSize = useStore((s) => s.ui.fontSize);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const mRef = useRef<HTMLDivElement>(null);
 
   // Ctrl/Cmd+click a stamp line: go back to its moment — open the transcript,
   // select the line, seek the playhead. The breadcrumb is the way BACK, not
@@ -90,23 +94,36 @@ export function NotesView() {
           <Icon name="pin" size={15} /> <span className="blabel">Stamp context</span>
         </button>
       </div>
-      <textarea ref={taRef} className="notesText nicescroll" value={notes} autoFocus
-        aria-label="Project notes"
-        // N types the letter while you write (as it must), so Escape is the
-        // keyboard way back to where you were
-        onMouseDown={jumpFromStamp}
-        onKeyDown={(e) => {
-          // Ctrl/Cmd+M: stamp without leaving the keyboard (M for moment)
-          if ((e.ctrlKey || e.metaKey) && (e.key === "m" || e.key === "M")) {
-            e.preventDefault(); stamp(); return;
-          }
-          if (e.key !== "Escape") return;
-          e.stopPropagation();
-          const st = useStore.getState();
-          st.setActive(st.lastPid || st.tabs[0] || "browse");
-        }}
-        placeholder={"What are you noticing across the study?\n\nStamp context drops a line like “— 21 Aug 2026 14:30 · P07 · line 214 · video 0:14:03” so a memo keeps the moment it came from."}
-        onChange={(e) => setNotes(e.target.value)} />
+      <div className="notesWrap">
+        {/* the mirror re-renders the same text with transparent glyphs, so the
+            chip it paints behind a stamp line sits exactly under the textarea's
+            own (still fully editable) text */}
+        <div ref={mRef} className="notesText notesMirror nicescroll" aria-hidden="true">
+          {notes.split("\n").map((line, i) => (
+            <span key={i}>{i > 0 ? "\n" : ""}{STAMP_RE.test(line)
+              ? <span className="stampchip">{line}</span> : line}</span>
+          ))}
+          {"\u200b" /* keeps a final empty line the same height as the textarea's */}
+        </div>
+        <textarea ref={taRef} className="notesText nicescroll" value={notes} autoFocus
+          aria-label="Project notes"
+          // N types the letter while you write (as it must), so Escape is the
+          // keyboard way back to where you were
+          onMouseDown={jumpFromStamp}
+          onKeyDown={(e) => {
+            // Ctrl/Cmd+M: stamp without leaving the keyboard (M for moment)
+            if ((e.ctrlKey || e.metaKey) && (e.key === "m" || e.key === "M")) {
+              e.preventDefault(); stamp(); return;
+            }
+            if (e.key !== "Escape") return;
+            e.stopPropagation();
+            const st = useStore.getState();
+            st.setActive(st.lastPid || st.tabs[0] || "browse");
+          }}
+          placeholder={"What are you noticing across the study?\n\nStamp context drops a line like “— 21 Aug 2026 14:30 · P07 · line 214 · video 0:14:03” so a memo keeps the moment it came from."}
+          onScroll={(e) => { const m = mRef.current; if (m) m.scrollTop = e.currentTarget.scrollTop; }}
+          onChange={(e) => setNotes(e.target.value)} />
+      </div>
     </div>
   );
 }
