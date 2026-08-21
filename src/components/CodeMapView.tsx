@@ -329,6 +329,7 @@ function MapInner() {
   // the modal, optionally pre-scoped to one island (island context menu)
   const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" }>(false);
   const [themeAiOpen, setThemeAiOpen] = useState(false);
+  const [confirmRelayout, setConfirmRelayout] = useState<{ x: number; y: number } | null>(null);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   const [hiddenNotes, setHiddenNotes] = useState<Set<number>>(remembered.hiddenNotes);
   useEffect(() => { remembered.openCards = openCards; remembered.hiddenNotes = hiddenNotes; }, [openCards, hiddenNotes]);
@@ -677,13 +678,13 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi) return;
-    const down = (e: MouseEvent) => { if (!(e.target as Element).closest(".mapMenu")) { setMenu(null); setConfirmAi(null); } };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setMenu(null); setConfirmAi(null); } };
+    if (!menu && !confirmAi && !confirmRelayout) return;
+    const down = (e: MouseEvent) => { if (!(e.target as Element).closest(".mapMenu")) { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); } };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setMenu(null); setConfirmAi(null); setConfirmRelayout(null); } };
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi]);
+  }, [menu, confirmAi, confirmRelayout]);
 
   return (
     <div id="codemap" className={"stage-" + stage} style={{ fontSize: sidebarFontSize }}>
@@ -713,6 +714,13 @@ function MapInner() {
         <button className="btn iconbtn" onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
           title="Move the minimap to the next corner">
           <Icon name="pip" size={15} />
+        </button>
+        <button className="btn iconbtn" onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setConfirmRelayout({ x: Math.max(8, r.right - 340), y: r.bottom + 8 });
+          }}
+          title="Lay the whole map out fresh (replaces your hand-placed layout)">
+          <Icon name="refresh" size={15} />
         </button>
       </div>
       <div className="mapCanvas">
@@ -794,6 +802,20 @@ function MapInner() {
                 false);
             }
           }} />
+      )}
+      {confirmRelayout && (
+        <div className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm re-layout"
+          style={{ left: confirmRelayout.x, top: confirmRelayout.y, fontSize: sidebarFontSize }}>
+          <div className="mapAiConfirmText">
+            Lay the map out fresh? Every chip and group you placed by hand returns to the
+            packed layout. <b>One undo step brings it all back.</b>
+          </div>
+          <div className="mapCardActions">
+            <button className="btn primary" autoFocus
+              onClick={() => { setConfirmRelayout(null); useStore.getState().resetMapLayout(); }}>Re-layout</button>
+            <button className="btn" onClick={() => setConfirmRelayout(null)}>Cancel</button>
+          </div>
+        </div>
       )}
       {confirmAi && (() => {
         const st = useStore.getState();
