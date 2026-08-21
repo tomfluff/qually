@@ -59,7 +59,7 @@ const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>
   const fs = useStore((s) => s.ui.sidebarFontSize);
   return (
     <div className={"mapChip" + (selected ? " sel" : "")}
-      style={{ height: chipH(fs), "--chip-c": data.color } as React.CSSProperties}
+      style={{ "--chip-c": data.color } as React.CSSProperties}
       title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}`}>
       <span className="mapName">{data.code}</span>
       <CodeCounts stat={{ segs: data.segs, pids: data.pids }} size={countIconSize(fs)} />
@@ -117,7 +117,7 @@ function MapInner() {
     [codebook, stats]);
 
   const build = useCallback((): ChipNodeT[] => {
-    const fs = useStore.getState().ui.sidebarFontSize;
+    const fs = sidebarFontSize;
     const ch = chipH(fs);
     const widths = codes.map((c) => chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0));
     // shelf-pack toward a near-square map: row width from the total chip area
@@ -134,12 +134,11 @@ function MapInner() {
         type: "chip" as const,
         position: pos,
         width: w, height: ch,
-        style: { width: w, height: ch },
         selected: remembered.selected.has(c),
         data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
       };
     });
-  }, [codes, codebook, stats]);
+  }, [codes, codebook, stats, sidebarFontSize]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
   // codebook changes under the map (a merge, a rename, new codes), rebuild —
@@ -162,11 +161,10 @@ function MapInner() {
     }
     setMenu({ x: e.clientX, y: e.clientY, sel });
   }, [selectionAt, rfSetNodes]);
-  const onSelectionContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setMenu({ x: e.clientX, y: e.clientY, sel: selectionAt() });
-  }, [selectionAt]);
   const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => e.preventDefault(), []);
+  const [selecting, setSelecting] = useState(false);
+  const onSelectionStart = useCallback(() => setSelecting(true), []);
+  const onSelectionEnd = useCallback(() => setSelecting(false), []);
   const nodeColor = useCallback((n: Node) => (n as ChipNodeT).data.color, []);
 
   const mergeSel = (menuSel: string[], into: string) => {
@@ -208,16 +206,20 @@ function MapInner() {
             onMoveEnd={onMoveEnd}
             minZoom={0.1} maxZoom={3}
             selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
+            autoPanOnSelection={false}
+            onSelectionStart={onSelectionStart} onSelectionEnd={onSelectionEnd}
             onlyRenderVisibleElements elevateNodesOnSelect={false}
             multiSelectionKeyCode={["Control", "Meta"]}
             onNodeDragStop={onNodeDragStop}
             zoomOnDoubleClick={false} deleteKeyCode={null} nodesConnectable={false}
             onNodeDoubleClick={onNodeDoubleClick}
             onNodeContextMenu={onNodeContextMenu}
-            onSelectionContextMenu={onSelectionContextMenu}
             onPaneContextMenu={onPaneContextMenu}>
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />
+            {/* the MiniMap re-scans the store on every write; unmounting it for
+                the duration of a box-drag costs one render at gesture start/end
+                instead of aggregate scans per membership change (codex consult) */}
+            {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <SelectionHud />
           </ReactFlow>
         )}

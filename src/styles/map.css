@@ -52,8 +52,19 @@
   background:var(--panel); border:1px solid var(--line); border-radius:10px;
   box-shadow:0 4px 14px rgba(0,0,0,.18); }
 .mapSelPanel .mapSelCount { color:var(--muted); }
-/* selection rectangle in the app's accent (skill: theme via RF's CSS vars) */
-.mapCanvas .react-flow {
-  --xy-selection-background-color-default: color-mix(in srgb, var(--accent) 10%, transparent);
-  --xy-selection-border-default: 1px solid var(--accent);
+/* Two DIFFERENT React Flow rectangles, styled separately on purpose (codex
+   consult): .react-flow__selection is the live marquee while dragging —
+   border-only, so a growing translucent fill never has to composite over
+   180 painted chips. .react-flow__nodesselection-rect is the SECOND box RF
+   swaps in after release, spanning the selection bounds; left styled, it
+   reads as the marquee jumping, and it intercepts the next drag — so it is
+   invisible and click-through. Selected chips already show the selection. */
+.mapCanvas .react-flow__selection {
+  background: transparent;
+  border: 2px solid var(--accent);
+}
+.mapCanvas .react-flow__nodesselection-rect {
+  background: transparent;
+  border: 0;
+  pointer-events: none;
 }
