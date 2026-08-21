@@ -34,7 +34,7 @@ import { mergeScopedClusters, type CodeAction, type ReconcilePlan } from "../ai/
 // (uniform padding would leave a field of dead air around short names), and
 // everything scales with the sidebar text ramp so large accessible settings
 // never clip. Rows are shelf-packed toward a near-square map.
-const GX = 14, GY = 12, PAD = 18, ISLAND_GAP = 64;
+const GX = 14, GY = 12, PAD = 18, ISLAND_GAP = 64, RING_BAND = 56;
 const chipH = (fs: number) => Math.round(fs * 2.4);
 const measurer = document.createElement("canvas").getContext("2d")!;
 const chipW = (fs: number, name: string, segs: number, pids: number) => {
@@ -56,6 +56,8 @@ type MapNode = ChipNodeT | IslandNodeT;
 
 // positions (drags survive), viewport and selection outlive the unmounting view
 const remembered = {
+  // the stage override: null = derived (Reconcile while anything is pending)
+  stage: null as null | "reconcile" | "themes",
   // chip positions are RELATIVE to their island (absolute when ungrouped/flat)
   positions: {} as Record<string, { x: number; y: number }>,
   islandPos: {} as Record<string, { x: number; y: number }>,
@@ -167,7 +169,29 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
     </div>
   );
 });
-const nodeTypes = { chip: ChipNode, island: IslandNode };
+// a constellation's region: a circular field with the proposed concept's name
+// captioned above (same semantic zoom as island captions). Read-only body —
+// click-through so box-select and chip drags pass; the caption names the
+// PROPOSED merged concept (newName if given, else the survivor's name).
+type OrbitData = { name: string; renamed: boolean; ci: number };
+type OrbitNodeT = Node<OrbitData, "orbit">;
+const OrbitNode = memo(function OrbitNode({ data }: NodeProps<OrbitNodeT>) {
+  const zoom = useFlowStore(zoomSel);
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const base = fs * 1.3;
+  // lower ceiling than island captions: 25 orbits sit far denser than a few
+  // islands, and 7x labels collided across rows at far zoom
+  const fontSize = Math.min(base * 3.5, Math.max(base, base / zoom));
+  return (
+    <div className="mapOrbit">
+      <div className="mapIslandLabel mapOrbitLabel" style={{ fontSize }}>
+        <span className="mapIslandName">{data.name}</span>
+        {data.renamed && <span className="mapOrbitTag">renamed</span>}
+      </div>
+    </div>
+  );
+});
+const nodeTypes = { chip: ChipNode, island: IslandNode, orbit: OrbitNode };
 
 // React Flow commits its marquee through React on EVERY pointer event with no
 // rAF gate (verified in the installed v12.11.3 source with codex): a high-rate
@@ -229,6 +253,13 @@ function MapInner() {
   // the pending revision plan is PROJECT data — it survives reloads and travels
   // in the file, so the review can continue in a later session
   const plan = useStore((st) => st.codePlan);
+  const clusters = useStore((st) => st.codeClusters);
+  // stage: Reconcile while ANYTHING is pending, Themes on an empty plan —
+  // unless the researcher flipped the toggle this session
+  const [stageOverride, setStageOverride] = useState(remembered.stage);
+  useEffect(() => { remembered.stage = stageOverride; }, [stageOverride]);
+  const stage: "reconcile" | "themes" =
+    stageOverride ?? (clusters.length + plan.length > 0 ? "reconcile" : "themes");
   const setPlan = useCallback((updater: CodeAction[] | ((p: CodeAction[]) => CodeAction[])) => {
     const st = useStore.getState();
     st.setCodePlan(typeof updater === "function" ? updater(st.codePlan) : updater);
@@ -241,10 +272,10 @@ function MapInner() {
       (stats[b]?.segs ?? 0) - (stats[a]?.segs ?? 0) || a.localeCompare(b)),
     [codebook, stats]);
 
-  // Islands: each group packs its chips into a compact block; the blocks (plus
-  // an Ungrouped block) shelf-pack across the canvas. No groups -> one flat map.
-  // Islands are parent nodes (before their children in the array, as RF
-  // requires); chips inside carry parentId and RELATIVE positions.
+  // Two stages, one canvas. Themes: islands (groups) as before. Reconcile:
+  // constellations — each pending cluster is a circular parent node with the
+  // survivor at the center and members on the orbit; codes in no cluster pack
+  // as a flat field below. Parents precede children (RF sub-flow rule).
   const layout = useMemo(() => {
     const fs = sidebarFontSize;
     const ch = chipH(fs);
@@ -266,26 +297,80 @@ function MapInner() {
       return Math.max(460, Math.sqrt(area) * 1.5);
     };
     const inBook = (c: string) => c in codebook;
-    const groups = codeGroups
-      .map((g, gi) => ({ ...g, gi, codes: g.codes.filter(inBook) }))
-      .filter((g) => g.codes.length > 0);
-    const grouped = new Set(groups.flatMap((g) => g.codes));
-    const loose = codes.filter((c) => !grouped.has(c));
-
     const actOf = new Map(plan.map((a) => [a.code, a]));
     const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
       type: "chip" as const,
-      position: remembered.positions[c] ?? position,
+      position,
       ...(parentId ? { parentId } : {}),
       width: widths.get(c)!, height: ch,
       selected: remembered.selected.has(c),
       data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c) },
     });
 
+    if (stage === "reconcile") {
+      // valid clusters only: members still in the book, survivor present, 2+
+      const live = clusters
+        .map((c, ci) => ({ ...c, ci, codes: c.codes.filter(inBook) }))
+        .filter((c) => c.codes.length >= 2 && c.codes.includes(c.survivor));
+      const clustered = new Set(live.flatMap((c) => c.codes));
+      const singles = codes.filter((c) => !clustered.has(c));
+
+      const orbitNodes: OrbitNodeT[] = [];
+      const chipNodes: ChipNodeT[] = [];
+      // radial blocks: hub center, members equally spaced on the orbit ring.
+      // RING_BAND is reserved empty space outside the orbit — the eviction
+      // ring — so the packer keeps neighbors clear of it (design premise 3).
+      const blocks = live.map((c) => {
+        const members = c.codes.filter((x) => x !== c.survivor);
+        const maxW = Math.max(...c.codes.map((x) => widths.get(x)!));
+        const hubW = widths.get(c.survivor)!;
+        const r = Math.max(120, hubW / 2 + maxW / 2 + fs * 3.2);
+        const size = 2 * (r + maxW / 2 + RING_BAND);
+        return { c, members, r, size };
+      });
+      const rowW = Math.max(1000, Math.sqrt(blocks.reduce((a, b) => a + (b.size + GX) ** 2 / (b.size + GX), 0)) * 0 +
+        Math.sqrt(blocks.reduce((a, b) => a + (b.size + ISLAND_GAP) * (b.size + ISLAND_GAP), 0)) * 1.4);
+      let x = 0, y = 0, rowH = 0;
+      for (const b of blocks) {
+        if (x > 0 && x + b.size > rowW) { x = 0; y += rowH + ISLAND_GAP; rowH = 0; }
+        const key = `orbit:${b.c.ci}`;
+        orbitNodes.push({
+          id: key, type: "orbit" as const,
+          position: remembered.islandPos[key] ?? { x, y },
+          width: b.size, height: b.size,
+          draggable: false, selectable: false, focusable: false,
+          data: { name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName, ci: b.c.ci },
+        });
+        const cx = b.size / 2, cy = b.size / 2;
+        const hub = { x: cx - widths.get(b.c.survivor)! / 2, y: cy - ch / 2 };
+        chipNodes.push(chipNode(b.c.survivor, remembered.positions[b.c.survivor] ?? hub, key));
+        b.members.forEach((m, i) => {
+          const ang = -Math.PI / 2 + (i * 2 * Math.PI) / b.members.length;
+          const px = cx + b.r * Math.cos(ang) - widths.get(m)! / 2;
+          const py = cy + b.r * Math.sin(ang) - ch / 2;
+          chipNodes.push(chipNode(m, remembered.positions[m] ?? { x: px, y: py }, key));
+        });
+        x += b.size + ISLAND_GAP;
+        rowH = Math.max(rowH, b.size);
+      }
+      // the untouched field: everything not in a cluster, flat-packed below
+      const flat = pack(singles, near(singles));
+      const offY = (blocks.length ? y + rowH + ISLAND_GAP + 40 : 0);
+      for (const c of singles)
+        chipNodes.push(chipNode(c, remembered.positions[c] ?? { x: flat.pos[c].x, y: offY + flat.pos[c].y }));
+      return { nodes: [...orbitNodes, ...chipNodes] as MapNode[] };
+    }
+
+    const groups = codeGroups
+      .map((g, gi) => ({ ...g, gi, codes: g.codes.filter(inBook) }))
+      .filter((g) => g.codes.length > 0);
+    const grouped = new Set(groups.flatMap((g) => g.codes));
+    const loose = codes.filter((c) => !grouped.has(c));
+
     if (groups.length === 0) {
       const flat = pack(codes, near(codes));
-      return { nodes: codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[] };
+      return { nodes: codes.map((c) => chipNode(c, remembered.positions[c] ?? flat.pos[c])) as MapNode[] };
     }
     const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
       ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
@@ -308,13 +393,13 @@ function MapInner() {
         dragHandle: ".mapIslandLabel",
         data: { name: b.name, gi: b.gi },
       });
-      for (const c of b.list) children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
+      for (const c of b.list) children.push(chipNode(c, remembered.positions[c] ?? { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
       ix += bw + ISLAND_GAP;
       rowH = Math.max(rowH, bh);
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: [...islands, ...children] as MapNode[] };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -324,17 +409,20 @@ function MapInner() {
   useEffect(() => { rfSetNodes(build()); }, [build, rfSetNodes]);
 
   // group editing: every mutation goes through the store so it lands in the file
-  // merge proposals draw as REAL edges, source chip to the code it would fold
-  // into — the map shows the plan's structure, not a glyph to decode
-  const planEdges = useMemo<Edge[]>(() => plan
-    .filter((a) => a.action === "merge" && a.code in codebook && (a.into ?? "") in codebook)
-    .map((a) => ({
-      id: `merge:${a.code}`,
-      source: a.code, target: a.into!,
-      animated: true, selectable: false, focusable: false,
-      markerEnd: { type: MarkerType.ArrowClosed, color: "var(--accent)" },
-      style: { stroke: "var(--accent)", strokeWidth: 2 },
-    })), [plan, codebook]);
+  // spokes: every cluster member points at its survivor. Edges exist ONLY in
+  // Reconcile mode — Themes never shows merge structure (design premise 1).
+  const spokeEdges = useMemo<Edge[]>(() => {
+    if (stage !== "reconcile") return [];
+    return clusters.flatMap((c, ci) =>
+      c.codes.filter((m) => m !== c.survivor && m in codebook && c.survivor in codebook)
+        .map((m) => ({
+          id: `spoke:${ci}:${m}`,
+          source: m, target: c.survivor,
+          animated: true, selectable: false, focusable: false,
+          markerEnd: { type: MarkerType.ArrowClosed, color: "var(--accent)" },
+          style: { stroke: "var(--accent)", strokeWidth: 2 },
+        })));
+  }, [stage, clusters, codebook]);
 
   // one verdict at a time; each accept is an existing undoable store action.
   // After a rename, pending merges that pointed at the old name follow it.
@@ -432,13 +520,21 @@ function MapInner() {
   }, [menu]);
 
   return (
-    <div id="codemap" style={{ fontSize: sidebarFontSize }}>
+    <div id="codemap" className={"stage-" + stage} style={{ fontSize: sidebarFontSize }}>
       <div className="mapBar">
         <span className="mapTitle">Code map</span>
         <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+        <div className="segmented mapStage" role="radiogroup" aria-label="Map stage">
+          <button className={"seg" + (stage === "reconcile" ? " on" : "")} role="radio"
+            aria-checked={stage === "reconcile"} onClick={() => setStageOverride("reconcile")}
+            title="Clean the codebook: merge constellations, renames, rejects">Reconcile</button>
+          <button className={"seg" + (stage === "themes" ? " on" : "")} role="radio"
+            aria-checked={stage === "themes"} onClick={() => setStageOverride("themes")}
+            title="Group the cleaned codebook into theme islands">Themes</button>
+        </div>
         <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
-          title="AI proposes similarity islands and per-code revisions (rename / merge / reject) for your review">
+          title="AI proposes merge constellations and per-code revisions for your review">
           <Icon name="sparkle" size={15} /> <span className="blabel">Reconcile with AI</span>
         </button>
         <button className="btn iconbtn" onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
@@ -452,7 +548,7 @@ function MapInner() {
           : (
           <ReactFlow<MapNode>
             defaultNodes={initialNodes} nodeTypes={nodeTypes}
-            edges={planEdges}
+            edges={spokeEdges}
             colorMode={dark ? "dark" : "light"}
             fitView={!remembered.viewport}
             defaultViewport={remembered.viewport ?? undefined}
@@ -475,7 +571,7 @@ function MapInner() {
             {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <RafSelectionMarquee />
             <SelectionHud />
-            {plan.length > 0 && (
+            {stage === "reconcile" && plan.length > 0 && (
               <Panel position="top-left" className="mapPlan">
                 <div className="mapPlanHead">
                   <b>Revision plan</b> <span className="mapPlanCount">{plan.length}</span>
