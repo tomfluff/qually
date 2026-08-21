@@ -21,18 +21,31 @@
 .mapCanvas .react-flow__controls button:hover { background:var(--sel); }
 /* selection ring is drawn by the chip itself (RF's default node chrome is off
    for custom node types, so there is nothing to double-draw) */
-.mapChip { display:flex; align-items:center; gap:8px; box-sizing:border-box;
-  padding:0 12px; height:100%; background:var(--panel); color:var(--fg);
-  border:2px solid var(--line); border-radius:10px; cursor:pointer;
-  font:inherit; text-align:left; }
+/* the chip: the code's color is the left edge AND a wash over the ground —
+   at map distance the color IS the identity, so it leads. The full name shows
+   (two lines before it clips); counts are the sidebar's icon pair, so the map
+   speaks the same count vocabulary as everywhere else. */
+.mapChip { display:flex; flex-direction:column; justify-content:center; gap:2px;
+  box-sizing:border-box; padding:6px 12px 6px 16px; height:100%;
+  background:color-mix(in srgb, var(--chip-c) 10%, var(--panel)); color:var(--fg);
+  border:2px solid var(--line); border-left:none; border-radius:10px; cursor:pointer;
+  font:inherit; text-align:left; position:relative; overflow:hidden; }
+.mapChip::before { content:""; position:absolute; left:0; top:0; bottom:0; width:7px;
+  background:var(--chip-c); }
 .mapChip:hover { border-color:var(--muted); }
 .mapChip.sel { border-color:var(--accent);
-  background:color-mix(in srgb, var(--accent) 9%, var(--panel)); }
-.mapChip .mapDot { width:.85em; height:.85em; border-radius:4px; flex:none; }
-.mapChip .mapName { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
-  white-space:nowrap; font-weight:600; }
-.mapChip .mapMeta { color:var(--muted); font-variant-numeric:tabular-nums; flex:none; }
+  background:color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+.mapChip .mapName { min-width:0; font-weight:600; line-height:1.2;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.mapChip .cnt { display:inline-flex; gap:10px; color:var(--muted);
+  font-variant-numeric:tabular-nums; }
+.mapChip .cntpair { display:inline-flex; align-items:center; gap:3px; }
 /* the right-click menu rides the shared .ctxmenu chrome; only the extras here */
 .mapMenu .mapMenuHead { padding:6px 10px 2px; color:var(--muted); font-size:.85em; }
 .mapMenu .mapDot { display:inline-block; width:.8em; height:.8em; border-radius:3px;
   margin-right:6px; vertical-align:-1px; }
+/* selection actions overlaying the canvas (RF Panel): floats, never reflows */
+.mapSelPanel { display:flex; align-items:center; gap:10px; padding:6px 10px;
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  box-shadow:0 4px 14px rgba(0,0,0,.18); }
+.mapSelPanel .mapSelCount { color:var(--muted); }

@@ -8,16 +8,22 @@
 // AI grouping lands on this surface next.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ReactFlow, ReactFlowProvider, MiniMap, Controls, useNodesState, useReactFlow,
+  ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, useNodesState, useReactFlow,
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useStore } from "../state/store";
 import { codeStats } from "../codeStats";
 import { preselectBrowse } from "./BrowseView";
+import { CodeCounts } from "./CodeCounts";
+import { Icon, countIconSize } from "./Icon";
 
-// chip geometry in WORLD units — the viewport transform scales the world
-const CW = 190, CH = 54, GX = 18, GY = 16;
+// chip geometry in WORLD units — the viewport transform scales the world.
+// Sized from the panel text ramp: the name needs two full lines and the count
+// row at ANY sidebar font size, so a fixed pixel height would clip the large
+// accessible settings this app exists for.
+const GX = 18, GY = 16;
+const dims = (fs: number) => ({ cw: Math.round(fs * 15), ch: Math.round(fs * 4.2 + 16) });
 
 type ChipData = { code: string; color: string; segs: number; pids: number };
 type ChipNodeT = Node<ChipData, "chip">;
@@ -30,17 +36,23 @@ const remembered = {
 };
 
 function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const { cw, ch } = dims(fs);
   return (
     <div className={"mapChip" + (selected ? " sel" : "")}
-      style={{ width: CW, height: CH }}
+      style={{ width: cw, height: ch, "--chip-c": data.color } as React.CSSProperties}
       title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}`}>
-      <span className="mapDot" style={{ background: data.color }} />
       <span className="mapName">{data.code}</span>
-      <span className="mapMeta">{data.segs} · {data.pids}</span>
+      <CodeCounts stat={{ segs: data.segs, pids: data.pids }} size={countIconSize(fs)} />
     </div>
   );
 }
 const nodeTypes = { chip: ChipNode };
+
+const NEXT_CORNER = {
+  "bottom-right": "bottom-left", "bottom-left": "top-left",
+  "top-left": "top-right", "top-right": "bottom-right",
+} as const;
 
 function MapInner() {
   const codebook = useStore((s) => s.codebook);
@@ -50,6 +62,8 @@ function MapInner() {
   const dark = useStore((s) => s.ui.dark);
   const setActive = useStore((s) => s.setActive);
   const mergeCode = useStore((s) => s.mergeCode);
+  const mapMinimap = useStore((s) => s.ui.mapMinimap);
+  const setUi = useStore((s) => s.setUi);
   const { setNodes: rfSetNodes } = useReactFlow();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -61,13 +75,14 @@ function MapInner() {
     [codebook, stats]);
 
   const build = useCallback((): ChipNodeT[] => {
+    const { cw, ch } = dims(useStore.getState().ui.sidebarFontSize);
     const cols = Math.max(1, Math.ceil(Math.sqrt(codes.length * 1.6)));
     return codes.map((c, i) => ({
       id: c,
       type: "chip" as const,
       position: remembered.positions[c]
-        ?? { x: (i % cols) * (CW + GX), y: Math.floor(i / cols) * (CH + GY) },
-      width: CW, height: CH,
+        ?? { x: (i % cols) * (cw + GX), y: Math.floor(i / cols) * (ch + GY) },
+      width: cw, height: ch,
       selected: remembered.selected.has(c),
       data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
     }));
@@ -111,11 +126,10 @@ function MapInner() {
         <span className="mapTitle">Code map</span>
         <span className="mapHint">The whole codebook at once. Drag to pan, wheel to zoom, <b>Shift+drag</b> to select a region, right-click a selection to act on it. Double-click a code for its excerpts.</span>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
-        {sel.length > 0 && (
-          <button className="btn" onClick={() => openInCodebook(sel)}>
-            Open {sel.length} in Codebook
-          </button>
-        )}
+        <button className="btn iconbtn" onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
+          title="Move the minimap to the next corner">
+          <Icon name="pip" size={15} />
+        </button>
       </div>
       <div className="mapCanvas">
         {codes.length === 0
@@ -136,7 +150,16 @@ function MapInner() {
             onSelectionContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }}
             onPaneContextMenu={(e) => e.preventDefault()}>
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable nodeColor={(n) => (n as ChipNodeT).data.color} />
+            <MiniMap pannable zoomable position={mapMinimap}
+              nodeColor={(n) => (n as ChipNodeT).data.color} />
+            {/* selection actions float OVER the canvas — appearing must not
+                resize the bar or reflow the viewport mid-drag */}
+            {sel.length > 0 && (
+              <Panel position="top-right" className="mapSelPanel">
+                <span className="mapSelCount">{sel.length} selected</span>
+                <button className="btn" onClick={() => openInCodebook(sel)}>Open in Codebook</button>
+              </Panel>
+            )}
           </ReactFlow>
         )}
       </div>
