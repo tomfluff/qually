@@ -16,8 +16,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
+  Handle, Position, MarkerType,
   useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
-  type Node, type NodeProps, type Viewport,
+  type Node, type NodeProps, type Viewport, type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useStore } from "../state/store";
@@ -69,11 +70,15 @@ const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>
     <div className={"mapChip" + (selected ? " sel" : "")}
       style={{ "--chip-c": data.color } as React.CSSProperties}
       title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}`}>
+      {/* invisible anchors for proposal edges (opacity, not display:none —
+          hidden handles break RF's edge geometry) */}
+      <Handle type="target" position={Position.Left} className="mapHandle" isConnectable={false} />
+      <Handle type="source" position={Position.Right} className="mapHandle" isConnectable={false} />
       <span className="mapName">{data.code}</span>
-      {data.act && (
+      {data.act && data.act.action !== "merge" && (
         <span className={"mapActBadge " + data.act.action}
           title={`${data.act.action}: ${data.act.rationale}`}>
-          {data.act.action === "rename" ? "✎" : data.act.action === "merge" ? "⇥" : "⊘"}
+          {data.act.action === "rename" ? "✎" : "⊘"}
         </span>
       )}
       <CodeCounts stat={{ segs: data.segs, pids: data.pids }} size={countIconSize(fs)} />
@@ -316,6 +321,18 @@ function MapInner() {
   useEffect(() => { rfSetNodes(build()); }, [build, rfSetNodes]);
 
   // group editing: every mutation goes through the store so it lands in the file
+  // merge proposals draw as REAL edges, source chip to the code it would fold
+  // into — the map shows the plan's structure, not a glyph to decode
+  const planEdges = useMemo<Edge[]>(() => plan
+    .filter((a) => a.action === "merge" && a.code in codebook && (a.into ?? "") in codebook)
+    .map((a) => ({
+      id: `merge:${a.code}`,
+      source: a.code, target: a.into!,
+      animated: true, selectable: false, focusable: false,
+      markerEnd: { type: MarkerType.ArrowClosed, color: "var(--accent)" },
+      style: { stroke: "var(--accent)", strokeWidth: 2 },
+    })), [plan, codebook]);
+
   // one verdict at a time; each accept is an existing undoable store action.
   // After a rename, pending merges that pointed at the old name follow it.
   const applyAction = (a: CodeAction) => {
@@ -427,6 +444,7 @@ function MapInner() {
           : (
           <ReactFlow<MapNode>
             defaultNodes={initialNodes} nodeTypes={nodeTypes}
+            edges={planEdges}
             colorMode={dark ? "dark" : "light"}
             fitView={!remembered.viewport}
             defaultViewport={remembered.viewport ?? undefined}
@@ -453,6 +471,7 @@ function MapInner() {
               <Panel position="top-left" className="mapPlan">
                 <div className="mapPlanHead">
                   <b>Revision plan</b> <span className="mapPlanCount">{plan.length}</span>
+                  <span className="mapPlanKey">✎ rename · ⊘ reject · merges draw as arrows</span>
                   <button className="btn" onClick={() => { [...plan].forEach(applyAction); }}>Accept all</button>
                   <button className="btn" onClick={() => setPlan([])} title="Discard every remaining proposal">Clear</button>
                 </div>

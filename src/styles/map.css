@@ -95,15 +95,18 @@
 /* the revision plan: proposals waiting for verdicts. A floating strip so the
    canvas keeps its size; each accept runs an undoable store action. */
 .mapPlan { background:var(--panel); border:1px solid var(--line); border-radius:10px;
-  box-shadow:0 4px 14px rgba(0,0,0,.18); max-width:min(40ch, 42vw); }
+  box-shadow:0 4px 14px rgba(0,0,0,.18); max-width:min(56ch, 46vw); }
 .mapPlanHead { display:flex; align-items:center; gap:8px; padding:8px 10px;
-  border-bottom:1px solid var(--line); }
+  border-bottom:1px solid var(--line); flex-wrap:wrap; }
+.mapPlanKey { flex-basis:100%; order:9; color:var(--muted); font-size:.85em; }
 .mapPlanHead .mapPlanCount { color:var(--muted); margin-right:auto; }
 .mapPlanHead .btn { padding:2px 8px; font-size:.9em; }
 .mapPlanList { max-height:min(46vh, 30em); overflow-y:auto; padding:6px; }
-.mapPlanRow { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px; }
+.mapPlanRow { display:flex; align-items:flex-start; gap:8px; padding:4px 6px; border-radius:6px; }
+.mapPlanRow .btn { flex:none; }
 .mapPlanRow:hover { background:var(--sel); }
-.mapPlanText { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* full proposals, wrapped — a truncated verdict cannot be judged */
+.mapPlanText { flex:1; min-width:0; line-height:1.35; overflow-wrap:break-word; }
 .mapPlanRow .btn { padding:1px 7px; }
 .mapPlanKind, .mapActBadge { font-weight:700; }
 .mapPlanKind.remove, .mapActBadge.remove { color:#c4554d; }
@@ -111,3 +114,6 @@
 .mapActBadge.rename, .mapActBadge.merge { color:var(--accent); }
 /* the chip's pending-proposal marker */
 .mapActBadge { flex:none; }
+/* proposal-edge anchors: present for geometry, invisible to the eye */
+.mapChip .mapHandle { opacity:0; pointer-events:none; width:1px; height:1px;
+  min-width:1px; min-height:1px; border:0; }
