@@ -72,6 +72,8 @@ const remembered = {
   // which halos have their card unfolded / their note dismissed (session)
   openCards: new Set<number>(),
   hiddenNotes: new Set<number>(),
+  // where the researcher parked the Revision plan panel (screen offset)
+  planPos: { x: 0, y: 0 },
 };
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -651,6 +653,18 @@ function MapInner() {
   }, [selectionAt, rfSetNodes]);
   const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => e.preventDefault(), []);
   const [selecting, setSelecting] = useState(false);
+  // the Revision plan floats: drag it by its header anywhere on the canvas
+  const [planPos, setPlanPos] = useState(remembered.planPos);
+  useEffect(() => { remembered.planPos = planPos; }, [planPos]);
+  const dragPlan = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0 || (e.target as Element).closest("button")) return;
+    e.preventDefault();
+    const sx = e.clientX - planPos.x, sy = e.clientY - planPos.y;
+    const move = (ev: PointerEvent) => setPlanPos({ x: ev.clientX - sx, y: ev.clientY - sy });
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }, [planPos]);
   const onSelectionStart = useCallback(() => setSelecting(true), []);
   const onSelectionEnd = useCallback(() => setSelecting(false), []);
   const nodeColor = useCallback((n: Node) => n.type === "chip" ? (n as ChipNodeT).data.color : "transparent", []);
@@ -730,8 +744,10 @@ function MapInner() {
             <RafSelectionMarquee />
             <SelectionHud />
             {stage === "reconcile" && plan.length > 0 && (
-              <Panel position="top-left" className="mapPlan">
-                <div className="mapPlanHead">
+              <Panel position="top-left" className="mapPlan"
+                style={{ transform: `translate(${planPos.x}px, ${planPos.y}px)` }}>
+                <div className="mapPlanHead" onPointerDown={dragPlan}
+                  title="Drag to move this panel">
                   <b>Revision plan</b> <span className="mapPlanCount">{plan.length}</span>
                   <span className="mapPlanKey">✎ rename · ⊘ reject · merge groups show as halos</span>
                   <button className="btn" onClick={() => { [...plan].forEach(applyAction); }}>Accept all</button>

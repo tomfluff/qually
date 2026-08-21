@@ -184,3 +184,8 @@
    text (RF disables selection on nodes by default) */
 .mapCardNode .mapCardRat, .mapNote .mapNoteText, .mapNote .mapNoteGen {
   user-select:text; -webkit-user-select:text; cursor:text; }
+/* the plan panel is furniture you can move: drag by the header */
+.mapPlanHead { cursor:grab; user-select:none; }
+.mapPlanHead:active { cursor:grabbing; }
+/* the minimap must not sit ON the zoom controls when both share bottom-left */
+.mapCanvas .react-flow__minimap.bottom.left { margin-left:56px; }
