@@ -34,3 +34,22 @@ textarea.notesText { background:transparent; }
 .stampchip { background:color-mix(in srgb, var(--accent) 11%, var(--bg));
   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
   border-radius:6px; padding:1px 5px; margin:-1px -5px; }
+/* a stamp whose transcript no longer exists: still a chip (it IS a stamp),
+   but grey — nothing to jump to, and the hover cursor skips it */
+.stampchip.dead { background:color-mix(in srgb, var(--muted) 12%, var(--bg));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--muted) 30%, transparent); }
+/* find-in-notes: a floating bar over the editor's top-right corner. Matches
+   paint in the mirror with the transcript search's yellow, so "found text"
+   looks the same everywhere; the current match gets a ring, not a fill — the
+   glyphs above stay theme-colored, so a fill couldn't guarantee contrast. */
+.notesFind { position:absolute; top:8px; right:22px; display:flex; align-items:center;
+  gap:6px; padding:4px 6px; background:var(--panel); border:1px solid var(--line);
+  border-radius:8px; box-shadow:0 4px 14px rgba(0,0,0,.18); }
+.notesFind input { width:18ch; padding:2px 6px; border:1px solid var(--line);
+  border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; }
+.notesFind .findCount { min-width:4ch; text-align:center; color:var(--muted);
+  font-variant-numeric:tabular-nums; }
+.notesFind .btn { display:inline-flex; padding:3px 6px; }
+.notesMark { background:#ffe58a; border-radius:3px; }
+[data-theme=dark] .notesMark { background:#7a6320; }
+.notesMark.cur { box-shadow:0 0 0 2px #ff9d3b; }
