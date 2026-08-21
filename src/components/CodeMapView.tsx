@@ -17,7 +17,7 @@ import {
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useStore } from "../state/store";
+import { useStore, bestSurvivor } from "../state/store";
 import { codeStats } from "../codeStats";
 import { preselectBrowse } from "./BrowseView";
 import { CodeCounts } from "./CodeCounts";
@@ -180,9 +180,12 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
   // rename affordances close back to a focused span — on a canvas of hundreds
   // of tabbable chips, losing focus to <body> is losing your place
   const spanRef = useRef<HTMLSpanElement>(null);
+  // keyboard closers land back on the span (a canvas of hundreds of tabbable
+  // chips is a bad place to lose your spot); a BLUR must not — the click that
+  // caused it is going somewhere else on purpose
   const refocus = () => requestAnimationFrame(() => spanRef.current?.focus());
   const rename = () => {
-    setEditing(false); refocus();
+    setEditing(false);
     const st = useStore.getState();
     const name = draft.trim();
     if (!name || st.codeGroups[data.gi]?.name === name) return; // no change, no history entry
@@ -203,7 +206,7 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
             onChange={(e) => setDraft(e.target.value)}
             onBlur={rename}
             onKeyDown={(e) => {
-              if (e.key === "Enter") rename();
+              if (e.key === "Enter") { rename(); refocus(); }
               if (e.key === "Escape") { e.stopPropagation(); setDraft(data.name); setEditing(false); refocus(); }
             }} />
         ) : (
@@ -239,7 +242,7 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const spanRef = useRef<HTMLSpanElement>(null);
   const refocus = () => requestAnimationFrame(() => spanRef.current?.focus());
   const rename = () => {
-    setEditing(false); refocus();
+    setEditing(false);
     const st = useStore.getState();
     const cur = st.codeClusters[data.ci];
     if (!cur) return;
@@ -258,7 +261,7 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
             onChange={(e) => setDraft(e.target.value)}
             onBlur={rename}
             onKeyDown={(e) => {
-              if (e.key === "Enter") rename();
+              if (e.key === "Enter") { rename(); refocus(); }
               if (e.key === "Escape") { e.stopPropagation(); setDraft(data.name); setEditing(false); refocus(); }
             }} />
         ) : (
@@ -389,6 +392,10 @@ function MapInner() {
   useEffect(() => { remembered.topicGroups = topicGroups; }, [topicGroups]);
   const [topicFp, setTopicFp] = useState(remembered.topicFp);
   useEffect(() => { remembered.topicFp = topicFp; }, [topicFp]);
+  // the codebook's IDENTITY, not the map's display order: `codes` is sorted by
+  // excerpt count, so accepting one excerpt would reorder it and cry stale
+  const codebookFp = useMemo(() => Object.keys(codebook).sort().join("\n"), [codebook]);
+  const topicsStale = topicFp !== codebookFp;
   const [topicAiOpen, setTopicAiOpen] = useState(false);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   useEffect(() => { remembered.openCards = openCards; }, [openCards]);
@@ -682,9 +689,12 @@ function MapInner() {
   // single confirmation, else N simultaneous envelopes stack into clipping.
   const applyAction = (a: CodeAction, sound = true) => {
     const st = useStore.getState();
+    // the row leaves the plan FIRST: renameCode rewrites every codePlan entry
+    // (store.ts, `.map(a => ({...a}))`), so a filter by reference afterwards
+    // would match nothing and the applied row would linger as a ghost
+    setPlan((ps) => ps.filter((x) => x !== a));
     if (a.action === "rename") st.renameCode(a.code, a.newName!);
     else if (a.action === "remove") st.rejectCode(a.code);
-    setPlan((ps) => ps.filter((x) => x !== a));
     if (sound) (a.action === "remove" ? earcon.reject : earcon.accept)();
   };
   const skipAction = (a: CodeAction) => { setPlan((ps) => ps.filter((x) => x !== a)); earcon.skip(); };
@@ -747,7 +757,11 @@ function MapInner() {
   // by-hand merge proposal: a new halo from the selection
   const clusterSelection = (sel: string[]) => {
     const st = useStore.getState();
-    st.setCodeClusters([...st.codeClusters, { survivor: sel[0], codes: sel, rationale: "Grouped by hand on the map." }]);
+    // a hand-made group has no deliberate direction yet — say so explicitly
+    // (bestSurvivor with no preference) rather than leaning on setCodeClusters
+    // to overwrite whatever placeholder we passed
+    st.setCodeClusters([...st.codeClusters,
+      { survivor: bestSurvivor(st, sel), codes: sel, rationale: "Grouped by hand on the map." }]);
     setMenu(null);
   };
   // the camera persists across tab switches AND reloads
@@ -958,10 +972,10 @@ function MapInner() {
         </label>
         {lens === "topics" && (
           <button className="btn" onClick={() => setTopicAiOpen(true)}
-            title={topicFp !== codes.join("\n")
+            title={topicsStale
               ? "The codebook changed since these piles were computed — re-run to refresh them"
               : "Ask the AI to recompute the topic piles"}>
-            {topicFp !== codes.join("\n") ? "Topics are stale — re-run…" : "Re-run topics…"}
+            {topicsStale ? "Topics are stale — re-run…" : "Re-run topics…"}
           </button>
         )}
         <div className="segmented mapStage" role="radiogroup" aria-label="Map stage">
@@ -1079,7 +1093,7 @@ function MapInner() {
           onReconcileInstead={() => { setTopicAiOpen(false); setStageOverride("reconcile"); }}
           onGroups={(groups) => {
             setTopicGroups(groups.map((g) => ({ name: g.name, codes: g.codes })));
-            setTopicFp(codes.join("\n"));
+            setTopicFp(codebookFp);
             delete remembered.lensPos.topics; // fresh piles, fresh placement
             setLens("topics");
             requestAnimationFrame(() => fitView({ duration: 200 }));
@@ -1092,7 +1106,8 @@ function MapInner() {
           onGroups={(groups) => { useStore.getState().applyThemeGroups(groups); }} />
       )}
       {aiOpen && (
-        <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope} onClose={() => setAiOpen(false)}
+        <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope} lensed={lens !== "default"}
+          onClose={() => setAiOpen(false)}
           onPlan={(p: ReconcilePlan, scope) => {
             const st = useStore.getState();
             if (scope === "all") {

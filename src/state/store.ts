@@ -1546,7 +1546,10 @@ export const useStore = create<State>()(
             return codes === c.codes ? c : { ...c, codes };
           })
           .filter((c) => c.codes.length >= 2)
-          .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes) }));
+          // membership changed here, so re-derive — but only where it had to:
+          // a survivor still in its cluster keeps the direction it was given
+          // (an evicted survivor is no longer a member and falls back)
+          .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) }));
         }
         set({ codeClusters: clusters, mapPositions: { ...s.mapPositions, [code]: pos } });
       },
@@ -1604,11 +1607,12 @@ export const useStore = create<State>()(
         announce(`Merged ${c.codes.length} codes into ${c.newName ?? c.survivor}`);
       },
       setCodeClusters: (clusters) => { get().pushUndo(); set({ codeClusters: clusters
-        // with the survivor control gone, the survivor is ALWAYS the
-        // best-evidenced member — one policy, applied to every cluster that
-        // enters the store, AI-made and hand-made alike
+        // one policy for every cluster entering the store: a survivor that is
+        // still a member holds (renaming a halo or storing a glimpse must not
+        // silently flip a merge's direction), and anything else falls back to
+        // the best-evidenced member
         .filter((c) => c.codes.length >= 2)
-        .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes) })) }); },
+        .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) })) }); },
       setLastPid: (pid) => set({ lastPid: pid }),
       // Newest first: the list is a record of what you asked, read most-recent
       // down. Not undoable — an answer costs an API call, and Ctrl+Z after some

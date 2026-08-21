@@ -32,10 +32,36 @@ test("bestSurvivor picks the most-evidenced member, stable on ties", () => {
   expect(bestSurvivor(s, ["beta", "gamma"])).toBe("beta");    // tie -> first listed
 });
 
-test("every cluster entering the store gets the evidence-based survivor", () => {
+test("a cluster with no valid survivor gets the evidence-based one", () => {
+  const st = useStore.getState();
+  st.setCodeClusters([{ survivor: "ghost", codes: ["beta", "alpha"], rationale: "" }]);
+  expect(useStore.getState().codeClusters[0].survivor).toBe("alpha");
+  st.setCodeClusters([]);
+});
+
+test("a valid survivor holds through a non-structural edit (halo rename, glimpse)", () => {
   const st = useStore.getState();
   st.setCodeClusters([{ survivor: "beta", codes: ["beta", "alpha"], rationale: "" }]);
-  expect(useStore.getState().codeClusters[0].survivor).toBe("alpha");
+  // renaming the halo re-enters the whole list; the merge direction must not flip
+  const cur = useStore.getState().codeClusters;
+  st.setCodeClusters(cur.map((c) => ({ ...c, newName: "merged name" })));
+  expect(useStore.getState().codeClusters[0].survivor).toBe("beta");
+  st.setCodeClusters([]);
+});
+
+test("reconcileDrop leaves OTHER clusters' survivors alone", () => {
+  const st = useStore.getState();
+  st.setCodeClusters([
+    { survivor: "beta", codes: ["beta", "alpha"], rationale: "" },   // deliberate: beta despite less evidence
+    { survivor: "gamma", codes: ["gamma", "alpha"], rationale: "" }, // (alpha lands in the first; see below)
+  ]);
+  const before = useStore.getState().codeClusters;
+  expect(before[0].survivor).toBe("beta");
+  // drop an unrelated code out of nothing: the untouched cluster keeps its direction
+  st.reconcileDrop("gamma", { x: 1, y: 1 }, null);
+  expect(useStore.getState().codeClusters[0].survivor).toBe("beta");
+  st.setCodeClusters([]);
+  st.resetMapLayout(); // the drop parked a position; leave the map packed
 });
 
 test("a preferred survivor wins when it is a member — merge direction is deliberate", () => {
