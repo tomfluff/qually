@@ -216,6 +216,10 @@ export interface State {
   // the review can continue in a later session
   codePlan: CodePlanAction[];
   codeClusters: CodeCluster[];
+  // Code map layout positions (session-only: ride the undo history, never the
+  // project file). Keys: chip name or island/orbit node id.
+  mapPositions: Record<string, { x: number; y: number }>;
+  mapIslandPos: Record<string, { x: number; y: number }>;
   // the transcript you were last ON (session-only): the Notes stamp and other
   // "what was I just doing" readers need it after you switch to a reserved view
   lastPid: string;
@@ -321,6 +325,10 @@ export interface State {
   setCodeGroups: (groups: CodeGroup[]) => void;
   setCodePlan: (plan: CodePlanAction[]) => void;
   setCodeClusters: (clusters: CodeCluster[]) => void;
+  // one undoable entry per completed map gesture
+  recordMapPosition: (id: string, pos: { x: number; y: number }, island?: boolean) => void;
+  // the whole cluster is applied as ONE undoable step
+  applyCluster: (ci: number) => void;
   setLastPid: (pid: string) => void;
   addAnswer: (a: Omit<Answer, "aid" | "at">) => void;
   deleteAnswer: (aid: number) => void;
@@ -400,6 +408,11 @@ function snapshot(s: State): string {
     // its grounding, and an undo that brought the segment back without it made
     // the researcher pay for the same AI call twice
     aiGrounds: s.aiGrounds, markerColors: s.ui.markerColors,
+    // the Code map's state rides too: undoing a verdict must put the proposal
+    // back on the canvas, and a layout move is as undoable as anything else
+    // (positions are session-only data, but they share this one history)
+    codeGroups: s.codeGroups, codePlan: s.codePlan, codeClusters: s.codeClusters,
+    mapPositions: s.mapPositions, mapIslandPos: s.mapIslandPos,
     sel: { ...s.selection, lines: [...s.selection.lines] },
   });
 }
@@ -429,6 +442,37 @@ function restoreLine(get: () => State, set: (p: Partial<State>) => void,
   // to the edited transcript so the undo is never a silent off-screen change
   if (get().active !== o.pid && get().tabs.includes(o.pid)) set({ active: o.pid });
 }
+// The merge itself, silent: no pushUndo, no announce — mergeCode wraps it for
+// the single-pair path, applyCluster composes several under ONE history entry.
+function mergeInto(get: () => State, set: (p: Partial<State>) => void, from: string, into: string) {
+  if (norm(from) === norm(into)) return;
+  const s = get();
+  if (!s.codebook[from] || !s.codebook[into]) return;
+  const seen = new Set<string>();
+  const merged = s.segments
+    .map((x) => norm(x.code) === norm(from) ? { ...x, code: into } : x)
+    .filter((x) => {
+      const key = `${x.pid}|${x.start}|${x.end}|${norm(x.code)}|${x.proposedBy}|${x.status}`;
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+  const cb = { ...s.codebook }; delete cb[from];
+  if (!cb[into].def && s.codebook[from].def)
+    cb[into] = { ...cb[into], def: s.codebook[from].def, defAi: s.codebook[from].defAi };
+  set({
+    codebook: cb,
+    segments: merged,
+    hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== from) },
+    codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== from) }))
+      .filter((g) => g.codes.length > 0),
+    codePlan: s.codePlan.filter((a) => a.code !== from && a.into !== from),
+    codeClusters: s.codeClusters
+      .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== from),
+        ...(c.out ? { out: c.out.filter((x) => x !== from) } : {}) }))
+      .filter((c) => c.survivor !== from && c.codes.length >= 2),
+  });
+}
+
 function restore(get: () => State, set: (p: Partial<State>) => void, json: string) {
   const o = JSON.parse(json);
   const cur = get();
@@ -459,6 +503,12 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
     // both added after snapshots existed — an older entry carries neither, and
     // wiping live data on an old undo entry is worse than not restoring it
     aiGrounds: o.aiGrounds ?? cur.aiGrounds,
+    // map data joined the snapshot later still — same old-entry guard
+    codeGroups: o.codeGroups ?? cur.codeGroups,
+    codePlan: o.codePlan ?? cur.codePlan,
+    codeClusters: o.codeClusters ?? cur.codeClusters,
+    mapPositions: o.mapPositions ?? cur.mapPositions,
+    mapIslandPos: o.mapIslandPos ?? cur.mapIslandPos,
     ui: o.markerColors ? { ...cur.ui, markerColors: o.markerColors } : cur.ui,
     hotbarCache: hotbarCodes(next), selection: sel, active, savedSelections: saved,
     // One cache must own the scroll after a tab change, or the tab's remembered anchor
@@ -512,7 +562,7 @@ export const useStore = create<State>()(
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codePlan: [], codeClusters: [], lastPid: "",
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codePlan: [], codeClusters: [], mapPositions: {}, mapIslandPos: {}, lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -526,7 +576,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codePlan: [], codeClusters: [], lastPid: "",
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codePlan: [], codeClusters: [], mapPositions: {}, mapIslandPos: {}, lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1406,13 +1456,53 @@ export const useStore = create<State>()(
       setSummary: (pid, text) => set({ summaries: { ...get().summaries, [pid]: text } }),
       setProjectNotes: (text) => set({ projectNotes: text }),
       setProjectName: (name) => set({ projectName: name }),
-      setCodeGroups: (groups) => set({ codeGroups: groups.filter((g) => g.codes.length > 0) }),
-      setCodePlan: (plan) => set({ codePlan: plan }),
-      setCodeClusters: (clusters) => set({ codeClusters: clusters
+      // every map mutation is one undoable history entry (design premise 7)
+      setCodeGroups: (groups) => { get().pushUndo(); set({ codeGroups: groups.filter((g) => g.codes.length > 0) }); },
+      setCodePlan: (plan) => { get().pushUndo(); set({ codePlan: plan }); },
+      recordMapPosition: (id, pos, island) => {
+        get().pushUndo();
+        set(island
+          ? { mapIslandPos: { ...get().mapIslandPos, [id]: pos } }
+          : { mapPositions: { ...get().mapPositions, [id]: pos } });
+      },
+      applyCluster: (ci) => {
+        const s0 = get();
+        const c = s0.codeClusters[ci];
+        if (!c || c.codes.length < 2) return;
+        get().pushUndo();
+        // the proposal leaves the plan, then the merges + rename apply through
+        // the same integrity path mergeCode/renameCode use — but silently, so
+        // the whole cluster is ONE history entry
+        set({ codeClusters: s0.codeClusters.filter((_, i) => i !== ci) });
+        for (const m of c.codes) if (m !== c.survivor) mergeInto(get, set, m, c.survivor);
+        if (c.newName && norm(c.newName) !== norm(c.survivor)) {
+          const s1 = get();
+          const existing = Object.keys(s1.codebook).find((k) => norm(k) === norm(c.newName!));
+          if (existing) mergeInto(get, set, c.survivor, existing);
+          else {
+            const cb: State["codebook"] = {};
+            for (const k of Object.keys(s1.codebook)) cb[k === c.survivor ? c.newName! : k] = s1.codebook[k];
+            set({
+              codebook: cb,
+              segments: s1.segments.map((x) => norm(x.code) === norm(c.survivor) ? { ...x, code: c.newName! } : x),
+              hotbar: { ...s1.hotbar, pinned: s1.hotbar.pinned.map((k) => k === c.survivor ? c.newName! : k) },
+              codeGroups: s1.codeGroups.map((g) => ({ ...g, codes: g.codes.map((x) => x === c.survivor ? c.newName! : x) })),
+              codePlan: s1.codePlan.map((a) => ({ ...a, code: a.code === c.survivor ? c.newName! : a.code })),
+              codeClusters: s1.codeClusters.map((x) => ({ ...x,
+                survivor: x.survivor === c.survivor ? c.newName! : x.survivor,
+                codes: x.codes.map((y) => y === c.survivor ? c.newName! : y),
+                ...(x.out ? { out: x.out.map((y) => y === c.survivor ? c.newName! : y) } : {}) })),
+            });
+          }
+        }
+        set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
+        announce(`Merged ${c.codes.length} codes into ${c.newName ?? c.survivor}`);
+      },
+      setCodeClusters: (clusters) => { get().pushUndo(); set({ codeClusters: clusters
         // a cluster survives while 2+ members exist ANYWHERE in it (evicted ones
         // can re-attach); an evicted survivor hands the crown to the first member
         .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: c.codes[0] })
-        .filter((c) => c.codes.length + (c.out?.length ?? 0) >= 2 && c.codes.length >= 1) }),
+        .filter((c) => c.codes.length + (c.out?.length ?? 0) >= 2 && c.codes.length >= 1) }); },
       setLastPid: (pid) => set({ lastPid: pid }),
       // Newest first: the list is a record of what you asked, read most-recent
       // down. Not undoable — an answer costs an API call, and Ctrl+Z after some
@@ -1561,37 +1651,12 @@ export const useStore = create<State>()(
       },
       mergeCode: (from, into) => {
         if (norm(from) === norm(into)) return;
-        const s = get();
         get().pushUndo();
-        const seen = new Set<string>();
-        const merged = s.segments
-          .map((x) => norm(x.code) === norm(from) ? { ...x, code: into } : x)
-          .filter((x) => {
-            // include proposedBy + status: two coders at the same span, or an
-            // accepted vs a candidate, are distinct data — not duplicates the
-            // merge should collapse (matches addSegment's per-coder dedup)
-            const key = `${x.pid}|${x.start}|${x.end}|${norm(x.code)}|${x.proposedBy}|${x.status}`;
-            if (seen.has(key)) return false;
-            seen.add(key); return true;
-          });
-        const cb = { ...s.codebook }; delete cb[from];
-        // Carry the definition when the survivor has none. Neither merge surface
-        // shows definitions, so the swap control let you pick which name lives
-        // with no idea which side held the only definition of the pair.
-        if (!cb[into].def && s.codebook[from].def)
-          cb[into] = { ...cb[into], def: s.codebook[from].def, defAi: s.codebook[from].defAi };
-        set({
-          codebook: cb,
-          segments: merged,
-          hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== from) },
-          codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== from) }))
-            .filter((g) => g.codes.length > 0),
-          codePlan: s.codePlan.filter((a) => a.code !== from && a.into !== from),
-          codeClusters: s.codeClusters
-            .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== from),
-              ...(c.out ? { out: c.out.filter((x) => x !== from) } : {}) }))
-            .filter((c) => c.survivor !== from && c.codes.length >= 2),
-        });
+        // segment dedup inside includes proposedBy + status: two coders at the
+        // same span, or an accepted vs a candidate, are distinct data — not
+        // duplicates the merge should collapse (matches addSegment's dedup).
+        // The definition carries over when the survivor has none.
+        mergeInto(get, set, from, into);
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
       },
       togglePin: (code) => {
