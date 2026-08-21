@@ -137,9 +137,13 @@ function RafSelectionMarquee() {
       if (!element) return;
       const rect = latest;
       if (!rect) { element.style.display = "none"; return; }
+      // all four edges through ONE pipeline (layout): a composited transform
+      // for position updates ahead of the layouted width/height, and on an
+      // upward drag — where position changes every frame — the box tears
+      element.style.left = `${rect.x}px`;
+      element.style.top = `${rect.y}px`;
       element.style.width = `${rect.width}px`;
       element.style.height = `${rect.height}px`;
-      element.style.transform = `translate3d(${rect.x}px, ${rect.y}px, 0)`;
       element.style.display = "block";
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(paint); };
