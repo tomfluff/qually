@@ -60,6 +60,7 @@ export interface Project {
   projectNotes?: string;
   projectName?: string;
   codeGroups?: { name: string; codes: string[]; rationale?: string }[];
+  codePlan?: { code: string; action: "rename" | "merge" | "remove"; newName?: string; into?: string; rationale: string }[];
   // answers to questions asked of the coded material, each with the scope and
   // model it came from — optional: absent in files written before Ask existed
   answers?: Answer[];
@@ -125,6 +126,10 @@ export function parseProject(text: string): Project {
     codeGroups: Array.isArray(p.codeGroups)
       ? p.codeGroups.filter((g): g is { name: string; codes: string[]; rationale?: string } =>
           !!g && typeof g.name === "string" && Array.isArray(g.codes) && g.codes.every((c: unknown) => typeof c === "string"))
+      : [],
+    codePlan: Array.isArray(p.codePlan)
+      ? p.codePlan.filter((a): a is NonNullable<Project["codePlan"]>[number] =>
+          !!a && typeof a.code === "string" && ["rename", "merge", "remove"].includes(a.action))
       : [],
     // hand-editable like everything else here: openProject maps over these and
     // derives nextAid from them, so a malformed entry would crash the load or

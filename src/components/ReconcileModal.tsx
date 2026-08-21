@@ -13,12 +13,13 @@ import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
-import { reconcileCodes, estimateReconcileTokens, type ReconcilePlan } from "../ai/reconcile";
+import { reconcileCodes, estimateReconcileTokens, type ReconcilePlan, type ReconcileMode } from "../ai/reconcile";
 import { announce } from "../announce";
 import { AiModal, ModelPicker } from "./AiModal";
 
-export function ReconcileModal({ groups, onPlan, onClose }: {
+export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }: {
   groups: CodeGroup[];
+  initialScope?: number | "all";
   onPlan: (plan: ReconcilePlan, scope: number | "all") => void;
   onClose: () => void;
 }) {
@@ -30,7 +31,8 @@ export function ReconcileModal({ groups, onPlan, onClose }: {
   const [done, setDone] = useState<{ groups: number; actions: number; cost: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [exN, setExN] = useState(8);
-  const [scope, setScope] = useState<number | "all">("all");
+  const [scope, setScope] = useState<number | "all">(initialScope);
+  const [mode, setMode] = useState<ReconcileMode>("consolidate");
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -74,7 +76,7 @@ export function ReconcileModal({ groups, onPlan, onClose }: {
     abort.current = new AbortController();
     try {
       const { plan, usage } = await reconcileCodes({
-        key, model: model.id, codes, redaction: red, signal: abort.current.signal,
+        key, model: model.id, codes, redaction: red, mode, signal: abort.current.signal,
       });
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "reconcile",
@@ -129,6 +131,23 @@ export function ReconcileModal({ groups, onPlan, onClose }: {
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
               <div className="recDials">
+                <div className="srow" role="radiogroup" aria-label="Phase">
+                  <span>Phase</span>
+                  <div className="segmented">
+                    <button className={"seg" + (mode === "consolidate" ? " on" : "")}
+                      role="radio" aria-checked={mode === "consolidate"}
+                      onClick={() => setMode("consolidate")}
+                      title="Low-level cleanup first: merge near-duplicates, sharpen names. No removals.">
+                      Consolidate
+                    </button>
+                    <button className={"seg" + (mode === "full" ? " on" : "")}
+                      role="radio" aria-checked={mode === "full"}
+                      onClick={() => setMode("full")}
+                      title="Everything: merges, renames, and rejecting codes with no analytic value.">
+                      Full revision
+                    </button>
+                  </div>
+                </div>
                 <div className="srow">
                   <span>Scope</span>
                   <select className="settext" value={scope === "all" ? "all" : String(scope)}

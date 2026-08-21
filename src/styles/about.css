@@ -197,3 +197,5 @@
    slider rather than a stray paragraph, and nothing touches the scroll gutter */
 .recDials { display:flex; flex-direction:column; gap:12px; margin:16px 2px 14px 0; }
 .recDials .settings-note { margin:0; max-width:56ch; }
+.recDials .segmented { flex:none; }
+.recDials .segmented .seg { padding:5px 12px; font-weight:500; }

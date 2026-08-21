@@ -75,22 +75,34 @@ const SCHEMA = {
   additionalProperties: false,
 } as const;
 
+// the phased pass: consolidation first (low-level cleanup — merge and rename
+// only, no removals), the full revision when the researcher asks for it
+export type ReconcileMode = "consolidate" | "full";
+const CONSOLIDATE_SUFFIX = `
+
+PHASE: consolidation only. Propose ONLY "rename" and "merge" actions — no "remove". The islands tend to hold theme-sized sets; this pass thins them into distinct, well-named codes, so be generous with merges of near-duplicate codes and with renames that sharpen vague names. Removal decisions come in a later pass.`;
+
 export async function reconcileCodes(opts: {
-  key: string; model: string; codes: MergeCodeInput[]; redaction: Redaction; signal?: AbortSignal;
+  key: string; model: string; codes: MergeCodeInput[]; redaction: Redaction;
+  mode?: ReconcileMode; signal?: AbortSignal;
 }): Promise<{ plan: ReconcilePlan; usage: Usage }> {
+  const consolidate = (opts.mode ?? "consolidate") === "consolidate";
   const { data, usage } = await callJson<{ groups: ClusterGroup[]; actions: CodeAction[] }>({
     key: opts.key,
     model: opts.model,
-    system: SYSTEM,
+    system: consolidate ? SYSTEM + CONSOLIDATE_SUFFIX : SYSTEM,
     user: renderMergePayload(opts.codes, opts.redaction),
     schemaName: "reconcile_codes",
     schema: SCHEMA,
     signal: opts.signal,
   });
+  const actions = sanitizeActions(opts.codes, data.actions ?? [], opts.redaction)
+    // belt and braces: the consolidation phase never removes, whatever the model says
+    .filter((a) => !consolidate || a.action !== "remove");
   return {
     plan: {
       groups: sanitizeClusterReply(opts.codes, data.groups ?? [], opts.redaction),
-      actions: sanitizeActions(opts.codes, data.actions ?? [], opts.redaction),
+      actions,
     },
     usage,
   };

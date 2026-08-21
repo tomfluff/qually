@@ -59,7 +59,6 @@ const remembered = {
   // chip positions are RELATIVE to their island (absolute when ungrouped/flat)
   positions: {} as Record<string, { x: number; y: number }>,
   islandPos: {} as Record<string, { x: number; y: number }>,
-  planActions: [] as CodeAction[],
   viewport: null as Viewport | null,
   selected: new Set<string>(),
 };
@@ -224,12 +223,16 @@ function MapInner() {
   const { setNodes: rfSetNodes, getNodes, getInternalNode } = useReactFlow();
   // menu state carries the selection it acts on, captured at open — the menu
   // needs no live subscription
-  const [menu, setMenu] = useState<{ x: number; y: number; sel: string[] } | null>(null);
-  const [aiOpen, setAiOpen] = useState(false);
-  // the AI's pending revision plan (session review state; applied through the
-  // store one verdict at a time)
-  const [plan, setPlan] = useState<CodeAction[]>(remembered.planActions);
-  useEffect(() => { remembered.planActions = plan; }, [plan]);
+  const [menu, setMenu] = useState<{ x: number; y: number; sel: string[]; island?: { gi: number; name: string } } | null>(null);
+  // the modal, optionally pre-scoped to one island (island context menu)
+  const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" }>(false);
+  // the pending revision plan is PROJECT data — it survives reloads and travels
+  // in the file, so the review can continue in a later session
+  const plan = useStore((st) => st.codePlan);
+  const setPlan = useCallback((updater: CodeAction[] | ((p: CodeAction[]) => CodeAction[])) => {
+    const st = useStore.getState();
+    st.setCodePlan(typeof updater === "function" ? updater(st.codePlan) : updater);
+  }, []);
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   // biggest first: the codes doing the most work anchor the top of the map
@@ -391,13 +394,18 @@ function MapInner() {
   }, [getNodes, getInternalNode, moveToGroup]);
   const onNodeDoubleClick = useCallback((_: unknown, n: Node) => openInCodebook([n.id]), []);
   const selectionAt = useCallback((): string[] =>
-    getNodes().filter((n) => n.selected).map((n) => n.id), [getNodes]);
+    getNodes().filter((n) => n.selected && n.type === "chip").map((n) => n.id), [getNodes]);
   const onNodeContextMenu = useCallback((e: React.MouseEvent, n: Node) => {
     e.preventDefault();
+    if (n.type === "island") {
+      const d = n.data as IslandData;
+      setMenu({ x: e.clientX, y: e.clientY, sel: [], island: { gi: d.gi, name: d.name } });
+      return;
+    }
     let sel = selectionAt();
     if (!sel.includes(n.id)) {
       sel = [n.id];
-      rfSetNodes((ns) => ns.map((x) => ({ ...x, selected: x.id === n.id })));
+      rfSetNodes((ns) => ns.map((x) => ({ ...x, selected: x.type === "chip" && x.id === n.id })));
     }
     setMenu({ x: e.clientX, y: e.clientY, sel });
   }, [selectionAt, rfSetNodes]);
@@ -429,7 +437,7 @@ function MapInner() {
         <span className="mapTitle">Code map</span>
         <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
-        <button className="btn iconlabel" onClick={() => setAiOpen(true)}
+        <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
           title="AI proposes similarity islands and per-code revisions (rename / merge / reject) for your review">
           <Icon name="sparkle" size={15} /> <span className="blabel">Reconcile with AI</span>
         </button>
@@ -498,7 +506,7 @@ function MapInner() {
         )}
       </div>
       {aiOpen && (
-        <ReconcileModal groups={codeGroups} onClose={() => setAiOpen(false)}
+        <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope} onClose={() => setAiOpen(false)}
           onPlan={(p: ReconcilePlan, scope) => {
             if (scope === "all") {
               remembered.positions = {}; remembered.islandPos = {};
@@ -516,7 +524,24 @@ function MapInner() {
             }
           }} />
       )}
-      {menu && menu.sel.length > 0 && (
+      {menu && menu.island && (
+        <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
+          <button role="menuitem" onClick={() => {
+            const list = menu.island!.gi === -1
+              ? codes.filter((c) => !codeGroups.some((g) => g.codes.includes(c)))
+              : codeGroups[menu.island!.gi]?.codes.filter((c) => c in codebook) ?? [];
+            openInCodebook(list); setMenu(null);
+          }}>
+            Open all grouped codes in Codebook
+          </button>
+          {menu.island.gi !== -1 && (
+            <button role="menuitem" onClick={() => { setAiOpen({ scope: menu.island!.gi }); setMenu(null); }}>
+              Reconcile “{menu.island.name}”…
+            </button>
+          )}
+        </div>
+      )}
+      {menu && !menu.island && menu.sel.length > 0 && (
         <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook

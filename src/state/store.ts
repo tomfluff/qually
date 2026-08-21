@@ -50,6 +50,11 @@ export interface Segment {
   notes: string; proposedBy: string; status: string;
 }
 export interface CodeGroup { name: string; codes: string[]; rationale?: string }
+// a pending reconciliation proposal (Code map): reviewed one verdict at a time
+export interface CodePlanAction {
+  code: string; action: "rename" | "merge" | "remove";
+  newName?: string; into?: string; rationale: string;
+}
 export interface Selection { pid: string | null; anchor: number | null; head: number | null; lines: Set<number>; }
 export interface Ui {
   fontSize: number; sidebarFontSize: number; dark: boolean; zen: boolean;
@@ -198,6 +203,9 @@ export interface State {
   // similarity groupings on the Code map (AI-proposed, then user-edited).
   // Analysis metadata, travels with the project file.
   codeGroups: CodeGroup[];
+  // the pending revision plan from the last reconcile run — study data too:
+  // the review can continue in a later session
+  codePlan: CodePlanAction[];
   // the transcript you were last ON (session-only): the Notes stamp and other
   // "what was I just doing" readers need it after you switch to a reserved view
   lastPid: string;
@@ -301,6 +309,7 @@ export interface State {
   setProjectNotes: (text: string) => void; // per keystroke — no undo entry, like setSummary
   setProjectName: (name: string) => void;
   setCodeGroups: (groups: CodeGroup[]) => void;
+  setCodePlan: (plan: CodePlanAction[]) => void;
   setLastPid: (pid: string) => void;
   addAnswer: (a: Omit<Answer, "aid" | "at">) => void;
   deleteAnswer: (aid: number) => void;
@@ -492,7 +501,7 @@ export const useStore = create<State>()(
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], lastPid: "",
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codePlan: [], lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -506,7 +515,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], lastPid: "",
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codePlan: [], lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1269,6 +1278,7 @@ export const useStore = create<State>()(
           projectNotes: s.projectNotes, // the project memo document — ditto
           projectName: s.projectName,     // the study's name — ditto
           codeGroups: s.codeGroups,       // Code map groupings — ditto
+          codePlan: s.codePlan,           // pending reconciliation verdicts — ditto
           answers: s.answers,     // …and so are the questions asked of the material
           // the speaker map rides along even though it lives in `ui`: who the
           // interviewer is belongs to the study, not to my font size (see project.ts)
@@ -1306,6 +1316,7 @@ export const useStore = create<State>()(
           projectNotes: p.projectNotes ?? "",
           projectName: p.projectName ?? "",
           codeGroups: p.codeGroups ?? [],
+          codePlan: p.codePlan ?? [],
           answers: p.answers ?? [],
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
@@ -1375,6 +1386,7 @@ export const useStore = create<State>()(
       setProjectNotes: (text) => set({ projectNotes: text }),
       setProjectName: (name) => set({ projectName: name }),
       setCodeGroups: (groups) => set({ codeGroups: groups.filter((g) => g.codes.length > 0) }),
+      setCodePlan: (plan) => set({ codePlan: plan }),
       setLastPid: (pid) => set({ lastPid: pid }),
       // Newest first: the list is a record of what you asked, read most-recent
       // down. Not undoable — an answer costs an API call, and Ctrl+Z after some
@@ -1490,6 +1502,9 @@ export const useStore = create<State>()(
           segments: s.segments.map((x) => norm(x.code) === norm(code) ? { ...x, code: name } : x),
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.map((c) => c === code ? name : c) },
           codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.map((c) => c === code ? name : c) })),
+          codePlan: s.codePlan.map((a) => ({ ...a,
+            code: a.code === code ? name : a.code,
+            ...(a.into === code ? { into: name } : {}) })),
         });
         set({ hotbarCache: hotbarCodes(get()) });
       },
@@ -1504,6 +1519,7 @@ export const useStore = create<State>()(
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== code) },
           codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== code) }))
             .filter((g) => g.codes.length > 0),
+          codePlan: s.codePlan.filter((a) => a.code !== code && a.into !== code),
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
       },
@@ -1534,6 +1550,7 @@ export const useStore = create<State>()(
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== from) },
           codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== from) }))
             .filter((g) => g.codes.length > 0),
+          codePlan: s.codePlan.filter((a) => a.code !== from && a.into !== from),
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
       },
@@ -1672,7 +1689,7 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
-        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, answers: s.answers,
+        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codePlan: s.codePlan, answers: s.answers,
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
@@ -1702,6 +1719,7 @@ export const useStore = create<State>()(
         s.projectNotes ??= "";
         s.projectName ??= "";
         s.codeGroups ??= [];
+        s.codePlan ??= [];
         s.answers ??= [];
         s.nextAid = Math.max(0, ...s.answers.map((x) => x.aid)) + 1;
         s.ui.summaryLayout ??= "side";
