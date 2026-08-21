@@ -26,14 +26,15 @@
    (two lines before it clips); counts are the sidebar's icon pair, so the map
    speaks the same count vocabulary as everywhere else. */
 .mapChip { display:flex; align-items:center; gap:14px;
-  box-sizing:border-box; padding:0 12px 0 20px; height:100%; width:100%;
+  box-sizing:border-box; padding:0 14px 0 12px; height:100%; width:100%;
   background:color-mix(in srgb, var(--chip-c) 10%, var(--panel)); color:var(--fg);
-  border:2px solid var(--line); border-left:none; border-radius:10px; cursor:pointer;
+  /* the color stripe IS the left border, so the radius rounds it instead of
+     clipping a pasted-on bar into a crescent */
+  border:2px solid var(--line); border-left:8px solid var(--chip-c);
+  border-radius:10px; cursor:pointer;
   font:inherit; text-align:left; position:relative; overflow:hidden; }
-.mapChip::before { content:""; position:absolute; left:0; top:0; bottom:0; width:8px;
-  background:var(--chip-c); }
-.mapChip:hover { border-color:var(--muted); }
-.mapChip.sel { border-color:var(--accent);
+.mapChip:hover { border-color:var(--muted); border-left-color:var(--chip-c); }
+.mapChip.sel { border-color:var(--accent); border-left-color:var(--chip-c);
   background:color-mix(in srgb, var(--accent) 14%, var(--panel)); }
 .mapChip .mapName { font-weight:600; white-space:nowrap; }
 /* the counts are the map's other axis — how much work a code does — so they

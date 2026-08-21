@@ -6,10 +6,10 @@
 // and its d3-zoom viewport does exactly that (a hand-rolled transform-on-state
 // version re-rendered every chip per pointermove and stuttered).
 // AI grouping lands on this surface next.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
-  useNodesState, useReactFlow, type Node, type NodeProps, type Viewport,
+  useOnSelectionChange, useReactFlow, type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useStore } from "../state/store";
@@ -27,9 +27,14 @@ const GX = 14, GY = 12;
 const chipH = (fs: number) => Math.round(fs * 2.4);
 const measurer = document.createElement("canvas").getContext("2d")!;
 const chipW = (fs: number, name: string, segs: number, pids: number) => {
-  measurer.font = `600 ${fs}px ${getComputedStyle(document.body).fontFamily}`;
-  const counts = measurer.measureText(`${segs}${pids}`).width + fs * 2.4; // two icons + gaps
-  return Math.round(10 + 10 + measurer.measureText(name).width + 14 + counts + 12);
+  const family = getComputedStyle(document.body).fontFamily;
+  measurer.font = `600 ${fs}px ${family}`;
+  const nameW = measurer.measureText(name).width;
+  measurer.font = `700 ${fs}px ${family}`; // the counts render bold
+  const counts = measurer.measureText(`${segs}${pids}`).width + fs * 2.6; // icons + inner gaps
+  // borders + padding + name/counts gap, with slack — a measured width that
+  // comes up 2px short reads as a bug on every single chip
+  return Math.round(nameW + counts + 64);
 };
 
 type ChipData = { code: string; color: string; segs: number; pids: number };
@@ -42,7 +47,7 @@ const remembered = {
   selected: new Set<string>(),
 };
 
-function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
+const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
   const fs = useStore((s) => s.ui.sidebarFontSize);
   return (
     <div className={"mapChip" + (selected ? " sel" : "")}
@@ -52,7 +57,7 @@ function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
       <CodeCounts stat={{ segs: data.segs, pids: data.pids }} size={countIconSize(fs)} />
     </div>
   );
-}
+});
 const nodeTypes = { chip: ChipNode };
 
 const NEXT_CORNER = {
@@ -72,6 +77,17 @@ function MapInner() {
   const setUi = useStore((s) => s.setUi);
   const { setNodes: rfSetNodes } = useReactFlow();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  // selection lives in RF's own (uncontrolled) store; we only observe it.
+  // A controlled nodes array re-rendered this whole component — and RF's
+  // 180-node subtree — on every membership change of a box-drag, which is
+  // why the selection rectangle lagged the pointer.
+  const [selIds, setSelIds] = useState<string[]>([...remembered.selected]);
+  const onSelChange = useCallback(({ nodes: ns }: { nodes: Node[] }) => {
+    const ids = ns.map((n) => n.id);
+    setSelIds(ids);
+    remembered.selected = new Set(ids);
+  }, []);
+  useOnSelectionChange({ onChange: onSelChange });
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   // biggest first: the codes doing the most work anchor the top of the map
@@ -98,23 +114,20 @@ function MapInner() {
         type: "chip" as const,
         position: pos,
         width: w, height: ch,
+        style: { width: w, height: ch },
         selected: remembered.selected.has(c),
         data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
       };
     });
   }, [codes, codebook, stats]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<ChipNodeT>(build());
-  // the codebook changed under the map (a merge, a rename, new codes): rebuild,
-  // keeping every surviving chip where it was
-  useEffect(() => { setNodes(build()); }, [build, setNodes]);
-  // selection outlives the view; positions are recorded per drag (below), so
-  // the packer stays in charge of everything the user hasn't placed by hand
-  useEffect(() => {
-    remembered.selected = new Set(nodes.filter((n) => n.selected).map((n) => n.id));
-  }, [nodes]);
+  // built once per mount; RF owns the array from here (uncontrolled). When the
+  // codebook changes under the map (a merge, a rename, new codes), rebuild —
+  // dragged chips keep their place via remembered.positions.
+  const [initialNodes] = useState(build);
+  useEffect(() => { rfSetNodes(build()); }, [build, rfSetNodes]);
 
-  const sel = nodes.filter((n) => n.selected).map((n) => n.id);
+  const sel = selIds.filter((c) => c in codebook);
   const openInCodebook = (list: string[]) => { preselectBrowse(list); setActive("browse"); };
 
   const soloUnlessSelected = (id: string) => {
@@ -152,13 +165,14 @@ function MapInner() {
           ? <div className="empty">No codes yet — the map draws itself as you code.</div>
           : (
           <ReactFlow<ChipNodeT>
-            nodes={nodes} onNodesChange={onNodesChange} nodeTypes={nodeTypes}
+            defaultNodes={initialNodes} nodeTypes={nodeTypes}
             colorMode={dark ? "dark" : "light"}
             fitView={!remembered.viewport}
             defaultViewport={remembered.viewport ?? undefined}
             onMoveEnd={(_, vp) => { remembered.viewport = vp; }}
             minZoom={0.1} maxZoom={3}
             selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
+            onlyRenderVisibleElements elevateNodesOnSelect={false}
             multiSelectionKeyCode={["Control", "Meta"]}
             onNodeDragStop={(_, n) => { remembered.positions[n.id] = n.position; }}
             zoomOnDoubleClick={false} deleteKeyCode={null} nodesConnectable={false}
@@ -169,14 +183,14 @@ function MapInner() {
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable position={mapMinimap}
               nodeColor={(n) => (n as ChipNodeT).data.color} />
-            {/* selection actions float OVER the canvas — appearing must not
-                resize the bar or reflow the viewport mid-drag */}
-            {sel.length > 0 && (
-              <Panel position="top-right" className="mapSelPanel">
-                <span className="mapSelCount">{sel.length} selected</span>
-                <button className="btn" onClick={() => openInCodebook(sel)}>Open in Codebook</button>
-              </Panel>
-            )}
+            {/* selection actions float OVER the canvas — always mounted, shown
+                by visibility, so drag-time membership changes never mount/unmount
+                a subtree mid-gesture (that churn showed as selection-box lag) */}
+            <Panel position="top-right" className="mapSelPanel"
+              style={{ visibility: sel.length > 0 ? "visible" : "hidden" }}>
+              <span className="mapSelCount">{sel.length} selected</span>
+              <button className="btn" onClick={() => openInCodebook(sel)}>Open in Codebook</button>
+            </Panel>
           </ReactFlow>
         )}
       </div>
