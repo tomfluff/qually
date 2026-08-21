@@ -15,7 +15,9 @@ import { clusterCodes, estimateClusterTokens, type ClusterGroup } from "../ai/cl
 import { announce } from "../announce";
 import { AiModal, ModelPicker } from "./AiModal";
 
-export function GroupModal({ onGroups, onReconcileInstead, onClose }: {
+export function GroupModal({ transient = false, onGroups, onReconcileInstead, onClose }: {
+  // transient: the result is an arrangement LENS, not saved theme groups
+  transient?: boolean;
   onGroups: (g: ClusterGroup[]) => void;
   onReconcileInstead: () => void;
   onClose: () => void;
@@ -95,7 +97,7 @@ export function GroupModal({ onGroups, onReconcileInstead, onClose }: {
   };
 
   return (
-    <AiModal title="Group codes by similarity" busy={busy} onClose={onClose}>
+    <AiModal title={transient ? "Arrange by AI topics" : "Group codes by similarity"} busy={busy} onClose={onClose}>
         {done ? (
           <>
             <div className="ai-body">
@@ -114,10 +116,14 @@ export function GroupModal({ onGroups, onReconcileInstead, onClose }: {
             <div className="ai-body nicescroll">
               <p className="about-lede">
                 The AI reads your whole codebook — each code's definition and a few excerpts you
-                coded with it — and proposes THEME groups: codes that belong together analytically.
-                The grouping lands on the map as islands for you to reshape; no code is renamed,
-                merged, or removed.
-                {hasGroups && <> <b>Your current groups are replaced.</b></>}
+                coded with it — and proposes {transient
+                  ? <>TOPIC neighborhoods: semantically connected codes that are the most likely to
+                    need merging together. The arrangement is a transient lens — it divides the
+                    consolidation work into smaller piles and writes nothing anywhere.</>
+                  : <>THEME groups: codes that belong together analytically.
+                    The grouping lands on the map as islands for you to reshape; no code is renamed,
+                    merged, or removed.</>}
+                {!transient && hasGroups && <> <b>Your current groups are replaced.</b></>}
               </p>
               {pending > 0 && (
                 <div className="ai-warn">

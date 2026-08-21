@@ -75,7 +75,8 @@ const remembered = {
   // where the researcher parked the Revision plan panel (screen offset)
   planPos: { x: 0, y: 0 },
   // the transient arrangement lens: a way of LOOKING, never written anywhere
-  lens: "default" as "default" | "pids" | "segs" | "cooc",
+  lens: "default" as "default" | "pids" | "segs" | "cooc" | "topics",
+  topicGroups: [] as { name: string; codes: string[] }[],
 };
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -365,6 +366,9 @@ function MapInner() {
   // the arrangement lens: transient bucket/co-occurrence views for triage
   const [lens, setLens] = useState(remembered.lens);
   useEffect(() => { remembered.lens = lens; }, [lens]);
+  const [topicGroups, setTopicGroups] = useState(remembered.topicGroups);
+  useEffect(() => { remembered.topicGroups = topicGroups; }, [topicGroups]);
+  const [topicAiOpen, setTopicAiOpen] = useState(false);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   const [hiddenNotes, setHiddenNotes] = useState<Set<number>>(remembered.hiddenNotes);
   useEffect(() => { remembered.openCards = openCards; remembered.hiddenNotes = hiddenNotes; }, [openCards, hiddenNotes]);
@@ -464,6 +468,12 @@ function MapInner() {
           lensGroups[bi].list.push(c);
         }
         lensGroups = lensGroups.filter((g) => g.list.length > 0);
+      } else if (lens === "topics") {
+        const grouped = new Set(topicGroups.flatMap((g) => g.codes));
+        lensGroups = topicGroups
+          .map((g) => ({ name: g.name, list: g.codes.filter(inBook) }))
+          .filter((g) => g.list.length > 0);
+        lensGroups.push({ name: "No topic", list: codes.filter((c) => !grouped.has(c)) });
       } else {
         // co-occurrence: codes whose accepted excerpts cover largely the SAME
         // lines are prime merge candidates (they always appear together)
@@ -635,7 +645,7 @@ function MapInner() {
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: [...islands, ...children] as MapNode[] };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, hiddenNotes, genCi, lens, segments]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, hiddenNotes, genCi, lens, segments, topicGroups]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -846,12 +856,17 @@ function MapInner() {
         <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
         <select className="settext mapLens" aria-label="Arrange the map by"
-          value={lens} onChange={(e) => setLens(e.target.value as typeof lens)}
+          value={lens} onChange={(e) => {
+            const v = e.target.value as typeof lens;
+            if (v === "topics" && topicGroups.length === 0) { setTopicAiOpen(true); return; }
+            setLens(v);
+          }}
           title="A transient lens: arranges the map for looking, changes nothing">
           <option value="default">Arrange: normal</option>
           <option value="pids">Arrange: transcript buckets</option>
           <option value="segs">Arrange: excerpt buckets</option>
           <option value="cooc">Arrange: co-occurrence</option>
+          <option value="topics">Arrange: AI topics</option>
         </select>
         <div className="segmented mapStage" role="radiogroup" aria-label="Map stage">
           <button className={"seg" + (stage === "reconcile" ? " on" : "")} role="radio"
@@ -944,6 +959,15 @@ function MapInner() {
           </ReactFlow>
         )}
       </div>
+      {topicAiOpen && (
+        <GroupModal transient
+          onClose={() => setTopicAiOpen(false)}
+          onReconcileInstead={() => { setTopicAiOpen(false); setStageOverride("reconcile"); }}
+          onGroups={(groups) => {
+            setTopicGroups(groups.map((g) => ({ name: g.name, codes: g.codes })));
+            setLens("topics");
+          }} />
+      )}
       {themeAiOpen && (
         <GroupModal
           onClose={() => setThemeAiOpen(false)}
