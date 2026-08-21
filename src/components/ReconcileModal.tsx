@@ -1,32 +1,36 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// Consent gate for the Code map's group-by-similarity run — same contract as
-// the merge/scan modals: see exactly what leaves the device before sending.
-// Scope: every code with at least one accepted segment (same payload as the
-// merge scan). Proposes a grouping; the map is where you reshape it.
+// Consent gate for the Code map's reconciliation run — same contract as every
+// AI surface: see exactly what leaves the device before sending. One pass
+// proposes similarity islands AND a per-code revision plan (rename / merge /
+// remove-as-reject), reviewed on the map. Scope: the whole codebook, or one
+// island for a cheaper local refinement. Evidence depth (excerpts per code) is
+// the researcher's dial — more excerpts, better judgments, more tokens.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { useStore, type CodeGroup } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
-import { MERGE_EXEMPLARS, renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
-import { clusterCodes, estimateClusterTokens, type ClusterGroup } from "../ai/cluster";
+import { renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
+import { reconcileCodes, estimateReconcileTokens, type ReconcilePlan } from "../ai/reconcile";
 import { announce } from "../announce";
 import { AiModal, ModelPicker } from "./AiModal";
 
-export function GroupModal({ onGroups, onClose }: {
-  onGroups: (g: ClusterGroup[]) => void;
+export function ReconcileModal({ groups, onPlan, onClose }: {
+  groups: CodeGroup[];
+  onPlan: (plan: ReconcilePlan, scope: number | "all") => void;
   onClose: () => void;
 }) {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
   const codebook = useStore((s) => s.codebook);
-  const hasGroups = useStore((s) => s.codeGroups.length > 0);
   const ai = useStore((s) => s.ai);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ found: number; cost: number } | null>(null);
+  const [done, setDone] = useState<{ groups: number; actions: number; cost: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [exN, setExN] = useState(8);
+  const [scope, setScope] = useState<number | "all">("all");
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -34,26 +38,28 @@ export function GroupModal({ onGroups, onClose }: {
   const [modelId, setModelId] = useState(ai.model);
   const model = modelOf(modelId);
 
-  // one input per code that has accepted segments — name + def + up to N excerpts
+  // one input per in-scope code with accepted segments — name + def + up to exN excerpts
   const codes = useMemo<MergeCodeInput[]>(() => {
+    const only = scope === "all" ? null : new Set(groups[scope]?.codes ?? []);
     const byCode = new Map<string, string[]>();
     for (const s of segments) {
       if (s.status !== "accepted" || !transcripts[s.pid]) continue;
+      if (only && !only.has(s.code)) continue;
       const arr = byCode.get(s.code) ?? [];
-      if (arr.length >= MERGE_EXEMPLARS) continue;
+      if (arr.length >= exN) continue;
       const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
       if (ex) { arr.push(ex); byCode.set(s.code, arr); }
     }
     return [...byCode.entries()].map(([name, excerpts]) => ({
       name, def: codebook[name]?.def ?? "", excerpts,
     }));
-  }, [segments, transcripts, codebook]);
+  }, [segments, transcripts, codebook, exN, scope, groups]);
 
   const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0);
-  const inTok = useMemo(() => estimateClusterTokens(codes, red), [codes, red]);
+  const inTok = useMemo(() => estimateReconcileTokens(codes, red), [codes, red]);
   const redactions = useMemo(() => codes.reduce((n, c) =>
     n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [codes, red]);
-  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 24)));
+  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 30)));
   const preview = renderMergePayload(codes, red);
   const enough = codes.length >= 4;
 
@@ -64,69 +70,82 @@ export function GroupModal({ onGroups, onClose }: {
       setErr(m); announce(m, { assertive: true }); return;
     }
     setBusy(true); setErr(null);
-    announce(`Grouping ${codes.length} codes by similarity…`);
+    announce(`Reconciling ${codes.length} codes…`);
     abort.current = new AbortController();
     try {
-      const { groups, usage } = await clusterCodes({
+      const { plan, usage } = await reconcileCodes({
         key, model: model.id, codes, redaction: red, signal: abort.current.signal,
       });
       useStore.getState().logAiCall({
-        at: new Date().toISOString(), model: model.id, task: "group", pid: "(codebook)",
+        at: new Date().toISOString(), model: model.id, task: "reconcile",
+        pid: scope === "all" ? "(codebook)" : `(island: ${groups[scope]?.name})`,
         lines: codes.length, redactions,
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
-      onGroups(groups);
-      setDone({ found: groups.length, cost: usage.costUsd });
-      announce(groups.length
-        ? `${groups.length} similarity group${groups.length === 1 ? "" : "s"} laid out on the map.`
-        : "No similarity groups stood out.");
+      onPlan(plan, scope);
+      setDone({ groups: plan.groups.length, actions: plan.actions.length, cost: usage.costUsd });
+      announce(`${plan.groups.length} groups and ${plan.actions.length} revision proposals laid out on the map.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
-      announce(`Grouping failed: ${msg}`, { assertive: true });
+      announce(`Reconciliation failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <AiModal title="Group codes by similarity" busy={busy} onClose={onClose}>
+    <AiModal title="Reconcile codes" busy={busy} onClose={onClose}>
         {done ? (
           <>
             <div className="ai-body">
               <p className="about-lede">
-                {done.found === 0
-                  ? <>No similarity groups stood out — the codebook reads as distinct usages.</>
-                  : <>Laid out <b>{done.found} group{done.found === 1 ? "" : "s"}</b> as islands on the map —
-                    drag codes between them, rename or dissolve any of them. The codes themselves are untouched.</>}
+                Laid out <b>{done.groups} group{done.groups === 1 ? "" : "s"}</b> and proposed{" "}
+                <b>{done.actions} revision{done.actions === 1 ? "" : "s"}</b> — each one waits on the
+                map for your verdict (accept applies it, undoably; skip discards it). Nothing has
+                changed yet, and "remove" only rejects a code's excerpts — the data stays in the file.
               </p>
               <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
             </div>
-            <div className="imp-actions"><button className="btn primary" onClick={onClose}>Done</button></div>
+            <div className="imp-actions"><button className="btn primary" onClick={onClose}>Review on the map</button></div>
           </>
         ) : (
           <>
             <div className="ai-body nicescroll">
               <p className="about-lede">
-                The AI reads your whole codebook — each code's definition and a few excerpts you
-                coded with it — and proposes groups of codes that get USED the same way: merge
-                candidates, near-synonyms, splinters of one concept. The grouping lands on the map
-                as islands for you to reshape; no code is renamed, merged, or removed.
-                {hasGroups && <> <b>Your current groups are replaced.</b></>}
+                Second-cycle consolidation: the AI reads each code's definition and excerpts, groups
+                codes by how they are USED, and proposes per-code revisions — clearer names, merges of
+                splintered concepts, rejection of codes with no analytic value — so themes can build
+                on clean, well-evidenced codes. You review every proposal on the map; coding stays yours.
+                {groups.length > 0 && scope === "all" && <> <b>Your current groups are replaced.</b></>}
               </p>
               {enough && (
                 <div className="ai-warn">
                   <b>This sends {codes.length} code{codes.length === 1 ? "" : "s"} — names, definitions,
-                  and up to {MERGE_EXEMPLARS} excerpts each — to OpenAI.</b> Excerpts are participant
+                  and up to {exN} excerpts each — to OpenAI.</b> Excerpts are participant
                   data; make sure this is allowed by your consent form and ethics approval.
                 </div>
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
+              <div className="srow" style={{ marginTop: 10 }}>
+                <span>Scope</span>
+                <select className="settext" value={scope === "all" ? "all" : String(scope)}
+                  onChange={(e) => setScope(e.target.value === "all" ? "all" : +e.target.value)}>
+                  <option value="all">Whole codebook</option>
+                  {groups.map((g, i) => <option key={i} value={i}>Island: {g.name}</option>)}
+                </select>
+              </div>
+              <label className="srow">
+                <span>Excerpts per code: <b>{exN}</b></span>
+                <input type="range" min={3} max={12} value={exN}
+                  onChange={(e) => setExN(+e.target.value)} />
+              </label>
+              <div className="settings-note">More excerpts give the AI better evidence for each judgment — and cost more tokens. The estimate below updates as you adjust.</div>
               {!enough ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
-                  Grouping needs at least four codes that have coded segments. Code a bit
-                  more, then come back.
+                  Reconciling needs at least four codes with coded segments in scope. Code a bit
+                  more (or widen the scope), then come back.
                 </p>
               ) : (
                 <>
@@ -153,7 +172,7 @@ export function GroupModal({ onGroups, onClose }: {
             ) : (
               <div className="imp-actions">
                 <button className="btn primary" onClick={run} disabled={busy}>
-                  {busy ? "Grouping…" : "Send 1 request to OpenAI"}
+                  {busy ? "Reconciling…" : "Send 1 request to OpenAI"}
                 </button>
                 <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
                   {busy ? "Stop" : "Cancel — send nothing"}

@@ -260,3 +260,32 @@ describe("cluster sanitize (Code map grouping)", () => {
     expect(out[0].rationale).toBe("About Ann.");
   });
 });
+
+describe("reconcile sanitize (Code map revision plan)", () => {
+  it("one action per code, no merge chains, restores redactions", async () => {
+    const { sanitizeActions } = await import("./reconcile");
+    const { redactor } = await import("./redact");
+    const r = redactor(["Ann"]);
+    const token = r.redact("Ann");
+    const codes = ["a", "b", "c", "d", "e"].map((name) => ({ name, def: "", excerpts: [] }));
+    const out = sanitizeActions(codes, [
+      { code: "a", action: "merge", into: "b", newName: "", rationale: `${token} says so.` },
+      { code: "b", action: "merge", into: "c", newName: "", rationale: "" },   // b is a's target AND a source -> a drops
+      { code: "c", action: "rename", newName: "clearer c", into: "", rationale: "" },
+      { code: "c", action: "remove", newName: "", into: "", rationale: "" },   // second action for c -> drops
+      { code: "ghost", action: "remove", newName: "", into: "", rationale: "" }, // unknown -> drops
+      { code: "d", action: "rename", newName: "d", into: "", rationale: "" },  // rename to itself -> drops
+      { code: "e", action: "remove", newName: "", into: "", rationale: "" },
+    ], r);
+    expect(out.map((a) => `${a.code}:${a.action}`)).toEqual(["b:merge", "c:rename", "e:remove"]);
+    const b = out.find((a) => a.code === "b")!;
+    expect(b.into).toBe("c");
+  });
+  it("merge keeps an optional new name for the merged concept", async () => {
+    const { sanitizeActions } = await import("./reconcile");
+    const codes = ["x", "y"].map((name) => ({ name, def: "", excerpts: [] }));
+    const [m] = sanitizeActions(codes, [
+      { code: "x", action: "merge", into: "y", newName: "better name", rationale: "" }]);
+    expect(m.newName).toBe("better name");
+  });
+});

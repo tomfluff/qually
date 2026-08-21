@@ -315,6 +315,9 @@ export interface State {
   // many went, so the caller can say it out loud.
   deleteSegmentsBy: (opts: { pid?: string; status: Segment["status"] }) => number;
   setStatus: (sid: number, status: string) => void;
+  // reconciliation's "remove": every accepted segment of the code is rejected in
+  // one undoable step — the data stays in the file, the code goes quiet
+  rejectCode: (code: string) => void;
   setNotes: (sid: number, notes: string) => void;
   setColor: (code: string, color: string) => void;
   // recolour every code so co-occurring codes differ; keepManual pins the
@@ -1356,6 +1359,14 @@ export const useStore = create<State>()(
         get().pushUndo();
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status } : x) });
         announce(`Segment ${status}`);
+      },
+      rejectCode: (code) => {
+        get().pushUndo();
+        let n = 0;
+        set({ segments: get().segments.map((x) =>
+          norm(x.code) === norm(code) && x.status === "accepted" ? (n++, { ...x, status: "rejected" }) : x) });
+        set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
+        announce(`${n} excerpt${n === 1 ? "" : "s"} of ${code} rejected`);
       },
       setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x), redoStack: [] }),
       // per keystroke, like notes. Summaries aren't in the undo snapshot, so no

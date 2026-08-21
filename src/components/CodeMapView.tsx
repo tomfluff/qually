@@ -25,7 +25,8 @@ import { codeStats } from "../codeStats";
 import { preselectBrowse } from "./BrowseView";
 import { CodeCounts } from "./CodeCounts";
 import { Icon, countIconSize } from "./Icon";
-import { GroupModal } from "./GroupModal";
+import { ReconcileModal } from "./ReconcileModal";
+import type { CodeAction, ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -46,7 +47,7 @@ const chipW = (fs: number, name: string, segs: number, pids: number) => {
   return Math.round(nameW + counts + 64);
 };
 
-type ChipData = { code: string; color: string; segs: number; pids: number };
+type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction };
 type ChipNodeT = Node<ChipData, "chip">;
 type IslandData = { name: string; gi: number };
 type IslandNodeT = Node<IslandData, "island">;
@@ -57,6 +58,7 @@ const remembered = {
   // chip positions are RELATIVE to their island (absolute when ungrouped/flat)
   positions: {} as Record<string, { x: number; y: number }>,
   islandPos: {} as Record<string, { x: number; y: number }>,
+  planActions: [] as CodeAction[],
   viewport: null as Viewport | null,
   selected: new Set<string>(),
 };
@@ -68,6 +70,12 @@ const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>
       style={{ "--chip-c": data.color } as React.CSSProperties}
       title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}`}>
       <span className="mapName">{data.code}</span>
+      {data.act && (
+        <span className={"mapActBadge " + data.act.action}
+          title={`${data.act.action}: ${data.act.rationale}`}>
+          {data.act.action === "rename" ? "✎" : data.act.action === "merge" ? "⇥" : "⊘"}
+        </span>
+      )}
       <CodeCounts stat={{ segs: data.segs, pids: data.pids }} size={countIconSize(fs)} />
     </div>
   );
@@ -213,6 +221,10 @@ function MapInner() {
   // needs no live subscription
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[] } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  // the AI's pending revision plan (session review state; applied through the
+  // store one verdict at a time)
+  const [plan, setPlan] = useState<CodeAction[]>(remembered.planActions);
+  useEffect(() => { remembered.planActions = plan; }, [plan]);
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   // biggest first: the codes doing the most work anchor the top of the map
@@ -252,6 +264,7 @@ function MapInner() {
     const grouped = new Set(groups.flatMap((g) => g.codes));
     const loose = codes.filter((c) => !grouped.has(c));
 
+    const actOf = new Map(plan.map((a) => [a.code, a]));
     const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
       type: "chip" as const,
@@ -259,7 +272,7 @@ function MapInner() {
       ...(parentId ? { parentId } : {}),
       width: widths.get(c)!, height: ch,
       selected: remembered.selected.has(c),
-      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
+      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c) },
     });
 
     if (groups.length === 0) {
@@ -293,7 +306,7 @@ function MapInner() {
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: [...islands, ...children] as MapNode[] };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -303,6 +316,29 @@ function MapInner() {
   useEffect(() => { rfSetNodes(build()); }, [build, rfSetNodes]);
 
   // group editing: every mutation goes through the store so it lands in the file
+  // one verdict at a time; each accept is an existing undoable store action.
+  // After a rename, pending merges that pointed at the old name follow it.
+  const applyAction = (a: CodeAction) => {
+    const st = useStore.getState();
+    if (a.action === "rename") {
+      st.renameCode(a.code, a.newName!);
+      setPlan((ps) => ps.filter((x) => x !== a).map((x) =>
+        x.action === "merge" && x.into === a.code ? { ...x, into: a.newName! } : x));
+      return;
+    }
+    if (a.action === "merge") {
+      st.mergeCode(a.code, a.into!);
+      if (a.newName) st.renameCode(a.into!, a.newName);
+      const finalName = a.newName || a.into!;
+      setPlan((ps) => ps.filter((x) => x !== a).map((x) =>
+        x.action === "merge" && x.into === a.code ? { ...x, into: finalName } : x));
+      return;
+    }
+    st.rejectCode(a.code);
+    setPlan((ps) => ps.filter((x) => x !== a));
+  };
+  const skipAction = (a: CodeAction) => setPlan((ps) => ps.filter((x) => x !== a));
+
   const moveToGroup = useCallback((code: string, gi: number) => {
     const cur = codeGroups.findIndex((g) => g.codes.includes(code));
     if (cur === gi) return; // includes the flat-map case: -1 === -1
@@ -377,8 +413,8 @@ function MapInner() {
         <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
         <button className="btn iconlabel" onClick={() => setAiOpen(true)}
-          title="AI proposes similarity groups; they land as islands you can reshape">
-          <Icon name="sparkle" size={15} /> <span className="blabel">Group by similarity</span>
+          title="AI proposes similarity islands and per-code revisions (rename / merge / reject) for your review">
+          <Icon name="sparkle" size={15} /> <span className="blabel">Reconcile with AI</span>
         </button>
         <button className="btn iconbtn" onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
           title="Move the minimap to the next corner">
@@ -413,16 +449,52 @@ function MapInner() {
             {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <RafSelectionMarquee />
             <SelectionHud />
+            {plan.length > 0 && (
+              <Panel position="top-left" className="mapPlan">
+                <div className="mapPlanHead">
+                  <b>Revision plan</b> <span className="mapPlanCount">{plan.length}</span>
+                  <button className="btn" onClick={() => { [...plan].forEach(applyAction); }}>Accept all</button>
+                  <button className="btn" onClick={() => setPlan([])} title="Discard every remaining proposal">Clear</button>
+                </div>
+                <div className="mapPlanList nicescroll">
+                  {plan.map((a, i) => (
+                    <div key={`${a.code}:${i}`} className="mapPlanRow" title={a.rationale}>
+                      <span className={"mapPlanKind " + a.action}>
+                        {a.action === "rename" ? "✎" : a.action === "merge" ? "⇥" : "⊘"}
+                      </span>
+                      <span className="mapPlanText">
+                        {a.action === "rename" ? <><b>{a.code}</b> → {a.newName}</>
+                          : a.action === "merge" ? <><b>{a.code}</b> ⇥ {a.into}{a.newName ? <> → {a.newName}</> : null}</>
+                          : <>reject <b>{a.code}</b>'s excerpts</>}
+                      </span>
+                      <button className="btn ok" onClick={() => applyAction(a)} title={"Apply — " + a.rationale}>✓</button>
+                      <button className="btn" onClick={() => skipAction(a)} title="Skip this proposal">✗</button>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            )}
 
           </ReactFlow>
         )}
       </div>
       {aiOpen && (
-        <GroupModal onClose={() => setAiOpen(false)}
-          onGroups={(groups) => {
-            // a fresh grouping owns the whole layout again
-            remembered.positions = {};
-            setCodeGroups(groups);
+        <ReconcileModal groups={codeGroups} onClose={() => setAiOpen(false)}
+          onPlan={(p: ReconcilePlan, scope) => {
+            if (scope === "all") {
+              remembered.positions = {}; remembered.islandPos = {};
+              setCodeGroups(p.groups);
+              setPlan(p.actions);
+            } else {
+              // island-scoped refinement: the returned groups re-partition only
+              // that island's codes; everything else stays put
+              const subset = new Set(codeGroups[scope]?.codes ?? []);
+              subset.forEach((c) => delete remembered.positions[c]);
+              const rest = codeGroups.filter((_, i) => i !== scope)
+                .map((g) => ({ ...g, codes: g.codes.filter((c) => !subset.has(c)) }));
+              setCodeGroups([...rest, ...p.groups]);
+              setPlan([...plan.filter((a) => !subset.has(a.code)), ...p.actions]);
+            }
           }} />
       )}
       {menu && menu.sel.length > 0 && (
