@@ -52,3 +52,8 @@
   background:var(--panel); border:1px solid var(--line); border-radius:10px;
   box-shadow:0 4px 14px rgba(0,0,0,.18); }
 .mapSelPanel .mapSelCount { color:var(--muted); }
+/* selection rectangle in the app's accent (skill: theme via RF's CSS vars) */
+.mapCanvas .react-flow {
+  --xy-selection-background-color-default: color-mix(in srgb, var(--accent) 10%, transparent);
+  --xy-selection-border-default: 1px solid var(--accent);
+}

@@ -2,14 +2,22 @@
 // Copyright (C) 2026 Yotam Sechayk
 // The Code map: the whole codebook as a spatial surface — pan, zoom, select,
 // then act (open the selection in the Codebook, or merge it down). Built on
-// React Flow: with 150+ codes the canvas must pan outside React's render loop,
-// and its d3-zoom viewport does exactly that (a hand-rolled transform-on-state
-// version re-rendered every chip per pointermove and stuttered).
+// React Flow, uncontrolled, following its performance playbook for hundreds
+// of nodes (see .agents/skills/react-flow):
+//   - RF owns the node array (defaultNodes); the codebook effect rebuilds it
+//     through the instance API only when codes actually change.
+//   - NOTHING at this level subscribes to selection. The floating action panel
+//     is its own component with a narrow RF-store subscription, so a box-drag
+//     re-renders that one strip — never the 180 chips, the MiniMap, or the
+//     selection rectangle's ancestors. (A controlled version re-rendered the
+//     world per membership change and the rectangle lagged the pointer.)
+//   - Custom node is memo'd; nodeTypes/handlers are stable references.
 // AI grouping lands on this surface next.
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
-  useOnSelectionChange, useReactFlow, type Node, type NodeProps, type Viewport,
+  useReactFlow, useStore as useFlowStore,
+  type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useStore } from "../state/store";
@@ -65,29 +73,41 @@ const NEXT_CORNER = {
   "top-left": "top-right", "top-right": "bottom-right",
 } as const;
 
+const openInCodebook = (list: string[]) => {
+  preselectBrowse(list);
+  useStore.getState().setActive("browse");
+};
+
+// The one selection subscriber. A newline-joined id string is its own
+// equality check, so this re-renders exactly when membership changes —
+// and nothing else in the tree does.
+const selectedIdsSel = (s: { nodes: Node[] }) =>
+  s.nodes.filter((n) => n.selected).map((n) => n.id).join("\n");
+function SelectionHud() {
+  const joined = useFlowStore(selectedIdsSel);
+  const sel = useMemo(() => (joined ? joined.split("\n") : []), [joined]);
+  useEffect(() => { remembered.selected = new Set(sel); }, [sel]);
+  return (
+    <Panel position="top-right" className="mapSelPanel"
+      style={{ visibility: sel.length > 0 ? "visible" : "hidden" }}>
+      <span className="mapSelCount">{sel.length} selected</span>
+      <button className="btn" onClick={() => openInCodebook(sel)}>Open in Codebook</button>
+    </Panel>
+  );
+}
+
 function MapInner() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const dark = useStore((s) => s.ui.dark);
-  const setActive = useStore((s) => s.setActive);
-  const mergeCode = useStore((s) => s.mergeCode);
   const mapMinimap = useStore((s) => s.ui.mapMinimap);
   const setUi = useStore((s) => s.setUi);
-  const { setNodes: rfSetNodes } = useReactFlow();
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  // selection lives in RF's own (uncontrolled) store; we only observe it.
-  // A controlled nodes array re-rendered this whole component — and RF's
-  // 180-node subtree — on every membership change of a box-drag, which is
-  // why the selection rectangle lagged the pointer.
-  const [selIds, setSelIds] = useState<string[]>([...remembered.selected]);
-  const onSelChange = useCallback(({ nodes: ns }: { nodes: Node[] }) => {
-    const ids = ns.map((n) => n.id);
-    setSelIds(ids);
-    remembered.selected = new Set(ids);
-  }, []);
-  useOnSelectionChange({ onChange: onSelChange });
+  const { setNodes: rfSetNodes, getNodes } = useReactFlow();
+  // menu state carries the selection it acts on, captured at open — the menu
+  // needs no live subscription
+  const [menu, setMenu] = useState<{ x: number; y: number; sel: string[] } | null>(null);
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   // biggest first: the codes doing the most work anchor the top of the map
@@ -127,15 +147,31 @@ function MapInner() {
   const [initialNodes] = useState(build);
   useEffect(() => { rfSetNodes(build()); }, [build, rfSetNodes]);
 
-  const sel = selIds.filter((c) => c in codebook);
-  const openInCodebook = (list: string[]) => { preselectBrowse(list); setActive("browse"); };
+  // stable handlers (skill rule: memoize callback props)
+  const onMoveEnd = useCallback((_: unknown, vp: Viewport) => { remembered.viewport = vp; }, []);
+  const onNodeDragStop = useCallback((_: unknown, n: Node) => { remembered.positions[n.id] = n.position; }, []);
+  const onNodeDoubleClick = useCallback((_: unknown, n: Node) => openInCodebook([n.id]), []);
+  const selectionAt = useCallback((): string[] =>
+    getNodes().filter((n) => n.selected).map((n) => n.id), [getNodes]);
+  const onNodeContextMenu = useCallback((e: React.MouseEvent, n: Node) => {
+    e.preventDefault();
+    let sel = selectionAt();
+    if (!sel.includes(n.id)) {
+      sel = [n.id];
+      rfSetNodes((ns) => ns.map((x) => ({ ...x, selected: x.id === n.id })));
+    }
+    setMenu({ x: e.clientX, y: e.clientY, sel });
+  }, [selectionAt, rfSetNodes]);
+  const onSelectionContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setMenu({ x: e.clientX, y: e.clientY, sel: selectionAt() });
+  }, [selectionAt]);
+  const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => e.preventDefault(), []);
+  const nodeColor = useCallback((n: Node) => (n as ChipNodeT).data.color, []);
 
-  const soloUnlessSelected = (id: string) => {
-    if (!remembered.selected.has(id))
-      rfSetNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id })));
-  };
-  const doMerge = (into: string) => {
-    sel.filter((c) => c !== into).forEach((c) => mergeCode(c, into));
+  const mergeSel = (menuSel: string[], into: string) => {
+    const mergeCode = useStore.getState().mergeCode;
+    menuSel.filter((c) => c !== into).forEach((c) => mergeCode(c, into));
     setMenu(null);
   };
 
@@ -169,40 +205,32 @@ function MapInner() {
             colorMode={dark ? "dark" : "light"}
             fitView={!remembered.viewport}
             defaultViewport={remembered.viewport ?? undefined}
-            onMoveEnd={(_, vp) => { remembered.viewport = vp; }}
+            onMoveEnd={onMoveEnd}
             minZoom={0.1} maxZoom={3}
             selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
             onlyRenderVisibleElements elevateNodesOnSelect={false}
             multiSelectionKeyCode={["Control", "Meta"]}
-            onNodeDragStop={(_, n) => { remembered.positions[n.id] = n.position; }}
+            onNodeDragStop={onNodeDragStop}
             zoomOnDoubleClick={false} deleteKeyCode={null} nodesConnectable={false}
-            onNodeDoubleClick={(_, n) => openInCodebook([n.id])}
-            onNodeContextMenu={(e, n) => { e.preventDefault(); soloUnlessSelected(n.id); setMenu({ x: e.clientX, y: e.clientY }); }}
-            onSelectionContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }}
-            onPaneContextMenu={(e) => e.preventDefault()}>
+            onNodeDoubleClick={onNodeDoubleClick}
+            onNodeContextMenu={onNodeContextMenu}
+            onSelectionContextMenu={onSelectionContextMenu}
+            onPaneContextMenu={onPaneContextMenu}>
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable position={mapMinimap}
-              nodeColor={(n) => (n as ChipNodeT).data.color} />
-            {/* selection actions float OVER the canvas — always mounted, shown
-                by visibility, so drag-time membership changes never mount/unmount
-                a subtree mid-gesture (that churn showed as selection-box lag) */}
-            <Panel position="top-right" className="mapSelPanel"
-              style={{ visibility: sel.length > 0 ? "visible" : "hidden" }}>
-              <span className="mapSelCount">{sel.length} selected</span>
-              <button className="btn" onClick={() => openInCodebook(sel)}>Open in Codebook</button>
-            </Panel>
+            <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />
+            <SelectionHud />
           </ReactFlow>
         )}
       </div>
-      {menu && sel.length > 0 && (
+      {menu && menu.sel.length > 0 && (
         <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
-          <button role="menuitem" onClick={() => { openInCodebook(sel); setMenu(null); }}>
-            Open {sel.length === 1 ? sel[0] : `${sel.length} codes`} in Codebook
+          <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
+            Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>
-          {sel.length > 1 && <>
-            <div className="mapMenuHead">Merge {sel.length} into…</div>
-            {sel.map((c) => (
-              <button key={c} role="menuitem" onClick={() => doMerge(c)}>
+          {menu.sel.length > 1 && <>
+            <div className="mapMenuHead">Merge {menu.sel.length} into…</div>
+            {menu.sel.map((c) => (
+              <button key={c} role="menuitem" onClick={() => mergeSel(menu.sel, c)}>
                 <span className="mapDot" style={{ background: codebook[c]?.color || "#999" }} /> {c}
               </button>
             ))}
