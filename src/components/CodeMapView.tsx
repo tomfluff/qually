@@ -13,7 +13,7 @@
 //     world per membership change and the rectangle lagged the pointer.)
 //   - Custom node is memo'd; nodeTypes/handlers are stable references.
 // AI grouping lands on this surface next.
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
   useReactFlow, useStore as useFlowStore,
@@ -67,6 +67,28 @@ const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>
   );
 });
 const nodeTypes = { chip: ChipNode };
+
+const PROBE_LABELS = ["Probe: off", "Probe: no minimap", "Probe: plain chips"];
+
+// rAF frame counter writing straight to the DOM — the meter itself must not
+// cause React renders while it measures
+function Fps() {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    let raf = 0, frames = 0, last = performance.now();
+    const tick = (now: number) => {
+      frames++;
+      if (now - last >= 500) {
+        if (ref.current) ref.current.textContent = `${Math.round(frames * 1000 / (now - last))} fps`;
+        frames = 0; last = now;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <span className="mapFps" ref={ref} />;
+}
 
 const NEXT_CORNER = {
   "bottom-right": "bottom-left", "bottom-left": "top-left",
@@ -163,6 +185,7 @@ function MapInner() {
   }, [selectionAt, rfSetNodes]);
   const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => e.preventDefault(), []);
   const [selecting, setSelecting] = useState(false);
+  const [probe, setProbe] = useState(0);
   const onSelectionStart = useCallback(() => setSelecting(true), []);
   const onSelectionEnd = useCallback(() => setSelecting(false), []);
   const nodeColor = useCallback((n: Node) => (n as ChipNodeT).data.color, []);
@@ -184,7 +207,7 @@ function MapInner() {
   }, [menu]);
 
   return (
-    <div id="codemap" style={{ fontSize: sidebarFontSize }}>
+    <div id="codemap" className={probe >= 2 ? "plainChips" : undefined} style={{ fontSize: sidebarFontSize }}>
       <div className="mapBar">
         <span className="mapTitle">Code map</span>
         <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
@@ -192,6 +215,11 @@ function MapInner() {
         <button className="btn iconbtn" onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
           title="Move the minimap to the next corner">
           <Icon name="pip" size={15} />
+        </button>
+        <Fps />
+        <button className="btn" onClick={() => setProbe((p) => (p + 1) % 3)}
+          title="Temporary performance probe: strips suspects so the smooth mode names the culprit">
+          {PROBE_LABELS[probe]}
         </button>
       </div>
       <div className="mapCanvas">
@@ -208,7 +236,7 @@ function MapInner() {
             selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
             autoPanOnSelection={false}
             onSelectionStart={onSelectionStart} onSelectionEnd={onSelectionEnd}
-            onlyRenderVisibleElements elevateNodesOnSelect={false}
+            elevateNodesOnSelect={false}
             multiSelectionKeyCode={["Control", "Meta"]}
             onNodeDragStop={onNodeDragStop}
             zoomOnDoubleClick={false} deleteKeyCode={null} nodesConnectable={false}
@@ -219,7 +247,7 @@ function MapInner() {
             {/* the MiniMap re-scans the store on every write; unmounting it for
                 the duration of a box-drag costs one render at gesture start/end
                 instead of aggregate scans per membership change (codex consult) */}
-            {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
+            {!selecting && probe < 1 && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <SelectionHud />
           </ReactFlow>
         )}
