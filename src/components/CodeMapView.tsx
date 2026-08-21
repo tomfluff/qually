@@ -8,8 +8,8 @@
 // AI grouping lands on this surface next.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, useNodesState, useReactFlow,
-  type Node, type NodeProps, type Viewport,
+  ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
+  useNodesState, useReactFlow, type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useStore } from "../state/store";
@@ -19,11 +19,18 @@ import { CodeCounts } from "./CodeCounts";
 import { Icon, countIconSize } from "./Icon";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
-// Sized from the panel text ramp: the name needs two full lines and the count
-// row at ANY sidebar font size, so a fixed pixel height would clip the large
-// accessible settings this app exists for.
-const GX = 18, GY = 16;
-const dims = (fs: number) => ({ cw: Math.round(fs * 15), ch: Math.round(fs * 4.2 + 16) });
+// Chips fit their content: width is the measured name plus the count block
+// (uniform padding would leave a field of dead air around short names), and
+// everything scales with the sidebar text ramp so large accessible settings
+// never clip. Rows are shelf-packed toward a near-square map.
+const GX = 14, GY = 12;
+const chipH = (fs: number) => Math.round(fs * 2.4);
+const measurer = document.createElement("canvas").getContext("2d")!;
+const chipW = (fs: number, name: string, segs: number, pids: number) => {
+  measurer.font = `600 ${fs}px ${getComputedStyle(document.body).fontFamily}`;
+  const counts = measurer.measureText(`${segs}${pids}`).width + fs * 2.4; // two icons + gaps
+  return Math.round(10 + 10 + measurer.measureText(name).width + 14 + counts + 12);
+};
 
 type ChipData = { code: string; color: string; segs: number; pids: number };
 type ChipNodeT = Node<ChipData, "chip">;
@@ -37,10 +44,9 @@ const remembered = {
 
 function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
   const fs = useStore((s) => s.ui.sidebarFontSize);
-  const { cw, ch } = dims(fs);
   return (
     <div className={"mapChip" + (selected ? " sel" : "")}
-      style={{ width: cw, height: ch, "--chip-c": data.color } as React.CSSProperties}
+      style={{ height: chipH(fs), "--chip-c": data.color } as React.CSSProperties}
       title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}`}>
       <span className="mapName">{data.code}</span>
       <CodeCounts stat={{ segs: data.segs, pids: data.pids }} size={countIconSize(fs)} />
@@ -75,26 +81,36 @@ function MapInner() {
     [codebook, stats]);
 
   const build = useCallback((): ChipNodeT[] => {
-    const { cw, ch } = dims(useStore.getState().ui.sidebarFontSize);
-    const cols = Math.max(1, Math.ceil(Math.sqrt(codes.length * 1.6)));
-    return codes.map((c, i) => ({
-      id: c,
-      type: "chip" as const,
-      position: remembered.positions[c]
-        ?? { x: (i % cols) * (cw + GX), y: Math.floor(i / cols) * (ch + GY) },
-      width: cw, height: ch,
-      selected: remembered.selected.has(c),
-      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
-    }));
+    const fs = useStore.getState().ui.sidebarFontSize;
+    const ch = chipH(fs);
+    const widths = codes.map((c) => chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0));
+    // shelf-pack toward a near-square map: row width from the total chip area
+    const area = widths.reduce((a, w) => a + (w + GX) * (ch + GY), 0);
+    const rowW = Math.max(680, Math.sqrt(area) * 1.45);
+    let x = 0, y = 0;
+    return codes.map((c, i) => {
+      const w = widths[i];
+      if (x > 0 && x + w > rowW) { x = 0; y += ch + GY; }
+      const pos = remembered.positions[c] ?? { x, y };
+      x += w + GX;
+      return {
+        id: c,
+        type: "chip" as const,
+        position: pos,
+        width: w, height: ch,
+        selected: remembered.selected.has(c),
+        data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
+      };
+    });
   }, [codes, codebook, stats]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ChipNodeT>(build());
   // the codebook changed under the map (a merge, a rename, new codes): rebuild,
   // keeping every surviving chip where it was
   useEffect(() => { setNodes(build()); }, [build, setNodes]);
-  // drags and selection outlive the view
+  // selection outlives the view; positions are recorded per drag (below), so
+  // the packer stays in charge of everything the user hasn't placed by hand
   useEffect(() => {
-    for (const n of nodes) remembered.positions[n.id] = n.position;
     remembered.selected = new Set(nodes.filter((n) => n.selected).map((n) => n.id));
   }, [nodes]);
 
@@ -124,7 +140,7 @@ function MapInner() {
     <div id="codemap" style={{ fontSize: sidebarFontSize }}>
       <div className="mapBar">
         <span className="mapTitle">Code map</span>
-        <span className="mapHint">The whole codebook at once. Drag to pan, wheel to zoom, <b>Shift+drag</b> to select a region, right-click a selection to act on it. Double-click a code for its excerpts.</span>
+        <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
         <button className="btn iconbtn" onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
           title="Move the minimap to the next corner">
@@ -142,8 +158,9 @@ function MapInner() {
             defaultViewport={remembered.viewport ?? undefined}
             onMoveEnd={(_, vp) => { remembered.viewport = vp; }}
             minZoom={0.1} maxZoom={3}
-            panOnDrag selectionOnDrag={false} selectionKeyCode="Shift"
+            selectionOnDrag panOnDrag={[1, 2]} selectionMode={SelectionMode.Partial}
             multiSelectionKeyCode={["Control", "Meta"]}
+            onNodeDragStop={(_, n) => { remembered.positions[n.id] = n.position; }}
             zoomOnDoubleClick={false} deleteKeyCode={null} nodesConnectable={false}
             onNodeDoubleClick={(_, n) => openInCodebook([n.id])}
             onNodeContextMenu={(e, n) => { e.preventDefault(); soloUnlessSelected(n.id); setMenu({ x: e.clientX, y: e.clientY }); }}

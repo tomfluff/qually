@@ -25,21 +25,23 @@
    at map distance the color IS the identity, so it leads. The full name shows
    (two lines before it clips); counts are the sidebar's icon pair, so the map
    speaks the same count vocabulary as everywhere else. */
-.mapChip { display:flex; flex-direction:column; justify-content:center; gap:2px;
-  box-sizing:border-box; padding:6px 12px 6px 16px; height:100%;
+.mapChip { display:flex; align-items:center; gap:14px;
+  box-sizing:border-box; padding:0 12px 0 20px; height:100%; width:100%;
   background:color-mix(in srgb, var(--chip-c) 10%, var(--panel)); color:var(--fg);
   border:2px solid var(--line); border-left:none; border-radius:10px; cursor:pointer;
   font:inherit; text-align:left; position:relative; overflow:hidden; }
-.mapChip::before { content:""; position:absolute; left:0; top:0; bottom:0; width:7px;
+.mapChip::before { content:""; position:absolute; left:0; top:0; bottom:0; width:8px;
   background:var(--chip-c); }
 .mapChip:hover { border-color:var(--muted); }
 .mapChip.sel { border-color:var(--accent);
   background:color-mix(in srgb, var(--accent) 14%, var(--panel)); }
-.mapChip .mapName { min-width:0; font-weight:600; line-height:1.2;
-  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.mapChip .cnt { display:inline-flex; gap:10px; color:var(--muted);
-  font-variant-numeric:tabular-nums; }
+.mapChip .mapName { font-weight:600; white-space:nowrap; }
+/* the counts are the map's other axis — how much work a code does — so they
+   read at full strength, bold, sized with the name; only the glyphs recede */
+.mapChip .cnt { display:inline-flex; gap:10px; margin-left:auto; color:var(--fg);
+  font-weight:700; font-variant-numeric:tabular-nums; }
 .mapChip .cntpair { display:inline-flex; align-items:center; gap:3px; }
+.mapChip .cntpair svg { color:var(--muted); }
 /* the right-click menu rides the shared .ctxmenu chrome; only the extras here */
 .mapMenu .mapMenuHead { padding:6px 10px 2px; color:var(--muted); font-size:.85em; }
 .mapMenu .mapDot { display:inline-block; width:.8em; height:.8em; border-radius:3px;
