@@ -128,21 +128,23 @@ export function ReconcileModal({ groups, onPlan, onClose }: {
                 </div>
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
-              <div className="srow" style={{ marginTop: 12 }}>
-                <span>Scope</span>
-                <select className="settext" value={scope === "all" ? "all" : String(scope)}
-                  onChange={(e) => setScope(e.target.value === "all" ? "all" : +e.target.value)}>
-                  <option value="all">Whole codebook</option>
-                  {groups.map((g, i) => <option key={i} value={i}>Island: {g.name}</option>)}
-                </select>
+              <div className="recDials">
+                <div className="srow">
+                  <span>Scope</span>
+                  <select className="settext" value={scope === "all" ? "all" : String(scope)}
+                    onChange={(e) => setScope(e.target.value === "all" ? "all" : +e.target.value)}>
+                    <option value="all">Whole codebook</option>
+                    {groups.map((g, i) => <option key={i} value={i}>Island: {g.name}</option>)}
+                  </select>
+                </div>
+                <label className="srow">
+                  <span>Excerpts per code</span>
+                  <input type="range" min={3} max={12} value={exN}
+                    onChange={(e) => setExN(+e.target.value)} />
+                  <span className="sval">{exN}</span>
+                </label>
+                <div className="settings-note">More excerpts give the AI better evidence for each judgment — and cost more tokens. The estimate below updates as you adjust.</div>
               </div>
-              <label className="srow">
-                <span>Excerpts per code</span>
-                <input type="range" min={3} max={12} value={exN}
-                  onChange={(e) => setExN(+e.target.value)} />
-                <span className="sval">{exN}</span>
-              </label>
-              <div className="settings-note">More excerpts give the AI better evidence for each judgment — and cost more tokens. The estimate below updates as you adjust.</div>
               {!enough ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   Reconciling needs at least four codes with coded segments in scope. Code a bit

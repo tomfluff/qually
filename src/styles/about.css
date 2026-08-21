@@ -191,3 +191,9 @@
 .about-credit .foot-author:hover { text-decoration:underline; color:var(--accent); }
 .about-credit .foot-avatar { width:20px; height:20px; border-radius:50%; object-fit:cover;
   display:block; box-shadow:0 0 0 1px var(--line); }
+
+/* the reconcile run's dials: one settled block between the model picker and
+   the payload preview — rows breathe, the note reads as a caption of the
+   slider rather than a stray paragraph, and nothing touches the scroll gutter */
+.recDials { display:flex; flex-direction:column; gap:12px; margin:16px 2px 14px 0; }
+.recDials .settings-note { margin:0; max-width:56ch; }
