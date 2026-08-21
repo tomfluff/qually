@@ -26,7 +26,7 @@ export const COLORS = PALETTE;
 // `active` is a transcript pid or one of these reserved view keys (Codebook / Assist).
 // Both are non-transcript surfaces, so transcript-only chrome and selection bookkeeping
 // gate on isTranscriptView.
-export const RESERVED_VIEWS = ["browse", "assist", "summary", "notes"] as const;
+export const RESERVED_VIEWS = ["browse", "assist", "summary", "notes", "map"] as const;
 export const isTranscriptView = (active: string) => !RESERVED_VIEWS.includes(active as typeof RESERVED_VIEWS[number]);
 
 // orig = the imported text, present only while an in-app correction differs from it

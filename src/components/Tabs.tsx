@@ -131,6 +131,11 @@ export function Tabs() {
         role="tab" aria-selected={active === "browse"} onClick={() => setActive("browse")}>
         <Icon name="list" size={14} /> Codebook
       </button>
+      <button className={"tab browsetab" + (active === "map" ? " active" : "")}
+        role="tab" aria-selected={active === "map"} onClick={() => setActive("map")}
+        title="Code map: see the whole codebook spatially — select, inspect, merge">
+        <Icon name="layout-grid" size={14} /> Map
+      </button>
       <button className={"tab browsetab" + (active === "summary" ? " active" : "")}
         role="tab" aria-selected={active === "summary"} onClick={() => setActive("summary")}
         title="Per-transcript session record and summary">

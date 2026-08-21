@@ -19,6 +19,7 @@
 @import "./styles/browse.css";      /* browse view */
 @import "./styles/summary.css";     /* summary tab: session record + summary panes */
 @import "./styles/notes.css";       /* notes tab: the project memo document */
+@import "./styles/map.css";         /* code map: pan/zoom codebook canvas */
 @import "./styles/settings.css";
 @import "./styles/zen.css";
 @import "./styles/hotbar.css";

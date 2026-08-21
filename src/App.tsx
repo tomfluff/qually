@@ -12,6 +12,7 @@ import { BrowseView } from "./components/BrowseView";
 import { AssistView } from "./components/AssistView";
 import { SummaryView } from "./components/SummaryView";
 import { NotesView } from "./components/NotesView";
+import { CodeMapView } from "./components/CodeMapView";
 import { VideoDock } from "./components/VideoDock";
 import { HotbarDock } from "./components/HotbarDock";
 import { CommandPalette } from "./components/CommandPalette";
@@ -283,6 +284,7 @@ export function App() {
             : active === "summary" ? <SummaryView />
             : active === "assist" ? <AssistView />
             : active === "notes" ? <NotesView />
+            : active === "map" ? <CodeMapView />
             : <TranscriptView />}
         </div>
       </div>

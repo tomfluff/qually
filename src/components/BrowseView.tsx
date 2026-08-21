@@ -28,6 +28,15 @@ const remembered = {
   showRejected: false,
 };
 
+// The Code map's "Open in Codebook": arrive with exactly these codes chosen,
+// no stale filter hiding them, and the excerpt pane back at the top.
+export function preselectBrowse(codes: string[]) {
+  remembered.selected = new Set(codes);
+  remembered.anchor = null;
+  remembered.filter = "";
+  excerptScroll = 0;
+}
+
 // where the excerpt list was parked, for the same reason and in the same place
 // as the rest of this cache
 let excerptScroll = 0;
