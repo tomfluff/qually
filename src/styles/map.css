@@ -132,3 +132,17 @@
   border:1px solid var(--accent); border-radius:99px; padding:.1em .6em; }
 /* badges are Reconcile-stage furniture */
 .stage-themes .mapActBadge { display:none; }
+/* the cluster card: verdicts on the selected constellation */
+.mapCard { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  box-shadow:0 4px 14px rgba(0,0,0,.18); max-width:min(46ch, 44vw);
+  margin-left:56px; /* clears the RF Controls stack */ }
+.mapCardHead { display:flex; align-items:center; gap:8px; padding:8px 12px 2px; }
+.mapCardRat { color:var(--muted); font-size:.85em; padding:0 12px 6px; line-height:1.35; }
+.mapCardList { max-height:min(38vh, 22em); overflow-y:auto; padding:4px 6px;
+  border-top:1px solid var(--line); }
+.mapCardRow { display:flex; align-items:center; gap:8px; padding:3px 6px; border-radius:6px; }
+.mapCardRow:hover { background:var(--sel); }
+.mapCardRow.off .mapCardName { color:var(--muted); text-decoration:line-through; }
+.mapCardName { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mapCardCount { color:var(--muted); font-variant-numeric:tabular-nums; }
+.mapCardActions { display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--line); }

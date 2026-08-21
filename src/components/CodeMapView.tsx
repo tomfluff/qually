@@ -234,6 +234,65 @@ function RafSelectionMarquee() {
   return <div ref={elementRef} className="mapRafMarquee" aria-hidden="true" />;
 }
 
+// The cluster card: verdict surface for the constellation of the currently
+// selected chip. Its own component with narrow subscriptions (skill rule) —
+// selection from RF's store, clusters from the app store — so drag-time churn
+// never re-renders the map around it. Toggles mirror the geometry: unticking
+// evicts to the ring, ticking re-attaches, the radio crowns a survivor.
+const firstSelectedSel = (s: { nodes: Node[] }) =>
+  s.nodes.find((n) => n.selected && n.type === "chip")?.id ?? "";
+function ClusterCard({ onAccept }: { onAccept: (ci: number) => void }) {
+  const selected = useFlowStore(firstSelectedSel);
+  const clusters = useStore((st) => st.codeClusters);
+  const codebook = useStore((st) => st.codebook);
+  const segments = useStore((st) => st.segments);
+  const ci = clusters.findIndex((c) => c.codes.includes(selected) || (c.out ?? []).includes(selected));
+  if (ci < 0) return null;
+  const c = clusters[ci];
+  const segsOf = (code: string) => segments.filter((x) => x.code === code && x.status === "accepted").length;
+  const setClusters = (next: typeof clusters) => useStore.getState().setCodeClusters(next);
+  const toggle = (m: string, on: boolean) => {
+    const upd = clusters.map((x, i) => i !== ci ? x : (on
+      ? { ...x, codes: [...x.codes, m], out: (x.out ?? []).filter((y) => y !== m) }
+      : { ...x, codes: x.codes.filter((y) => y !== m), out: [...(x.out ?? []), m] }));
+    setClusters(upd);
+  };
+  const crown = (m: string) => setClusters(clusters.map((x, i) => i !== ci ? x : { ...x, survivor: m }));
+  const skip = () => setClusters(clusters.filter((_, i) => i !== ci));
+  const canAccept = c.codes.length >= 2;
+  return (
+    <Panel position="bottom-left" className="mapCard">
+      <div className="mapCardHead">
+        <b>{c.newName ?? c.survivor}</b>
+        {c.newName && <span className="mapOrbitTag">renamed</span>}
+      </div>
+      <div className="mapCardRat">{c.rationale}</div>
+      <div className="mapCardList">
+        {[...c.codes, ...(c.out ?? []).filter((m) => m in codebook)].map((m) => {
+          const on = c.codes.includes(m);
+          return (
+            <label key={m} className={"mapCardRow" + (on ? "" : " off")}>
+              <input type="checkbox" checked={on} onChange={(e) => toggle(m, e.target.checked)}
+                title={on ? "Untick to evict from the merge" : "Tick to re-attach"} />
+              <input type="radio" name="survivor" checked={c.survivor === m} disabled={!on}
+                onChange={() => crown(m)} title="Keep this code as the survivor" />
+              <span className="mapCardName">{m}</span>
+              <span className="mapCardCount">{segsOf(m)}</span>
+            </label>
+          );
+        })}
+      </div>
+      <div className="mapCardActions">
+        <button className="btn primary" disabled={!canAccept} onClick={() => onAccept(ci)}
+          title={canAccept ? `Merge ${c.codes.length} codes into ${c.newName ?? c.survivor} (undoable)` : "A merge needs at least 2 ticked members"}>
+          Accept merge
+        </button>
+        <button className="btn" onClick={skip} title="Discard this proposal (codes stay as they are)">Skip</button>
+      </div>
+    </Panel>
+  );
+}
+
 function MapInner() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
@@ -313,7 +372,7 @@ function MapInner() {
       const live = clusters
         .map((c, ci) => ({ ...c, ci, codes: c.codes.filter(inBook) }))
         .filter((c) => c.codes.length >= 2 && c.codes.includes(c.survivor));
-      const clustered = new Set(live.flatMap((c) => c.codes));
+      const clustered = new Set(live.flatMap((c) => [...c.codes, ...(c.out ?? [])]));
       const singles = codes.filter((c) => !clustered.has(c));
 
       const orbitNodes: OrbitNodeT[] = [];
@@ -323,7 +382,8 @@ function MapInner() {
       // ring — so the packer keeps neighbors clear of it (design premise 3).
       const blocks = live.map((c) => {
         const members = c.codes.filter((x) => x !== c.survivor);
-        const maxW = Math.max(...c.codes.map((x) => widths.get(x)!));
+        const all = [...c.codes, ...(c.out ?? []).filter(inBook)];
+        const maxW = Math.max(...all.map((x) => widths.get(x)!));
         const hubW = widths.get(c.survivor)!;
         const r = Math.max(120, hubW / 2 + maxW / 2 + fs * 3.2);
         const size = 2 * (r + maxW / 2 + RING_BAND);
@@ -344,12 +404,22 @@ function MapInner() {
         });
         const cx = b.size / 2, cy = b.size / 2;
         const hub = { x: cx - widths.get(b.c.survivor)! / 2, y: cy - ch / 2 };
-        chipNodes.push(chipNode(b.c.survivor, remembered.positions[b.c.survivor] ?? hub, key));
+        chipNodes.push(chipNode(b.c.survivor, hub, key));
         b.members.forEach((m, i) => {
           const ang = -Math.PI / 2 + (i * 2 * Math.PI) / b.members.length;
           const px = cx + b.r * Math.cos(ang) - widths.get(m)! / 2;
           const py = cy + b.r * Math.sin(ang) - ch / 2;
-          chipNodes.push(chipNode(m, remembered.positions[m] ?? { x: px, y: py }, key));
+          chipNodes.push(chipNode(m, { x: px, y: py }, key));
+        });
+        // evicted members sit on the eviction ring — outside the attach
+        // region, still re-attachable by dragging back in
+        const outs = (b.c.out ?? []).filter(inBook);
+        const rRing = b.size / 2 - RING_BAND / 2;
+        outs.forEach((m, i) => {
+          const ang = -Math.PI / 2 + ((i + 0.5) * 2 * Math.PI) / Math.max(outs.length, 3);
+          const px = cx + rRing * Math.cos(ang) - widths.get(m)! / 2;
+          const py = cy + rRing * Math.sin(ang) - ch / 2;
+          chipNodes.push(chipNode(m, { x: px, y: py }, key));
         });
         x += b.size + ISLAND_GAP;
         rowH = Math.max(rowH, b.size);
@@ -446,6 +516,18 @@ function MapInner() {
     setPlan((ps) => ps.filter((x) => x !== a));
   };
   const skipAction = (a: CodeAction) => setPlan((ps) => ps.filter((x) => x !== a));
+  // sequential apply for now — the single-undo-step batch op lands with the
+  // snapshot-extension step of the design (steps 7-8)
+  const acceptCluster = useCallback((ci: number) => {
+    const st = useStore.getState();
+    const c = st.codeClusters[ci];
+    if (!c || c.codes.length < 2) return;
+    // the proposal leaves the plan first (evicted members included), then the
+    // merges + rename apply through the store's own integrity
+    st.setCodeClusters(st.codeClusters.filter((_, i) => i !== ci));
+    for (const m of c.codes) if (m !== c.survivor) useStore.getState().mergeCode(m, c.survivor);
+    if (c.newName) useStore.getState().renameCode(c.survivor, c.newName);
+  }, []);
 
   const moveToGroup = useCallback((code: string, gi: number) => {
     const cur = codeGroups.findIndex((g) => g.codes.includes(code));
@@ -465,11 +547,50 @@ function MapInner() {
   };
   // stable handlers (skill rule: memoize callback props)
   const onMoveEnd = useCallback((_: unknown, vp: Viewport) => { remembered.viewport = vp; }, []);
-  // a drag is a filing action once islands exist: a chip joins whichever
-  // island its ABSOLUTE center lands in (or leaves its group on open canvas);
-  // an island just remembers where it was put (session aesthetics)
+  // Themes: a drag files a chip into whichever island its center lands in.
+  // Reconcile: geometry is the pending plan — drop on the hub crowns a new
+  // survivor, drop outside the attach circle evicts (snap to ring), drop
+  // inside snaps back into orbit. Free positions are never kept in Reconcile.
   const onNodeDragStop = useCallback((_: unknown, n: Node) => {
-    if (n.type === "island") { remembered.islandPos[n.id] = n.position; return; }
+    if (n.type !== "chip") { if (n.type === "island") remembered.islandPos[n.id] = n.position; return; }
+    if (stage === "reconcile") {
+      const st = useStore.getState();
+      const ci = st.codeClusters.findIndex((c) => c.codes.includes(n.id) || (c.out ?? []).includes(n.id));
+      const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
+      const ccx = abs.x + (n.width ?? 0) / 2, ccy = abs.y + (n.height ?? 0) / 2;
+      const bump = () => rfSetNodes(build()); // relayout: geometry owns positions
+      if (ci < 0) { bump(); return; } // singles just snap back
+      const c = st.codeClusters[ci];
+      const orbit = getNodes().find((x) => x.id === `orbit:${ci}`);
+      if (!orbit) { bump(); return; }
+      const ox = orbit.position.x + (orbit.width ?? 0) / 2, oy = orbit.position.y + (orbit.height ?? 0) / 2;
+      const dist = Math.hypot(ccx - ox, ccy - oy);
+      const attachR = (orbit.width ?? 0) / 2 - RING_BAND;
+      const inCodes = c.codes.includes(n.id);
+      // crown: a member dropped with its center over the survivor's chip
+      const hubNode = getNodes().find((x) => x.id === c.survivor);
+      const hubAbs = hubNode ? getInternalNode(c.survivor)?.internals.positionAbsolute : null;
+      if (inCodes && n.id !== c.survivor && hubNode && hubAbs
+          && ccx >= hubAbs.x && ccx <= hubAbs.x + (hubNode.width ?? 0)
+          && ccy >= hubAbs.y && ccy <= hubAbs.y + (hubNode.height ?? 0)) {
+        st.setCodeClusters(st.codeClusters.map((x, i) => i !== ci ? x : { ...x, survivor: n.id }));
+        return;
+      }
+      if (inCodes && dist > attachR) {
+        // evict (pending): member -> out; layout snaps it to the ring
+        st.setCodeClusters(st.codeClusters.map((x, i) => i !== ci ? x
+          : { ...x, codes: x.codes.filter((y) => y !== n.id), out: [...(x.out ?? []), n.id] }));
+        return;
+      }
+      if (!inCodes && dist <= attachR) {
+        // re-attach: out -> codes
+        st.setCodeClusters(st.codeClusters.map((x, i) => i !== ci ? x
+          : { ...x, codes: [...x.codes, n.id], out: (x.out ?? []).filter((y) => y !== n.id) }));
+        return;
+      }
+      bump();
+      return;
+    }
     remembered.positions[n.id] = n.position;
     const islands = getNodes().filter((x) => x.type === "island");
     if (!islands.length) return;
@@ -479,8 +600,28 @@ function MapInner() {
       && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
     const gi = hit ? (hit.data as IslandData).gi : -1;
     moveToGroup(n.id, gi);
-  }, [getNodes, getInternalNode, moveToGroup]);
+  }, [getNodes, getInternalNode, moveToGroup, stage, rfSetNodes, build]);
   const onNodeDoubleClick = useCallback((_: unknown, n: Node) => openInCodebook([n.id]), []);
+  // the spoke IS the live membership signal while dragging: rAF-coalesced
+  // imperative toggle of the edge's visibility (no React work per move)
+  const dragFrame = useRef(0);
+  const onNodeDrag = useCallback((_: unknown, n: Node) => {
+    if (stage !== "reconcile" || n.type !== "chip" || dragFrame.current) return;
+    dragFrame.current = requestAnimationFrame(() => {
+      dragFrame.current = 0;
+      const st = useStore.getState();
+      const ci = st.codeClusters.findIndex((c) => c.codes.includes(n.id));
+      if (ci < 0) return;
+      const orbit = getNodes().find((x) => x.id === `orbit:${ci}`);
+      const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
+      if (!orbit) return;
+      const ox = orbit.position.x + (orbit.width ?? 0) / 2, oy = orbit.position.y + (orbit.height ?? 0) / 2;
+      const inside = Math.hypot(abs.x + (n.width ?? 0) / 2 - ox, abs.y + (n.height ?? 0) / 2 - oy)
+        <= (orbit.width ?? 0) / 2 - RING_BAND;
+      const el = document.querySelector<SVGGElement>(`.react-flow__edge[data-id="spoke:${ci}:${n.id}"]`);
+      if (el) el.style.opacity = inside ? "" : "0.15";
+    });
+  }, [stage, getNodes, getInternalNode]);
   const selectionAt = useCallback((): string[] =>
     getNodes().filter((n) => n.selected && n.type === "chip").map((n) => n.id), [getNodes]);
   const onNodeContextMenu = useCallback((e: React.MouseEvent, n: Node) => {
@@ -559,7 +700,7 @@ function MapInner() {
             onSelectionStart={onSelectionStart} onSelectionEnd={onSelectionEnd}
             elevateNodesOnSelect={false}
             multiSelectionKeyCode={["Control", "Meta"]}
-            onNodeDragStop={onNodeDragStop}
+            onNodeDragStop={onNodeDragStop} onNodeDrag={onNodeDrag}
             zoomOnDoubleClick={false} deleteKeyCode={null} nodesConnectable={false}
             onNodeDoubleClick={onNodeDoubleClick}
             onNodeContextMenu={onNodeContextMenu}
@@ -571,6 +712,7 @@ function MapInner() {
             {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <RafSelectionMarquee />
             <SelectionHud />
+            {stage === "reconcile" && <ClusterCard onAccept={acceptCluster} />}
             {stage === "reconcile" && plan.length > 0 && (
               <Panel position="top-left" className="mapPlan">
                 <div className="mapPlanHead">

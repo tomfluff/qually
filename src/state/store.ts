@@ -60,6 +60,9 @@ export interface CodePlanAction {
 // as a sibling of codePlan so older app versions simply ignore it.
 export interface CodeCluster {
   survivor: string; codes: string[]; newName?: string; rationale: string;
+  // members evicted from the proposal but still re-attachable (pending-out);
+  // Accept applies `codes` only
+  out?: string[];
 }
 export interface Selection { pid: string | null; anchor: number | null; head: number | null; lines: Set<number>; }
 export interface Ui {
@@ -1405,7 +1408,11 @@ export const useStore = create<State>()(
       setProjectName: (name) => set({ projectName: name }),
       setCodeGroups: (groups) => set({ codeGroups: groups.filter((g) => g.codes.length > 0) }),
       setCodePlan: (plan) => set({ codePlan: plan }),
-      setCodeClusters: (clusters) => set({ codeClusters: clusters.filter((c) => c.codes.length >= 2 && c.codes.includes(c.survivor)) }),
+      setCodeClusters: (clusters) => set({ codeClusters: clusters
+        // a cluster survives while 2+ members exist ANYWHERE in it (evicted ones
+        // can re-attach); an evicted survivor hands the crown to the first member
+        .map((c) => c.codes.includes(c.survivor) || c.codes.length === 0 ? c : { ...c, survivor: c.codes[0] })
+        .filter((c) => c.codes.length + (c.out?.length ?? 0) >= 2 && c.codes.length >= 1) }),
       setLastPid: (pid) => set({ lastPid: pid }),
       // Newest first: the list is a record of what you asked, read most-recent
       // down. Not undoable — an answer costs an API call, and Ctrl+Z after some
@@ -1526,7 +1533,8 @@ export const useStore = create<State>()(
             ...(a.into === code ? { into: name } : {}) })),
           codeClusters: s.codeClusters.map((c) => ({ ...c,
             survivor: c.survivor === code ? name : c.survivor,
-            codes: c.codes.map((x) => x === code ? name : x) })),
+            codes: c.codes.map((x) => x === code ? name : x),
+            ...(c.out ? { out: c.out.map((x) => x === code ? name : x) } : {}) })),
         });
         set({ hotbarCache: hotbarCodes(get()) });
       },
@@ -1545,7 +1553,8 @@ export const useStore = create<State>()(
           // a deleted member leaves its cluster; a deleted survivor (or a
           // cluster thinned below 2) drops the whole proposal
           codeClusters: s.codeClusters
-            .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== code) }))
+            .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== code),
+              ...(c.out ? { out: c.out.filter((x) => x !== code) } : {}) }))
             .filter((c) => c.survivor !== code && c.codes.length >= 2),
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
@@ -1579,7 +1588,8 @@ export const useStore = create<State>()(
             .filter((g) => g.codes.length > 0),
           codePlan: s.codePlan.filter((a) => a.code !== from && a.into !== from),
           codeClusters: s.codeClusters
-            .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== from) }))
+            .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== from),
+              ...(c.out ? { out: c.out.filter((x) => x !== from) } : {}) }))
             .filter((c) => c.survivor !== from && c.codes.length >= 2),
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
