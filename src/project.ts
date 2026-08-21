@@ -58,6 +58,7 @@ export interface Project {
   summaries?: Record<string, string>;
   // the project memo document (Notes tab) — optional: absent before it existed
   projectNotes?: string;
+  projectName?: string;
   // answers to questions asked of the coded material, each with the scope and
   // model it came from — optional: absent in files written before Ask existed
   answers?: Answer[];
@@ -119,6 +120,7 @@ export function parseProject(text: string): Project {
     markerColors: p.markerColors ?? {},
     summaries: p.summaries ?? {},
     projectNotes: typeof p.projectNotes === "string" ? p.projectNotes : "",
+    projectName: typeof p.projectName === "string" ? p.projectName : "",
     // hand-editable like everything else here: openProject maps over these and
     // derives nextAid from them, so a malformed entry would crash the load or
     // poison the counter

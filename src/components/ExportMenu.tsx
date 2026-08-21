@@ -31,6 +31,9 @@ export function ExportMenu() {
   // A pending export, parked behind the "still signed (default)?" nudge. null = no gate.
   const [gate, setGate] = useState<(() => void) | null>(null);
   const [gateName, setGateName] = useState("");
+  // A pending export, parked behind the "name this project?" prompt. null = no prompt.
+  const [nameGate, setNameGate] = useState<((base: string) => void) | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const tabs = useStore((s) => s.tabs);
   const hasDefault = useStore((s) => s.segments.some((x) => !x.proposedBy.trim() || x.proposedBy === "(default)"));
@@ -52,14 +55,33 @@ export function ExportMenu() {
   }, [open]);
 
   useEffect(() => {
+    if (!nameGate) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setNameGate(null); } };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
+  }, [nameGate]);
+
+  useEffect(() => {
     if (!gate) return;
     const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setGate(null); } };
     document.addEventListener("keydown", onEsc, true);
     return () => document.removeEventListener("keydown", onEsc, true);
   }, [gate]);
 
-  const base = slug(tabs[0] ?? "qually");
   const s = () => useStore.getState();
+  // every exported filename leads with the project's name and today's date;
+  // with no name yet, the first transcript stands in (the old behavior)
+  const expBase = (name: string) =>
+    `${slug(name || tabs[0] || "qually")}-${new Date().toISOString().slice(0, 10)}`;
+  // Every export passes through here. A named project exports straight away; an
+  // unnamed one asks once — name it (kept, editable in Settings) or skip.
+  const withBase = (cb: (base: string) => void) => () => {
+    const name = s().projectName.trim();
+    if (name) return cb(expBase(name));
+    setNameDraft("");
+    setNameGate(() => cb);
+    setOpen(false);
+  };
 
   // Any export that carries proposed_by passes through here. If some codes are still
   // "(default)", offer to sign them first — but never block: "keep default" ships as-is.
@@ -76,12 +98,12 @@ export function ExportMenu() {
     setGate(null);
   };
 
-  const doProject = () => {
-    saveText(s().exportProject(), `${base}.qually.json`, "application/json");
+  const doProject = withBase((b) => {
+    saveText(s().exportProject(), `${b}.qually.json`, "application/json");
     setOpen(false);
-  };
+  });
 
-  const doBundle = gated(() => {
+  const doBundle = withBase((b) => gated(() => {
     const st = s();
     const files = [
       { name: "README.txt", text:
@@ -119,9 +141,9 @@ it round-trips everything, including corrections and AI observations.
     if (aiCalls) files.push({ name: "ai-provenance.csv", text: st.exportAiLog() });
     if (answerCount) files.push({ name: "answers.csv", text: st.exportAnswers() });
     save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
-      new Date()), `${base}-csv.zip`);
+      new Date()), `${b}-csv.zip`);
     setOpen(false);
-  });
+  })());
 
   const item = (label: string, hint: string, onClick: () => void, primary = false) => (
     <button className={"exitem" + (primary ? " pri" : "")} onClick={onClick}>
@@ -143,18 +165,46 @@ it round-trips everything, including corrections and AI observations.
           {item("Project (.qually.json)", "Transcripts, corrections, codes, AI observations. Load it to pick up where you left off.", doProject, true)}
           <div className="exsec">Share &amp; publish</div>
           {item("All as CSVs (.zip)", "The whole bundle as spreadsheets, for a pipeline or a co-author.", doBundle)}
-          {item("Coded segments (.csv)", "Segments with computed excerpts.", gated(() => { saveText(s().exportCSV(), "coded-segments.csv"); setOpen(false); }))}
-          {item("Codebook (.csv)", "Codes with colors, definitions, status.", () => { saveText(s().exportCodebook(), "codebook.csv"); setOpen(false); })}
+          {item("Coded segments (.csv)", "Segments with computed excerpts.", withBase((b) => gated(() => { saveText(s().exportCSV(), `${b}-coded-segments.csv`); setOpen(false); })()))}
+          {item("Codebook (.csv)", "Codes with colors, definitions, status.", withBase((b) => { saveText(s().exportCodebook(), `${b}-codebook.csv`); setOpen(false); }))}
           {editCount > 0 && item(`Transcript edits (.csv) · ${editCount}`, "Every correction: original vs corrected.",
-            () => { saveText(s().exportEdits(), "transcript-edits.csv"); setOpen(false); })}
+            withBase((b) => { saveText(s().exportEdits(), `${b}-transcript-edits.csv`); setOpen(false); }))}
           {eventCount > 0 && item(`Session events (.csv) · ${eventCount}`, "Markers and field notes, with your edits, in the columns you loaded.",
-            () => { saveText(s().exportMarkers(), "events.csv"); setOpen(false); })}
+            withBase((b) => { saveText(s().exportMarkers(), `${b}-events.csv`); setOpen(false); }))}
           {noticeCount > 0 && item(`AI observations (.csv) · ${noticeCount}`, "Instances the AI marked for review.",
-            () => { saveText(s().exportNotices(), "ai-observations.csv"); setOpen(false); })}
+            withBase((b) => { saveText(s().exportNotices(), `${b}-ai-observations.csv`); setOpen(false); }))}
           {answerCount > 0 && item(`Answers (.csv) · ${answerCount}`, "One row per citation; joins to coded segments on the ref.",
-            () => { saveText(s().exportAnswers(), "answers.csv"); setOpen(false); })}
+            withBase((b) => { saveText(s().exportAnswers(), `${b}-answers.csv`); setOpen(false); }))}
           {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost. Your methods appendix.",
-            () => { saveText(s().exportAiLog(), "ai-provenance.csv"); setOpen(false); })}
+            withBase((b) => { saveText(s().exportAiLog(), `${b}-ai-provenance.csv`); setOpen(false); }))}
+        </div>
+      )}
+      {nameGate && (
+        <div className="about-backdrop" onMouseDown={() => setNameGate(null)}>
+          <div className="about imp" role="dialog" aria-modal="true"
+            aria-labelledby="namegate-title" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="about-head">
+              <h2 id="namegate-title">Name this project</h2>
+              <button className="btn iconbtn" onClick={() => setNameGate(null)} title="Cancel (Esc)">
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <p className="about-lede">
+              The project name leads every exported filename, with today's date —
+              like <code>{`${slug(nameDraft || "my-study")}-${new Date().toISOString().slice(0, 10)}-coded-segments.csv`}</code>.
+              Set once; change it any time in Settings.
+            </p>
+            <label className="signfield"><span>Project name</span>
+              <input className="signinput" autoFocus value={nameDraft} placeholder="e.g. Voice-UI field study"
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && nameDraft.trim()) { s().setProjectName(nameDraft.trim()); nameGate(expBase(nameDraft.trim())); setNameGate(null); } }} />
+            </label>
+            <div className="imp-actions">
+              <button className="btn primary" disabled={!nameDraft.trim()}
+                onClick={() => { s().setProjectName(nameDraft.trim()); nameGate(expBase(nameDraft.trim())); setNameGate(null); }}>Save &amp; export</button>
+              <button className="btn" onClick={() => { nameGate(expBase("")); setNameGate(null); }}>Skip for now</button>
+            </div>
+          </div>
         </div>
       )}
       {gate && (

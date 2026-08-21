@@ -38,6 +38,8 @@ export function SettingsButton() {
   const lanePattern = useStore((s) => s.ui.lanePattern);
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const coderName = useStore((s) => s.ui.coderName);
+  const projectName = useStore((s) => s.projectName);
+  const setProjectName = useStore((s) => s.setProjectName);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const mergeGapOn = useStore((s) => s.ui.mergeGapOn);
   const mergeGap = useStore((s) => s.ui.mergeGap);
@@ -239,6 +241,12 @@ export function SettingsButton() {
               </>}
 
               {tab === "Coding" && <>
+                <label className="srow">
+                  <span>Project name</span>
+                  <input type="text" className="settext" value={projectName} placeholder="e.g. Voice-UI field study"
+                    onChange={(e) => setProjectName(e.target.value)} />
+                </label>
+                <div className="settings-note">Leads every exported filename, with the export date. Saved in the project file.</div>
                 <label className="srow">
                   <span>Coder name</span>
                   <input type="text" className="settext" value={coderName} placeholder="Your name"
