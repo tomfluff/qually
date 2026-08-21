@@ -16,7 +16,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
-  useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
+  ViewportPortal, useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -31,7 +31,7 @@ import { Icon, countIconSize } from "./Icon";
 // (uniform padding would leave a field of dead air around short names), and
 // everything scales with the sidebar text ramp so large accessible settings
 // never clip. Rows are shelf-packed toward a near-square map.
-const GX = 14, GY = 12;
+const GX = 14, GY = 12, PAD = 18, LABEL_H = 40, ISLAND_GAP = 52;
 const chipH = (fs: number) => Math.round(fs * 2.4);
 const measurer = document.createElement("canvas").getContext("2d")!;
 const chipW = (fs: number, name: string, segs: number, pids: number) => {
@@ -96,6 +96,34 @@ function SelectionHud() {
   );
 }
 
+// an island's caption: double-click to rename (a real group only), x dissolves
+function IslandLabel({ name, gi, onRename, onDissolve }: {
+  name: string; gi: number;
+  onRename: (gi: number, name: string) => void; onDissolve: (gi: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  if (gi === -1) return <div className="mapIslandLabel"><span className="mapIslandName loose">{name}</span></div>;
+  return (
+    <div className="mapIslandLabel">
+      {editing ? (
+        <input className="mapIslandEdit" value={draft} autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => { onRename(gi, draft); setEditing(false); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { onRename(gi, draft); setEditing(false); }
+            if (e.key === "Escape") { e.stopPropagation(); setDraft(name); setEditing(false); }
+          }} />
+      ) : (
+        <span className="mapIslandName" title="Double-click to rename"
+          onDoubleClick={() => { setDraft(name); setEditing(true); }}>{name}</span>
+      )}
+      <button className="mapIslandX" title="Dissolve this group (codes stay)"
+        onClick={() => onDissolve(gi)}>×</button>
+    </div>
+  );
+}
+
 // React Flow commits its marquee through React on EVERY pointer event with no
 // rAF gate (verified in the installed v12.11.3 source with codex): a high-rate
 // mouse lands several unsynchronized commits per display frame, and the
@@ -144,6 +172,8 @@ function MapInner() {
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const dark = useStore((s) => s.ui.dark);
   const mapMinimap = useStore((s) => s.ui.mapMinimap);
+  const codeGroups = useStore((s) => s.codeGroups);
+  const setCodeGroups = useStore((s) => s.setCodeGroups);
   const setUi = useStore((s) => s.setUi);
   const { setNodes: rfSetNodes, getNodes } = useReactFlow();
   // menu state carries the selection it acts on, captured at open — the menu
@@ -157,29 +187,68 @@ function MapInner() {
       (stats[b]?.segs ?? 0) - (stats[a]?.segs ?? 0) || a.localeCompare(b)),
     [codebook, stats]);
 
-  const build = useCallback((): ChipNodeT[] => {
+  // Islands: each group packs its chips into a compact block; the blocks (plus
+  // an Ungrouped block) shelf-pack across the canvas. No groups -> one flat map.
+  const layout = useMemo(() => {
     const fs = sidebarFontSize;
     const ch = chipH(fs);
-    const widths = codes.map((c) => chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0));
-    // shelf-pack toward a near-square map: row width from the total chip area
-    const area = widths.reduce((a, w) => a + (w + GX) * (ch + GY), 0);
-    const rowW = Math.max(680, Math.sqrt(area) * 1.45);
-    let x = 0, y = 0;
-    return codes.map((c, i) => {
-      const w = widths[i];
-      if (x > 0 && x + w > rowW) { x = 0; y += ch + GY; }
-      const pos = remembered.positions[c] ?? { x, y };
-      x += w + GX;
-      return {
-        id: c,
-        type: "chip" as const,
-        position: pos,
-        width: w, height: ch,
-        selected: remembered.selected.has(c),
-        data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
-      };
-    });
-  }, [codes, codebook, stats, sidebarFontSize]);
+    const widths = new Map(codes.map((c) => [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0)]));
+    const pack = (list: string[], targetW: number) => {
+      let x = 0, y = 0, maxW = 0;
+      const pos: Record<string, { x: number; y: number }> = {};
+      for (const c of list) {
+        const w = widths.get(c)!;
+        if (x > 0 && x + w > targetW) { x = 0; y += ch + GY; }
+        pos[c] = { x, y };
+        x += w + GX;
+        maxW = Math.max(maxW, x - GX);
+      }
+      return { pos, w: maxW, h: list.length ? y + ch : 0 };
+    };
+    const near = (list: string[]) => {
+      const area = list.reduce((a, c) => a + (widths.get(c)! + GX) * (ch + GY), 0);
+      return Math.max(460, Math.sqrt(area) * 1.5);
+    };
+    const inBook = (c: string) => c in codebook;
+    const groups = codeGroups
+      .map((g, gi) => ({ ...g, gi, codes: g.codes.filter(inBook) }))
+      .filter((g) => g.codes.length > 0);
+    const grouped = new Set(groups.flatMap((g) => g.codes));
+    const loose = codes.filter((c) => !grouped.has(c));
+
+    const positions: Record<string, { x: number; y: number }> = {};
+    const regions: { name: string; gi: number; x: number; y: number; w: number; h: number }[] = [];
+    if (groups.length === 0) {
+      const flat = pack(codes, near(codes));
+      Object.assign(positions, flat.pos);
+    } else {
+      // island blocks (Ungrouped last, gi -1), shelf-packed with margins
+      const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
+        ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
+        .map((b) => ({ ...b, ...pack(b.list, near(b.list)) }));
+      const totalW = blocks.reduce((a, b) => a + b.w + 2 * PAD + ISLAND_GAP, 0);
+      const rowW = Math.max(900, Math.sqrt(totalW * (blocks[0] ? blocks[0].h + 160 : 1)) * 1.6, ...blocks.map((b) => b.w + 2 * PAD));
+      let ix = 0, iy = 0, rowH = 0;
+      for (const b of blocks) {
+        const bw = b.w + 2 * PAD, bh = b.h + PAD + LABEL_H;
+        if (ix > 0 && ix + bw > rowW) { ix = 0; iy += rowH + ISLAND_GAP; rowH = 0; }
+        regions.push({ name: b.name, gi: b.gi, x: ix, y: iy, w: bw, h: bh });
+        for (const c of b.list) positions[c] = { x: ix + PAD + b.pos[c].x, y: iy + LABEL_H + b.pos[c].y };
+        ix += bw + ISLAND_GAP;
+        rowH = Math.max(rowH, bh);
+      }
+    }
+    const nodes: ChipNodeT[] = codes.map((c) => ({
+      id: c,
+      type: "chip" as const,
+      position: remembered.positions[c] ?? positions[c],
+      width: widths.get(c)!, height: ch,
+      selected: remembered.selected.has(c),
+      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0 },
+    }));
+    return { nodes, regions };
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups]);
+  const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
   // codebook changes under the map (a merge, a rename, new codes), rebuild —
@@ -187,9 +256,43 @@ function MapInner() {
   const [initialNodes] = useState(build);
   useEffect(() => { rfSetNodes(build()); }, [build, rfSetNodes]);
 
+  // group editing: every mutation goes through the store so it lands in the file
+  const moveToGroup = useCallback((code: string, gi: number) => {
+    const cur = codeGroups.findIndex((g) => g.codes.includes(code));
+    if (cur === gi) return;
+    const next = codeGroups.map((g, i) => ({
+      ...g,
+      codes: i === gi ? [...g.codes, code] : g.codes.filter((c) => c !== code),
+    }));
+    delete remembered.positions[code]; // the packer files it into its new island
+    setCodeGroups(next);
+  }, [codeGroups, setCodeGroups]);
+  const groupSelection = (sel: string[]) => {
+    const cleaned = codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => !sel.includes(c)) }));
+    sel.forEach((c) => delete remembered.positions[c]);
+    setCodeGroups([...cleaned, { name: `Group ${codeGroups.length + 1}`, codes: sel }]);
+    setMenu(null);
+  };
+  const renameGroup = useCallback((gi: number, name: string) => {
+    if (!name.trim()) return;
+    setCodeGroups(codeGroups.map((g, i) => (i === gi ? { ...g, name: name.trim() } : g)));
+  }, [codeGroups, setCodeGroups]);
+  const dissolveGroup = useCallback((gi: number) => {
+    codeGroups[gi]?.codes.forEach((c) => delete remembered.positions[c]);
+    setCodeGroups(codeGroups.filter((_, i) => i !== gi));
+  }, [codeGroups, setCodeGroups]);
+
   // stable handlers (skill rule: memoize callback props)
   const onMoveEnd = useCallback((_: unknown, vp: Viewport) => { remembered.viewport = vp; }, []);
-  const onNodeDragStop = useCallback((_: unknown, n: Node) => { remembered.positions[n.id] = n.position; }, []);
+  // a drag is a filing action once islands exist: the chip joins whichever
+  // island its center lands in (or leaves its group on open canvas)
+  const onNodeDragStop = useCallback((_: unknown, n: Node) => {
+    remembered.positions[n.id] = n.position;
+    if (!layout.regions.length) return;
+    const cx = n.position.x + (n.width ?? 0) / 2, cy = n.position.y + (n.height ?? 0) / 2;
+    const hit = layout.regions.find((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
+    moveToGroup(n.id, hit ? hit.gi : -1);
+  }, [layout, moveToGroup]);
   const onNodeDoubleClick = useCallback((_: unknown, n: Node) => openInCodebook([n.id]), []);
   const selectionAt = useCallback((): string[] =>
     getNodes().filter((n) => n.selected).map((n) => n.id), [getNodes]);
@@ -263,6 +366,17 @@ function MapInner() {
             {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             <RafSelectionMarquee />
             <SelectionHud />
+            {/* island regions live in WORLD coordinates behind the chips */}
+            <ViewportPortal>
+              {layout.regions.map((r) => (
+                <div key={`${r.gi}:${r.name}`}
+                  className={"mapIsland" + (r.gi === -1 ? " loose" : "")}
+                  style={{ transform: `translate(${r.x}px, ${r.y}px)`, width: r.w, height: r.h }}>
+                  <IslandLabel name={r.name} gi={r.gi}
+                    onRename={renameGroup} onDissolve={dissolveGroup} />
+                </div>
+              ))}
+            </ViewportPortal>
           </ReactFlow>
         )}
       </div>
@@ -271,6 +385,11 @@ function MapInner() {
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>
+          {menu.sel.length > 1 && (
+            <button role="menuitem" onClick={() => groupSelection(menu.sel)}>
+              Group {menu.sel.length} codes together
+            </button>
+          )}
           {menu.sel.length > 1 && <>
             <div className="mapMenuHead">Merge {menu.sel.length} into…</div>
             {menu.sel.map((c) => (

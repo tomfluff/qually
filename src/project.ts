@@ -59,6 +59,7 @@ export interface Project {
   // the project memo document (Notes tab) — optional: absent before it existed
   projectNotes?: string;
   projectName?: string;
+  codeGroups?: { name: string; codes: string[]; rationale?: string }[];
   // answers to questions asked of the coded material, each with the scope and
   // model it came from — optional: absent in files written before Ask existed
   answers?: Answer[];
@@ -121,6 +122,10 @@ export function parseProject(text: string): Project {
     summaries: p.summaries ?? {},
     projectNotes: typeof p.projectNotes === "string" ? p.projectNotes : "",
     projectName: typeof p.projectName === "string" ? p.projectName : "",
+    codeGroups: Array.isArray(p.codeGroups)
+      ? p.codeGroups.filter((g): g is { name: string; codes: string[]; rationale?: string } =>
+          !!g && typeof g.name === "string" && Array.isArray(g.codes) && g.codes.every((c: unknown) => typeof c === "string"))
+      : [],
     // hand-editable like everything else here: openProject maps over these and
     // derives nextAid from them, so a malformed entry would crash the load or
     // poison the counter

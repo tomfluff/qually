@@ -49,6 +49,7 @@ export interface Segment {
   sid: number; pid: string; start: number; end: number; code: string;
   notes: string; proposedBy: string; status: string;
 }
+export interface CodeGroup { name: string; codes: string[]; rationale?: string }
 export interface Selection { pid: string | null; anchor: number | null; head: number | null; lines: Set<number>; }
 export interface Ui {
   fontSize: number; sidebarFontSize: number; dark: boolean; zen: boolean;
@@ -194,6 +195,9 @@ export interface State {
   projectNotes: string;
   // the study's name: leads every exported filename. Study data, travels with the file.
   projectName: string;
+  // similarity groupings on the Code map (AI-proposed, then user-edited).
+  // Analysis metadata, travels with the project file.
+  codeGroups: CodeGroup[];
   // the transcript you were last ON (session-only): the Notes stamp and other
   // "what was I just doing" readers need it after you switch to a reserved view
   lastPid: string;
@@ -296,6 +300,7 @@ export interface State {
   setSummary: (pid: string, text: string) => void;
   setProjectNotes: (text: string) => void; // per keystroke — no undo entry, like setSummary
   setProjectName: (name: string) => void;
+  setCodeGroups: (groups: CodeGroup[]) => void;
   setLastPid: (pid: string) => void;
   addAnswer: (a: Omit<Answer, "aid" | "at">) => void;
   deleteAnswer: (aid: number) => void;
@@ -484,7 +489,7 @@ export const useStore = create<State>()(
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", lastPid: "",
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -498,7 +503,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", lastPid: "",
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1260,6 +1265,7 @@ export const useStore = create<State>()(
           summaries: s.summaries, // session summaries: the researcher's artifact, study data
           projectNotes: s.projectNotes, // the project memo document — ditto
           projectName: s.projectName,     // the study's name — ditto
+          codeGroups: s.codeGroups,       // Code map groupings — ditto
           answers: s.answers,     // …and so are the questions asked of the material
           // the speaker map rides along even though it lives in `ui`: who the
           // interviewer is belongs to the study, not to my font size (see project.ts)
@@ -1296,6 +1302,7 @@ export const useStore = create<State>()(
           summaries: p.summaries ?? {},
           projectNotes: p.projectNotes ?? "",
           projectName: p.projectName ?? "",
+          codeGroups: p.codeGroups ?? [],
           answers: p.answers ?? [],
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
@@ -1356,6 +1363,7 @@ export const useStore = create<State>()(
       setSummary: (pid, text) => set({ summaries: { ...get().summaries, [pid]: text } }),
       setProjectNotes: (text) => set({ projectNotes: text }),
       setProjectName: (name) => set({ projectName: name }),
+      setCodeGroups: (groups) => set({ codeGroups: groups.filter((g) => g.codes.length > 0) }),
       setLastPid: (pid) => set({ lastPid: pid }),
       // Newest first: the list is a record of what you asked, read most-recent
       // down. Not undoable — an answer costs an API call, and Ctrl+Z after some
@@ -1470,6 +1478,7 @@ export const useStore = create<State>()(
           codebook: cb,
           segments: s.segments.map((x) => norm(x.code) === norm(code) ? { ...x, code: name } : x),
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.map((c) => c === code ? name : c) },
+          codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.map((c) => c === code ? name : c) })),
         });
         set({ hotbarCache: hotbarCodes(get()) });
       },
@@ -1482,6 +1491,8 @@ export const useStore = create<State>()(
           codebook: cb,
           segments: s.segments.filter((x) => norm(x.code) !== norm(code)), // A: drop its segments too
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== code) },
+          codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== code) }))
+            .filter((g) => g.codes.length > 0),
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
       },
@@ -1510,6 +1521,8 @@ export const useStore = create<State>()(
           codebook: cb,
           segments: merged,
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== from) },
+          codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== from) }))
+            .filter((g) => g.codes.length > 0),
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
       },
@@ -1648,7 +1661,7 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
-        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, answers: s.answers,
+        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, answers: s.answers,
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
@@ -1677,6 +1690,7 @@ export const useStore = create<State>()(
         s.summaries ??= {};
         s.projectNotes ??= "";
         s.projectName ??= "";
+        s.codeGroups ??= [];
         s.answers ??= [];
         s.nextAid = Math.max(0, ...s.answers.map((x) => x.aid)) + 1;
         s.ui.summaryLayout ??= "side";
