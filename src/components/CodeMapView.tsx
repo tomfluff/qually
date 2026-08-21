@@ -30,6 +30,7 @@ import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { type MergeCodeInput } from "../ai/dedupe";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { mergeScopedClusters, estimateGlimpseTokens, glimpseCluster, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
@@ -130,6 +131,7 @@ function SelectionHud() {
       const pos = halo ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y } : { x: 0, y: 0 };
       st.reconcileDrop(code, pos, null);
     }
+    if (inMerge.length) earcon.evict();
   };
   return (
     <Panel position="top-right" className="mapSelPanel"
@@ -264,14 +266,14 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   if (!cluster) return null;
   const c = cluster;
   const st = () => useStore.getState();
-  const skip = () => st().setCodeClusters(st().codeClusters.filter((_, i) => i !== data.ci));
+  const skip = () => { st().setCodeClusters(st().codeClusters.filter((_, i) => i !== data.ci)); earcon.skip(); };
   const canAccept = c.codes.length >= 2;
   return (
     <div className="mapCardNode nodrag nowheel">
       <div className="mapCardRat">{c.rationale}</div>
       <div className="mapCardActions">
         <button className="btn primary" disabled={!canAccept}
-          onClick={() => st().applyCluster(data.ci)}
+          onClick={() => { st().applyCluster(data.ci); earcon.accept(); }}
           title={canAccept ? `Merge ${c.codes.length} codes into ${c.newName ?? c.survivor} — one undo step` : "A merge needs at least 2 members"}>
           Accept merge
         </button>
@@ -660,8 +662,9 @@ function MapInner() {
     if (a.action === "rename") st.renameCode(a.code, a.newName!);
     else if (a.action === "remove") st.rejectCode(a.code);
     setPlan((ps) => ps.filter((x) => x !== a));
+    earcon.accept();
   };
-  const skipAction = (a: CodeAction) => setPlan((ps) => ps.filter((x) => x !== a));
+  const skipAction = (a: CodeAction) => { setPlan((ps) => ps.filter((x) => x !== a)); earcon.skip(); };
 
   // "describe this group": one-line confirm, default model, result lands on
   // the note node; the note's pulse IS the progress indicator
@@ -688,6 +691,7 @@ function MapInner() {
     const inputs = glimpseInputs(ci);
     setHiddenNotes((old) => { const n = new Set(old); n.delete(ci); return n; });
     setGenCi(ci);
+    earcon.aiStart();
     try {
       const { glimpse, usage } = await glimpseCluster({
         key, model: st.ai.model, codes: inputs, redaction: red,
@@ -700,9 +704,11 @@ function MapInner() {
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
       announce("Group description ready.");
+      earcon.aiDone();
     } catch (e) {
       const msg = e instanceof AiError ? e.message : (e as Error).message;
       announce(`Describe failed: ${msg}`, { assertive: true });
+      earcon.error();
     } finally {
       setGenCi(null);
     }
@@ -755,7 +761,11 @@ function MapInner() {
       const hit = haloAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2);
       const targetCi = hit ? (hit.data as HaloData).ci : null;
       const pos = hit ? { x: abs.x - hit.position.x, y: abs.y - hit.position.y } : abs;
+      const before = st.codeClusters.findIndex((c) => c.codes.includes(n.id));
       st.reconcileDrop(n.id, pos, targetCi);
+      const after = useStore.getState().codeClusters.findIndex((c) => c.codes.includes(n.id));
+      if (after >= 0 && after !== before) earcon.join();
+      else if (after < 0 && before >= 0) earcon.evict();
       return;
     }
     const islands = getNodes().filter((x) => x.type === "island");

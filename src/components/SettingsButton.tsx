@@ -39,6 +39,7 @@ export function SettingsButton() {
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const coderName = useStore((s) => s.ui.coderName);
   const projectName = useStore((s) => s.projectName);
+  const mapSounds = useStore((s) => s.ui.mapSounds);
   const setProjectName = useStore((s) => s.setProjectName);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const mergeGapOn = useStore((s) => s.ui.mergeGapOn);
@@ -247,6 +248,12 @@ export function SettingsButton() {
                     onChange={(e) => setProjectName(e.target.value)} />
                 </label>
                 <div className="settings-note">Leads every exported filename, with the export date. Saved in the project file.</div>
+                <label className="srow">
+                  <span>Map sounds</span>
+                  <input type="checkbox" checked={mapSounds}
+                    onChange={(e) => setUi({ mapSounds: e.target.checked })} />
+                </label>
+                <div className="settings-note">Quiet sound-marks confirm Code map actions — joining or leaving a merge group, AI requests, accepts. Multimodal feedback that doesn't depend on catching a visual change.</div>
                 <label className="srow">
                   <span>Coder name</span>
                   <input type="text" className="settext" value={coderName} placeholder="Your name"
