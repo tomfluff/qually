@@ -117,7 +117,7 @@ type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT;
 // layout slot it owns; `layout: null` marks a DERIVED view whose piles come
 // from counts, where there is no membership to edit and so nothing moves at
 // all — better an absent gesture than one that silently does nothing.
-export type MapView = "reconcile" | "themes" | "areas" | "pids" | "segs";
+export type MapView = "reconcile" | "themes" | "areas" | "pids" | "segs" | "defs" | "speaker";
 type ViewSpec = {
   label: string;
   /** said out loud beside the view name, and announced on every switch */
@@ -146,8 +146,16 @@ const VIEWS: Record<MapView, ViewSpec> = {
     label: "By segment count", layout: null,
     drag: "Just looking — nothing moves here",
   },
+  defs: {
+    label: "By definition", layout: null,
+    drag: "Just looking — nothing moves here",
+  },
+  speaker: {
+    label: "By speaker", layout: null,
+    drag: "Just looking — nothing moves here",
+  },
 };
-const VIEW_ORDER: MapView[] = ["reconcile", "themes", "areas", "pids", "segs"];
+const VIEW_ORDER: MapView[] = ["reconcile", "themes", "areas", "pids", "segs", "defs", "speaker"];
 
 // session view state that outlives the unmounting view; positions ride the
 // store's undo history and the camera persists in ui (across reloads)
@@ -844,6 +852,59 @@ function MapInner() {
       })) };
     }
 
+    // BY DEFINITION: the map as a worklist for Draft definitions
+    if (view === "defs") {
+      const has = (c: string) => (codebook[c]?.def ?? "").trim().length > 0;
+      const piles = [
+        { name: "Defined", list: codes.filter(has) },
+        { name: "Undefined", list: codes.filter((c) => !has(c)) },
+      ];
+      return { nodes: withSimilar(pileNodes(piles.filter((g) => g.list.length > 0), {
+        islandId: (p) => `bucket:${p.name}`, movable: false,
+      })) };
+    }
+
+    // BY SPEAKER: whose voice a code lives in. Each accepted excerpt's lines
+    // tally toward their speakers; a speaker owning ≥2/3 of a code's lines
+    // owns the code, anything less is Mixed — the codes born in the
+    // back-and-forth rather than in one voice.
+    if (view === "speaker") {
+      const lineSpk = new Map<string, Map<number, string>>();
+      for (const [pid, t] of Object.entries(transcripts))
+        lineSpk.set(pid, new Map(t.lines.map((l) => [l.id, l.speaker])));
+      const tallies = new Map<string, Map<string, number>>();
+      for (const s of segments) {
+        if (s.status !== "accepted") continue;
+        const ls = lineSpk.get(s.pid);
+        if (!ls) continue;
+        const t = tallies.get(s.code) ?? new Map<string, number>();
+        for (let i = s.start; i <= s.end; i++) {
+          const sp = ls.get(i);
+          if (sp) t.set(sp, (t.get(sp) ?? 0) + 1);
+        }
+        tallies.set(s.code, t);
+      }
+      const bucketOf = (c: string) => {
+        const t = tallies.get(c);
+        if (!t || t.size === 0) return "No excerpts";
+        const total = [...t.values()].reduce((a, b) => a + b, 0);
+        const [top, n] = [...t.entries()].sort((a, b) => b[1] - a[1])[0];
+        return n / total >= 2 / 3 ? top : "Mixed";
+      };
+      const piles = new Map<string, string[]>();
+      for (const c of codes) {
+        const b = bucketOf(c);
+        if (!piles.has(b)) piles.set(b, []);
+        piles.get(b)!.push(c);
+      }
+      // speakers alphabetically; the derived piles close the row
+      const tail = (n: string) => (n === "Mixed" ? 1 : n === "No excerpts" ? 2 : 0);
+      const names = [...piles.keys()].sort((a, b) => tail(a) - tail(b) || a.localeCompare(b));
+      return { nodes: withSimilar(pileNodes(names.map((name) => ({ name, list: piles.get(name)! })), {
+        islandId: (p) => `bucket:${p.name}`, movable: false,
+      })) };
+    }
+
     // AI AREAS: real project data, so a drop files the code. `ai` is the index
     // of the pile in the stored areas (-1 = the Unassigned parking lot), which
     // survives the filtering of empty ones — row order does not.
@@ -1005,7 +1066,7 @@ function MapInner() {
     for (const c of looseFree) children.push(chipNode(c, { x: 0, y: 0 }));
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, topicGroups, similar, simTokens]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
