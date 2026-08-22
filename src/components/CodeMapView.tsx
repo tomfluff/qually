@@ -1612,7 +1612,10 @@ function MapInner() {
           }}
           title={lens !== "default" ? "A lens hides your layout — switch Arrange back to Normal first"
             : "Reset the layout, or adjust it so nothing overlaps at this zoom"}>
+          {/* the caret is how every other menu button in the app says it is a
+              menu (Export, Assist) — without it this read as a plain action */}
           <Icon name="refresh" size={15} /> <span className="blabel">Layout</span>
+          <Icon name={layoutMenu ? "chevron-up" : "chevron-down"} size={13} />
         </button>
       </div>
       <div className="mapCanvas">
