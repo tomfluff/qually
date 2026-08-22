@@ -176,10 +176,12 @@ const openInCodebook = (list: string[]) => {
 // and nothing else in the tree does.
 const selectedIdsSel = (s: { nodes: Node[] }) =>
   s.nodes.filter((n) => n.selected && n.type === "chip").map((n) => n.id).join("\n");
-function SelectionHud({ lensOn }: { lensOn: boolean }) {
+function SelectionHud({ lensOn, onSelectionChanged }: { lensOn: boolean; onSelectionChanged: () => void }) {
   const joined = useFlowStore(selectedIdsSel);
   const sel = useMemo(() => (joined ? joined.split("\n") : []), [joined]);
   useEffect(() => { remembered.selected = new Set(sel); }, [sel]);
+  // the one place that already re-renders exactly when chip selection changes
+  useEffect(() => { onSelectionChanged(); }, [joined, onSelectionChanged]);
   const clusters = useStore((st) => st.codeClusters);
   const { getNodes } = useReactFlow();
   // the keyboard path for eviction: dragging out is pointer-only, this is not.
@@ -381,8 +383,11 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
 const simEvent = (name: string, detail?: unknown) =>
   window.dispatchEvent(new CustomEvent(`qually:sim${name}`, { detail }));
 const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>) {
-  const stats = useStore((s) => s.hotbarCache && null); // never re-renders on hotbar
-  void stats;
+  // It rides the canvas (tethered to its code) but it is a PANEL: at 10% zoom
+  // a world-sized panel is 33px wide and unreadable, so it counter-scales the
+  // way the captions do and holds a steady on-screen size.
+  const zoom = useFlowStore(zoomSel);
+  const scale = Math.min(10, Math.max(1, 1 / zoom));
   const codebook = useStore((s) => s.codebook);
   const groups = useStore((s) => s.codeGroups);
   const clusters = useStore((s) => s.codeClusters);
@@ -393,7 +398,8 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
   };
   const n = data.ticked.size;
   return (
-    <div className="mapSimNode nodrag nowheel">
+    <div className="mapSimNode nodrag nowheel"
+      style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
       <div className="mapSimHead">
         <b>Similar to “{data.source}”</b>
         <button className="mapNoteX" aria-label="Close" onClick={() => simEvent("close")}>×</button>
@@ -418,9 +424,9 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
                 {home && (
                   <span className="mapSimHome"
                     title={home.startsWith("merge: ")
-                      ? "Already in another merge proposal — taking it here removes it from that one"
-                      : "Already in this theme island — a merge leaves that alone, grouping moves it here"}>
-                    in {home}
+                      ? `Already in the merge proposal “${home.slice(7)}” — taking it here removes it from that one`
+                      : `Already in the theme island “${home}” — a merge leaves that alone, grouping moves it here`}>
+                    {home.startsWith("merge: ") ? "in a merge" : "in a group"}
                   </span>
                 )}
                 <i>{m.why}</i>
@@ -441,13 +447,20 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
       {data.ai === "done" && data.cost != null && (
         <div className="mapSimNote">AI pass done · ${data.cost.toFixed(4)} · logged</div>
       )}
+      {n > 0 && (
+        <div className="mapSimNote mapSimChoice">
+          <b>Merge</b> makes them one code · <b>Group</b> keeps them separate, filed together
+        </div>
+      )}
       <div className="mapCardActions">
         <button className="btn primary" disabled={!n} onClick={() => simEvent("take", "merge")}
-          title="Propose merging these into one code — lands as a halo you can still edit">
-          Propose merge{n ? ` (${n + 1})` : ""}
+          title="These are ONE code: fold them into a single code. Lands as a proposal you review and can still edit — accepting it shrinks the codebook.">
+          Merge into one{n ? ` (${n + 1})` : ""}
         </button>
         <button className="btn" disabled={!n} onClick={() => simEvent("take", "group")}
-          title="Put these in one theme island">Group</button>
+          title="These stay SEPARATE codes, filed together as a theme. Nothing about the codes changes.">
+          Group as theme
+        </button>
         <button className="btn" disabled={!n} onClick={() => simEvent("select")}
           title="Select these on the map and close">Select</button>
       </div>
@@ -571,6 +584,8 @@ function MapInner() {
   const codebookFp = useMemo(() => Object.keys(codebook).sort().join("\n"), [codebook]);
   const topicsStale = topicFp !== codebookFp;
   const [topicAiOpen, setTopicAiOpen] = useState(false);
+  // bumped when a view's own session placements change, so the layout rebuilds
+  const [lensNonce, setLensNonce] = useState(0);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   useEffect(() => { remembered.openCards = openCards; }, [openCards]);
   const [genCi, setGenCi] = useState<number | null>(null);
@@ -813,7 +828,7 @@ function MapInner() {
         islands.push({
           id: key, type: "island" as const,
           position: lp[`i:${b.name}`] ?? { x: ix, y: iy }, width: bw, height: bh,
-          draggable: true, selectable: true, focusable: false,
+          draggable: true, selectable: false, focusable: false,
           dragHandle: ".mapIslandLabel",
           data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list, gkey: b.name },
         });
@@ -889,10 +904,10 @@ function MapInner() {
           // gaps come out at exactly HALO_GAP
           position: mapIslandPos[key] ?? { x: x + Math.max(0, (b.cap.w - b.w) / 2), y },
           width: b.w, height: b.h,
-          // selectable so several groups can be picked and moved together;
-          // the marquee still only *starts* on empty canvas, and the selection
-          // panel counts codes, not groups
-          draggable: true, selectable: true, focusable: false,
+          // NOT pointer-selectable: a group counts as selected when every one
+          // of its codes is (see the derivation effect), so brushing a capsule
+          // with the marquee picks the codes you touched, not the whole group
+          draggable: true, selectable: false, focusable: false,
           dragHandle: ".mapHaloLabel",
           data: {
             name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName,
@@ -959,7 +974,7 @@ function MapInner() {
         type: "island" as const,
         position: mapIslandPos[key] ?? { x: ix, y: iy },
         width: bw, height: bh,
-        draggable: true, selectable: true, focusable: false,
+        draggable: true, selectable: false, focusable: false,
         dragHandle: ".mapIslandLabel",
         data: { name: b.name, gi: b.gi },
       });
@@ -969,7 +984,7 @@ function MapInner() {
     }
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, similar, simTokens]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, similar, simTokens, lensNonce]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -1132,19 +1147,25 @@ function MapInner() {
       const clusters = st.codeClusters
         .map((c) => ({ ...c, codes: c.codes.filter((x) => !members.includes(x)) }))
         .filter((c) => c.codes.length >= 2);
-      st.setCodeClusters([...clusters, {
+      const next = [...clusters, {
         survivor: bestSurvivor(st, members), codes: members,
         rationale: `Found by searching for codes similar to “${cur.source}”.`,
-      }]);
+      }];
+      st.setCodeClusters(next);
       earcon.join();
-      announce(`Proposed merging ${members.length} codes into one — review it on the map`);
+      announce(`Proposed merging ${members.length} codes into one — showing it on the map`);
+      // take the researcher to the proposal, or nothing appears to have happened
+      showNodes(haloIdsFor(useStore.getState().codeClusters, [next[next.length - 1]]), "reconcile");
     } else {
       const groups = st.codeGroups
         .map((g) => ({ ...g, codes: g.codes.filter((x) => !members.includes(x)) }))
         .filter((g) => g.codes.length > 0);
       st.setCodeGroups([...groups, { name: cur.source, codes: members }]);
       earcon.join();
-      announce(`Grouped ${members.length} codes as “${cur.source}”`);
+      announce(`Grouped ${members.length} codes as “${cur.source}” — showing it on the map`);
+      // islands live in the Themes stage: land there, or the group is made and
+      // the map looks unchanged
+      showNodes([`island:${useStore.getState().codeGroups.length - 1}`], "themes");
     }
     setSimilar(null);
   }, [similar]);
@@ -1256,9 +1277,9 @@ function MapInner() {
   // Take me to what the run produced. Halos only exist in Reconcile and only
   // outside a lens, so clear both first, then wait for React Flow to render
   // the nodes before framing them.
-  const showNodes = useCallback((ids: string[]) => {
+  const showNodes = useCallback((ids: string[], stageWanted: "reconcile" | "themes" = "reconcile") => {
     if (!ids.length) return;
-    setStageOverride("reconcile");
+    setStageOverride(stageWanted);
     setLens("default");
     let tries = 0, frame = 0;
     const tick = () => {
@@ -1283,7 +1304,7 @@ function MapInner() {
   // caption floating above it, at THIS zoom — then nudge only the boxes that
   // actually collide, by the least that clears them. Nothing inside a group
   // moves, the camera does not move, and it lands as one undoable layout edit.
-  const adjustToZoom = useCallback(() => {
+  const cleanUpLayout = useCallback(() => {
     const zoom = getZoom();
     const nodes = getNodes().filter((n) => !n.parentId && n.type !== "card" && n.type !== "similar");
     if (nodes.length < 2) { announce("Nothing needed moving at this zoom"); return; }
@@ -1319,8 +1340,33 @@ function MapInner() {
       const pos = { x: n.position.x + dx, y: n.position.y + dy };
       if (n.type === "chip") chips[n.id] = pos; else islands[n.id] = pos;
     });
+    if (lens !== "default") {
+      // a view's arrangement is session-only, so tidying it is session-only
+      // too: no store write, no undo entry, and Reset in this view just drops
+      // these moves again
+      const store = (remembered.lensPos[lens] ??= {});
+      for (const n of nodes) {
+        const pos = { ...chips, ...islands }[n.id];
+        if (!pos) continue;
+        store[`i:${(n.data as IslandData).gkey ?? n.id}`] = pos;
+      }
+      setLensNonce((v) => v + 1);
+      announce(moved
+        ? `Tidied ${moved} pile${moved === 1 ? "" : "s"} in this view`
+        : "Nothing was overlapping in this view");
+      return;
+    }
     useStore.getState().applyMapLayout(chips, islands, moved);
-  }, [getZoom, getNodes]);
+  }, [getZoom, getNodes, lens]);
+  // Reset inside a view drops only what you moved HERE; your free-form layout
+  // is a different thing and is never touched from inside a view.
+  const resetLensLayout = useCallback(() => {
+    if (lens === "default") return;
+    const had = Object.keys(remembered.lensPos[lens] ?? {}).length;
+    delete remembered.lensPos[lens];
+    setLensNonce((v) => v + 1);
+    announce(had ? "This view is back to its own arrangement" : "You have not moved anything in this view");
+  }, [lens]);
 
   const selectSimilar = useCallback(() => {
     const cur = similar;
@@ -1418,13 +1464,19 @@ function MapInner() {
       return;
     }
     const st = useStore.getState();
+    // A group is selected only when all of its codes are, so a group drag
+    // carries its members in the set too. React Flow already moves children
+    // with their parent, so filing them again would bake in a doubled offset —
+    // and they never left their capsule anyway.
+    const movedIds = new Set(moved.map((x) => x.id));
+    const carried = moved.filter((x) => !(x.parentId && movedIds.has(x.parentId)));
     const chips: Record<string, { x: number; y: number }> = {};
     const islands: Record<string, { x: number; y: number }> = {};
     const reconcile: { code: string; ci: number | null }[] = [];
     const themes: { code: string; gi: number }[] = [];
     const absOf = (x: Node) => getInternalNode(x.id)?.internals.positionAbsolute ?? x.position;
     const liveIslands = stage === "reconcile" ? [] : getNodes().filter((x) => x.type === "island");
-    for (const x of moved) {
+    for (const x of carried) {
       if (x.type === "island" || x.type === "halo") { islands[x.id] = x.position; continue; }
       if (x.type !== "chip") continue;
       const abs = absOf(x);
@@ -1545,6 +1597,33 @@ function MapInner() {
   }, [planPos]);
   const onSelectionStart = useCallback(() => setSelecting(true), []);
   const onSelectionEnd = useCallback(() => setSelecting(false), []);
+  // A group is selected when EVERY one of its codes is — brushing a capsule
+  // with the marquee gives you the codes you touched, and taking the whole
+  // group is a deliberate act (sweep all of it, or Ctrl-click the last one).
+  // React Flow's selectionMode is global, so this rule is derived here rather
+  // than configured: it also means the rule holds for Ctrl-click, not just
+  // the marquee.
+  const syncGroupSelection = useCallback(() => {
+    rfSetNodes((ns) => {
+      const picked = new Set(ns.filter((n) => n.type === "chip" && n.selected).map((n) => n.id));
+      const members = new Map<string, string[]>();
+      for (const n of ns) if (n.type === "chip" && n.parentId) {
+        const list = members.get(n.parentId) ?? [];
+        list.push(n.id);
+        members.set(n.parentId, list);
+      }
+      let changed = false;
+      const next = ns.map((n) => {
+        if (n.type === "chip") return n;
+        const mine = members.get(n.id);
+        const whole = !!mine?.length && mine.every((c) => picked.has(c));
+        if (!!n.selected === whole) return n;
+        changed = true;
+        return { ...n, selected: whole };
+      });
+      return changed ? next : ns; // never write for a no-op: this runs on every selection change
+    });
+  }, [rfSetNodes]);
   const nodeColor = useCallback((n: Node) => n.type === "chip" ? (n as ChipNodeT).data.color : "transparent", []);
 
   const mergeSel = (menuSel: string[], into: string) => {
@@ -1583,7 +1662,7 @@ function MapInner() {
         </button>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
         <span className="mapBarGap" />
-        <label className="mapLensWrap" title="A transient lens: arranges the map for looking, your own layout comes back on Normal">
+        <label className="mapLensWrap" title="A view: arranges the map for looking. Your free-form layout is untouched and one click away.">
           <span className="mapLensLabel">Arrange</span>
           <select className="settext mapLens" aria-label="Arrange the map by"
             value={lens} onChange={(e) => {
@@ -1593,10 +1672,10 @@ function MapInner() {
               // the lens lays out from the world origin with different extents —
               // without a fitView a zoomed-in camera lands on empty canvas
               requestAnimationFrame(() => fitView({ duration: 200 }));
-              announce(v === "default" ? "Arranged normally — your layout is back."
-                : `Arranged by ${{ pids: "transcript buckets", segs: "excerpt buckets", cooc: "co-occurrence", topics: "AI topics" }[v]}. A transient lens; switch back to Normal for your own layout.`);
+              announce(v === "default" ? "Back to your free-form layout."
+                : `Arranged by ${{ pids: "transcript buckets", segs: "excerpt buckets", cooc: "co-occurrence", topics: "AI topics" }[v]}. A view only — your free-form layout is untouched.`);
             }}>
-            <option value="default">Normal</option>
+            <option value="default">Free-form (your layout)</option>
             <option value="pids">Transcript buckets</option>
             <option value="segs">Excerpt buckets</option>
             <option value="cooc">Co-occurrence</option>
@@ -1640,13 +1719,11 @@ function MapInner() {
           <Icon name="pip" size={15} />
         </button>
         <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!layoutMenu}
-          disabled={lens !== "default"}
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setLayoutMenu(layoutMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
           }}
-          title={lens !== "default" ? "A lens hides your layout — switch Arrange back to Normal first"
-            : "Reset the layout, or adjust it so nothing overlaps at this zoom"}>
+          title="Reset or clean up the arrangement you are looking at">
           {/* the caret is how every other menu button in the app says it is a
               menu (Export, Assist) — without it this read as a plain action */}
           <Icon name="refresh" size={15} /> <span className="blabel">Layout</span>
@@ -1696,7 +1773,7 @@ function MapInner() {
               </Panel>
             )}
             <RafSelectionMarquee />
-            <SelectionHud lensOn={lens !== "default"} />
+            <SelectionHud lensOn={lens !== "default"} onSelectionChanged={syncGroupSelection} />
             {stage === "reconcile" && plan.length > 0 && (
               <Panel position="top-left" className="mapPlan"
                 style={{ transform: `translate(${planPos.x}px, ${planPos.y}px)` }}>
@@ -1818,6 +1895,7 @@ function MapInner() {
             <dt>Act on codes</dt><dd>Right-click a selection.</dd>
             <dt>Read a code</dt><dd>Double-click a chip.</dd>
             <dt>Reconcile</dt><dd>A capsule is a proposed merge: drag chips in or out. Its caption names the merged code; the arrow opens the reasoning.</dd>
+            <dt>Merge vs group</dt><dd>A <b>merge</b> says these are one code and folds them into one, shrinking the codebook. A <b>group</b> says they are different codes that belong together, and changes nothing about them.</dd>
             <dt>Themes</dt><dd>Drag codes between islands, or an island by its caption.</dd>
             <dt>Arrange</dt><dd>A lens for looking only. Normal restores your layout.</dd>
             <dt>Spread</dt><dd>Nudges groups apart until names stop overlapping.</dd>
@@ -1831,13 +1909,18 @@ function MapInner() {
           <button role="menuitem" onClick={() => {
             const at = layoutMenu;
             setLayoutMenu(null);
-            setConfirmRelayout(at);   // resetting throws away hand placement: confirm it
+            if (lens !== "default") { resetLensLayout(); return; } // a view's own moves: no confirm needed
+            setConfirmRelayout(at);   // resetting your own layout discards work: confirm it
           }}>
             Reset layout
-            <span className="mapMenuNote">Back to the packed layout</span>
+            <span className="mapMenuNote">
+              {lens === "default"
+                ? "Back to the packed layout"
+                : "Undo the moves you made in this view"}
+            </span>
           </button>
-          <button role="menuitem" onClick={() => { setLayoutMenu(null); adjustToZoom(); }}>
-            Adjust to zoom
+          <button role="menuitem" onClick={() => { setLayoutMenu(null); cleanUpLayout(); }}>
+            Clean up layout
             <span className="mapMenuNote">Nudge things apart until nothing overlaps at this zoom</span>
           </button>
         </div>
