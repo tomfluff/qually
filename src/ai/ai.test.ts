@@ -392,3 +392,21 @@ describe("plan strip", () => {
     expect(dropAction(rewritten, "missing")).toHaveLength(2);
   });
 });
+
+describe("find similar (semantic pass)", () => {
+  it("keeps only real codes, drops the focus code and duplicates, bands unknown values down", async () => {
+    const { sanitizeMatches } = await import("./similar");
+    const out = sanitizeMatches("difficult to see", ["small text", "needs zoom", "belonging"], [
+      { code: "needs zoom", band: "related", why: "a remedy for the same problem" },
+      { code: "small text", band: "very", why: "same perceptual struggle" },
+      { code: "small text", band: "very", why: "duplicate row" },      // dedupes
+      { code: "Difficult To See", band: "very", why: "the focus itself" }, // norm-equal focus -> drops
+      { code: "ghost", band: "very", why: "never sent" },              // unknown -> drops
+      { code: "belonging", band: "wild", why: "" },                    // unknown band -> related
+    ]);
+    expect(out.map((m) => `${m.name}:${m.band}`)).toEqual([
+      "small text:very", "needs zoom:related", "belonging:related",
+    ]);
+    expect(out[2].why).toBe("the AI judged these close"); // never an empty reason
+  });
+});

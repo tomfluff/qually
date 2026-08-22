@@ -217,3 +217,28 @@
 .mapIslandEdit { cursor:text; user-select:text; -webkit-user-select:text; }
 /* top-left minimap ducks under the plan panel's header line */
 .mapCanvas .react-flow__minimap.top.left { margin-top:64px; }
+/* "Find similar codes": a ranked panel at the cursor. Rows are labels so the
+   whole row is a hit target (the chips are small; the list should not be). */
+.mapSimilar { width:min(370px, 92vw); padding:0; overflow:hidden; }
+.mapSimHead { padding:9px 12px 8px; border-bottom:1px solid var(--line); font-weight:700; }
+.mapSimHead span { display:block; color:var(--muted); font-weight:400; font-size:.85em; margin-top:2px; }
+.mapSimEmpty { padding:10px 12px; color:var(--muted); font-size:.9em; }
+.mapSimList { max-height:min(46vh, 380px); overflow-y:auto; }
+.mapSimRow { display:flex; gap:9px; align-items:flex-start; padding:7px 12px; cursor:pointer;
+  border-bottom:1px solid var(--line); }
+.mapSimRow:hover { background:var(--sel); }
+.mapSimRow input { margin-top:.25em; flex:none; accent-color:var(--accent); }
+.mapSimName { flex:1; min-width:0; line-height:1.35; }
+.mapSimName b { font-weight:700; }
+.mapSimName i { display:block; font-style:normal; color:var(--muted); font-size:.85em; }
+.mapSimCount { color:var(--muted); font-weight:700; font-size:.8em; margin-left:.45em;
+  font-variant-numeric:tabular-nums; }
+/* a code that already lives somewhere: warned, and unticked until you say so */
+.mapSimHome { color:var(--warn, #c98a2a); font-size:.75em; font-weight:700; margin-left:.45em;
+  border:1px solid currentColor; border-radius:99px; padding:0 .5em; white-space:nowrap; }
+.mapSimBar { flex:none; width:44px; height:5px; border-radius:99px; background:var(--line);
+  margin-top:.5em; overflow:hidden; }
+.mapSimBar i { display:block; height:100%; background:var(--accent); }
+.mapSimAi { display:block; width:calc(100% - 20px); margin:9px 10px; text-align:left; }
+.mapSimNote { padding:8px 12px 0; color:var(--muted); font-size:.85em; }
+.mapSimilar .mapCardActions { border-top:1px solid var(--line); margin-top:6px; }

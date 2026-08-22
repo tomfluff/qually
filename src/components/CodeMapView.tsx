@@ -34,6 +34,8 @@ import { onProjectSwap } from "../sessionReset";
 import { relaxBoxes } from "../mapRelax";
 import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
+import { findSimilar } from "../similar";
+import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
 import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
@@ -442,6 +444,13 @@ function MapInner() {
   // the gestures used to sit in the bar as a paragraph; they are reference,
   // not something to read every session, so they live behind a button
   const [helpOpen, setHelpOpen] = useState(false);
+  // "find similar codes": a ranked panel at the cursor. Local matches appear
+  // instantly; the AI pass is a second, paid step inside the same panel.
+  const [similar, setSimilar] = useState<null | {
+    source: string; x: number; y: number;
+    rows: { name: string; score: number; why: string; band?: "very" | "related" }[];
+    ticked: Set<string>; ai: "idle" | "busy" | "done"; cost?: number;
+  }>(null);
   // the arrangement lens: transient bucket/co-occurrence views for triage
   const [lens, setLens] = useState(remembered.lens);
   useEffect(() => { remembered.lens = lens; }, [lens]);
@@ -853,6 +862,113 @@ function MapInner() {
     }
   }, [glimpseInputs]);
 
+  // where each code currently lives, so a match can say "in <group>" and stay
+  // unticked until the researcher deliberately takes it
+  const homeOf = useCallback((code: string): string | null => {
+    const st = useStore.getState();
+    const cl = st.codeClusters.find((c) => c.codes.includes(code));
+    if (cl) return `merge: ${cl.newName ?? cl.survivor}`;
+    const g = st.codeGroups.find((x) => x.codes.includes(code));
+    return g ? g.name : null;
+  }, []);
+  const openSimilar = useCallback((source: string, x: number, y: number) => {
+    const st = useStore.getState();
+    const book = Object.keys(st.codebook).map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
+    const rows = findSimilar(source, book).map((m) => ({ ...m }));
+    setSimilar({
+      source, x, y, rows, ai: "idle",
+      // codes already filed stay unticked: taking one is a deliberate act
+      ticked: new Set(rows.filter((m) => !homeOf(m.name)).map((m) => m.name)),
+    });
+    announce(rows.length
+      ? `${rows.length} code${rows.length === 1 ? "" : "s"} with similar wording to ${source}`
+      : `No codes share wording with ${source}. Ask the AI for semantic matches.`);
+  }, [homeOf]);
+  // the paid second look: names and definitions only, one small request
+  const runSimilarAi = useCallback(async () => {
+    const cur = similar;
+    if (!cur) return;
+    const st = useStore.getState();
+    const key = getKey();
+    if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
+    const red = redactor(st.ai.redactTerms);
+    const book = Object.keys(st.codebook)
+      .filter((n) => n !== cur.source)
+      .map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
+    // a few excerpts of the focus code sharpen the judgement; the rest of the
+    // book rides on names and definitions alone
+    const focus = { name: cur.source, def: st.codebook[cur.source]?.def ?? "", excerpts: [] as string[] };
+    const byCode: string[] = [];
+    for (const seg of st.segments) {
+      if (seg.status !== "accepted" || seg.code !== cur.source || !st.transcripts[seg.pid]) continue;
+      if (byCode.length >= 4) break;
+      const ex = segExcerpt(seg, st.transcripts[seg.pid].lines).excerpt;
+      if (ex) byCode.push(ex);
+    }
+    focus.excerpts = byCode;
+    setSimilar((s) => s && { ...s, ai: "busy" });
+    earcon.aiStart();
+    try {
+      const { matches, usage } = await findSimilarWithAi({
+        key, model: st.ai.model, focus, book, redaction: red,
+      });
+      st.logAiCall({
+        at: new Date().toISOString(), model: st.ai.model, task: "similar",
+        pid: `(similar to: ${cur.source})`, lines: book.length + 1,
+        redactions: red.count(focus.def) + focus.excerpts.reduce((n, e) => n + red.count(e), 0),
+        inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
+      });
+      setSimilar((s) => {
+        if (!s) return s;
+        // the AI's list leads; a local-only match keeps its place below
+        const seen = new Set(matches.map((m) => m.name));
+        const merged = [
+          ...matches.map((m) => ({ name: m.name, score: m.band === "very" ? 0.95 : 0.6, why: m.why, band: m.band })),
+          ...s.rows.filter((r) => !seen.has(r.name)),
+        ];
+        const ticked = new Set(s.ticked);
+        for (const m of matches) if (m.band === "very" && !homeOf(m.name)) ticked.add(m.name);
+        return { ...s, rows: merged, ticked, ai: "done", cost: usage.costUsd };
+      });
+      earcon.aiDone();
+      announce(`${matches.length} semantic match${matches.length === 1 ? "" : "es"} for ${cur.source}`);
+    } catch (e) {
+      const msg = e instanceof AiError ? e.message : (e as Error).message;
+      setSimilar((s) => s && { ...s, ai: "idle" });
+      earcon.error();
+      announce(`Find similar failed: ${msg}`, { assertive: true });
+    }
+  }, [similar, homeOf]);
+  // acting on the ticked rows: the source code always rides along, and any
+  // code taken from another group or merge leaves it (one entry, undoable)
+  const takeSimilar = useCallback((mode: "merge" | "group") => {
+    const cur = similar;
+    if (!cur) return;
+    const picked = [...cur.ticked];
+    if (!picked.length) return;
+    const members = [cur.source, ...picked];
+    const st = useStore.getState();
+    if (mode === "merge") {
+      const clusters = st.codeClusters
+        .map((c) => ({ ...c, codes: c.codes.filter((x) => !members.includes(x)) }))
+        .filter((c) => c.codes.length >= 2);
+      st.setCodeClusters([...clusters, {
+        survivor: bestSurvivor(st, members), codes: members,
+        rationale: `Found by searching for codes similar to “${cur.source}”.`,
+      }]);
+      earcon.join();
+      announce(`Proposed merging ${members.length} codes into one — review it on the map`);
+    } else {
+      const groups = st.codeGroups
+        .map((g) => ({ ...g, codes: g.codes.filter((x) => !members.includes(x)) }))
+        .filter((g) => g.codes.length > 0);
+      st.setCodeGroups([...groups, { name: cur.source, codes: members }]);
+      earcon.join();
+      announce(`Grouped ${members.length} codes as “${cur.source}”`);
+    }
+    setSimilar(null);
+  }, [similar]);
+
   const groupSelection = (sel: string[]) => {
     const cleaned = codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => !sel.includes(c)) }));
     setCodeGroups([...cleaned, { name: `Group ${codeGroups.length + 1}`, codes: sel }]);
@@ -1055,8 +1171,8 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi && !confirmRelayout && !helpOpen) return;
-    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); };
+    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar) return;
+    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setSimilar(null); };
     const down = (e: MouseEvent) => {
       const t = e.target as Element;
       // the help button toggles itself; let its own handler run
@@ -1066,7 +1182,7 @@ function MapInner() {
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi, confirmRelayout, helpOpen]);
+  }, [menu, confirmAi, confirmRelayout, helpOpen, similar]);
 
   return (
     <div id="codemap" className={"stage-" + stage} style={{ fontSize: sidebarFontSize }}>
@@ -1292,6 +1408,99 @@ function MapInner() {
             }
           }} />
       )}
+      {similar && (() => {
+        const st = useStore.getState();
+        const total = Object.keys(st.codebook).length;
+        const tickable = similar.rows.length;
+        const nSel = similar.ticked.size;
+        const toggle = (name: string) => setSimilar((s) => {
+          if (!s) return s;
+          const t = new Set(s.ticked);
+          t.has(name) ? t.delete(name) : t.add(name);
+          return { ...s, ticked: t };
+        });
+        // the AI cost, quoted before it is spent — the same one-line consent
+        // the group description uses
+        const red = redactor(st.ai.redactTerms);
+        const book = Object.keys(st.codebook).filter((n) => n !== similar.source)
+          .map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
+        const inTok = estimateSimilarTokens(
+          { name: similar.source, def: st.codebook[similar.source]?.def ?? "", excerpts: [] }, book, red);
+        const model = modelOf(st.ai.model);
+        const aiCost = costOf(model, inTok, estimateTokens(" ".repeat(240)));
+        return (
+          <div className="ctxmenu mapMenu mapSimilar" role="dialog"
+            aria-label={`Codes similar to ${similar.source}`}
+            // a chip near the bottom would push the panel off-screen: anchor it
+            // to the pointer and let it grow UPWARD instead
+            style={similar.y > window.innerHeight / 2
+              ? { left: Math.min(similar.x, window.innerWidth - 380), bottom: window.innerHeight - similar.y, fontSize: sidebarFontSize }
+              : { left: Math.min(similar.x, window.innerWidth - 380), top: similar.y, fontSize: sidebarFontSize }}>
+            <div className="mapSimHead">
+              <b>Similar to “{similar.source}”</b>
+              <span>{tickable} of {total - 1} codes · {nSel} ticked</span>
+            </div>
+            {tickable === 0 && similar.ai !== "done" && (
+              <div className="mapSimEmpty">Nothing here shares wording with this code. A semantic look may still find relatives.</div>
+            )}
+            {tickable === 0 && similar.ai === "done" && (
+              <div className="mapSimEmpty">No relatives found. This code is doing its own work.</div>
+            )}
+            <div className="mapSimList nicescroll">
+              {similar.rows.map((m) => {
+                const home = homeOf(m.name);
+                const stat = stats[m.name];
+                return (
+                  <label key={m.name} className="mapSimRow">
+                    <input type="checkbox" checked={similar.ticked.has(m.name)}
+                      onChange={() => toggle(m.name)} />
+                    <span className="mapSimName">
+                      <b>{m.name}</b>
+                      <span className="mapSimCount">{stat?.segs ?? 0}</span>
+                      {home && (
+                        <span className="mapSimHome"
+                          title={home.startsWith("merge: ")
+                            ? "Already in another merge proposal — taking it here removes it from that one"
+                            : "Already in this theme island — a merge leaves that alone, grouping moves it here"}>
+                          in {home}
+                        </span>
+                      )}
+                      <i>{m.why}</i>
+                    </span>
+                    <span className="mapSimBar" aria-hidden="true">
+                      <i style={{ width: `${Math.round(Math.min(1, m.score) * 100)}%` }} />
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {similar.ai !== "done" && (
+              <button className="btn mapSimAi" disabled={similar.ai === "busy"} onClick={() => void runSimilarAi()}>
+                {similar.ai === "busy"
+                  ? "Reading the codebook…"
+                  : <>Ask the AI for semantic matches — <b>≈{inTok.toLocaleString()} tokens · ≈${aiCost.toFixed(4)}</b></>}
+              </button>
+            )}
+            {similar.ai === "done" && similar.cost != null && (
+              <div className="mapSimNote">AI pass done · ${similar.cost.toFixed(4)} · logged</div>
+            )}
+            <div className="mapCardActions">
+              <button className="btn primary" disabled={!nSel} onClick={() => takeSimilar("merge")}
+                title="Propose merging these into one code — lands as a halo you can still edit">
+                Propose merge{nSel ? ` (${nSel + 1})` : ""}
+              </button>
+              <button className="btn" disabled={!nSel} onClick={() => takeSimilar("group")}
+                title="Put these in one theme island">Group</button>
+              <button className="btn" disabled={!nSel} title="Select these on the map and close"
+                onClick={() => {
+                  const pick = new Set([similar.source, ...similar.ticked]);
+                  rfSetNodes((ns) => ns.map((n) => ({ ...n, selected: n.type === "chip" && pick.has(n.id) })));
+                  setSimilar(null);
+                }}>Select</button>
+            </div>
+          </div>
+        );
+      })()}
       {helpOpen && (
         <div className="mapMenu mapHelp" role="dialog" aria-label="How to use the map"
           style={{ fontSize: sidebarFontSize }}>
@@ -1391,6 +1600,15 @@ function MapInner() {
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>
+          {menu.sel.length === 1 && (
+            <button role="menuitem" onClick={() => {
+              const { x, y, sel } = menu;
+              setMenu(null);
+              openSimilar(sel[0], x, y);
+            }}>
+              Find similar codes…
+            </button>
+          )}
           {stage === "reconcile" && (
             <button role="menuitem" onClick={() => { setAiOpen({ scope: { focus: menu.sel } }); setMenu(null); }}>
               AI: where {menu.sel.length === 1 ? "does this code" : "do these codes"} belong…
