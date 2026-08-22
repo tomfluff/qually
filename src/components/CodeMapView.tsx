@@ -113,10 +113,6 @@ const remembered = {
   planMin: false,
   // the transient arrangement lens: a way of LOOKING, never written anywhere
   lens: "default" as "default" | "pids" | "segs" | "topics",
-  topicGroups: [] as { name: string; codes: string[] }[],
-  // the codebook signature the topics arrangement was computed from — a
-  // mismatch means merges/renames happened since and the piles are stale
-  topicFp: "",
   // hand-moves made while a lens is up: session-only, per lens, never written
   // to the store — switching back to normal restores the manual layout intact.
   // Keys are `i:<group>` and `c:<code>@<group>`, NOT node ids: a chip's
@@ -137,8 +133,6 @@ onProjectSwap(function forgetMapSession() {
   remembered.planPos = { x: 0, y: 0 };
   remembered.planMin = false;
   remembered.lens = "default";
-  remembered.topicGroups = [];
-  remembered.topicFp = "";
   remembered.lensPos = {};
 });
 
@@ -575,10 +569,9 @@ function MapInner() {
   // the arrangement views: transient bucket and AI-area views for finding your way
   const [lens, setLens] = useState(remembered.lens);
   useEffect(() => { remembered.lens = lens; }, [lens]);
-  const [topicGroups, setTopicGroups] = useState(remembered.topicGroups);
-  useEffect(() => { remembered.topicGroups = topicGroups; }, [topicGroups]);
-  const [topicFp, setTopicFp] = useState(remembered.topicFp);
-  useEffect(() => { remembered.topicFp = topicFp; }, [topicFp]);
+  // the areas view is project data: it survives a reload and travels in the file
+  const topicGroups = useStore((s) => s.codeAreas);
+  const topicFp = useStore((s) => s.codeAreasFp);
   // the codebook's IDENTITY, not the map's display order: `codes` is sorted by
   // excerpt count, so accepting one excerpt would reorder it and cry stale
   const codebookFp = useMemo(() => Object.keys(codebook).sort().join("\n"), [codebook]);
@@ -761,8 +754,10 @@ function MapInner() {
         lensGroups = topicGroups
           .map((g) => ({ name: g.name, list: g.codes.filter(inBook) }))
           .filter((g) => g.list.length > 0);
+        // codes the areas have never seen — added, or renamed since the run —
+        // collect here rather than vanishing: file them by hand, or re-run
         const untopiced = codes.filter((c) => !grouped.has(c));
-        if (untopiced.length) lensGroups.push({ name: "No topic", list: untopiced });
+        if (untopiced.length) lensGroups.push({ name: "Unassigned", list: untopiced });
       }
       // islands layout — structurally read-only, but everything still MOVES:
       // hand-placements live in remembered.lensPos (session, per lens), never
@@ -1782,9 +1777,8 @@ function MapInner() {
           onClose={() => setTopicAiOpen(false)}
           onReconcileInstead={() => { setTopicAiOpen(false); setStageOverride("reconcile"); }}
           onGroups={(groups) => {
-            setTopicGroups(groups.map((g) => ({ name: g.name, codes: g.codes })));
-            setTopicFp(codebookFp);
-            delete remembered.lensPos.topics; // fresh piles, fresh placement
+            useStore.getState().setCodeAreas(groups.map((g) => ({ name: g.name, codes: g.codes })), codebookFp);
+            delete remembered.lensPos.topics; // fresh areas, fresh placement
             setLens("topics");
             requestAnimationFrame(() => fitView({ duration: 200 }));
           }} />

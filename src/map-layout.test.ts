@@ -197,3 +197,41 @@ test("applyMapDrop moving codes between theme islands keeps one entry and lets t
   expect(s.mapPositions.alpha).toBeUndefined();
   useStore.getState().setCodeGroups([]);
 });
+
+// The AI areas view costs a request, so it lives in the project: it survives a
+// reload, and the codebook moving under it must not silently lose codes.
+test("AI areas: a rename carries the code, a delete drops it, a new code lands unassigned", () => {
+  const st = useStore.getState();
+  st.setCodeAreas([{ name: "Strategies", codes: ["alpha", "beta"] }], "alpha\nbeta\ngamma");
+  expect(useStore.getState().codeAreas[0].codes).toEqual(["alpha", "beta"]);
+
+  // renamed: the same code under a new label keeps its shelf
+  useStore.getState().renameCode("alpha", "alpha renamed");
+  expect(useStore.getState().codeAreas[0].codes).toEqual(["alpha renamed", "beta"]);
+
+  // deleted: it leaves, and an area emptied by that drops entirely
+  useStore.getState().deleteCode("beta");
+  expect(useStore.getState().codeAreas[0].codes).toEqual(["alpha renamed"]);
+
+  // a code the areas never saw is simply absent — the map files it as
+  // "Unassigned" rather than the store inventing a home for it
+  expect(useStore.getState().codeAreas.flatMap((a) => a.codes)).not.toContain("gamma");
+
+  // the signature is what tells the map the book has moved on
+  expect(useStore.getState().codeAreasFp).toBe("alpha\nbeta\ngamma");
+  useStore.getState().setCodeAreas([], "");
+});
+
+test("AI areas ride the undo stack and the project file", async () => {
+  const { parseProject } = await import("./project");
+  const st = useStore.getState();
+  const depth = useStore.getState().undoStack.length;
+  st.setCodeAreas([{ name: "Opinions", codes: ["gamma"] }], "sig");
+  expect(useStore.getState().undoStack.length).toBe(depth + 1);
+  // a save/open round trip must not lose the AI pass
+  const round = parseProject(useStore.getState().exportProject());
+  expect(round.codeAreas).toEqual([{ name: "Opinions", codes: ["gamma"] }]);
+  expect(round.codeAreasFp).toBe("sig");
+  useStore.getState().undo();
+  expect(useStore.getState().codeAreas).toEqual([]);
+});

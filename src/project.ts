@@ -60,6 +60,10 @@ export interface Project {
   projectNotes?: string;
   projectName?: string;
   codeGroups?: { name: string; codes: string[]; rationale?: string }[];
+  // the Code map's AI "areas" view, plus the codebook signature it was worked
+  // out from — an AI pass is worth carrying with the project
+  codeAreas?: { name: string; codes: string[]; rationale?: string }[];
+  codeAreasFp?: string;
   codePlan?: { code: string; action: "rename" | "merge" | "remove"; newName?: string; into?: string; rationale: string }[];
   codeClusters?: { survivor: string; codes: string[]; newName?: string; rationale: string; desc?: string }[];
   // answers to questions asked of the coded material, each with the scope and
@@ -128,6 +132,11 @@ export function parseProject(text: string): Project {
       ? p.codeGroups.filter((g): g is { name: string; codes: string[]; rationale?: string } =>
           !!g && typeof g.name === "string" && Array.isArray(g.codes) && g.codes.every((c: unknown) => typeof c === "string"))
       : [],
+    codeAreas: Array.isArray(p.codeAreas)
+      ? p.codeAreas.filter((g): g is { name: string; codes: string[]; rationale?: string } =>
+          !!g && typeof g.name === "string" && Array.isArray(g.codes) && g.codes.every((c: unknown) => typeof c === "string"))
+      : [],
+    codeAreasFp: typeof p.codeAreasFp === "string" ? p.codeAreasFp : "",
     codePlan: Array.isArray(p.codePlan)
       ? p.codePlan.filter((a): a is NonNullable<Project["codePlan"]>[number] =>
           !!a && typeof a.code === "string" && ["rename", "merge", "remove"].includes(a.action))

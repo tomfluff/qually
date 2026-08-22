@@ -218,6 +218,12 @@ export interface State {
   // similarity groupings on the Code map (AI-proposed, then user-edited).
   // Analysis metadata, travels with the project file.
   codeGroups: CodeGroup[];
+  // The Code map's AI "areas" view: a coarse shelf per code, worked out by one
+  // AI pass. It costs a request, so it lives in the project rather than the
+  // session — and carries the codebook signature it was computed from, so the
+  // map can say when it has drifted.
+  codeAreas: CodeGroup[];
+  codeAreasFp: string;
   // the pending revision plan from the last reconcile run — study data too:
   // the review can continue in a later session
   codePlan: CodePlanAction[];
@@ -329,6 +335,7 @@ export interface State {
   setProjectNotes: (text: string) => void; // per keystroke — no undo entry, like setSummary
   setProjectName: (name: string) => void;
   setCodeGroups: (groups: CodeGroup[]) => void;
+  setCodeAreas: (areas: CodeGroup[], fp: string) => void;
   setCodePlan: (plan: CodePlanAction[]) => void;
   setCodeClusters: (clusters: CodeCluster[]) => void;
   // one undoable entry per completed map gesture
@@ -438,7 +445,8 @@ function snapshot(s: State): string {
     // the Code map's state rides too: undoing a verdict must put the proposal
     // back on the canvas, and a layout move is as undoable as anything else
     // (positions are session-only data, but they share this one history)
-    codeGroups: s.codeGroups, codePlan: s.codePlan, codeClusters: s.codeClusters,
+    codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp,
+    codePlan: s.codePlan, codeClusters: s.codeClusters,
     mapPositions: s.mapPositions, mapIslandPos: s.mapIslandPos,
     sel: { ...s.selection, lines: [...s.selection.lines] },
   });
@@ -522,6 +530,8 @@ function mergeInto(get: () => State, set: (p: Partial<State>) => void, from: str
     codebook: cb,
     segments: merged,
     hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== from) },
+    codeAreas: s.codeAreas.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== from) }))
+      .filter((g) => g.codes.length > 0),
     codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== from) }))
       .filter((g) => g.codes.length > 0),
     codePlan: s.codePlan.filter((a) => a.code !== from && a.into !== from),
@@ -563,6 +573,8 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
     aiGrounds: o.aiGrounds ?? cur.aiGrounds,
     // map data joined the snapshot later still — same old-entry guard
     codeGroups: o.codeGroups ?? cur.codeGroups,
+    codeAreas: o.codeAreas ?? cur.codeAreas,
+    codeAreasFp: o.codeAreasFp ?? cur.codeAreasFp,
     codePlan: o.codePlan ?? cur.codePlan,
     codeClusters: o.codeClusters ?? cur.codeClusters,
     mapPositions: o.mapPositions ?? cur.mapPositions,
@@ -620,7 +632,7 @@ export const useStore = create<State>()(
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codePlan: [], codeClusters: [], mapPositions: {}, mapIslandPos: {}, lastPid: "",
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: {}, mapIslandPos: {}, lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -634,7 +646,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codePlan: [], codeClusters: [], mapPositions: {}, mapIslandPos: {}, lastPid: "",
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: {}, mapIslandPos: {}, lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1398,6 +1410,8 @@ export const useStore = create<State>()(
           projectNotes: s.projectNotes, // the project memo document — ditto
           projectName: s.projectName,     // the study's name — ditto
           codeGroups: s.codeGroups,       // Code map groupings — ditto
+          codeAreas: s.codeAreas,         // the AI areas view — an AI pass, worth keeping
+          codeAreasFp: s.codeAreasFp,
           codePlan: s.codePlan,           // pending reconciliation verdicts — ditto
           codeClusters: s.codeClusters,   // pending merge-clusters — ditto
           answers: s.answers,     // …and so are the questions asked of the material
@@ -1437,6 +1451,8 @@ export const useStore = create<State>()(
           projectNotes: p.projectNotes ?? "",
           projectName: p.projectName ?? "",
           codeGroups: p.codeGroups ?? [],
+          codeAreas: p.codeAreas ?? [],
+          codeAreasFp: p.codeAreasFp ?? "",
           codePlan: (p.codePlan ?? []).filter((a) => a.action !== "merge"),
           // emit-never, load-always: pairwise merges from older files become
           // 2-member clusters, so saved plans keep working
@@ -1521,6 +1537,12 @@ export const useStore = create<State>()(
       setProjectName: (name) => set({ projectName: name }),
       // every map mutation is one undoable history entry (design premise 7)
       setCodeGroups: (groups) => { get().pushUndo(); set({ codeGroups: groups.filter((g) => g.codes.length > 0) }); },
+      // the areas view: stored with the signature of the codebook it read, so
+      // the map can offer a re-run once the book has moved on
+      setCodeAreas: (areas, fp) => {
+        get().pushUndo();
+        set({ codeAreas: areas.filter((g) => g.codes.length > 0), codeAreasFp: fp });
+      },
       setCodePlan: (plan) => { get().pushUndo(); set({ codePlan: plan }); },
       resetMapLayout: () => {
         const s = get();
@@ -1807,6 +1829,7 @@ export const useStore = create<State>()(
           segments: s.segments.map((x) => norm(x.code) === norm(code) ? { ...x, code: name } : x),
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.map((c) => c === code ? name : c) },
           codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.map((c) => c === code ? name : c) })),
+          codeAreas: s.codeAreas.map((g) => ({ ...g, codes: g.codes.map((c) => c === code ? name : c) })),
           codePlan: s.codePlan.map((a) => ({ ...a,
             code: a.code === code ? name : a.code,
             ...(a.into === code ? { into: name } : {}) })),
@@ -1845,6 +1868,7 @@ export const useStore = create<State>()(
           segments: s.segments.map((x) => ren.has(x.code) ? { ...x, code: r(x.code) } : x),
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.map(r) },
           codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.map(r) })),
+          codeAreas: s.codeAreas.map((g) => ({ ...g, codes: g.codes.map(r) })),
           codePlan: s.codePlan.map((a) => ({ ...a, code: r(a.code), ...(a.into ? { into: r(a.into) } : {}) })),
           codeClusters: s.codeClusters.map((c) => ({ ...c, survivor: r(c.survivor), codes: c.codes.map(r),
             // same members under new spelling: the glimpse is NOT stale
@@ -1865,6 +1889,8 @@ export const useStore = create<State>()(
           segments: s.segments.filter((x) => norm(x.code) !== norm(code)), // A: drop its segments too
           hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.filter((c) => c !== code) },
           codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== code) }))
+            .filter((g) => g.codes.length > 0),
+          codeAreas: s.codeAreas.map((g) => ({ ...g, codes: g.codes.filter((c) => c !== code) }))
             .filter((g) => g.codes.length > 0),
           codePlan: s.codePlan.filter((a) => a.code !== code && a.into !== code),
           // a deleted member leaves its cluster; a deleted survivor (or a
@@ -2020,7 +2046,7 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, // NB: the API key is not in the store (ai/key.ts)
-        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
+        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
@@ -2050,6 +2076,8 @@ export const useStore = create<State>()(
         s.projectNotes ??= "";
         s.projectName ??= "";
         s.codeGroups ??= [];
+        s.codeAreas ??= [];
+        s.codeAreasFp ??= "";
         s.codePlan ??= [];
         s.codeClusters ??= [];
         // same pairwise->cluster migration for a persisted local session
