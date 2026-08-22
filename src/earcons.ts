@@ -59,8 +59,10 @@ export const earcon = {
   hoverIn() { if (!on()) return; tone(587, 0, 0.06, 0.022); },
   // the held chip crosses OUT of a group's field (would leave on release)
   hoverOut() { if (!on()) return; tone(415, 0, 0.07, 0.022); },
-  // an AI request left the device: one soft tick
-  aiStart() { if (!on()) return; tone(880, 0, 0.05, 0.03, "triangle"); },
+  // an AI request left the device: a double tick. Two syllables for a send,
+  // and the COUNT is what tells it apart from the single-blip marks — a 2
+  // semitone gap at 50ms is not a difference anyone can hear.
+  aiStart() { if (!on()) return; tone(880, 0, 0.04, 0.03, "triangle"); tone(880, 0.07, 0.04, 0.03, "triangle"); },
   // the AI result landed: gentle two-note resolve
   aiDone() { if (!on()) return; tone(587, 0, 0.1, 0.04); tone(880, 0.09, 0.16, 0.04); },
   // a merge was accepted: settled low-high confirmation
@@ -81,8 +83,13 @@ export const earcon = {
   redo() { if (!on()) return; tone(494, 0, 0.07, 0.035, "triangle"); tone(659, 0.06, 0.1, 0.035, "triangle"); },
   // the edge of the history: nothing there to undo or redo
   nothing() { if (!on()) return; tone(233, 0, 0.09, 0.025, "triangle"); },
-  // an arrangement settled (Clean up / Reset layout): a soft landing
-  settle() { if (!on()) return; tone(392, 0, 0.09, 0.03); tone(523, 0.07, 0.13, 0.03); },
+  // an arrangement settled (Clean up, Reset layout, a group moved): one note
+  // that RESTS. Told apart by duration, not pitch — every other single mark
+  // is under 0.1s, so this is the only one that hangs; two-note shapes were
+  // all taken (rising sine = join/aiDone, falling = evict/reject, falling
+  // triangle = undo), and marks separated only by register are marks nobody
+  // can tell apart.
+  settle() { if (!on()) return; tone(392, 0, 0.3, 0.03); },
   // something failed: low buzz
   error() { if (!on()) return; tone(180, 0, 0.22, 0.05, "square"); },
 };

@@ -53,7 +53,10 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
 export function Icon({ name, size = 18 }: { name: keyof typeof PATHS; size?: number }) {
   const { d, fill } = PATHS[name];
   return (
-    <svg className="icn" width={size} height={size} viewBox="0 0 24 24"
+    // decorative by contract: every icon here sits beside a label, or in a
+    // button that names itself with aria-label/title. Hidden from the a11y
+    // tree so it can never become half of an accessible name.
+    <svg className="icn" aria-hidden="true" width={size} height={size} viewBox="0 0 24 24"
       fill={fill ? "currentColor" : "none"} stroke={fill ? "none" : "currentColor"}
       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
       style={{ display: "block" }}>

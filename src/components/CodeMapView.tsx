@@ -18,7 +18,7 @@
 // its spot, so the packer tidies it in with the other unfiled codes.
 // Performance shape per the react-flow skill: uncontrolled flow, narrow
 // per-component subscriptions, memo'd nodes, imperative marquee.
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
   useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
@@ -272,7 +272,24 @@ function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onS
 // away the map reads as GROUP NAMES), clamping at a base deliberately above
 // the code text size — titles outrank chips.
 const zoomSel = (s: { transform: [number, number, number] }) => s.transform[2];
-const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
+// Moving a group by hand is pointer-only otherwise, and precision dragging is
+// exactly what magnification makes expensive. Same window-event idiom the card
+// toggle uses, so the node needs no callback threaded through React Flow.
+const moveIsland = (id: string, dx: number, dy: number) =>
+  window.dispatchEvent(new CustomEvent("qually:moveisland", { detail: { id, dx, dy } }));
+const ARROW: Record<string, [number, number]> = {
+  ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+};
+/** arrow keys nudge the group; Shift takes a bigger step */
+const islandArrowKeys = (id: string) => (e: React.KeyboardEvent) => {
+  const d = ARROW[e.key];
+  if (!d) return;
+  e.preventDefault();
+  e.stopPropagation();          // RF pans the canvas on arrows otherwise
+  const step = e.shiftKey ? 100 : 20;
+  moveIsland(id, d[0] * step, d[1] * step);
+};
+const IslandNode = memo(function IslandNode({ id, data }: NodeProps<IslandNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const base = fs * 1.3;
@@ -301,7 +318,13 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
     <div className={"mapIsland" + (data.gi === -1 ? " loose" : "")}>
       <div className="mapIslandLabel" style={{ fontSize }}>
         {data.pile || data.gi === -1 ? (
-          <span className={"mapIslandName" + (data.gi === -1 ? " loose" : "")}>{data.name}</span>
+          // a derived pile has no name to edit, but it still moves — so the
+          // caption is focusable for the arrow keys and says so
+          <span className={"mapIslandName" + (data.gi === -1 ? " loose" : "")}
+            tabIndex={0} role="button" ref={spanRef}
+            aria-label={`${data.name}. Arrow keys move this group, Shift for a bigger step`}
+            title="Drag, or focus and use the arrow keys, to move this group"
+            onKeyDown={islandArrowKeys(id)}>{data.name}</span>
         ) : editing ? (
           <input className="mapIslandEdit nodrag" value={draft} autoFocus
             onPointerDown={(e) => e.stopPropagation()}
@@ -313,9 +336,13 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
             }} />
         ) : (
           <>
-            <span className="mapIslandName" title="Drag to move the group; double-click or Enter to rename"
-              tabIndex={0} role="button" ref={spanRef} aria-label={`Rename ${data.name}`}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "F2" || e.key === " ") { e.preventDefault(); setDraft(data.name); setEditing(true); } }}
+            <span className="mapIslandName" title="Drag or arrow-key to move the group; double-click or Enter to rename"
+              tabIndex={0} role="button" ref={spanRef}
+              aria-label={`${data.name}. Enter renames; arrow keys move this group`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === "F2" || e.key === " ") { e.preventDefault(); setDraft(data.name); setEditing(true); return; }
+                islandArrowKeys(id)(e);
+              }}
               onDoubleClick={() => { setDraft(data.name); setEditing(true); }}>{data.name}</span>
             <button className="mapIslandX nodrag" title="Dissolve this group (codes stay)"
               onPointerDown={(e) => e.stopPropagation()}
@@ -718,6 +745,22 @@ function MapInner() {
   const spec = VIEWS[view];
   // the layout slot this view owns; null means nothing here moves
   const slot = spec.layout;
+  // arrow-key group moves land here and take whichever route the view owns:
+  // the store's layout slot, or the session's pile positions. Same two paths the
+  // pointer drop uses, so a keyboard move is not a second kind of move.
+  useEffect(() => {
+    const onMove = (e: Event) => {
+      const { id, dx, dy } = (e as CustomEvent<{ id: string; dx: number; dy: number }>).detail;
+      const n = getNodes().find((x) => x.id === id);
+      if (!n) return;
+      const pos = { x: n.position.x + dx, y: n.position.y + dy };
+      rfSetNodes((ns) => ns.map((x) => (x.id === id ? { ...x, position: pos } : x)));
+      if (slot) useStore.getState().applyMapLayout({}, { [id]: pos }, 1, slot);
+      else remembered.bucketPos[view] = { ...(remembered.bucketPos[view] ?? {}), [id]: pos };
+    };
+    window.addEventListener("qually:moveisland", onMove);
+    return () => window.removeEventListener("qually:moveisland", onMove);
+  }, [getNodes, rfSetNodes, slot, view]);
   const setPlan = useCallback((updater: CodeAction[] | ((p: CodeAction[]) => CodeAction[])) => {
     const st = useStore.getState();
     st.setCodePlan(typeof updater === "function" ? updater(st.codePlan) : updater);
@@ -1597,6 +1640,9 @@ function MapInner() {
       if (!movedPiles.length) return;
       const store = (remembered.bucketPos[view] ??= {});
       for (const x of movedPiles) store[x.id] = x.position;
+      // the only committed move gesture in these views: mark it like every
+      // other commit, or dragging by feel gets no confirmation
+      earcon.settle();
       announce(`Moved ${movedPiles.length === 1 ? "a group" : `${movedPiles.length} groups`}`);
       return;
     }
@@ -2049,30 +2095,44 @@ function MapInner() {
           {/* one flat list: every view is a peer, each with its own actions in
               the bar — the status line under each name says what lives there.
               The two derived count views sit under one "Grouping" divider. */}
-          {VIEW_ORDER.map((v) => {
-            const s = VIEWS[v];
-            const status = v === "reconcile" && clusters.length + plan.length > 0
-              ? `${clusters.length + plan.length} pending`
-              : v === "areas"
-                ? (topicGroups.length === 0 ? "not worked out yet"
-                  : `${topicGroups.length} areas${topicsStale ? " · stale" : ""}`)
-                : v === "themes" && codeGroups.length ? `${codeGroups.length} islands` : "";
-            return (
-              <Fragment key={v}>
-                {v === "pids" && <div className="mapMenuHead mapViewDivide">Grouping</div>}
-                <button role="menuitemradio" aria-checked={view === v}
+          {(() => {
+            const row = (v: MapView) => {
+              const s = VIEWS[v];
+              const status = v === "reconcile" && clusters.length + plan.length > 0
+                ? `${clusters.length + plan.length} pending`
+                : v === "areas"
+                  ? (topicGroups.length === 0 ? "not worked out yet"
+                    : `${topicGroups.length} areas${topicsStale ? " · stale" : ""}`)
+                  : v === "themes" && codeGroups.length ? `${codeGroups.length} islands` : "";
+              return (
+                <button key={v} role="menuitemradio" aria-checked={view === v}
                   className={view === v ? "on" : ""}
                   onClick={() => switchView(v)}>
                   {view === v ? "✓ " : ""}{s.label}
-                  {/* the count views explain themselves under the Grouping
-                      head; the bar's drag line covers them once inside */}
+                  {/* the grouping views explain themselves under their head;
+                      the bar's drag line covers them once inside */}
                   {s.layout && (
                     <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
                   )}
                 </button>
-              </Fragment>
+              );
+            };
+            // The labelled rule is a PICTURE of the split. role="group" is what
+            // carries the same split into the accessibility tree — a bare div
+            // between menuitems is never announced, so a screen-reader user
+            // would hear four unexplained labels with nothing tying them
+            // together. The visible caption is hidden from that tree and the
+            // group's own aria-label says it instead, so it is said once.
+            return (
+              <>
+                {VIEW_ORDER.filter((v) => VIEWS[v].layout).map(row)}
+                <div role="group" aria-label="Grouping" className="mapViewGroup">
+                  <div className="mapMenuHead mapViewDivide" aria-hidden="true">Grouping</div>
+                  {VIEW_ORDER.filter((v) => !VIEWS[v].layout).map(row)}
+                </div>
+              </>
             );
-          })}
+          })()}
         </div>
       )}
       {layoutMenu && (
@@ -2105,10 +2165,18 @@ function MapInner() {
               onClick={() => {
                 setConfirmRelayout(null);
                 // a grouping view's pile moves live in the session, not the store
-                if (!slot && remembered.bucketPos[view]) {
+                // a grouping view: say it out loud like the store path does —
+                // a confirmed action that answers only in sound is no answer
+                // with Sounds off, and the already-packed case must answer too
+                if (!slot) {
+                  if (!remembered.bucketPos[view]) {
+                    announce("The map is already in its packed layout");
+                    return;
+                  }
                   delete remembered.bucketPos[view];
                   setBucketRev((r) => r + 1);
                   earcon.settle();
+                  announce("Map laid out fresh");
                   requestAnimationFrame(() => fitView({ duration: 200 }));
                   return;
                 }
@@ -2154,7 +2222,11 @@ function MapInner() {
           </button>
           {/* the sparkle IS the "this asks the AI" mark, app-wide — saying it
               in words too made every such row read as a category, not an act */}
-          <button role="menuitem" onClick={() => { setConfirmAi({ ci: menu.halo!.ci, x: menu.x, y: menu.y }); setMenu(null); }}>
+          {/* the sparkle carries "this asks the AI" for the eye; the icon is
+              aria-hidden, so the accessible name has to carry it in words —
+              an off-device, paid action must not read like a local one */}
+          <button role="menuitem" aria-label="Describe this group with AI"
+            onClick={() => { setConfirmAi({ ci: menu.halo!.ci, x: menu.x, y: menu.y }); setMenu(null); }}>
             <Icon name="sparkle" size={16} /> Describe this group…
           </button>
         </div>
@@ -2187,7 +2259,9 @@ function MapInner() {
             </button>
           )}
           {view === "reconcile" && (
-            <button role="menuitem" onClick={() => {
+            <button role="menuitem"
+              aria-label={`Ask the AI where ${menu.sel.length === 1 ? "this code belongs" : "these codes belong"}`}
+              onClick={() => {
               setConfirmFocus({ codes: menu.sel, x: menu.x, y: menu.y }); setMenu(null);
             }}>
               <Icon name="sparkle" size={16} /> Where {menu.sel.length === 1 ? "does this code" : "do these codes"} belong…
