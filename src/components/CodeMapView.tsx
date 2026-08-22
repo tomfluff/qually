@@ -479,11 +479,13 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
 const simEvent = (name: string, detail?: unknown) =>
   window.dispatchEvent(new CustomEvent(`qually:sim${name}`, { detail }));
 const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>) {
-  // It rides the canvas (tethered to its code) but it is a PANEL: at 10% zoom
-  // a world-sized panel is 33px wide and unreadable, so it counter-scales the
-  // way the captions do and holds a steady on-screen size.
+  // It rides the canvas (tethered to its code) but it is a PANEL, so it holds
+  // ONE on-screen size at every zoom: the exact inverse, with no clamp. The
+  // old floor of 1 could not shrink the panel, so zooming IN grew it with the
+  // canvas — a control whose text size depends on the camera is a control you
+  // have to re-find every time you zoom.
   const zoom = useFlowStore(zoomSel);
-  const scale = Math.min(10, Math.max(1, 1 / zoom));
+  const scale = 1 / zoom;
   const codebook = useStore((s) => s.codebook);
   const groups = useStore((s) => s.codeGroups);
   const clusters = useStore((s) => s.codeClusters);
