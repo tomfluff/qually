@@ -28,13 +28,12 @@
 /* the one flexible cell: it takes the slack so the controls sit right */
 .mapBar .mapBarGap { flex:1 1 0; min-width:0; }
 /* the gestures, behind the ? button */
-.mapHelp { position:absolute; left:16px; top:52px; z-index:6; max-width:52ch;
+.mapHelp { position:absolute; left:16px; top:52px; z-index:6; max-width:48ch;
   background:var(--panel); border:1px solid var(--line); border-radius:10px;
-  box-shadow:0 8px 24px rgba(0,0,0,.28); padding:12px 14px 14px; }
-.mapHelpHead { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-.mapHelpHead b { flex:1; }
-.mapHelpList { display:grid; grid-template-columns:auto 1fr; gap:6px 14px;
-  margin:0; font-size:.95em; }
+  box-shadow:0 8px 24px rgba(0,0,0,.28); padding:10px 13px 11px; font-size:.94em; }
+.mapHelpHead { margin-bottom:7px; }
+.mapHelpList { display:grid; grid-template-columns:auto 1fr; gap:4px 14px;
+  margin:0; line-height:1.4; }
 .mapHelpList dt { font-weight:600; white-space:nowrap; }
 .mapHelpList dd { margin:0; color:var(--muted); }
 @media (max-width:640px) {
@@ -276,7 +275,8 @@
   height:var(--ctl-h); line-height:1; }
 
 /* the gestures panel scrolls instead of running off a short screen */
-.mapHelp { max-height:calc(100vh - 120px); overflow-y:auto; }
+.mapHelp { max-height:calc(100vh - 130px); overflow-y:auto; }
+.mapHelpFoot { color:var(--muted); font-size:.85em; margin-top:8px; }
 /* the answer to "where do these belong" — it stays until dismissed, because a
    run that proposes nothing must not look like a run that did nothing */
 .mapFocusNote { display:flex; align-items:center; gap:12px; max-width:min(70ch, 80vw);

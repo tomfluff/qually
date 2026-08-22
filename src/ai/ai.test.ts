@@ -410,3 +410,23 @@ describe("find similar (semantic pass)", () => {
     expect(out[2].why).toBe("the AI judged these close"); // never an empty reason
   });
 });
+
+describe("locating a run's proposals on the map", () => {
+  it("finds the fresh clusters by membership, not by position", async () => {
+    const { haloIdsFor } = await import("./reconcile");
+    const live = [
+      { survivor: "x", codes: ["x", "y"], rationale: "" },        // pre-existing
+      { survivor: "a", codes: ["b", "a"], rationale: "" },        // fresh, members reordered
+      { survivor: "p", codes: ["p", "q"], rationale: "" },        // pre-existing
+      { survivor: "c", codes: ["c", "d", "e"], rationale: "" },   // fresh
+    ];
+    const fresh = [
+      { survivor: "a", codes: ["a", "b"], rationale: "" },
+      { survivor: "c", codes: ["e", "d", "c"], rationale: "" },
+    ];
+    expect(haloIdsFor(live, fresh)).toEqual(["halo:1", "halo:3"]);
+    expect(haloIdsFor(live, [])).toEqual([]);
+    // a proposal that did not survive the landing has no halo to show
+    expect(haloIdsFor(live, [{ survivor: "z", codes: ["z", "w"], rationale: "" }])).toEqual([]);
+  });
+});

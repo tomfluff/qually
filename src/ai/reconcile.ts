@@ -372,6 +372,18 @@ export function sanitizeFocusClusters(
   return out;
 }
 
+// After a run lands, which halos does it correspond to? The map addresses
+// halos by their INDEX in the live cluster list, so a run's fresh proposals
+// have to be located by their membership rather than remembered by position —
+// merging reorders the list. Used by the result note's "Show the group".
+export function haloIdsFor(live: ClusterProposal[], fresh: ClusterProposal[]): string[] {
+  const sig = (codes: string[]) => [...codes].sort().join("\u0000");
+  const wanted = new Set(fresh.map((c) => sig(c.codes)));
+  return live
+    .map((c, i) => (wanted.has(sig(c.codes)) ? `halo:${i}` : null))
+    .filter((x): x is string => x !== null);
+}
+
 // Landing a focus run into a pending plan (codex-reviewed): the conflict set
 // is the reviewed focus PLUS every code the fresh output touches (cluster
 // members AND action targets — a proposal for a code the model forgot to echo

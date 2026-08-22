@@ -36,7 +36,7 @@ import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
 import { findSimilar } from "../similar";
 import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
-import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, reconcileFocus, mergeFocusResults, estimateFocusTokens, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
+import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -591,7 +591,11 @@ function MapInner() {
   const focusConfirmRef = useKeepOnScreen<HTMLDivElement>([confirmFocus]);
   const [focusBusy, setFocusBusy] = useState(false);
   // what the run actually said, shown on the map until dismissed
-  const [focusNote, setFocusNote] = useState<{ text: string; cost: number } | null>(null);
+  const [focusNote, setFocusNote] = useState<null | {
+    text: string; cost: number;
+    // node ids the run produced, so the note can take you to them
+    show?: string[]; showLabel?: string;
+  }>(null);
   // card fold/unfold arrives from the node components as an event
   useEffect(() => {
     const onToggle = (e: Event) => setOpenCards((old) => {
@@ -1208,7 +1212,19 @@ function MapInner() {
         ? `No changes proposed — the AI reads ${focus.length === 1 ? "this code" : "these codes"} as already belonging where ${focus.length === 1 ? "it is" : "they are"}.`
         : `${nC} merge proposal${nC === 1 ? "" : "s"} and ${nA} rename or reject${nA === 1 ? "" : "s"} — on the map now.`;
       const missed = r.unreviewed.length ? ` ${r.unreviewed.length} code${r.unreviewed.length === 1 ? "" : "s"} came back unreviewed.` : "";
-      setFocusNote({ text: verdict + missed, cost: r.usage.costUsd });
+      // which nodes the run actually produced, so "Show" has somewhere to go:
+      // the halos for fresh clusters, else the chips the actions touched
+      const haloIds = haloIdsFor(useStore.getState().codeClusters, r.plan.clusters);
+      const show = haloIds.length ? haloIds : r.plan.actions.map((a) => a.code);
+      setFocusNote({
+        text: verdict + missed, cost: r.usage.costUsd,
+        ...(show.length ? {
+          show,
+          showLabel: haloIds.length
+            ? `Show ${haloIds.length === 1 ? "the group" : `the ${haloIds.length} groups`}`
+            : `Show ${show.length === 1 ? "the code" : "the codes"}`,
+        } : {}),
+      });
       announce(verdict + missed);
       if (nC) setStageOverride("reconcile");
     } catch (e) {
@@ -1248,6 +1264,32 @@ function MapInner() {
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [similar, getViewport, setViewport]);
+
+  // Take me to what the run produced. Halos only exist in Reconcile and only
+  // outside a lens, so clear both first, then wait for React Flow to render
+  // the nodes before framing them.
+  const showNodes = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    setStageOverride("reconcile");
+    setLens("default");
+    let tries = 0, frame = 0;
+    const tick = () => {
+      const live = getNodes().filter((n) => ids.includes(n.id));
+      if (!live.length) {
+        if (tries++ < 12) frame = requestAnimationFrame(tick);
+        return;
+      }
+      void fitView({ nodes: live.map((n) => ({ id: n.id })), padding: 0.35, duration: 420, maxZoom: 1.1 });
+      // the chips inside also carry the selection, so the answer is legible
+      // the moment the camera lands
+      const wanted = new Set(live.flatMap((n) =>
+        n.type === "halo" ? getNodes().filter((x) => x.parentId === n.id).map((x) => x.id) : [n.id]));
+      rfSetNodes((ns) => ns.map((n) => ({ ...n, selected: n.type === "chip" && wanted.has(n.id) })));
+      announce(`Showing ${live.length === 1 ? "the proposal" : `${live.length} proposals`} on the map`);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [getNodes, fitView, rfSetNodes]);
 
   const selectSimilar = useCallback(() => {
     const cur = similar;
@@ -1626,6 +1668,11 @@ function MapInner() {
                   : <>
                       <span>{focusNote!.text}</span>
                       {focusNote!.cost > 0 && <span className="mapFocusCost">${focusNote!.cost.toFixed(4)} · logged</span>}
+                      {focusNote!.show && (
+                        <button className="btn primary" onClick={() => showNodes(focusNote!.show!)}>
+                          {focusNote!.showLabel}
+                        </button>
+                      )}
                       <button className="btn" onClick={() => setFocusNote(null)}>Dismiss</button>
                     </>}
               </Panel>
@@ -1745,23 +1792,19 @@ function MapInner() {
       {helpOpen && (
         <div className="mapMenu mapHelp" role="dialog" aria-label="How to use the map"
           style={{ fontSize: sidebarFontSize }}>
-          <div className="mapHelpHead">
-            <b>The whole codebook at once</b>
-            <button className="btn iconbtn" aria-label="Close" onClick={() => setHelpOpen(false)}>
-              <Icon name="x" size={14} />
-            </button>
-          </div>
+          <div className="mapHelpHead"><b>The whole codebook at once</b></div>
           <dl className="mapHelpList">
-            <dt>Select</dt><dd>Drag a box across the canvas. Hold Ctrl (Cmd) to add to the selection.</dd>
-            <dt>Pan</dt><dd><b>Space+drag</b>, or drag with the middle or right button.</dd>
-            <dt>Zoom</dt><dd>Wheel, or the +/− controls in the corner. Group names stay readable as you zoom out.</dd>
-            <dt>Act on codes</dt><dd>Right-click a selection: open in the Codebook, ask the AI where those codes belong, propose a merge, or merge them into one.</dd>
-            <dt>Read a code</dt><dd>Double-click a chip for its excerpts.</dd>
-            <dt>Reconcile</dt><dd>A capsule is a proposed merge. Drag a chip inside it to join, outside to leave — it keeps the spot you give it. The caption is the merged code's name; double-click to rename, or use its arrow for the reasoning and the verdict.</dd>
-            <dt>Themes</dt><dd>Drag codes between islands; drag an island by its caption; double-click a caption to rename it.</dd>
-            <dt>Arrange</dt><dd>A lens rearranges the map for looking and changes nothing. Switch back to Normal for your own layout.</dd>
-            <dt>Spread</dt><dd>Nudges groups apart until their names stop overlapping, without moving the view. Toggle it back to contract.</dd>
+            <dt>Select</dt><dd>Drag a box. Ctrl (Cmd) adds to it.</dd>
+            <dt>Pan</dt><dd><b>Space+drag</b>, or middle/right-drag.</dd>
+            <dt>Zoom</dt><dd>Wheel, or the +/− controls.</dd>
+            <dt>Act on codes</dt><dd>Right-click a selection.</dd>
+            <dt>Read a code</dt><dd>Double-click a chip.</dd>
+            <dt>Reconcile</dt><dd>A capsule is a proposed merge: drag chips in or out. Its caption names the merged code; the arrow opens the reasoning.</dd>
+            <dt>Themes</dt><dd>Drag codes between islands, or an island by its caption.</dd>
+            <dt>Arrange</dt><dd>A lens for looking only. Normal restores your layout.</dd>
+            <dt>Spread</dt><dd>Nudges groups apart until names stop overlapping.</dd>
           </dl>
+          <div className="mapHelpFoot">Esc, or the ? button, closes this.</div>
         </div>
       )}
       {confirmRelayout && (
