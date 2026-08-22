@@ -59,9 +59,16 @@ export interface CodePlanAction {
 // a pending merge-CLUSTER: 2+ member codes proposed as ONE concept. survivor is
 // one of the members; newName optionally renames the merged concept. Persisted
 // as a sibling of codePlan so older app versions simply ignore it.
-export type MapStage = "reconcile" | "themes";
+// Every view that owns hand-placed positions gets its own slot. The AI areas
+// view earns one because filing a code there used to write into whichever
+// stage was behind it — silently deleting a position the researcher had placed
+// in Reconcile or Themes, and burning an undo entry to do it. The bucket views
+// deliberately have NO slot: their piles are derived from counts and drift as
+// you code, so a remembered spot inside "2-5 excerpts" is garbage the moment a
+// code becomes a 6-excerpt code. Those keep a session-only overlay instead.
+export type MapStage = "reconcile" | "themes" | "areas";
 export type StageLayout = Record<MapStage, Record<string, { x: number; y: number }>>;
-const emptyLayout = (): StageLayout => ({ reconcile: {}, themes: {} });
+const emptyLayout = (): StageLayout => ({ reconcile: {}, themes: {}, areas: {} });
 
 export interface CodeCluster {
   survivor: string; codes: string[]; newName?: string; rationale: string;
@@ -516,6 +523,11 @@ export function normalizeClusters(s: State, clusters: CodeCluster[]): CodeCluste
 // Code-keyed side tables (map placements) follow their code through a rename:
 // the map's hand-placed spots are the researcher's own work, and a rename that
 // orphans them throws that work away silently.
+// apply a transform to EVERY view's layout, so adding a view cannot silently
+// drop its positions from a rename or a casing sweep
+const mapLayouts = (l: StageLayout, f: (rec: Record<string, { x: number; y: number }>) => Record<string, { x: number; y: number }>): StageLayout =>
+  Object.fromEntries(Object.entries(l).map(([k, rec]) => [k, f(rec)])) as StageLayout;
+
 const renameKey = <T,>(rec: Record<string, T>, from: string, to: string): Record<string, T> =>
   from in rec ? Object.fromEntries(Object.entries(rec).map(([k, v]) => [k === from ? to : k, v])) : rec;
 
@@ -1876,10 +1888,10 @@ export const useStore = create<State>()(
             ...(c.descCodes ? { descCodes: c.descCodes.map((x) => x === code ? name : x) } : {}) })),
           // the map's hand-placed spots are keyed by code name: miss this and
           // a rename silently throws the researcher's layout away
-          mapPositions: {
-            reconcile: renameKey(s.mapPositions.reconcile, code, name),
-            themes: renameKey(s.mapPositions.themes, code, name),
-          },
+          // map over the slots, never list them: a new view's layout would
+          // otherwise be thrown away on the next rename, exactly as this
+          // comment's older twin warned
+          mapPositions: mapLayouts(s.mapPositions, (rec) => renameKey(rec, code, name)),
         });
         set({ hotbarCache: hotbarCodes(get()) });
       },
@@ -1913,10 +1925,8 @@ export const useStore = create<State>()(
             // same members under new spelling: the glimpse is NOT stale
             ...(c.descCodes ? { descCodes: c.descCodes.map(r) } : {}) })),
           // a case sweep must not cost the researcher their map layout
-          mapPositions: {
-            reconcile: Object.fromEntries(Object.entries(s.mapPositions.reconcile).map(([k, v]) => [r(k), v])),
-            themes: Object.fromEntries(Object.entries(s.mapPositions.themes).map(([k, v]) => [r(k), v])),
-          },
+          mapPositions: mapLayouts(s.mapPositions,
+            (rec) => Object.fromEntries(Object.entries(rec).map(([k, v]) => [r(k), v]))),
         });
         set({ hotbarCache: hotbarCodes(get()) });
         announce(`${ren.size} code name${ren.size === 1 ? "" : "s"} now start ${style === "lower" ? "lowercase" : "with a capital"}`);

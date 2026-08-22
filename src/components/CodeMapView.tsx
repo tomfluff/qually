@@ -1443,7 +1443,9 @@ function MapInner() {
         for (const k of Object.keys(lensStore)) if (k.startsWith(`c:${x.id}@`)) delete lensStore[k];
       }
       if (areas.length) {
-        useStore.getState().applyMapDrop({ stage, areas });
+        // "areas", NOT the stage behind this view: passing the stage wrote into
+        // that stage's layout and deleted positions placed there by hand
+        useStore.getState().applyMapDrop({ stage: "areas", areas });
         if (joined) earcon.join(); else if (evicted) earcon.evict();
         announce(joined && !evicted
           ? `Moved ${joined} code${joined === 1 ? "" : "s"} into that area`

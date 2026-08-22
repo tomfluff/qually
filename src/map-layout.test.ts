@@ -297,3 +297,40 @@ test("the two stages keep separate layouts", () => {
   useStore.getState().resetMapLayout("reconcile");
   useStore.getState().resetMapLayout("themes");
 });
+
+// A live bug found in review: filing a code in the AI areas view passed the
+// stage BEHIND that view, so applyMapDrop deleted the code's hand-placed
+// position in Reconcile or Themes — silent loss, plus an undo entry spent.
+test("filing a code in the areas view leaves the other views' layouts alone", () => {
+  const st = useStore.getState();
+  st.recordMapPosition("alpha", { x: 11, y: 22 }, false, "reconcile");
+  st.recordMapPosition("alpha", { x: 33, y: 44 }, false, "themes");
+  st.setCodeAreas([{ name: "Strategies", codes: ["beta"] }], "sig");
+  useStore.getState().applyMapDrop({ stage: "areas", areas: [{ code: "alpha", ai: 0 }] });
+  const s = useStore.getState();
+  expect(s.mapPositions.reconcile.alpha).toEqual({ x: 11, y: 22 });  // untouched
+  expect(s.mapPositions.themes.alpha).toEqual({ x: 33, y: 44 });     // untouched
+  expect(s.codeAreas[0].codes).toContain("alpha");
+  useStore.getState().setCodeAreas([], "");
+  useStore.getState().resetMapLayout("reconcile");
+  useStore.getState().resetMapLayout("themes");
+});
+
+// The rename paths used to enumerate the layout slots by name, with a comment
+// warning that missing one throws the researcher's layout away.
+test("a rename carries positions in EVERY view's layout, including new ones", () => {
+  // whatever the fixture currently holds — earlier tests rename codes around
+  const code = Object.keys(useStore.getState().codebook)[0];
+  const to = "a name nothing else uses";
+  const st = useStore.getState();
+  st.recordMapPosition(code, { x: 1, y: 1 }, false, "reconcile");
+  st.recordMapPosition(code, { x: 2, y: 2 }, false, "themes");
+  st.recordMapPosition(code, { x: 3, y: 3 }, false, "areas");
+  useStore.getState().renameCode(code, to);
+  const s = useStore.getState();
+  expect(s.mapPositions.reconcile[to]).toEqual({ x: 1, y: 1 });
+  expect(s.mapPositions.themes[to]).toEqual({ x: 2, y: 2 });
+  expect(s.mapPositions.areas[to]).toEqual({ x: 3, y: 3 });   // the new slot too
+  useStore.getState().renameCode(to, code);
+  (["reconcile", "themes", "areas"] as const).forEach((v) => useStore.getState().resetMapLayout(v));
+});
