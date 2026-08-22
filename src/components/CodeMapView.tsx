@@ -27,6 +27,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useStore, bestSurvivor, type MapStage } from "../state/store";
 import { codeStats } from "../codeStats";
+import { speakerBuckets } from "../speakerBuckets";
 import { preselectBrowse } from "./BrowseView";
 import { CodeCounts } from "./CodeCounts";
 import { Icon, countIconSize } from "./Icon";
@@ -736,8 +737,10 @@ function MapInner() {
   // until they do, which is what keeps the default following the work rather
   // than freezing on whatever the map opened with.
   const [viewOverride, setViewOverride] = useState(remembered.view);
-  // bumps when session pile positions reset — remembered lives outside React,
-  // so the layout memo needs a dep that changes to rebuild from it
+  // Bumps when session pile positions are RESET or CLEANED UP — `remembered`
+  // lives outside React, so the layout memo needs a dep that changes to
+  // rebuild from it. A pointer drag deliberately does NOT bump: see the note
+  // at its branch in onNodeDragStop.
   const [bucketRev, setBucketRev] = useState(0);
   useEffect(() => { remembered.view = viewOverride; }, [viewOverride]);
   const view: MapView =
@@ -851,16 +854,18 @@ function MapInner() {
     // and the AI areas. `islandId` gives each pile a stable identity: row order
     // shifts as piles empty and refill, so positions must not hang off it.
     const pileNodes = (
-      piles: { name: string; list: string[]; ai?: number }[],
+      // `key` separates a pile's IDENTITY from its drawn name, for the groupings
+      // whose labels a participant could collide with (a speaker named "Mixed")
+      piles: { name: string; key?: string; list: string[]; ai?: number }[],
       opts: {
-        islandId: (p: { name: string }) => string; movable: boolean; freeChips?: string[];
+        islandId: (p: { name: string; key?: string }) => string; movable: boolean; freeChips?: string[];
         /** positions for piles moved by hand when the view has no store slot
             (the grouping views park them in the session) */
         stored?: Record<string, { x: number; y: number }>;
       },
     ) => {
       const blocks = piles.map((g, gi) => ({
-        name: g.name, gi, list: g.list, ai: g.ai, ...pack(g.list, near(g.list)),
+        name: g.name, key: g.key, gi, list: g.list, ai: g.ai, ...pack(g.list, near(g.list)),
         // the caption reads "name · count" and carries no buttons
         cap: captionBox(fs, 1, 7, `${g.name} · ${g.list.length}`, 1, family),
       }));
@@ -922,46 +927,15 @@ function MapInner() {
       })) };
     }
 
-    // BY SPEAKER: whose voice a code lives in. Each accepted excerpt's lines
-    // tally toward their speakers; a speaker owning ≥2/3 of a code's lines
-    // owns the code, anything less is Mixed — the codes born in the
-    // back-and-forth rather than in one voice.
+    // BY SPEAKER: whose voice a code lives in. The rule lives in
+    // speakerBuckets.ts so the majority boundary is testable without a canvas.
     if (view === "speaker") {
-      const lineSpk = new Map<string, Map<number, string>>();
-      for (const [pid, t] of Object.entries(transcripts))
-        lineSpk.set(pid, new Map(t.lines.map((l) => [l.id, l.speaker])));
-      const tallies = new Map<string, Map<string, number>>();
-      for (const s of segments) {
-        if (s.status !== "accepted") continue;
-        const ls = lineSpk.get(s.pid);
-        if (!ls) continue;
-        const t = tallies.get(s.code) ?? new Map<string, number>();
-        for (let i = s.start; i <= s.end; i++) {
-          const sp = ls.get(i);
-          if (sp) t.set(sp, (t.get(sp) ?? 0) + 1);
-        }
-        tallies.set(s.code, t);
-      }
-      const bucketOf = (c: string) => {
-        const t = tallies.get(c);
-        if (!t || t.size === 0) return "No excerpts";
-        const total = [...t.values()].reduce((a, b) => a + b, 0);
-        const [top, n] = [...t.entries()].sort((a, b) => b[1] - a[1])[0];
-        return n / total >= 2 / 3 ? top : "Mixed";
-      };
-      const piles = new Map<string, string[]>();
-      for (const c of codes) {
-        const b = bucketOf(c);
-        if (!piles.has(b)) piles.set(b, []);
-        piles.get(b)!.push(c);
-      }
-      // speakers alphabetically; the derived piles close the row
-      const tail = (n: string) => (n === "Mixed" ? 1 : n === "No excerpts" ? 2 : 0);
-      const names = [...piles.keys()].sort((a, b) => tail(a) - tail(b) || a.localeCompare(b));
-      return { nodes: withSimilar(pileNodes(names.map((name) => ({ name, list: piles.get(name)! })), {
-        islandId: (p) => `bucket:${p.name}`, movable: true,
-        stored: remembered.bucketPos[view] ?? {},
-      })) };
+      const piles = speakerBuckets(codes, segments, transcripts);
+      return { nodes: withSimilar(pileNodes(
+        piles.map((p) => ({ name: p.label, key: p.key, list: p.codes })), {
+          islandId: (p) => `bucket:${p.key ?? p.name}`, movable: true,
+          stored: remembered.bucketPos[view] ?? {},
+        })) };
     }
 
     // AI AREAS: real project data, so a drop files the code. `ai` is the index
@@ -1584,6 +1558,11 @@ function MapInner() {
     view === "reconcile" ? "halo" : view === "themes" || view === "areas" ? "island" : null;
   const containerAt = useMemo(() => dropTarget === null ? null : (cx: number, cy: number) =>
     getNodes().find((h) => h.type === dropTarget
+      // the catch-all is a PARKING LOT, not a container: a drop there LEAVES
+      // the group. Counting it as a container made the crossing sound promise
+      // "this will join" over the one pile that means the opposite.
+      && !((h.data as Partial<IslandData & HaloData>)?.gi === -1
+        || (h.data as Partial<IslandData & HaloData>)?.ai === -1)
       && cx >= h.position.x && cx <= h.position.x + (h.width ?? 0)
       && cy >= h.position.y && cy <= h.position.y + (h.height ?? 0)) ?? null, [getNodes, dropTarget]);
   // the container under the held chip, tracked across the drag: the .will
@@ -1639,6 +1618,10 @@ function MapInner() {
       const movedPiles = (dragged?.length ? dragged : [n]).filter((x) => x.type === "island");
       if (!movedPiles.length) return;
       const store = (remembered.bucketPos[view] ??= {});
+      // No bucketRev bump here, unlike the identical mutation in cleanUpLayout:
+      // React Flow is uncontrolled, so the pile ALREADY renders where it was
+      // dropped, and the next rebuild reads these positions fresh. Bumping
+      // would only repaint what is already correct.
       for (const x of movedPiles) store[x.id] = x.position;
       // the only committed move gesture in these views: mark it like every
       // other commit, or dragging by feel gets no confirmation
