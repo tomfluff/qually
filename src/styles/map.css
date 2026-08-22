@@ -293,10 +293,10 @@
 .mapSimBar { flex:none; width:44px; height:5px; border-radius:99px; background:var(--line);
   margin-top:.5em; overflow:hidden; }
 .mapSimBar i { display:block; height:100%; background:var(--accent); }
-/* The panel sets its own text size and counter-scales as one block, but .btn
-   carries font-size:1rem — so every button here ignored that and came out
-   bigger than the CODE NAMES it acts on. The names are the content; nothing
-   in the chrome outranks them. */
+/* The panel's text rides the map's inherited size, but .btn carries
+   font-size:1rem — so every button here ignored that and came out bigger
+   than the CODE NAMES it acts on. The names are the content; nothing in the
+   chrome outranks them. */
 .mapSimNode .btn { font-size:1em; }
 /* the AI pass: what it does on line one, what it costs on line two */
 .mapSimAi { display:flex; flex-direction:column; align-items:flex-start; gap:2px;

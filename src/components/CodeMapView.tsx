@@ -479,19 +479,12 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
 const simEvent = (name: string, detail?: unknown) =>
   window.dispatchEvent(new CustomEvent(`qually:sim${name}`, { detail }));
 const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>) {
-  // It rides the canvas (tethered to its code) but it is a PANEL, so it holds
-  // ONE on-screen size at every zoom: the exact inverse, with no clamp. The
-  // old floor of 1 could not shrink the panel, so zooming IN grew it with the
-  // canvas — a control whose text size depends on the camera is a control you
-  // have to re-find every time you zoom.
-  const zoom = useFlowStore(zoomSel);
-  const scale = 1 / zoom;
+  // The panel is a thing ON the map, not a control floating above it: it
+  // takes the zoom like a chip does, shrinking as you pull back and growing
+  // as you come in. It counter-scaled once, to hold one readable size — but a
+  // panel that stays 330px while the codebook shrinks to a smudge stops being
+  // part of the picture, and reading it is what zooming in is FOR.
   const codebook = useStore((s) => s.codebook);
-  // the node anchors at the chip's bottom edge; the 14px breathing gap is
-  // SCREEN ink (translate inside the counter-scale), so the stem drawn by
-  // .mapSimNode::before bridges chip and panel exactly at every zoom — a
-  // world-unit gap left the panel adrift 42px below its chip at zoom 3
-  const transform = `scale(${scale}) translate(0, 14px)`;
   const groups = useStore((s) => s.codeGroups);
   const clusters = useStore((s) => s.codeClusters);
   const homeOf = (code: string) => {
@@ -501,8 +494,7 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
   };
   const n = data.ticked.size;
   return (
-    <div className="mapSimNode nodrag nowheel"
-      style={{ transform, transformOrigin: "top left" }}>
+    <div className="mapSimNode nodrag nowheel">
       <div className="mapSimHead">
         <b>Similar to “{data.source}”</b>
         <button className="mapNoteX" aria-label="Close" onClick={() => simEvent("close")}>×</button>
@@ -873,9 +865,9 @@ function MapInner() {
       }
       const node: SimilarNodeT = {
         id: "similar", type: "similar",
-        // flush with the chip's bottom edge: the visual gap is screen-sized
-        // by the node's own transform, not world-sized here
-        position: { x: abs.x, y: abs.y + (host.height ?? ch) },
+        // a world-unit gap below the chip: panel and stem scale together, so
+        // the 14px stem drawn by .mapSimNode::before bridges it at any zoom
+        position: { x: abs.x, y: abs.y + (host.height ?? ch) + 14 },
         width: Math.max(330, fs * 24),
         draggable: false, selectable: false, focusable: false,
         zIndex: 20,
