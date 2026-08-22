@@ -169,6 +169,10 @@ const remembered = {
   // where the researcher parked the Revision plan panel (screen offset)
   planPos: { x: 0, y: 0 },
   planMin: false,
+  // hand-moved PILES in the derived grouping views (session only: the piles
+  // themselves drift as coding continues, so remembering them across sessions
+  // would pin stale geography). Chips inside never move — only the groups do.
+  bucketPos: {} as Partial<Record<MapView, Record<string, { x: number; y: number }>>>,
 };
 
 // A project swap makes every one of these meaningless — they are keyed by
@@ -181,6 +185,7 @@ onProjectSwap(function forgetMapSession() {
   remembered.openCards = new Set();
   remembered.planPos = { x: 0, y: 0 };
   remembered.planMin = false;
+  remembered.bucketPos = {};
 });
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -704,6 +709,9 @@ function MapInner() {
   // until they do, which is what keeps the default following the work rather
   // than freezing on whatever the map opened with.
   const [viewOverride, setViewOverride] = useState(remembered.view);
+  // bumps when session pile positions reset — remembered lives outside React,
+  // so the layout memo needs a dep that changes to rebuild from it
+  const [bucketRev, setBucketRev] = useState(0);
   useEffect(() => { remembered.view = viewOverride; }, [viewOverride]);
   const view: MapView =
     viewOverride ?? (clusters.length + plan.length > 0 ? "reconcile" : "themes");
@@ -801,7 +809,12 @@ function MapInner() {
     // shifts as piles empty and refill, so positions must not hang off it.
     const pileNodes = (
       piles: { name: string; list: string[]; ai?: number }[],
-      opts: { islandId: (p: { name: string }) => string; movable: boolean; freeChips?: string[] },
+      opts: {
+        islandId: (p: { name: string }) => string; movable: boolean; freeChips?: string[];
+        /** positions for piles moved by hand when the view has no store slot
+            (the grouping views park them in the session) */
+        stored?: Record<string, { x: number; y: number }>;
+      },
     ) => {
       const blocks = piles.map((g, gi) => ({
         name: g.name, gi, list: g.list, ai: g.ai, ...pack(g.list, near(g.list)),
@@ -812,7 +825,7 @@ function MapInner() {
         ...blocks.map((b) => b.cap.w));
       const islands: IslandNodeT[] = [];
       const children: ChipNodeT[] = [];
-      const stored = opts.movable && slot ? mapIslandPos[slot] : {};
+      const stored = opts.stored ?? (opts.movable && slot ? mapIslandPos[slot] : {});
       let ix = 0, iy = blocks[0]?.cap.h ?? 0, rowH = 0;
       for (const b of blocks) {
         const key = opts.islandId(b);
@@ -848,7 +861,8 @@ function MapInner() {
       const piles = buckets.map(([name]) => ({ name, list: [] as string[] }));
       for (const c of codes) piles[buckets.findIndex(([, fits]) => fits(val(c)))].list.push(c);
       return { nodes: withSimilar(pileNodes(piles.filter((g) => g.list.length > 0), {
-        islandId: (p) => `bucket:${p.name}`, movable: false,
+        islandId: (p) => `bucket:${p.name}`, movable: true,
+        stored: remembered.bucketPos[view] ?? {},
       })) };
     }
 
@@ -860,7 +874,8 @@ function MapInner() {
         { name: "Undefined", list: codes.filter((c) => !has(c)) },
       ];
       return { nodes: withSimilar(pileNodes(piles.filter((g) => g.list.length > 0), {
-        islandId: (p) => `bucket:${p.name}`, movable: false,
+        islandId: (p) => `bucket:${p.name}`, movable: true,
+        stored: remembered.bucketPos[view] ?? {},
       })) };
     }
 
@@ -901,7 +916,8 @@ function MapInner() {
       const tail = (n: string) => (n === "Mixed" ? 1 : n === "No excerpts" ? 2 : 0);
       const names = [...piles.keys()].sort((a, b) => tail(a) - tail(b) || a.localeCompare(b));
       return { nodes: withSimilar(pileNodes(names.map((name) => ({ name, list: piles.get(name)! })), {
-        islandId: (p) => `bucket:${p.name}`, movable: false,
+        islandId: (p) => `bucket:${p.name}`, movable: true,
+        stored: remembered.bucketPos[view] ?? {},
       })) };
     }
 
@@ -1066,7 +1082,7 @@ function MapInner() {
     for (const c of looseFree) children.push(chipNode(c, { x: 0, y: 0 }));
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -1471,9 +1487,16 @@ function MapInner() {
       const pos = { x: n.position.x + dx, y: n.position.y + dy };
       if (n.type === "chip") chips[n.id] = pos; else islands[n.id] = pos;
     });
-    if (!slot) return; // a derived view has no layout to tidy
+    if (!slot) {
+      // a grouping view: its only top-level things are the piles, and their
+      // hand positions live in the session, not the store
+      remembered.bucketPos[view] = { ...(remembered.bucketPos[view] ?? {}), ...islands };
+      setBucketRev((r) => r + 1);
+      announce(moved ? `Moved ${moved === 1 ? "1 group" : `${moved} groups`} apart` : "Nothing needed moving at this zoom");
+      return;
+    }
     useStore.getState().applyMapLayout(chips, islands, moved, slot);
-  }, [getZoom, getNodes, slot]);
+  }, [getZoom, getNodes, slot, view]);
 
   const selectSimilar = useCallback(() => {
     const cur = similar;
@@ -1557,7 +1580,15 @@ function MapInner() {
     // React Flow reports a multi-selection drag ONCE, with the whole set in the
     // third argument. File every node in it, or the ones you did not happen to
     // grab snap back to their packed spots on the next rebuild.
-    if (!slot) return; // derived view: nothing here moves
+    if (!slot) {
+      // a grouping view: the PILES rearrange (session memory), chips never move
+      const movedPiles = (dragged?.length ? dragged : [n]).filter((x) => x.type === "island");
+      if (!movedPiles.length) return;
+      const store = (remembered.bucketPos[view] ??= {});
+      for (const x of movedPiles) store[x.id] = x.position;
+      announce(`Moved ${movedPiles.length === 1 ? "a group" : `${movedPiles.length} groups`}`);
+      return;
+    }
     const moved = dragged?.length ? dragged : [n];
     // A group is selected only when all of its codes are, so a group drag
     // carries its members in the set too. React Flow already moves children
@@ -2062,6 +2093,13 @@ function MapInner() {
             <button className="btn primary" autoFocus
               onClick={() => {
                 setConfirmRelayout(null);
+                // a grouping view's pile moves live in the session, not the store
+                if (!slot && remembered.bucketPos[view]) {
+                  delete remembered.bucketPos[view];
+                  setBucketRev((r) => r + 1);
+                  requestAnimationFrame(() => fitView({ duration: 200 }));
+                  return;
+                }
                 if (slot && useStore.getState().resetMapLayout(slot))
                   requestAnimationFrame(() => fitView({ duration: 200 }));
               }}>Re-layout</button>
