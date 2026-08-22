@@ -230,10 +230,14 @@ const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>
 });
 const LOOSE = "\u0000loose";
 
-const NEXT_CORNER = {
-  "bottom-right": "bottom-left", "bottom-left": "top-left",
-  "top-left": "top-right", "top-right": "bottom-right",
-} as const;
+// Named, not cycled: the old button stepped to "the next corner", so putting
+// the minimap somewhere meant clicking until it landed there and reading an
+// icon that never said where it was going.
+const CORNERS = [
+  ["top-left", "Top left"], ["top-right", "Top right"],
+  ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"],
+] as const;
+const RING_SIZES = ["xs", "sm", "md", "lg", "xl"] as const;
 
 const openInCodebook = (list: string[]) => {
   preselectBrowse(list);
@@ -661,6 +665,7 @@ function MapInner() {
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const dark = useStore((s) => s.ui.dark);
   const mapMinimap = useStore((s) => s.ui.mapMinimap);
+  const mapRing = useStore((s) => s.ui.mapRing);
   const codeGroups = useStore((s) => s.codeGroups);
   const setCodeGroups = useStore((s) => s.setCodeGroups);
   const setUi = useStore((s) => s.setUi);
@@ -676,6 +681,11 @@ function MapInner() {
   const [themeAiOpen, setThemeAiOpen] = useState(false);
   const [confirmRelayout, setConfirmRelayout] = useState<{ right: number; y: number } | null>(null);
   const [layoutMenu, setLayoutMenu] = useState<{ right: number; y: number } | null>(null);
+  // the map's own settings: they live HERE rather than in the Settings modal
+  // because both are judged by eye against the codes on screen, and a modal
+  // covers the thing you are judging
+  const [mapSetMenu, setMapSetMenu] = useState<{ right: number; y: number } | null>(null);
+  const mapSetRef = useKeepOnScreen<HTMLDivElement>([mapSetMenu]);
   // the gestures used to sit in the bar as a paragraph; they are reference,
   // not something to read every session, so they live behind a button
   const [helpOpen, setHelpOpen] = useState(false);
@@ -1938,8 +1948,8 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !layoutMenu && !viewMenu) return;
-    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setLayoutMenu(null); setViewMenu(null); };
+    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !layoutMenu && !viewMenu && !mapSetMenu) return;
+    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setLayoutMenu(null); setViewMenu(null); setMapSetMenu(null); };
     const down = (e: MouseEvent) => {
       const t = e.target as Element;
       // the help button toggles itself; let its own handler run
@@ -1952,7 +1962,7 @@ function MapInner() {
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, layoutMenu, viewMenu]);
+  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, layoutMenu, viewMenu, mapSetMenu]);
 
   return (
     <div id="codemap" className={"view-" + view} style={{ fontSize: sidebarFontSize }}>
@@ -2003,10 +2013,14 @@ function MapInner() {
           <span className="blabel mapViewName">{spec.label}</span>
           <Icon name={viewMenu ? "chevron-up" : "chevron-down"} size={13} />
         </button>
-        <button className="btn iconbtn" aria-label="Move the minimap to the next corner"
-          onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
-          title="Move the minimap to the next corner">
-          <Icon name="pip" size={16} />
+        <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!mapSetMenu}
+          aria-label="Map settings"
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setMapSetMenu(mapSetMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
+          }}
+          title="Map settings: selection ring, minimap">
+          <Icon name="settings" size={16} />
         </button>
         <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!layoutMenu}
           onClick={(e) => {
@@ -2233,6 +2247,33 @@ function MapInner() {
               </>
             );
           })()}
+        </div>
+      )}
+      {mapSetMenu && (
+        <div ref={mapSetRef} className="ctxmenu mapMenu mapSetMenu" role="dialog" aria-label="Map settings"
+          style={{ right: mapSetMenu.right, top: mapSetMenu.y, fontSize: sidebarFontSize }}>
+          <div className="mapMenuHead" id="mapring-h">Selection ring</div>
+          <div className="segmented" role="radiogroup" aria-labelledby="mapring-h">
+            {RING_SIZES.map((sz) => (
+              <button key={sz} className={"seg" + (mapRing === sz ? " on" : "")}
+                role="radio" aria-checked={mapRing === sz}
+                onClick={() => setUi({ mapRing: sz })}
+                title={`${MAP_RING_PX[sz]}px around every selected code`}>{sz}</button>
+            ))}
+          </div>
+          <div className="mapMenuNote">
+            {MAP_RING_PX[mapRing]}px around a selected code, held at every zoom.
+          </div>
+          <div className="ctxdiv" />
+          <div className="mapMenuHead" id="mapmini-h">Minimap</div>
+          <div className="segmented mapCornerPick" role="radiogroup" aria-labelledby="mapmini-h">
+            {CORNERS.map(([c, label]) => (
+              <button key={c} className={"seg" + (mapMinimap === c ? " on" : "")}
+                role="radio" aria-checked={mapMinimap === c}
+                onClick={() => setUi({ mapMinimap: c })}
+                title={`Put the minimap in the ${label.toLowerCase()}`}>{label}</button>
+            ))}
+          </div>
         </div>
       )}
       {layoutMenu && (

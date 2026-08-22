@@ -348,6 +348,19 @@
 .mapCardNode .btn.primary:hover:not(:disabled) { background:var(--accent); filter:brightness(1.12); }
 /* the Layout menu: two named actions, each with a line saying what it does —
    "reset" and "adjust" are easy to confuse when one of them discards work */
+/* the map's own settings: segmented pickers, not menu items, because you sit
+   on this menu and try a few weights against the codes behind it */
+.mapSetMenu { max-width:32ch; padding:4px 2px 6px; }
+.mapSetMenu .mapMenuHead { padding:6px 8px 4px; }
+.mapSetMenu .segmented { margin:0 8px; width:calc(100% - 16px); }
+.mapSetMenu .segmented .seg { flex:1; padding-inline:6px; }
+/* four corners read as words, so the choice does not depend on decoding an
+   arrow at a glance */
+.mapSetMenu .mapCornerPick { flex-wrap:wrap; }
+.mapSetMenu .mapCornerPick .seg { flex:1 1 45%; }
+.mapSetMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
+  line-height:1.35; padding:5px 9px 2px; }
+.mapSetMenu .ctxdiv { margin:7px 6px 2px; }
 .mapLayoutMenu { max-width:34ch; }
 .mapLayoutMenu button { display:block; text-align:left; width:100%; }
 .mapLayoutMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
