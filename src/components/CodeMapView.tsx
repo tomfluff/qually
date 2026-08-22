@@ -813,7 +813,7 @@ function MapInner() {
         islands.push({
           id: key, type: "island" as const,
           position: lp[`i:${b.name}`] ?? { x: ix, y: iy }, width: bw, height: bh,
-          draggable: true, selectable: false, focusable: false,
+          draggable: true, selectable: true, focusable: false,
           dragHandle: ".mapIslandLabel",
           data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list, gkey: b.name },
         });
@@ -889,7 +889,10 @@ function MapInner() {
           // gaps come out at exactly HALO_GAP
           position: mapIslandPos[key] ?? { x: x + Math.max(0, (b.cap.w - b.w) / 2), y },
           width: b.w, height: b.h,
-          draggable: true, selectable: false, focusable: false,
+          // selectable so several groups can be picked and moved together;
+          // the marquee still only *starts* on empty canvas, and the selection
+          // panel counts codes, not groups
+          draggable: true, selectable: true, focusable: false,
           dragHandle: ".mapHaloLabel",
           data: {
             name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName,
@@ -956,7 +959,7 @@ function MapInner() {
         type: "island" as const,
         position: mapIslandPos[key] ?? { x: ix, y: iy },
         width: bw, height: bh,
-        draggable: true, selectable: false, focusable: false,
+        draggable: true, selectable: true, focusable: false,
         dragHandle: ".mapIslandLabel",
         data: { name: b.name, gi: b.gi },
       });
@@ -1294,16 +1297,29 @@ function MapInner() {
       const left = n.type === "halo" ? n.position.x - Math.max(0, (capW - w) / 2) : n.position.x;
       return { id: n.id, x: left, y: n.position.y - capH, w: Math.max(w, capW), h: h + capH };
     });
-    const relaxed = relaxBoxes(boxes, Math.max(16, 24 / zoom));
+    // Two rounds, because only GROUPS actually collide when you zoom out:
+    // their captions counter-scale and grow past their capsules, while a chip's
+    // text rides inside it and a packed field of chips never overlaps itself.
+    // So settle the groups against each other first, then move only the codes
+    // a caption has landed on — instead of shaking the whole field.
+    const pad = 10 / zoom; // a constant ~10px of breathing space on screen
+    const groupIds = new Set(nodes.filter((n) => n.type !== "chip").map((n) => n.id));
+    const chipIds = new Set(nodes.filter((n) => n.type === "chip").map((n) => n.id));
+    const settled = relaxBoxes(boxes, { pad, horizontalBias: 3, anchored: chipIds });
+    const relaxed = relaxBoxes(settled, { pad, horizontalBias: 3, anchored: groupIds });
     const chips: Record<string, { x: number; y: number }> = {};
     const islands: Record<string, { x: number; y: number }> = {};
+    let moved = 0;
     nodes.forEach((n, i) => {
       const dx = relaxed[i].x - boxes[i].x, dy = relaxed[i].y - boxes[i].y;
-      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return; // it did not need to move
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) moved++;
+      // EVERY top-level thing gets an explicit position, including the ones
+      // that did not move: leave some to the packer and it will happily pack
+      // them straight back on top of the ones that did.
       const pos = { x: n.position.x + dx, y: n.position.y + dy };
       if (n.type === "chip") chips[n.id] = pos; else islands[n.id] = pos;
     });
-    useStore.getState().applyMapLayout(chips, islands);
+    useStore.getState().applyMapLayout(chips, islands, moved);
   }, [getZoom, getNodes]);
 
   const selectSimilar = useCallback(() => {
@@ -1383,14 +1399,16 @@ function MapInner() {
     // a stale .will outline and chirps a crossing on top of the drop's own mark
     if (dragFrame.current) { cancelAnimationFrame(dragFrame.current); dragFrame.current = 0; }
     dragOver.current = null;
+    // React Flow reports a multi-selection drag ONCE, with the whole set in the
+    // third argument. File every node in it, or the ones you did not happen to
+    // grab snap back to their packed spots on the next rebuild.
+    const moved = dragged?.length ? dragged : [n];
     if (lens !== "default") {
-      // moving under a lens is fine — parking, comparing, tidying a pile —
-      // but it stays in the lens's own session overlay: no store write, no
-      // membership change, and the normal layout comes back untouched.
-      // RF reports a multi-selection drag once, with the whole set in the
-      // third argument — record every node, or the rest snap back.
+      // moving under a lens is fine — parking, comparing, tidying a pile — but
+      // it stays in the lens's own session overlay: no store write, no
+      // membership change, and the normal layout comes back untouched
       const store = (remembered.lensPos[lens] ??= {});
-      for (const x of (dragged?.length ? dragged : [n])) {
+      for (const x of moved) {
         const parent = x.parentId ? getNodes().find((p) => p.id === x.parentId) : null;
         const gkey = (parent?.data as IslandData | undefined)?.gkey;
         // key by IDENTITY, not node id: a chip's spot is relative to its pile,
@@ -1400,27 +1418,44 @@ function MapInner() {
       return;
     }
     const st = useStore.getState();
-    if (n.type === "island" || n.type === "halo") { st.recordMapPosition(n.id, n.position, true); return; }
-    const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
-    if (stage === "reconcile") {
-      clearWill();
-      const hit = haloAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2);
-      const targetCi = hit ? (hit.data as HaloData).ci : null;
-      const pos = hit ? { x: abs.x - hit.position.x, y: abs.y - hit.position.y } : abs;
-      const before = st.codeClusters.findIndex((c) => c.codes.includes(n.id));
-      st.reconcileDrop(n.id, pos, targetCi);
-      const after = useStore.getState().codeClusters.findIndex((c) => c.codes.includes(n.id));
-      if (after >= 0 && after !== before) earcon.join();
-      else if (after < 0 && before >= 0) earcon.evict();
-      return;
+    const chips: Record<string, { x: number; y: number }> = {};
+    const islands: Record<string, { x: number; y: number }> = {};
+    const reconcile: { code: string; ci: number | null }[] = [];
+    const themes: { code: string; gi: number }[] = [];
+    const absOf = (x: Node) => getInternalNode(x.id)?.internals.positionAbsolute ?? x.position;
+    const liveIslands = stage === "reconcile" ? [] : getNodes().filter((x) => x.type === "island");
+    for (const x of moved) {
+      if (x.type === "island" || x.type === "halo") { islands[x.id] = x.position; continue; }
+      if (x.type !== "chip") continue;
+      const abs = absOf(x);
+      const cx = abs.x + (x.width ?? 0) / 2, cy = abs.y + (x.height ?? 0) / 2;
+      if (stage === "reconcile") {
+        const hit = haloAt(cx, cy);
+        reconcile.push({ code: x.id, ci: hit ? (hit.data as HaloData).ci : null });
+        chips[x.id] = hit ? { x: abs.x - hit.position.x, y: abs.y - hit.position.y } : abs;
+      } else if (!liveIslands.length) {
+        chips[x.id] = x.position;
+      } else {
+        const hit = liveIslands.find((r) => cx >= r.position.x && cx <= r.position.x + (r.width ?? 0)
+          && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
+        themes.push({ code: x.id, gi: hit ? (hit.data as IslandData).gi : -1 });
+        chips[x.id] = x.position;
+      }
     }
-    const islands = getNodes().filter((x) => x.type === "island");
-    if (!islands.length) { st.recordMapPosition(n.id, n.position); return; }
-    const cx = abs.x + (n.width ?? 0) / 2, cy = abs.y + (n.height ?? 0) / 2;
-    const hitIsl = islands.find((r) => cx >= r.position.x && cx <= r.position.x + (r.width ?? 0)
-      && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
-    const gi = hitIsl ? (hitIsl.data as IslandData).gi : -1;
-    st.themesDrop(n.id, n.position, gi);
+    if (stage === "reconcile") clearWill();
+    const before = new Map(reconcile.map((r) =>
+      [r.code, st.codeClusters.findIndex((c) => c.codes.includes(r.code))]));
+    st.applyMapDrop({ chips, islands, reconcile, themes });
+    // one mark per gesture, describing what actually happened to the set
+    const after = useStore.getState().codeClusters;
+    let joined = 0, left = 0;
+    for (const [code, was] of before) {
+      const now = after.findIndex((c) => c.codes.includes(code));
+      if (now >= 0 && now !== was) joined++;
+      else if (now < 0 && was >= 0) left++;
+    }
+    if (joined) earcon.join(); else if (left) earcon.evict();
+    if (moved.length > 1) announce(`Moved ${moved.length} things`);
   }, [getNodes, getInternalNode, stage, haloAt, lens]);
   // a drag can end by unmount too; never leave a frame pointed at dead nodes
   useEffect(() => () => { if (dragFrame.current) cancelAnimationFrame(dragFrame.current); }, []);

@@ -335,7 +335,15 @@ export interface State {
   recordMapPosition: (id: string, pos: { x: number; y: number }, island?: boolean) => void;
   // a whole-map nudge (Adjust to zoom): every moved thing, ONE entry
   applyMapLayout: (chips: Record<string, { x: number; y: number }>,
-    islands: Record<string, { x: number; y: number }>) => void;
+    islands: Record<string, { x: number; y: number }>, moved: number) => void;
+  // a drop that moved SEVERAL things at once (a multi-selection drag): every
+  // position and every membership change, ONE undoable entry
+  applyMapDrop: (d: {
+    chips?: Record<string, { x: number; y: number }>;
+    islands?: Record<string, { x: number; y: number }>;
+    reconcile?: { code: string; ci: number | null }[];
+    themes?: { code: string; gi: number }[];
+  }) => void;
   reconcileDrop: (code: string, pos: { x: number; y: number }, targetCi: number | null) => void;
   // Themes-stage drop: position + island membership, ONE entry. gi -1 = no island.
   themesDrop: (code: string, pos: { x: number; y: number }, gi: number) => void;
@@ -1545,6 +1553,49 @@ export const useStore = create<State>()(
       // a completed Reconcile drop: position + membership change, ONE entry.
       // targetCi === null leaves whatever cluster the code was in (outside is
       // just outside); a number joins that cluster (leaving any other).
+      // The batched drop. React Flow reports a multi-selection drag ONCE, with
+      // the whole set, so filing only the grabbed node left every other
+      // selected code snapping back to its packed spot on the next rebuild.
+      applyMapDrop: (d) => {
+        get().pushUndo();
+        const s = get();
+        let clusters = s.codeClusters;
+        for (const { code, ci } of d.reconcile ?? []) {
+          const cur = clusters.findIndex((c) => c.codes.includes(code));
+          if (cur === ci) continue;
+          clusters = clusters.map((c, i) => {
+            let codes = c.codes;
+            if (i === cur) codes = codes.filter((x) => x !== code);
+            if (i === ci && !codes.includes(code)) codes = [...codes, code];
+            return codes === c.codes ? c : { ...c, codes };
+          });
+        }
+        if (clusters !== s.codeClusters) {
+          clusters = clusters
+            .filter((c) => c.codes.length >= 2)
+            .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) }));
+        }
+        let groups = s.codeGroups;
+        const positions = { ...s.mapPositions, ...(d.chips ?? {}) };
+        for (const { code, gi } of d.themes ?? []) {
+          const cur = groups.findIndex((g) => g.codes.includes(code));
+          if (cur === gi) continue;
+          // a new home means the packer files it; the drop position only holds
+          // when the code stayed where it was
+          delete positions[code];
+          groups = groups.map((g, i) => ({
+            ...g,
+            codes: i === gi ? [...g.codes, code] : g.codes.filter((x) => x !== code),
+          }));
+        }
+        if (groups !== s.codeGroups) groups = groups.filter((g) => g.codes.length > 0);
+        set({
+          codeClusters: clusters,
+          codeGroups: groups,
+          mapPositions: positions,
+          mapIslandPos: { ...s.mapIslandPos, ...(d.islands ?? {}) },
+        });
+      },
       reconcileDrop: (code, pos, targetCi) => {
         get().pushUndo();
         const s = get();
@@ -1584,10 +1635,11 @@ export const useStore = create<State>()(
       // nudged positions like a hand-drag would, so it persists, exports, and
       // comes back with one undo — unlike the old view-only spread, which
       // vanished on reload and could not be reasoned about.
-      applyMapLayout: (chips, islands) => {
+      applyMapLayout: (chips, islands, moved) => {
         const s = get();
-        const moved = Object.keys(chips).length + Object.keys(islands).length;
-        if (!moved) { announce("Nothing needed moving at this zoom"); return; }
+        // `moved` counts what actually shifted; the maps carry EVERY top-level
+        // position so the packer cannot refill the gaps that were just opened
+        if (!moved) { announce("Nothing was overlapping at this zoom"); return; }
         get().pushUndo();
         set({
           mapPositions: { ...s.mapPositions, ...chips },

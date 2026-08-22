@@ -153,3 +153,47 @@ test("normalizeCodeCase on an already-conforming book is a no-op with no history
   st.normalizeCodeCase("lower");
   expect(useStore.getState().undoStack.length).toBe(depth);
 });
+
+// React Flow reports a multi-selection drag ONCE, with the whole set. Filing
+// only the grabbed node is what made every other selected code snap back.
+test("applyMapDrop files every dragged code: positions and membership, one entry", () => {
+  const st = useStore.getState();
+  st.setCodeClusters([{ survivor: "beta", codes: ["beta", "gamma"], rationale: "" }]);
+  const depth = useStore.getState().undoStack.length;
+  useStore.getState().applyMapDrop({
+    chips: { alpha: { x: 10, y: 20 }, beta: { x: 30, y: 40 } },
+    islands: { "halo:0": { x: 5, y: 6 } },
+    reconcile: [
+      { code: "alpha", ci: 0 },   // joins the cluster
+      { code: "gamma", ci: null }, // leaves it
+    ],
+  });
+  const s = useStore.getState();
+  expect(s.undoStack.length).toBe(depth + 1);           // ONE entry for the gesture
+  expect(s.mapPositions.alpha).toEqual({ x: 10, y: 20 }); // every position kept
+  expect(s.mapPositions.beta).toEqual({ x: 30, y: 40 });
+  expect(s.mapIslandPos["halo:0"]).toEqual({ x: 5, y: 6 });
+  expect([...s.codeClusters[0].codes].sort()).toEqual(["alpha", "beta"]);
+  s.undo();
+  expect(useStore.getState().mapPositions.alpha).toBeUndefined();
+  useStore.getState().setCodeClusters([]);
+  useStore.getState().resetMapLayout();
+});
+
+test("applyMapDrop moving codes between theme islands keeps one entry and lets the packer refile", () => {
+  const st = useStore.getState();
+  st.setCodeGroups([{ name: "One", codes: ["alpha", "beta"] }, { name: "Two", codes: ["gamma"] }]);
+  st.recordMapPosition("alpha", { x: 99, y: 99 });
+  const depth = useStore.getState().undoStack.length;
+  useStore.getState().applyMapDrop({
+    chips: { alpha: { x: 1, y: 1 } },
+    themes: [{ code: "alpha", gi: 1 }],   // alpha moves to island Two
+  });
+  const s = useStore.getState();
+  expect(s.undoStack.length).toBe(depth + 1);
+  expect(s.codeGroups[1].codes).toContain("alpha");
+  expect(s.codeGroups[0].codes).not.toContain("alpha");
+  // a code that changed island is filed by the packer, not left at a stale spot
+  expect(s.mapPositions.alpha).toBeUndefined();
+  useStore.getState().setCodeGroups([]);
+});

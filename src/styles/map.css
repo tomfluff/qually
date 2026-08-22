@@ -298,3 +298,8 @@
 .mapLayoutMenu button { display:block; text-align:left; width:100%; }
 .mapLayoutMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
   line-height:1.35; margin-top:1px; }
+/* a selected group: the capsule and the island frame say so, the same accent
+   the chips use — groups are selectable so several can be moved together */
+.react-flow__node.selected > .mapHalo,
+.react-flow__node.selected > .mapIsland { border-color:var(--accent); }
+.react-flow__node.selected > .mapIsland { background:color-mix(in srgb, var(--accent) 9%, transparent); }
