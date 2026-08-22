@@ -4,11 +4,43 @@
    Flow owns the viewport (pan/zoom/box-select) and the minimap. Its stylesheet
    is imported by the component; here we theme what shows and style the chips. */
 #codemap { display:flex; flex-direction:column; height:100%; min-width:0; }
-.mapBar { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-  padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+/* The bar is one row of controls, so they share ONE height — set in em, so it
+   rides the app's text-size ramp instead of pinning a pixel value that clips
+   at large accessible sizes. Every control opts in through the same rule
+   rather than each carrying its own vertical padding. */
+.mapBar { --ctl-h:2.2em;
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:9px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+.mapBar .btn,
+.mapBar .settext,
+.mapBar .segmented,
+.mapBar .segmented .seg {
+  /* one font-size for the whole bar — .btn's own 1rem would otherwise ignore
+     the text-size setting AND make `em` resolve differently per control, which
+     is what left the bar with two heights */
+  font-size:1em;
+  height:var(--ctl-h); min-height:var(--ctl-h); padding-block:0; line-height:1;
+  display:inline-flex; align-items:center; }
+.mapBar .segmented { padding:0; }
+.mapBar .btn.iconbtn { justify-content:center; aspect-ratio:1; padding-inline:0; }
 .mapBar .mapTitle { font-weight:600; }
-.mapBar .mapHint { flex:1 1 20ch; min-width:0; color:var(--muted); font-size:.9em; }
 .mapBar .mapCount { color:var(--muted); }
+/* the one flexible cell: it takes the slack so the controls sit right */
+.mapBar .mapBarGap { flex:1 1 0; min-width:0; }
+/* the gestures, behind the ? button */
+.mapHelp { position:absolute; left:16px; top:52px; z-index:6; max-width:52ch;
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.28); padding:12px 14px 14px; }
+.mapHelpHead { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.mapHelpHead b { flex:1; }
+.mapHelpList { display:grid; grid-template-columns:auto 1fr; gap:6px 14px;
+  margin:0; font-size:.95em; }
+.mapHelpList dt { font-weight:600; white-space:nowrap; }
+.mapHelpList dd { margin:0; color:var(--muted); }
+@media (max-width:640px) {
+  .mapHelpList { grid-template-columns:1fr; gap:2px; }
+  .mapHelpList dd { margin-bottom:6px; }
+}
 .mapCanvas { flex:1; min-height:0; position:relative; background:var(--bg); }
 .mapCanvas .empty { position:absolute; inset:0; display:grid; place-items:center;
   color:var(--muted); }
@@ -116,7 +148,7 @@
 .mapActBadge { flex:none; }
 /* stage toggle rides the bar */
 .mapBar .mapStage { flex:none; }
-.mapBar .mapStage .seg { padding:4px 12px; font-weight:500; }
+.mapBar .mapStage .seg { padding-inline:12px; font-weight:500; }
 /* the halo: a capsule field hugging its packed member chips — containment IS
    membership. The body is click-through; the caption (drag handle + menu
    target) is the live part. While a chip is held over it, .will outlines it
@@ -175,9 +207,10 @@
 /* the minimap must not sit ON the zoom controls when both share bottom-left */
 .mapCanvas .react-flow__minimap.bottom.left { margin-left:56px; }
 /* the lens select rides the bar compactly, labeled once instead of per-option */
-.mapLensWrap { display:inline-flex; align-items:center; gap:6px; flex:none; }
+.mapLensWrap { display:inline-flex; align-items:center; gap:6px; flex:none;
+  height:var(--ctl-h); }
 .mapLensLabel { color:var(--muted); font-size:.9em; }
-.mapBar .mapLens { flex:none; width:auto; padding:4px 8px; }
+.mapBar .mapLens { flex:none; width:auto; padding-inline:8px; }
 /* the plan panel folds to its header line */
 .mapPlanHead .mapPlanMin { padding:2px 7px; }
 /* the rename input types like an input, not a drag handle */

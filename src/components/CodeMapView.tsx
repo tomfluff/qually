@@ -439,6 +439,9 @@ function MapInner() {
   const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" | { focus: string[] } }>(false);
   const [themeAiOpen, setThemeAiOpen] = useState(false);
   const [confirmRelayout, setConfirmRelayout] = useState<{ right: number; y: number } | null>(null);
+  // the gestures used to sit in the bar as a paragraph; they are reference,
+  // not something to read every session, so they live behind a button
+  const [helpOpen, setHelpOpen] = useState(false);
   // the arrangement lens: transient bucket/co-occurrence views for triage
   const [lens, setLens] = useState(remembered.lens);
   useEffect(() => { remembered.lens = lens; }, [lens]);
@@ -1052,20 +1055,31 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi && !confirmRelayout) return;
-    const down = (e: MouseEvent) => { if (!(e.target as Element).closest(".mapMenu")) { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); } };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setMenu(null); setConfirmAi(null); setConfirmRelayout(null); } };
+    if (!menu && !confirmAi && !confirmRelayout && !helpOpen) return;
+    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); };
+    const down = (e: MouseEvent) => {
+      const t = e.target as Element;
+      // the help button toggles itself; let its own handler run
+      if (!t.closest(".mapMenu") && !t.closest(".mapHelpBtn")) close();
+    };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi, confirmRelayout]);
+  }, [menu, confirmAi, confirmRelayout, helpOpen]);
 
   return (
     <div id="codemap" className={"stage-" + stage} style={{ fontSize: sidebarFontSize }}>
       <div className="mapBar">
         <span className="mapTitle">Code map</span>
-        <span className="mapHint">The whole codebook at once. Drag to select, <b>Space+drag</b> (or middle/right-drag) to pan, wheel to zoom. Right-click a selection to act on it; double-click a code for its excerpts.</span>
+        <button className="btn iconbtn mapHelpBtn" aria-expanded={helpOpen}
+          aria-label={helpOpen ? "Hide how to use the map" : "How to use the map"}
+          onClick={() => setHelpOpen((v) => !v)}
+          title="How to use the map">
+          <Icon name="help" size={15} />
+        </button>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+        <span className="mapBarGap" />
         <label className="mapLensWrap" title="A transient lens: arranges the map for looking, your own layout comes back on Normal">
           <span className="mapLensLabel">Arrange</span>
           <select className="settext mapLens" aria-label="Arrange the map by"
@@ -1277,6 +1291,28 @@ function MapInner() {
                 false);
             }
           }} />
+      )}
+      {helpOpen && (
+        <div className="mapMenu mapHelp" role="dialog" aria-label="How to use the map"
+          style={{ fontSize: sidebarFontSize }}>
+          <div className="mapHelpHead">
+            <b>The whole codebook at once</b>
+            <button className="btn iconbtn" aria-label="Close" onClick={() => setHelpOpen(false)}>
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+          <dl className="mapHelpList">
+            <dt>Select</dt><dd>Drag a box across the canvas. Hold Ctrl (Cmd) to add to the selection.</dd>
+            <dt>Pan</dt><dd><b>Space+drag</b>, or drag with the middle or right button.</dd>
+            <dt>Zoom</dt><dd>Wheel, or the +/− controls in the corner. Group names stay readable as you zoom out.</dd>
+            <dt>Act on codes</dt><dd>Right-click a selection: open in the Codebook, ask the AI where those codes belong, propose a merge, or merge them into one.</dd>
+            <dt>Read a code</dt><dd>Double-click a chip for its excerpts.</dd>
+            <dt>Reconcile</dt><dd>A capsule is a proposed merge. Drag a chip inside it to join, outside to leave — it keeps the spot you give it. The caption is the merged code's name; double-click to rename, or use its arrow for the reasoning and the verdict.</dd>
+            <dt>Themes</dt><dd>Drag codes between islands; drag an island by its caption; double-click a caption to rename it.</dd>
+            <dt>Arrange</dt><dd>A lens rearranges the map for looking and changes nothing. Switch back to Normal for your own layout.</dd>
+            <dt>Spread</dt><dd>Nudges groups apart until their names stop overlapping, without moving the view. Toggle it back to contract.</dd>
+          </dl>
+        </div>
       )}
       {confirmRelayout && (
         <div className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm re-layout"
