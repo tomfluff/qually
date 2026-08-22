@@ -36,6 +36,14 @@ html,body,#root { margin:0; height:100%; background:var(--bg); color:var(--fg);
   font-family:system-ui,Segoe UI,Roboto,sans-serif; }
 #app { display:flex; flex-direction:column; height:100%; }
 button { font-family:inherit; }
+/* Icons meet the text's ink. Flex centres an icon on the LINE BOX beside it,
+   and fonts with asymmetric vertical metrics (Segoe UI on Windows) hang their
+   glyphs below that box's centre — so every icon in the app read a hair high
+   beside its label. 0.055em is the measured gap between Segoe's glyph-band
+   centre and its line-box centre; translate is paint-only, so no layout moves.
+   Applies to ALL our icons (Icon.tsx stamps .icn) so icon-only buttons stay on
+   the same optical line as their labelled neighbours. */
+.icn { translate: 0 0.055em; }
 
 /* Visually hidden, exposed to screen readers — the live region and text-only
    labels use this. clip-path alone isn't enough for some SRs; the 1px box is. */

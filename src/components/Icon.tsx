@@ -53,7 +53,7 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
 export function Icon({ name, size = 18 }: { name: keyof typeof PATHS; size?: number }) {
   const { d, fill } = PATHS[name];
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24"
+    <svg className="icn" width={size} height={size} viewBox="0 0 24 24"
       fill={fill ? "currentColor" : "none"} stroke={fill ? "none" : "currentColor"}
       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
       style={{ display: "block" }}>
