@@ -2013,15 +2013,6 @@ function MapInner() {
           <span className="blabel mapViewName">{spec.label}</span>
           <Icon name={viewMenu ? "chevron-up" : "chevron-down"} size={13} />
         </button>
-        <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!mapSetMenu}
-          aria-label="Map settings"
-          onClick={(e) => {
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setMapSetMenu(mapSetMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
-          }}
-          title="Map settings: selection ring, minimap">
-          <Icon name="settings" size={16} />
-        </button>
         <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!layoutMenu}
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -2032,6 +2023,15 @@ function MapInner() {
               menu (Export, Assist) — without it this read as a plain action */}
           <Icon name="refresh" size={16} /> <span className="blabel">Layout</span>
           <Icon name={layoutMenu ? "chevron-up" : "chevron-down"} size={13} />
+        </button>
+        <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!mapSetMenu}
+          aria-label="Map settings"
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setMapSetMenu(mapSetMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
+          }}
+          title="Map settings: selection ring, minimap">
+          <Icon name="settings" size={16} />
         </button>
       </div>
       <div className="mapCanvas" ref={canvasRef} tabIndex={-1}
@@ -2250,29 +2250,37 @@ function MapInner() {
         </div>
       )}
       {mapSetMenu && (
+        /* the Settings modal's own furniture — .set-h, .srow, .settings-note —
+           so the map's settings read like settings, not like a context menu
+           that grew form controls */
         <div ref={mapSetRef} className="ctxmenu mapMenu mapSetMenu" role="dialog" aria-label="Map settings"
           style={{ right: mapSetMenu.right, top: mapSetMenu.y, fontSize: sidebarFontSize }}>
-          <div className="mapMenuHead" id="mapring-h">Selection ring</div>
-          <div className="segmented" role="radiogroup" aria-labelledby="mapring-h">
-            {RING_SIZES.map((sz) => (
-              <button key={sz} className={"seg" + (mapRing === sz ? " on" : "")}
-                role="radio" aria-checked={mapRing === sz}
-                onClick={() => setUi({ mapRing: sz })}
-                title={`${MAP_RING_PX[sz]}px around every selected code`}>{sz}</button>
-            ))}
+          <div className="set-h">Map</div>
+          <div className="srow">
+            <span id="mapring-h">Selection ring</span>
+            <div className="segmented" role="radiogroup" aria-labelledby="mapring-h">
+              {RING_SIZES.map((sz) => (
+                <button key={sz} className={"seg" + (mapRing === sz ? " on" : "")}
+                  role="radio" aria-checked={mapRing === sz}
+                  onClick={() => setUi({ mapRing: sz })}
+                  title={`${MAP_RING_PX[sz]}px around every selected code`}>{sz}</button>
+              ))}
+            </div>
           </div>
-          <div className="mapMenuNote">
-            {MAP_RING_PX[mapRing]}px around a selected code, held at every zoom.
+          <div className="settings-note">
+            {MAP_RING_PX[mapRing]}px around a selected code, and it holds that thickness at
+            every zoom — so a selection stays findable with the whole codebook on screen.
           </div>
-          <div className="ctxdiv" />
-          <div className="mapMenuHead" id="mapmini-h">Minimap</div>
-          <div className="segmented mapCornerPick" role="radiogroup" aria-labelledby="mapmini-h">
-            {CORNERS.map(([c, label]) => (
-              <button key={c} className={"seg" + (mapMinimap === c ? " on" : "")}
-                role="radio" aria-checked={mapMinimap === c}
-                onClick={() => setUi({ mapMinimap: c })}
-                title={`Put the minimap in the ${label.toLowerCase()}`}>{label}</button>
-            ))}
+          <div className="srow">
+            <span id="mapmini-h">Minimap</span>
+            <div className="segmented mapCornerPick" role="radiogroup" aria-labelledby="mapmini-h">
+              {CORNERS.map(([c, label]) => (
+                <button key={c} className={"seg" + (mapMinimap === c ? " on" : "")}
+                  role="radio" aria-checked={mapMinimap === c}
+                  onClick={() => setUi({ mapMinimap: c })}
+                  title={`Put the minimap in the ${label.toLowerCase()}`}>{label}</button>
+              ))}
+            </div>
           </div>
         </div>
       )}

@@ -348,19 +348,27 @@
 .mapCardNode .btn.primary:hover:not(:disabled) { background:var(--accent); filter:brightness(1.12); }
 /* the Layout menu: two named actions, each with a line saying what it does —
    "reset" and "adjust" are easy to confuse when one of them discards work */
-/* the map's own settings: segmented pickers, not menu items, because you sit
-   on this menu and try a few weights against the codes behind it */
-.mapSetMenu { max-width:32ch; padding:4px 2px 6px; }
-.mapSetMenu .mapMenuHead { padding:6px 8px 4px; }
-.mapSetMenu .segmented { margin:0 8px; width:calc(100% - 16px); }
-.mapSetMenu .segmented .seg { flex:1; padding-inline:6px; }
-/* four corners read as words, so the choice does not depend on decoding an
-   arrow at a glance */
-.mapSetMenu .mapCornerPick { flex-wrap:wrap; }
-.mapSetMenu .mapCornerPick .seg { flex:1 1 45%; }
-.mapSetMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
-  line-height:1.35; padding:5px 9px 2px; }
-.mapSetMenu .ctxdiv { margin:7px 6px 2px; }
+/* The map's settings borrow the Settings modal's furniture wholesale, so the
+   two read as the same kind of surface: .set-h heading, label-left rows, the
+   small muted note. */
+.mapSetMenu { width:min(40ch, 92vw); padding:8px 12px 11px; }
+.mapSetMenu .set-h { margin:2px 0 8px; }
+.mapSetMenu .srow { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px;
+  min-height:26px; margin-bottom:2px; }
+.mapSetMenu .srow > span:first-child { flex:1; color:var(--fg); font-weight:500; }
+.mapSetMenu .settings-note { margin:2px 0 12px; }
+/* Segments size to their WORDS. The shared rule shares the width equally and
+   lets a segment shrink under its label, which clipped "Bottom right" to
+   "Bottom" — the group keeps its natural width here and wraps to its own line
+   when the label leaves it no room. */
+.mapSetMenu .segmented { flex:0 0 auto; }
+.mapSetMenu .segmented .seg { flex:0 0 auto; min-width:max-content; padding-inline:9px; }
+/* four corners as a 2x2: the names are too long for one row, and stacking
+   them four deep hides the shape of the choice they describe. The 1px gaps
+   over the border colour ARE the dividers. */
+.mapSetMenu .mapCornerPick { display:grid; grid-template-columns:1fr 1fr; gap:1px;
+  background:var(--muted); }
+.mapSetMenu .mapCornerPick .seg { border-left:0; text-align:center; }
 .mapLayoutMenu { max-width:34ch; }
 .mapLayoutMenu button { display:block; text-align:left; width:100%; }
 .mapLayoutMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
