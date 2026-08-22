@@ -57,7 +57,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
   }, [segments, transcripts, codebook]);
 
   const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0);
-  const inTok = useMemo(() => estimateClusterTokens(codes, red), [codes, red]);
+  const inTok = useMemo(() => estimateClusterTokens(codes, red, transient ? "areas" : "usage"), [codes, red, transient]);
   const redactions = useMemo(() => codes.reduce((n, c) =>
     n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [codes, red]);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 24)));
@@ -71,12 +71,15 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
       setErr(m); announce(m, { assertive: true }); return;
     }
     setBusy(true); setErr(null);
-    announce(`Grouping ${codes.length} codes by similarity…`);
+    announce(transient ? `Sorting ${codes.length} codes into areas…` : `Grouping ${codes.length} codes by similarity…`);
     earcon.aiStart();
     abort.current = new AbortController();
     try {
       const { groups, usage } = await clusterCodes({
-        key, model: model.id, codes, redaction: red, signal: abort.current.signal,
+        key, model: model.id, codes, redaction: red,
+        // the map's view wants a few broad shelves; theming wants usage groups
+        kind: transient ? "areas" : "usage",
+        signal: abort.current.signal,
       });
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "group", pid: "(codebook)",
@@ -87,8 +90,8 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
       setDone({ found: groups.length, cost: usage.costUsd });
       earcon.aiDone();
       announce(groups.length
-        ? `${groups.length} similarity group${groups.length === 1 ? "" : "s"} laid out on the map.`
-        : "No similarity groups stood out.");
+        ? `${groups.length} ${transient ? "area" : "similarity group"}${groups.length === 1 ? "" : "s"} laid out on the map.`
+        : `No ${transient ? "areas" : "similarity groups"} stood out.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
@@ -101,17 +104,17 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
   };
 
   return (
-    <AiModal title={transient ? "Arrange by AI topics" : "Group codes by similarity"} busy={busy} onClose={onClose}>
+    <AiModal title={transient ? "Arrange by AI areas" : "Group codes by similarity"} busy={busy} onClose={onClose}>
         {done ? (
           <>
             <div className="ai-body">
               <p className="about-lede">
                 {done.found === 0
-                  ? <>No {transient ? "topic neighborhoods" : "similarity groups"} stood out — the codebook reads as distinct usages.</>
+                  ? <>No {transient ? "areas" : "similarity groups"} stood out — the codebook reads as distinct usages.</>
                   : transient
-                    ? <>Arranged the map into <b>{done.found} topic pile{done.found === 1 ? "" : "s"}</b> — a
-                      transient lens for triaging merges. Select codes in a pile and ask where they belong;
-                      switch Arrange back to Default to return to your layout. Nothing was saved or changed.</>
+                    ? <>Arranged the map into <b>{done.found} area{done.found === 1 ? "" : "s"}</b> — shelves for
+                      finding codes worth regrouping. Select codes in one and act on them as usual;
+                      switch Arrange back to Free-form for your own layout. Nothing was saved or changed.</>
                     : <>Laid out <b>{done.found} group{done.found === 1 ? "" : "s"}</b> as islands on the map —
                       drag codes between them, rename or dissolve any of them. The codes themselves are untouched.</>}
               </p>
@@ -125,9 +128,10 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
               <p className="about-lede">
                 The AI reads your whole codebook — each code's definition and a few excerpts you
                 coded with it — and proposes {transient
-                  ? <>TOPIC neighborhoods: semantically connected codes that are the most likely to
-                    need merging together. The arrangement is a transient lens — it divides the
-                    consolidation work into smaller piles and writes nothing anywhere.</>
+                  ? <>a handful of BROAD areas — the shelves you would use to find your way around a
+                    long codebook (strategies, opinions, difficulties, and so on). It is a way of
+                    looking: nothing is renamed, merged, or saved, and your free-form layout is
+                    untouched.</>
                   : <>THEME groups: codes that belong together analytically.
                     The grouping lands on the map as islands for you to reshape; no code is renamed,
                     merged, or removed.</>}

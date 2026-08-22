@@ -112,7 +112,7 @@ const remembered = {
   planPos: { x: 0, y: 0 },
   planMin: false,
   // the transient arrangement lens: a way of LOOKING, never written anywhere
-  lens: "default" as "default" | "pids" | "segs" | "cooc" | "topics",
+  lens: "default" as "default" | "pids" | "segs" | "topics",
   topicGroups: [] as { name: string; codes: string[] }[],
   // the codebook signature the topics arrangement was computed from — a
   // mismatch means merges/renames happened since and the piles are stale
@@ -123,7 +123,7 @@ const remembered = {
   // position is relative to its pile, so when the grouping shifts under it
   // (a bucket boundary moves, topics re-run) the old spot is meaningless and
   // must be forgotten rather than re-applied against a different parent.
-  lensPos: {} as Partial<Record<"pids" | "segs" | "cooc" | "topics", Record<string, { x: number; y: number }>>>,
+  lensPos: {} as Partial<Record<"pids" | "segs" | "topics", Record<string, { x: number; y: number }>>>,
 };
 
 // A project swap makes every one of these meaningless — they are keyed by
@@ -572,7 +572,7 @@ function MapInner() {
       { name: similar.source, def: st.codebook[similar.source]?.def ?? "", excerpts: [] }, book, red);
     return { inTok, cost: costOf(modelOf(st.ai.model), inTok, estimateTokens(" ".repeat(240))) };
   }, [similar]);
-  // the arrangement lens: transient bucket/co-occurrence views for triage
+  // the arrangement views: transient bucket and AI-area views for finding your way
   const [lens, setLens] = useState(remembered.lens);
   useEffect(() => { remembered.lens = lens; }, [lens]);
   const [topicGroups, setTopicGroups] = useState(remembered.topicGroups);
@@ -741,8 +741,8 @@ function MapInner() {
     });
 
     if (lens !== "default") {
-      // buckets from counts, or co-occurrence components — computed locally,
-      // arranged as read-only islands; nothing is written anywhere
+      // buckets from counts, or the AI areas — arranged as islands you can
+      // move within the view; nothing is written to the project
       let lensGroups: { name: string; list: string[] }[] = [];
       if (lens === "pids" || lens === "segs") {
         const val = (c: string) => (lens === "pids" ? stats[c]?.pids ?? 0 : stats[c]?.segs ?? 0);
@@ -763,44 +763,6 @@ function MapInner() {
           .filter((g) => g.list.length > 0);
         const untopiced = codes.filter((c) => !grouped.has(c));
         if (untopiced.length) lensGroups.push({ name: "No topic", list: untopiced });
-      } else {
-        // co-occurrence: codes whose accepted excerpts cover largely the SAME
-        // lines are prime merge candidates (they always appear together)
-        const lines = new Map<string, Set<string>>();
-        for (const seg of segments) {
-          if (seg.status !== "accepted" || !(seg.code in codebook)) continue;
-          const set = lines.get(seg.code) ?? new Set<string>();
-          for (let l = seg.start; l <= seg.end; l++) set.add(`${seg.pid}:${l}`);
-          lines.set(seg.code, set);
-        }
-        const names = [...lines.keys()].filter((c) => (lines.get(c)?.size ?? 0) >= 2);
-        // pairwise, NOT transitive: A~B and B~C must not chain A into C's
-        // group. Greedy from the strongest pairs; a code may extend a group
-        // only if it co-occurs with EVERY member.
-        const score = (a: string, b: string) => {
-          const A = lines.get(a)!, B = lines.get(b)!;
-          let inter = 0;
-          for (const x of A) if (B.has(x)) inter++;
-          return inter / Math.min(A.size, B.size);
-        };
-        const pairs: [number, string, string][] = [];
-        for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
-          const sc = score(names[i], names[j]);
-          if (sc >= 0.6) pairs.push([sc, names[i], names[j]]);
-        }
-        pairs.sort((a, b) => b[0] - a[0]);
-        const groupOf = new Map<string, string[]>();
-        for (const [, a, b] of pairs) {
-          const ga = groupOf.get(a), gb = groupOf.get(b);
-          if (!ga && !gb) { const g = [a, b]; groupOf.set(a, g); groupOf.set(b, g); }
-          else if (ga && !gb && ga.every((m) => score(m, b) >= 0.6)) { ga.push(b); groupOf.set(b, ga); }
-          else if (gb && !ga && gb.every((m) => score(m, a) >= 0.6)) { gb.push(a); groupOf.set(a, gb); }
-        }
-        const together = [...new Set(groupOf.values())].sort((a, b) => b.length - a.length);
-        const grouped = new Set(together.flat());
-        lensGroups = together.map((g, i) => ({ name: `Always together ${i + 1}`, list: g }));
-        const unpaired = codes.filter((c) => !grouped.has(c));
-        if (unpaired.length) lensGroups.push({ name: "No co-occurrence signal", list: unpaired });
       }
       // islands layout — structurally read-only, but everything still MOVES:
       // hand-placements live in remembered.lensPos (session, per lens), never
@@ -823,7 +785,7 @@ function MapInner() {
         const stepW = Math.max(bw, b.cap.w);
         if (ix > 0 && ix + stepW > rowW) { ix = 0; iy += rowH + ISLAND_GAP + b.cap.h; rowH = 0; }
         // positions hang off the pile's NAME: gi is row order, and a bucket
-        // emptying or the cooc piles re-sorting would hand one pile's spot to
+        // emptying or the piles re-sorting would hand one pile's spot to
         // another
         islands.push({
           id: key, type: "island" as const,
@@ -1673,21 +1635,20 @@ function MapInner() {
               // without a fitView a zoomed-in camera lands on empty canvas
               requestAnimationFrame(() => fitView({ duration: 200 }));
               announce(v === "default" ? "Back to your free-form layout."
-                : `Arranged by ${{ pids: "transcript buckets", segs: "excerpt buckets", cooc: "co-occurrence", topics: "AI topics" }[v]}. A view only — your free-form layout is untouched.`);
+                : `Arranged by ${{ pids: "transcript buckets", segs: "excerpt buckets", topics: "AI areas" }[v]}. A view only — your free-form layout is untouched.`);
             }}>
             <option value="default">Free-form (your layout)</option>
             <option value="pids">Transcript buckets</option>
             <option value="segs">Excerpt buckets</option>
-            <option value="cooc">Co-occurrence</option>
-            <option value="topics">AI topics</option>
+            <option value="topics">AI areas</option>
           </select>
         </label>
         {lens === "topics" && (
           <button className="btn" onClick={() => setTopicAiOpen(true)}
             title={topicsStale
-              ? "The codebook changed since these piles were computed — re-run to refresh them"
-              : "Ask the AI to recompute the topic piles"}>
-            {topicsStale ? "Topics are stale — re-run…" : "Re-run topics…"}
+              ? "The codebook changed since these areas were worked out — re-run to refresh them"
+              : "Ask the AI to work the areas out again"}>
+            {topicsStale ? "Areas are stale — re-run…" : "Re-run areas…"}
           </button>
         )}
         <div className="segmented mapStage" role="radiogroup" aria-label="Map stage">
@@ -1897,7 +1858,7 @@ function MapInner() {
             <dt>Reconcile</dt><dd>A capsule is a proposed merge: drag chips in or out. Its caption names the merged code; the arrow opens the reasoning.</dd>
             <dt>Merge vs group</dt><dd>A <b>merge</b> says these are one code and folds them into one, shrinking the codebook. A <b>group</b> says they are different codes that belong together, and changes nothing about them.</dd>
             <dt>Themes</dt><dd>Drag codes between islands, or an island by its caption.</dd>
-            <dt>Arrange</dt><dd>A lens for looking only. Normal restores your layout.</dd>
+            <dt>Arrange</dt><dd>Views for looking only — buckets by size, or AI areas. Free-form is your own layout, always one click away.</dd>
             <dt>Spread</dt><dd>Nudges groups apart until names stop overlapping.</dd>
           </dl>
           <div className="mapHelpFoot">Esc, or the ? button, closes this.</div>
