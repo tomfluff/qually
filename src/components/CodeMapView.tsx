@@ -621,6 +621,25 @@ function RafSelectionMarquee() {
   return <div ref={elementRef} className="mapRafMarquee" aria-hidden="true" />;
 }
 
+// A selected chip's 2px border is world ink: at 0.1 zoom it paints at 0.2px
+// and the selection — the one thing a low-vision researcher must be able to
+// find on a 178-code canvas — simply vanishes. This spends a constant ~6px of
+// SCREEN ink on a ring, priced in world units here and read by the .sel rules
+// in map.css as one CSS length on the flow container. One subscription total:
+// the chips never watch the zoom themselves, so only the few selected
+// elements restyle when it changes — nothing new rides the drag path.
+function SelectionRingScale() {
+  const zoom = useFlowStore(zoomSel);
+  const flowStore = useFlowStoreApi();
+  useEffect(() => {
+    // the ceiling only matters if the zoom range ever deepens: it keeps a
+    // far-out camera from burying the tiny map under ring paint
+    flowStore.getState().domNode?.style.setProperty(
+      "--map-ring", `${Math.min(60, 6 / zoom).toFixed(2)}px`);
+  }, [zoom, flowStore]);
+  return null;
+}
+
 // Popups are placed at the pointer, which near an edge puts half of them
 // off-screen. Measure once after they render and nudge them back in — cheaper
 // and more honest than guessing each panel's size in advance.
@@ -2050,6 +2069,7 @@ function MapInner() {
               </Panel>
             )}
             <RafSelectionMarquee />
+            <SelectionRingScale />
             <SelectionHud canEvict={view === "reconcile"} onSelectionChanged={syncGroupSelection} />
             {view === "reconcile" && plan.length > 0 && (
               <Panel position="top-left" className="mapPlan"

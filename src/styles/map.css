@@ -68,8 +68,15 @@
   border-radius:10px; cursor:pointer;
   font:inherit; text-align:left; position:relative; overflow:hidden; }
 .mapChip:hover { border-color:var(--muted); border-left-color:var(--chip-c); }
+/* --map-ring (set on the flow container by SelectionRingScale) is a constant
+   ~6px of SCREEN ink priced in world units, so the ring survives zooming out:
+   the 2px accent border alone painted at 0.2px at 0.1 zoom and the selection
+   vanished. An outline, not a border — it changes no layout, so 178 chips
+   never reflow while the zoom runs. Weight and fill carry the signal along
+   with the color, never the color alone. */
 .mapChip.sel { border-color:var(--accent); border-left-color:var(--chip-c);
-  background:color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+  background:color-mix(in srgb, var(--accent) 14%, var(--panel));
+  outline:var(--map-ring, 4px) solid var(--accent); }
 .mapChip .mapName { font-weight:600; white-space:nowrap; }
 /* the counts are the map's other axis — how much work a code does — so they
    read at full strength, bold, sized with the name; only the glyphs recede */
@@ -343,9 +350,12 @@
 .mapLayoutMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
   line-height:1.35; margin-top:1px; }
 /* a selected group: the capsule and the island frame say so, the same accent
-   the chips use — groups are selectable so several can be moved together */
+   the chips use — groups are selectable so several can be moved together.
+   The same zoom-priced ring the chips wear: a 1px accent frame is just as
+   gone at 0.1 zoom as a chip's border */
 .react-flow__node.selected > .mapHalo,
-.react-flow__node.selected > .mapIsland { border-color:var(--accent); }
+.react-flow__node.selected > .mapIsland { border-color:var(--accent);
+  outline:var(--map-ring, 4px) solid var(--accent); }
 .react-flow__node.selected > .mapIsland { background:color-mix(in srgb, var(--accent) 9%, transparent); }
 /* the one line that separates the two actions people confuse */
 .mapSimChoice { padding:6px 12px 0; }
