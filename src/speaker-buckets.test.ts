@@ -74,3 +74,29 @@ test("a tie between two speakers is resolved the same way every time", () => {
   expect(once[0].key).toBe(MIXED);
   expect(again[0].key).toBe(once[0].key);
 });
+
+// Line ids are checked only for being safe integers on import, and a
+// hand-edited project file is not checked at all. Walking start..end would
+// turn one sparse id into billions of misses and freeze the tab.
+test("a sparse line id does not walk the gap", () => {
+  const sparse = { P01: { lines: [line(1, "Ana"), line(2_000_000_000, "Ben")] } };
+  const t0 = Date.now();
+  const piles = speakerBuckets(["c"], [seg(1, "P01", "c", 1, 2_000_000_000)], sparse);
+  expect(Date.now() - t0).toBeLessThan(200);
+  expect(piles[0].key).toBe(MIXED); // one line each, so nobody owns it
+});
+
+test("speaker names are trimmed, and a blank speaker is not a voice", () => {
+  const messy = { P01: { lines: [line(1, "Ana"), line(2, "Ana "), line(3, "   ")] } };
+  const piles = speakerBuckets(["c"], [seg(1, "P01", "c", 1, 3)], messy);
+  // "Ana " must not become a second person, and the blank line must not tally
+  expect(piles).toHaveLength(1);
+  expect(piles[0].key).toBe("spk:Ana");
+  expect(piles[0].label).toBe("Ana");
+});
+
+test("lines out of id order in the file still tally by range", () => {
+  const jumbled = { P01: { lines: [line(3, "Ben"), line(1, "Ana"), line(2, "Ana")] } };
+  const piles = speakerBuckets(["c"], [seg(1, "P01", "c", 1, 2)], jumbled);
+  expect(piles[0].key).toBe("spk:Ana");
+});

@@ -28,23 +28,42 @@ export function speakerBuckets(
   segments: Segment[],
   transcripts: Record<string, { lines: Line[] }>,
 ): SpeakerPile[] {
-  // line id → speaker, per transcript: a segment names a line RANGE, and the
-  // speaker can change inside it
-  const lineSpk = new Map<string, Map<number, string>>();
-  for (const [pid, t] of Object.entries(transcripts))
-    lineSpk.set(pid, new Map(t.lines.map((l) => [l.id, l.speaker])));
+  // Each transcript's lines in id order, so a segment's range is found by
+  // BINARY SEARCH over the lines that exist — never by counting up from start
+  // to end. Line ids are only checked for being safe integers on import, and a
+  // hand-edited project file is not checked at all, so one sparse id would
+  // turn a range walk into billions of misses and freeze the tab.
+  const byPid = new Map<string, { ids: number[]; speakers: string[] }>();
+  for (const [pid, t] of Object.entries(transcripts)) {
+    const sorted = [...t.lines].sort((a, b) => a.id - b.id);
+    byPid.set(pid, {
+      ids: sorted.map((l) => l.id),
+      // trimmed, like every other surface that reads a speaker — an untrimmed
+      // "P1 " from a hand-edited file would split one person into two piles
+      speakers: sorted.map((l) => l.speaker.trim()),
+    });
+  }
+  /** index of the first id >= v */
+  const lowerBound = (ids: number[], v: number) => {
+    let lo = 0, hi = ids.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (ids[mid] < v) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+  };
 
   const tallies = new Map<string, Map<string, number>>();
   for (const s of segments) {
     // accepted only — a candidate coding is not evidence the researcher has
     // stood behind, same rule as codeStats
     if (s.status !== "accepted") continue;
-    const ls = lineSpk.get(s.pid);
-    if (!ls) continue;   // a transcript that is not loaded tallies nothing
+    const tr = byPid.get(s.pid);
+    if (!tr) continue;   // a transcript that is not loaded tallies nothing
     const t = tallies.get(s.code) ?? new Map<string, number>();
-    for (let i = s.start; i <= s.end; i++) {
-      const sp = ls.get(i);
-      if (sp) t.set(sp, (t.get(sp) ?? 0) + 1);
+    for (let i = lowerBound(tr.ids, s.start); i < tr.ids.length && tr.ids[i] <= s.end; i++) {
+      const sp = tr.speakers[i];
+      if (sp) t.set(sp, (t.get(sp) ?? 0) + 1);   // a blank speaker is not a voice
     }
     tallies.set(s.code, t);
   }

@@ -111,13 +111,14 @@ type SimilarData = {
 type SimilarNodeT = Node<SimilarData, "similar">;
 type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT;
 
-// THE VIEWS. One value, five entries — not a stage crossed with a lens. The
-// old pair could express eight situations for a product that has five, and
-// every feature had to answer "is this a stage thing or a lens thing?" with
-// "neither, it depends". Each view declares what a drag means in it and which
-// layout slot it owns; `layout: null` marks a DERIVED view whose piles come
-// from counts, where there is no membership to edit and so nothing moves at
-// all — better an absent gesture than one that silently does nothing.
+// THE VIEWS. One value — not a stage crossed with a lens. The old pair could
+// express eight situations for a product that has five, and every feature had
+// to answer "is this a stage thing or a lens thing?" with "neither, it
+// depends". Each view declares what a drag means in it and which layout slot
+// it owns; `layout: null` marks a DERIVED view, whose piles come from the data
+// rather than from anything you filed. There is no membership to edit there,
+// so a CHIP never moves — but the piles themselves rearrange, in the session
+// only, because a derived pile drifts as the coding grows.
 export type MapView = "reconcile" | "themes" | "areas" | "pids" | "segs" | "defs" | "speaker";
 type ViewSpec = {
   label: string;
@@ -1505,12 +1506,18 @@ function MapInner() {
       if (n.type === "chip") chips[n.id] = pos; else islands[n.id] = pos;
     });
     if (!slot) {
+      // A Clean up that moved nothing must WRITE nothing. Recording every
+      // pile's packed spot would pin them all: the piles are derived, so they
+      // are meant to re-pack as the coding grows, and a pinned one is later
+      // overlapped by the neighbour that grew into it. (The store path returns
+      // early for the same reason.)
+      if (!moved) { announce("Nothing needed moving at this zoom"); return; }
       // a grouping view: its only top-level things are the piles, and their
       // hand positions live in the session, not the store
       remembered.bucketPos[view] = { ...(remembered.bucketPos[view] ?? {}), ...islands };
       setBucketRev((r) => r + 1);
-      if (moved) earcon.settle();
-      announce(moved ? `Moved ${moved === 1 ? "1 group" : `${moved} groups`} apart` : "Nothing needed moving at this zoom");
+      earcon.settle();
+      announce(`Moved ${moved === 1 ? "1 group" : `${moved} groups`} apart`);
       return;
     }
     if (moved) earcon.settle();
@@ -1587,7 +1594,10 @@ function MapInner() {
       clearWill();
       // only capsules carry the .will outline; islands show membership by
       // containment, which the dragged chip already demonstrates
-      if (hit && remembered.view === "reconcile")
+      // dropTarget, NOT remembered.view: the override is null whenever the
+      // view is DERIVED, which is the map's usual Reconcile state — so this
+      // read left the outline dark exactly where the crossing sounds fire.
+      if (hit && dropTarget === "halo")
         document.querySelector(`.react-flow__node[data-id="${hit.id}"] .mapHalo`)?.classList.add("will");
       const over = hit?.id ?? null;
       if (over !== dragOver.current) {
@@ -1597,14 +1607,15 @@ function MapInner() {
         dragOver.current = over;
       }
     });
-  }, [getInternalNode, containerAt]);
+  }, [getInternalNode, containerAt, dropTarget]);
 
   // ONE drop rule, every view that has containers:
   //   into a container  → joins, APPENDED at the end (its hand position is
   //                       forgotten, so the packer puts it after the others)
   //   onto the catch-all→ leaves, and forgets its position so it tidies in
   //   open canvas       → leaves, and stays exactly where you let go
-  // Derived views never get here: nothing in them is draggable.
+  // A derived view arrives here too, with its PILES: only chips are pinned
+  // there, and their branch below is guarded by the layout slot.
   const onNodeDragStop = useCallback((_: unknown, n: Node, dragged: Node[]) => {
     // the last onNodeDrag's frame is still pending: let it run and it repaints
     // a stale .will outline and chirps a crossing on top of the drop's own mark
@@ -2139,9 +2150,18 @@ function MapInner() {
         <div className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm re-layout"
           aria-describedby="relayout-confirm-text"
           style={{ right: confirmRelayout.right, top: confirmRelayout.y, fontSize: sidebarFontSize }}>
+          {/* the promise has to match the route: a grouping view's pile
+              positions live in the session, outside the undo history, so
+              "undo brings it back" there would send Ctrl+Z at a real edit */}
           <div className="mapAiConfirmText" id="relayout-confirm-text">
-            Lay the map out fresh? Every chip and group you placed by hand returns to the
-            packed layout. <b>One undo step brings it all back.</b>
+            {slot ? <>
+              Lay the map out fresh? Every chip and group you placed by hand returns to the
+              packed layout. <b>One undo step brings it all back.</b>
+            </> : <>
+              Lay the groups out fresh? Every group you moved by hand returns to the packed
+              layout. <b>This one cannot be undone</b> — these positions last for the session
+              and are not part of the undo history.
+            </>}
           </div>
           <div className="mapCardActions">
             <button className="btn primary" autoFocus

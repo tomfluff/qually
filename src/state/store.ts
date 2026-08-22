@@ -289,8 +289,9 @@ export interface State {
   resolveImportSign: (name: string | null) => void;
   resolveCoderAsk: (name: string | null) => void;
   ensureCode: (code: string) => string;
+  /** returns false when the span was already coded that way (a dedup) */
   addSegment: (pid: string, start: number, end: number, code: string,
-    proposedBy?: string, status?: string, notes?: string) => void;
+    proposedBy?: string, status?: string, notes?: string) => boolean;
   applyCode: (code: string) => void;
   selectLine: (id: number, opts?: { extend?: boolean; toggle?: boolean }) => void;
   moveSelection: (dir: -1 | 1, extend: boolean) => void;
@@ -866,19 +867,33 @@ export const useStore = create<State>()(
         // once you commit one; export nudges you before it ships.
         const by = proposedBy ?? (s.ui.coderName.trim() || "(default)");
         // dedup is per coder: two coders holding the same span+code is agreement data, not a dupe
-        if (s.segments.some((x) => x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(code) && x.proposedBy === by)) return;
+        if (s.segments.some((x) => x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(code) && x.proposedBy === by)) return false;
         set({ segments: [...s.segments, { sid: s.nextSid, pid, start, end, code, notes, proposedBy: by, status }], nextSid: s.nextSid + 1 });
+        return true;
       },
 
       applyCode: (code) => {
         const s = get();
         if (!s.selection.pid || !s.selection.lines.size) return;
+        const before = s.segments;
         s.pushUndo();
         const ids = [...s.selection.lines].sort((a, b) => a - b);
-        let start = ids[0], prev = ids[0];
+        let start = ids[0], prev = ids[0], wrote = 0;
         for (let i = 1; i <= ids.length; i++) {
-          if (i === ids.length || ids[i] !== prev + 1) { get().addSegment(s.selection.pid, start, prev, code); start = ids[i]; }
+          if (i === ids.length || ids[i] !== prev + 1) {
+            if (get().addSegment(s.selection.pid, start, prev, code)) wrote++;
+            start = ids[i];
+          }
           prev = ids[i];
+        }
+        // Pressing the same hotkey twice on the same selection dedups to
+        // nothing. Confirming it anyway — in sound AND in words — says a write
+        // happened that did not, and the undo entry we pushed would then eat a
+        // real edit instead. Take both back.
+        if (!wrote) {
+          set({ undoStack: get().undoStack.slice(0, -1), segments: before });
+          announce(`Already coded as ${code}`);
+          return;
         }
         // the visual confirmation is a lane bar appearing; these are its
         // audible twins — the most frequent act in the app, so the mark is one
