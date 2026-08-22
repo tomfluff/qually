@@ -104,7 +104,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
   };
 
   return (
-    <AiModal title={transient ? "Arrange by AI areas" : "Group codes by similarity"} busy={busy} onClose={onClose}>
+    <AiModal title={transient ? "Sort the map into areas" : "Group codes by similarity"} busy={busy} onClose={onClose}>
         {done ? (
           <>
             <div className="ai-body">

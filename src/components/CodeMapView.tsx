@@ -135,7 +135,7 @@ const VIEWS: Record<MapView, ViewSpec> = {
     drag: "Dragging a code between islands changes its theme",
   },
   areas: {
-    label: "AI areas", layout: "areas",
+    label: "Areas", layout: "areas",
     drag: "Dragging a code files it into an area",
   },
   pids: {
@@ -1714,7 +1714,7 @@ function MapInner() {
           aria-label={helpOpen ? "Hide how to use the map" : "How to use the map"}
           onClick={() => setHelpOpen((v) => !v)}
           title="How to use the map">
-          <Icon name="help" size={15} />
+          <Icon name="help" size={16} />
         </button>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
         {/* what a drag does HERE — the same motion means three different things
@@ -1725,13 +1725,13 @@ function MapInner() {
         {view === "reconcile" && (
           <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
             title="AI proposes merge groups and per-code revisions for your review">
-            <Icon name="sparkle" size={15} /> <span className="blabel">Reconcile with AI</span>
+            <Icon name="sparkle" size={16} /> <span className="blabel">Reconcile with AI</span>
           </button>
         )}
         {view === "themes" && (
           <button className="btn iconlabel" onClick={() => setThemeAiOpen(true)}
             title="AI groups the cleaned codebook into theme islands for you to reshape">
-            <Icon name="sparkle" size={15} /> <span className="blabel">Group into themes with AI</span>
+            <Icon name="sparkle" size={16} /> <span className="blabel">Group into themes with AI</span>
           </button>
         )}
         {view === "areas" && (
@@ -1751,14 +1751,14 @@ function MapInner() {
           }}
           aria-label={`View: ${spec.label}. Choose what the map shows`}
           title="Choose what the map shows">
-          <Icon name="eye" size={15} />
+          <Icon name="eye" size={16} />
           <span className="blabel mapViewName">{spec.label}</span>
           <Icon name={viewMenu ? "chevron-up" : "chevron-down"} size={13} />
         </button>
         <button className="btn iconbtn" aria-label="Move the minimap to the next corner"
           onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
           title="Move the minimap to the next corner">
-          <Icon name="pip" size={15} />
+          <Icon name="pip" size={16} />
         </button>
         <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!layoutMenu}
           onClick={(e) => {
@@ -1768,7 +1768,7 @@ function MapInner() {
           title="Reset or clean up the arrangement you are looking at">
           {/* the caret is how every other menu button in the app says it is a
               menu (Export, Assist) — without it this read as a plain action */}
-          <Icon name="refresh" size={15} /> <span className="blabel">Layout</span>
+          <Icon name="refresh" size={16} /> <span className="blabel">Layout</span>
           <Icon name={layoutMenu ? "chevron-up" : "chevron-down"} size={13} />
         </button>
       </div>
@@ -1936,7 +1936,7 @@ function MapInner() {
             <dt>Reconcile</dt><dd>A capsule is a proposed merge: drag chips in or out. Its caption names the merged code; the arrow opens the reasoning.</dd>
             <dt>Merge vs group</dt><dd>A <b>merge</b> says these are one code and folds them into one, shrinking the codebook. A <b>group</b> says they are different codes that belong together, and changes nothing about them.</dd>
             <dt>Themes</dt><dd>Drag codes between islands, or an island by its caption.</dd>
-            <dt>Views</dt><dd>One list: Reconcile and Themes are where you work, the buckets and AI areas are ways of looking. Each keeps its own layout, and the bar always says what a drag does in the one you are in.</dd>
+            <dt>Views</dt><dd>One list: Reconcile and Themes are where you work, the buckets and areas are ways of looking. Each keeps its own layout, and the bar always says what a drag does in the one you are in.</dd>
             <dt>Dragging</dt><dd>Into a group it joins, and lands after the ones already there. Out to open canvas it leaves and stays where you drop it. Onto the catch-all pile it leaves and tidies in.</dd>
             <dt>Layout</dt><dd>Reset packs this view again; Clean up nudges things apart until names stop overlapping.</dd>
           </dl>
