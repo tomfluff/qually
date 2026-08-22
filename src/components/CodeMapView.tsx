@@ -534,11 +534,17 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
           );
         })}
       </div>
+      {/* two lines: the act, then what it costs in smaller type — one long
+          wrapping line read as a paragraph, not a button */}
       {data.ai !== "done" && (
-        <button className="btn iconlabel mapSimAi" disabled={data.ai === "busy"} onClick={() => simEvent("ai")}>
-          <Icon name="sparkle" size={16} />
-          {data.ai === "busy" ? <span>Reading the codebook…</span>
-            : <span>Ask the AI for semantic matches — <b>≈{data.inTok.toLocaleString()} tokens · ≈${data.costEst.toFixed(4)}</b></span>}
+        <button className="btn mapSimAi" disabled={data.ai === "busy"} onClick={() => simEvent("ai")}>
+          <span className="mapSimAiAct">
+            <Icon name="sparkle" size={16} />
+            {data.ai === "busy" ? "Reading the codebook…" : "Find semantic matches"}
+          </span>
+          {data.ai !== "busy" && (
+            <span className="mapSimAiCost">≈{data.inTok.toLocaleString()} tokens · ≈${data.costEst.toFixed(4)}</span>
+          )}
         </button>
       )}
       {data.ai === "done" && data.cost != null && (
@@ -557,8 +563,10 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
             {data.take.label}{n ? ` (${n + 1})` : ""}
           </button>
         )}
+        {/* the same count as the filing button: both act on the source code
+            plus everything ticked */}
         <button className="btn" disabled={!n} onClick={() => simEvent("select")}
-          title="Select these on the map and close">Select</button>
+          title="Select these on the map and close">Select{n ? ` (${n + 1})` : ""}</button>
       </div>
     </div>
   );
@@ -1566,6 +1574,12 @@ function MapInner() {
     const cur = similar;
     if (!cur) return;
     const pick = new Set([cur.source, ...cur.ticked]);
+    // Seed the session's selection FIRST. Closing the panel rebuilds the
+    // layout, and a rebuilt chip takes its selected state from here — the
+    // HUD's effect that normally keeps this in step runs a beat later, so
+    // without this the rebuild wiped the selection we just made and left the
+    // one chip the panel was opened from.
+    remembered.selected = new Set(pick);
     rfSetNodes((ns) => ns.map((n) => ({ ...n, selected: n.type === "chip" && pick.has(n.id) })));
     setSimilar(null);
     announce(`${pick.size} codes selected on the map`);
