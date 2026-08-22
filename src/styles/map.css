@@ -151,9 +151,7 @@
   background:var(--line); }
 /* the View button holds one width no matter which view is on, so the divider
    and everything around it never shifts as you switch */
-.mapViewBtn { width:26ch; flex:none; justify-content:flex-start; text-align:left; }
-.mapViewBtn .mapViewKicker { color:var(--muted); font-size:.8em; font-weight:600;
-  letter-spacing:.4px; text-transform:uppercase; flex:none; }
+.mapViewBtn { width:24ch; flex:none; justify-content:flex-start; text-align:left; }
 .mapViewBtn .mapViewName { flex:1 1 0; min-width:0; overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap; }
 /* the halo: a capsule field hugging its packed member chips — containment IS

@@ -1749,8 +1749,9 @@ function MapInner() {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setViewMenu(viewMenu ? null : { left: r.left, y: r.bottom + 8 });
           }}
+          aria-label={`View: ${spec.label}. Choose what the map shows`}
           title="Choose what the map shows">
-          <span className="mapViewKicker">View</span>
+          <Icon name="eye" size={15} />
           <span className="blabel mapViewName">{spec.label}</span>
           <Icon name={viewMenu ? "chevron-up" : "chevron-down"} size={13} />
         </button>
