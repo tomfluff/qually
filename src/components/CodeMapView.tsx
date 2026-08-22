@@ -107,6 +107,9 @@ type SimilarRow = { name: string; score: number; why: string; band?: "very" | "r
 type SimilarData = {
   source: string; rows: SimilarRow[]; ticked: Set<string>;
   ai: "idle" | "busy" | "done"; cost?: number; inTok: number; costEst: number;
+  /** what filing these together MEANS in the view you are in, or null where
+      nothing files (the derived groupings edit no membership) */
+  take: TakeSpec | null;
 };
 type SimilarNodeT = Node<SimilarData, "similar">;
 type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT;
@@ -120,41 +123,59 @@ type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT;
 // so a CHIP never moves — but the piles themselves rearrange, in the session
 // only, because a derived pile drifts as the coding grows.
 export type MapView = "reconcile" | "themes" | "areas" | "pids" | "segs" | "defs" | "speaker";
+type TakeSpec = {
+  mode: "merge" | "group" | "area";
+  /** the button, e.g. "Group as theme" */
+  label: string;
+  /** one line saying what it does to the codes, shown above the button */
+  what: string;
+};
 type ViewSpec = {
   label: string;
   /** said out loud beside the view name, and announced on every switch */
   drag: string;
   /** the layout slot this view owns, or null when nothing here can move */
   layout: MapStage | null;
+  /** Taking a set of similar codes files them the way THIS view files things.
+      Merge is not one of these dressed differently: it folds codes into one
+      and shrinks the codebook, so it is offered only where merges live. */
+  take: TakeSpec | null;
 };
 const VIEWS: Record<MapView, ViewSpec> = {
   reconcile: {
     label: "Reconcile", layout: "reconcile",
     drag: "Dragging a code in or out of a capsule changes what gets merged",
+    take: { mode: "merge", label: "Propose a merge", what: "A merge makes them ONE code — it lands as a proposal you can still edit" },
   },
   themes: {
     label: "Themes", layout: "themes",
     drag: "Dragging a code between islands changes its theme",
+    take: { mode: "group", label: "Group as theme", what: "They stay separate codes, filed together as a theme" },
   },
   areas: {
     label: "Areas", layout: "areas",
     drag: "Dragging a code files it into an area",
+    take: { mode: "area", label: "Group as area", what: "They stay separate codes, filed together in an area" },
   },
   pids: {
     label: "By document count", layout: null,
     drag: "Drag a group to rearrange; the codes inside stay put",
+    take: null,
   },
   segs: {
     label: "By segment count", layout: null,
     drag: "Drag a group to rearrange; the codes inside stay put",
+    take: null,
   },
   defs: {
     label: "By definition", layout: null,
     drag: "Drag a group to rearrange; the codes inside stay put",
+    take: null,
   },
   speaker: {
     label: "By speaker", layout: null,
     drag: "Drag a group to rearrange; the codes inside stay put",
+    take: null,
   },
 };
 const VIEW_ORDER: MapView[] = ["reconcile", "themes", "areas", "pids", "segs", "defs", "speaker"];
@@ -514,28 +535,28 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
         })}
       </div>
       {data.ai !== "done" && (
-        <button className="btn mapSimAi" disabled={data.ai === "busy"} onClick={() => simEvent("ai")}>
-          {data.ai === "busy" ? "Reading the codebook…"
-            : <>Ask the AI for semantic matches — <b>≈{data.inTok.toLocaleString()} tokens · ≈${data.costEst.toFixed(4)}</b></>}
+        <button className="btn iconlabel mapSimAi" disabled={data.ai === "busy"} onClick={() => simEvent("ai")}>
+          <Icon name="sparkle" size={16} />
+          {data.ai === "busy" ? <span>Reading the codebook…</span>
+            : <span>Ask the AI for semantic matches — <b>≈{data.inTok.toLocaleString()} tokens · ≈${data.costEst.toFixed(4)}</b></span>}
         </button>
       )}
       {data.ai === "done" && data.cost != null && (
         <div className="mapSimNote">AI pass done · ${data.cost.toFixed(4)} · logged</div>
       )}
-      {n > 0 && (
-        <div className="mapSimNote mapSimChoice">
-          <b>Merge</b> makes them one code · <b>Group</b> keeps them separate, filed together
-        </div>
+      {/* ONE filing action, the one this view can show. Offering merge and
+          group side by side made the same panel mean different things in
+          different views — and in a view with neither, both were nonsense. */}
+      {n > 0 && data.take && (
+        <div className="mapSimNote mapSimChoice">{data.take.what}</div>
       )}
       <div className="mapCardActions">
-        <button className="btn primary" disabled={!n} onClick={() => simEvent("take", "merge")}
-          title="These are ONE code: fold them into a single code. Lands as a proposal you review and can still edit — accepting it shrinks the codebook.">
-          Merge into one{n ? ` (${n + 1})` : ""}
-        </button>
-        <button className="btn" disabled={!n} onClick={() => simEvent("take", "group")}
-          title="These stay SEPARATE codes, filed together as a theme. Nothing about the codes changes.">
-          Group as theme
-        </button>
+        {data.take && (
+          <button className="btn primary" disabled={!n} onClick={() => simEvent("take", data.take!.mode)}
+            title={data.take.what}>
+            {data.take.label}{n ? ` (${n + 1})` : ""}
+          </button>
+        )}
         <button className="btn" disabled={!n} onClick={() => simEvent("select")}
           title="Select these on the map and close">Select</button>
       </div>
@@ -696,7 +717,7 @@ function MapInner() {
     };
     const onClose = () => setSimilar(null);
     const onAi = () => void runSimilarAiRef.current?.();
-    const onTake = (e: Event) => takeSimilarRef.current?.((e as CustomEvent<"merge" | "group">).detail);
+    const onTake = (e: Event) => takeSimilarRef.current?.((e as CustomEvent<"merge" | "group" | "area">).detail);
     const onSelect = () => selectSimilarRef.current?.();
     window.addEventListener("qually:simtoggle", onToggleRow);
     window.addEventListener("qually:simclose", onClose);
@@ -714,7 +735,7 @@ function MapInner() {
   // the handlers close over changing state, so the listeners reach them
   // through refs rather than re-subscribing on every keystroke
   const runSimilarAiRef = useRef<() => void>(null);
-  const takeSimilarRef = useRef<(m: "merge" | "group") => void>(null);
+  const takeSimilarRef = useRef<(m: "merge" | "group" | "area") => void>(null);
   const selectSimilarRef = useRef<() => void>(null);
   // the pending revision plan is PROJECT data — it survives reloads and travels
   // in the file, so the review can continue in a later session
@@ -822,7 +843,7 @@ function MapInner() {
         width: Math.max(330, fs * 24),
         draggable: false, selectable: false, focusable: false,
         zIndex: 20,
-        data: { ...similar, inTok: simTokens.inTok, costEst: simTokens.cost },
+        data: { ...similar, inTok: simTokens.inTok, costEst: simTokens.cost, take: spec.take },
       };
       return [...ns, node];
     };
@@ -1252,7 +1273,7 @@ function MapInner() {
   }, [similar, homeOf]);
   // acting on the ticked rows: the source code always rides along, and any
   // code taken from another group or merge leaves it (one entry, undoable)
-  const takeSimilar = useCallback((mode: "merge" | "group") => {
+  const takeSimilar = useCallback((mode: "merge" | "group" | "area") => {
     const cur = similar;
     if (!cur) return;
     const picked = [...cur.ticked];
@@ -1271,7 +1292,18 @@ function MapInner() {
       earcon.join();
       announce(`Proposed merging ${members.length} codes into one — showing it on the map`);
       // take the researcher to the proposal, or nothing appears to have happened
-      showNodes(haloIdsFor(useStore.getState().codeClusters, [next[next.length - 1]]), "reconcile");
+      showNodes(haloIdsFor(useStore.getState().codeClusters, [next[next.length - 1]]), "reconcile", null);
+    } else if (mode === "area") {
+      // Areas are usually an AI pass, but a hand-made one is the same shape —
+      // and the fingerprint stays as it was: this does not make the AI's areas
+      // any more or less current than they already were.
+      const areas = st.codeAreas
+        .map((g) => ({ ...g, codes: g.codes.filter((x) => !members.includes(x)) }))
+        .filter((g) => g.codes.length > 0);
+      st.setCodeAreas([...areas, { name: cur.source, codes: members }], st.codeAreasFp);
+      earcon.join();
+      announce(`Filed ${members.length} codes in a new area “${cur.source}” — showing it on the map`);
+      showNodes([`area:${cur.source}`], "areas", null);
     } else {
       const groups = st.codeGroups
         .map((g) => ({ ...g, codes: g.codes.filter((x) => !members.includes(x)) }))
@@ -1281,7 +1313,7 @@ function MapInner() {
       announce(`Grouped ${members.length} codes as “${cur.source}” — showing it on the map`);
       // islands live in the Themes stage: land there, or the group is made and
       // the map looks unchanged
-      showNodes([`island:${useStore.getState().codeGroups.length - 1}`], "themes");
+      showNodes([`island:${useStore.getState().codeGroups.length - 1}`], "themes", null);
     }
     setSimilar(null);
   }, [similar]);
@@ -1393,7 +1425,12 @@ function MapInner() {
   // Take me to what the run produced. Halos only exist in the Reconcile view,
   // islands only in Themes, so switch there first and then wait for React Flow
   // to render the nodes before framing them.
-  const showNodes = useCallback((ids: string[], wanted: MapView = "reconcile") => {
+  // `say`: what to announce once the camera has landed. The three take-paths
+  // already say what they DID ("Filed 3 codes in a new area…"), and a second
+  // message a beat later just overwrites the first in the live region — so
+  // they pass null and keep their own sentence.
+  const showNodes = useCallback((ids: string[], wanted: MapView = "reconcile",
+    say: string | null = "auto") => {
     if (!ids.length) return;
     setViewOverride(wanted);
     let tries = 0, frame = 0;
@@ -1409,7 +1446,8 @@ function MapInner() {
       const wanted = new Set(live.flatMap((n) =>
         n.type === "halo" ? getNodes().filter((x) => x.parentId === n.id).map((x) => x.id) : [n.id]));
       rfSetNodes((ns) => ns.map((n) => ({ ...n, selected: n.type === "chip" && wanted.has(n.id) })));
-      announce(`Showing ${live.length === 1 ? "the proposal" : `${live.length} proposals`} on the map`);
+      if (say === "auto") announce(`Showing ${live.length === 1 ? "the proposal" : `${live.length} proposals`} on the map`);
+      else if (say) announce(say);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);

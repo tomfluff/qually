@@ -264,7 +264,15 @@
 .mapSimRow { display:flex; gap:9px; align-items:flex-start; padding:7px 12px; cursor:pointer;
   border-bottom:1px solid var(--line); }
 .mapSimRow:hover { background:var(--sel); }
-.mapSimRow input { margin-top:.25em; flex:none; accent-color:var(--accent); }
+/* The tick sits on the code's NAME, so it is sized and centred against that
+   first line. font:inherit FIRST: a form control does not inherit font-size,
+   so without it every `em` here resolves against the browser's 13.3px default
+   instead of the panel's text — which is why a hand-tuned margin looked right
+   at one text size and wrong at another. The ink nudge is the same one every
+   icon takes: a label's glyphs sit below the middle of its line box. */
+.mapSimRow input { flex:none; accent-color:var(--accent);
+  font:inherit; width:.95em; height:.95em; margin:0;
+  margin-top:calc((1.35em - .95em) / 2 + var(--ink-nudge)); }
 .mapSimName { flex:1; min-width:0; line-height:1.35; overflow-wrap:anywhere; }
 .mapSimName b { font-weight:700; }
 .mapSimName i { display:block; font-style:normal; color:var(--muted); font-size:.85em; }
