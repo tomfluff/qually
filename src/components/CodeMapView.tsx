@@ -1927,20 +1927,17 @@ function MapInner() {
         <div className="mapMenu mapHelp" role="dialog" aria-label="How to use the map"
           style={{ fontSize: sidebarFontSize }}>
           <div className="mapHelpHead"><b>The whole codebook at once</b></div>
+          {/* the minimum to operate: gestures that have no on-screen hint, and
+              the one concept the map cannot show — merge vs group. Everything
+              else is said where it happens (the drag line in the bar, the
+              Layout menu's own notes). */}
           <dl className="mapHelpList">
-            <dt>Select</dt><dd>Drag a box. Ctrl (Cmd) adds to it.</dd>
-            <dt>Pan</dt><dd><b>Space+drag</b>, or middle/right-drag.</dd>
-            <dt>Zoom</dt><dd>Wheel, or the +/− controls.</dd>
-            <dt>Act on codes</dt><dd>Right-click a selection.</dd>
-            <dt>Read a code</dt><dd>Double-click a chip.</dd>
-            <dt>Reconcile</dt><dd>A capsule is a proposed merge: drag chips in or out. Its caption names the merged code; the arrow opens the reasoning.</dd>
-            <dt>Merge vs group</dt><dd>A <b>merge</b> says these are one code and folds them into one, shrinking the codebook. A <b>group</b> says they are different codes that belong together, and changes nothing about them.</dd>
-            <dt>Themes</dt><dd>Drag codes between islands, or an island by its caption.</dd>
-            <dt>Views</dt><dd>One list: Reconcile and Themes are where you work, the buckets and areas are ways of looking. Each keeps its own layout, and the bar always says what a drag does in the one you are in.</dd>
-            <dt>Dragging</dt><dd>Into a group it joins, and lands after the ones already there. Out to open canvas it leaves and stays where you drop it. Onto the catch-all pile it leaves and tidies in.</dd>
-            <dt>Layout</dt><dd>Reset packs this view again; Clean up nudges things apart until names stop overlapping.</dd>
+            <dt>Select</dt><dd>Drag a box. Ctrl adds to it.</dd>
+            <dt>Move</dt><dd>Space, middle or right-drag pans; wheel zooms.</dd>
+            <dt>Act</dt><dd>Right-click a selection. Double-click reads a code.</dd>
+            <dt>Capsules</dt><dd>A proposed merge — drag chips in or out.</dd>
+            <dt>Merge vs group</dt><dd>A merge folds codes into one; a group keeps separate codes together.</dd>
           </dl>
-          <div className="mapHelpFoot">Esc, or the ? button, closes this.</div>
         </div>
       )}
       {viewMenu && (

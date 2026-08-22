@@ -298,7 +298,6 @@
 
 /* the gestures panel scrolls instead of running off a short screen */
 .mapHelp { max-height:calc(100% - 64px); overflow-y:auto; }
-.mapHelpFoot { color:var(--muted); font-size:.85em; margin-top:8px; }
 /* the answer to "where do these belong" — it stays until dismissed, because a
    run that proposes nothing must not look like a run that did nothing */
 .mapFocusNote { display:flex; align-items:center; gap:12px; max-width:min(70ch, 80vw);
