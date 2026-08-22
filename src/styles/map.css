@@ -19,11 +19,15 @@
      the text-size setting AND make `em` resolve differently per control, which
      is what left the bar with two heights */
   font-size:1em;
-  /* NO line-height:1 here — squeezing the inline box to the em square shifts
-     the glyphs off the flex centre, so icons read low against their labels
-     (Export/New in the toolbar centre fine on the normal line box) */
   height:var(--ctl-h); min-height:var(--ctl-h); padding-block:0;
   display:inline-flex; align-items:center; }
+/* icons vs text: flex centres the label's LINE BOX, and fonts with asymmetric
+   metrics (Segoe UI on Windows) hang their glyphs below its centre — so every
+   icon read high beside its text. Trimming the box to the cap height makes
+   "centred" mean the ink, whatever the font. No-op where unsupported. */
+.mapBar .btn .blabel, .mapBar .mapTitle, .mapBar .mapCount, .mapBar .mapDragHint,
+.mapBar .segmented .seg {
+  text-box: trim-both cap alphabetic; }
 .mapBar .segmented { padding:0; }
 .mapBar .btn.iconbtn { justify-content:center; aspect-ratio:1; padding-inline:0; }
 .mapBar .mapTitle { font-weight:600; }
