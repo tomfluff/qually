@@ -228,6 +228,8 @@
 .mapViewMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
   line-height:1.35; margin-top:1px; }
 .mapViewMenu button.on { font-weight:600; }
+/* the derived count views sit under one labelled divider */
+.mapViewMenu .mapViewDivide { border-top:1px solid var(--line); margin-top:4px; padding-top:6px; }
 /* the canvas takes focus after a view switch, but never draws a focus ring for
    a pointer user — the announcement is what carries the change */
 .mapCanvas:focus { outline:none; }

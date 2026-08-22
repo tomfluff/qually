@@ -18,7 +18,7 @@
 // its spot, so the packer tidies it in with the other unfiled codes.
 // Performance shape per the react-flow skill: uncontrolled flow, narrow
 // per-component subscriptions, memo'd nodes, imperative marquee.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
   useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
@@ -139,11 +139,11 @@ const VIEWS: Record<MapView, ViewSpec> = {
     drag: "Dragging a code files it into an area",
   },
   pids: {
-    label: "Transcript buckets", layout: null,
+    label: "By document count", layout: null,
     drag: "Looking only — nothing here moves and nothing changes",
   },
   segs: {
-    label: "Excerpt buckets", layout: null,
+    label: "By segment count", layout: null,
     drag: "Looking only — nothing here moves and nothing changes",
   },
 };
@@ -1944,7 +1944,8 @@ function MapInner() {
         <div ref={viewMenuRef} className="ctxmenu mapMenu mapViewMenu" role="menu" aria-label="Map view"
           style={{ left: viewMenu.left, top: viewMenu.y, fontSize: sidebarFontSize }}>
           {/* one flat list: every view is a peer, each with its own actions in
-              the bar — the status line under each name says what lives there */}
+              the bar — the status line under each name says what lives there.
+              The two derived count views sit under one "Grouping" divider. */}
           {VIEW_ORDER.map((v) => {
             const s = VIEWS[v];
             const status = v === "reconcile" && clusters.length + plan.length > 0
@@ -1954,12 +1955,15 @@ function MapInner() {
                   : `${topicGroups.length} areas${topicsStale ? " · stale" : ""}`)
                 : v === "themes" && codeGroups.length ? `${codeGroups.length} islands` : "";
             return (
-              <button key={v} role="menuitemradio" aria-checked={view === v}
-                className={view === v ? "on" : ""}
-                onClick={() => switchView(v)}>
-                {view === v ? "✓ " : ""}{s.label}
-                <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
-              </button>
+              <Fragment key={v}>
+                {v === "pids" && <div className="mapMenuHead mapViewDivide">Grouping</div>}
+                <button role="menuitemradio" aria-checked={view === v}
+                  className={view === v ? "on" : ""}
+                  onClick={() => switchView(v)}>
+                  {view === v ? "✓ " : ""}{s.label}
+                  <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
+                </button>
+              </Fragment>
             );
           })}
         </div>
