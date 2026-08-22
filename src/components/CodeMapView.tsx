@@ -25,7 +25,7 @@ import {
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useStore, bestSurvivor, type MapStage } from "../state/store";
+import { useStore, bestSurvivor, MAP_RING_PX, type MapStage } from "../state/store";
 import { codeStats } from "../codeStats";
 import { speakerBuckets } from "../speakerBuckets";
 import { preselectBrowse } from "./BrowseView";
@@ -622,13 +622,16 @@ function RafSelectionMarquee() {
 // elements restyle when it changes — nothing new rides the drag path.
 function SelectionRingScale() {
   const zoom = useFlowStore(zoomSel);
+  const px = MAP_RING_PX[useStore((s) => s.ui.mapRing)];
   const flowStore = useFlowStoreApi();
   useEffect(() => {
-    // the ceiling only matters if the zoom range ever deepens: it keeps a
-    // far-out camera from burying the tiny map under ring paint
+    // priced in world units so it PAINTS at `px` screen pixels whatever the
+    // camera is doing. The ceiling only matters if the zoom range ever
+    // deepens: it keeps a far-out camera from burying the tiny map under ring
+    // paint, and rides the chosen weight so it never crops the setting.
     flowStore.getState().domNode?.style.setProperty(
-      "--map-ring", `${Math.min(60, 6 / zoom).toFixed(2)}px`);
-  }, [zoom, flowStore]);
+      "--map-ring", `${Math.min(px * 10, px / zoom).toFixed(2)}px`);
+  }, [zoom, px, flowStore]);
   return null;
 }
 

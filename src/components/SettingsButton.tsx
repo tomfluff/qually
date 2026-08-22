@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore, speakersOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, type SpeakerWeight } from "../state/store";
+import { useStore, speakersOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, MAP_RING_PX, type SpeakerWeight } from "../state/store";
 import { openColorPicker } from "../colorPicker";
 import { PALETTES } from "../palettes";
 import { MODELS, modelOf } from "../ai/openai";
@@ -35,6 +35,7 @@ export function SettingsButton() {
   const fontFamily = useStore((s) => s.ui.fontFamily);
   const warnSize = useStore((s) => s.ui.warnSize);
   const laneWidth = useStore((s) => s.ui.laneWidth);
+  const mapRing = useStore((s) => s.ui.mapRing);
   const lanePattern = useStore((s) => s.ui.lanePattern);
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const coderName = useStore((s) => s.ui.coderName);
@@ -254,6 +255,17 @@ export function SettingsButton() {
                     onChange={(e) => setUi({ mapSounds: e.target.checked })} />
                 </label>
                 <div className="settings-note">Quiet sound-marks confirm what happened — coding a line, undo and redo, joining or leaving a group, AI requests, accepts. Multimodal feedback that doesn't depend on catching a visual change.</div>
+                <div className="srow">
+                  <span>Selection ring</span>
+                  <div className="segmented">
+                    {(["xs", "sm", "md", "lg", "xl"] as const).map((sz) => (
+                      <button key={sz} className={"seg" + (mapRing === sz ? " on" : "")}
+                        onClick={() => setUi({ mapRing: sz })}
+                        title={`${MAP_RING_PX[sz]}px around every selected code`}>{sz}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-note">How heavy the ring around a selected code draws on the Code map — {MAP_RING_PX[mapRing]}px, and it holds that thickness at every zoom, so a selection stays findable with the whole codebook on screen.</div>
                 <div className="srow">
                   <span>Code name style</span>
                   <div className="segmented">

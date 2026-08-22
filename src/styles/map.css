@@ -69,14 +69,17 @@
   font:inherit; text-align:left; position:relative; overflow:hidden; }
 .mapChip:hover { border-color:var(--muted); border-left-color:var(--chip-c); }
 /* --map-ring (set on the flow container by SelectionRingScale) is a constant
-   ~6px of SCREEN ink priced in world units, so the ring survives zooming out:
-   the 2px accent border alone painted at 0.2px at 0.1 zoom and the selection
-   vanished. An outline, not a border — it changes no layout, so 178 chips
-   never reflow while the zoom runs. Weight and fill carry the signal along
-   with the color, never the color alone. */
+   count of SCREEN pixels priced in world units, so the ring survives zooming
+   out: the 2px accent border alone painted at 0.2px at 0.1 zoom and the
+   selection vanished. A spread SHADOW rather than an outline — it changes no
+   layout, so 178 chips never reflow while the zoom runs, and unlike an
+   outline it follows the border-radius exactly, so ring and border read as
+   one edge instead of two with a seam between them. Weight and fill carry the
+   signal along with the color, never the color alone; its thickness is the
+   researcher's to set (Settings, Selection ring). */
 .mapChip.sel { border-color:var(--accent); border-left-color:var(--chip-c);
   background:color-mix(in srgb, var(--accent) 14%, var(--panel));
-  outline:var(--map-ring, 4px) solid var(--accent); }
+  box-shadow:0 0 0 var(--map-ring, 4px) var(--accent); }
 .mapChip .mapName { font-weight:600; white-space:nowrap; }
 /* the counts are the map's other axis — how much work a code does — so they
    read at full strength, bold, sized with the name; only the glyphs recede */
@@ -355,7 +358,7 @@
    gone at 0.1 zoom as a chip's border */
 .react-flow__node.selected > .mapHalo,
 .react-flow__node.selected > .mapIsland { border-color:var(--accent);
-  outline:var(--map-ring, 4px) solid var(--accent); }
+  box-shadow:0 0 0 var(--map-ring, 4px) var(--accent); }
 .react-flow__node.selected > .mapIsland { background:color-mix(in srgb, var(--accent) 9%, transparent); }
 /* the one line that separates the two actions people confuse */
 .mapSimChoice { padding:6px 12px 0; }
