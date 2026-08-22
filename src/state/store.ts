@@ -361,6 +361,13 @@ export interface State {
   // position and every membership change, ONE undoable entry
   applyMapDrop: (d: {
     stage: MapStage;
+    /**
+     * Codes whose hand position is FORGOTTEN, so the packer places them: a
+     * code that joined a container (it is appended after the members) or one
+     * dropped on the catch-all pile. Everything else keeps the spot it was
+     * dropped at — position and membership never both carry meaning.
+     */
+    tidy?: string[];
     chips?: Record<string, { x: number; y: number }>;
     islands?: Record<string, { x: number; y: number }>;
     reconcile?: { code: string; ci: number | null }[];
@@ -1634,9 +1641,6 @@ export const useStore = create<State>()(
         for (const { code, gi } of d.themes ?? []) {
           const cur = groups.findIndex((g) => g.codes.includes(code));
           if (cur === gi) continue;
-          // a new home means the packer files it; the drop position only holds
-          // when the code stayed where it was
-          delete positions[code];
           groups = groups.map((g, i) => ({
             ...g,
             codes: i === gi ? [...g.codes, code] : g.codes.filter((x) => x !== code),
@@ -1647,15 +1651,16 @@ export const useStore = create<State>()(
         for (const { code, ai } of d.areas ?? []) {
           const cur = areas.findIndex((a) => a.codes.includes(code));
           if (cur === ai) continue;
-          // the code is filed, not parked: drop any hand position so the view
-          // packs it neatly inside its new area
-          delete positions[code];
           areas = areas.map((a, i) => ({
             ...a,
             codes: i === ai ? [...a.codes, code] : a.codes.filter((x) => x !== code),
           }));
         }
         if (areas !== s.codeAreas) areas = areas.filter((a) => a.codes.length > 0);
+        // the caller decides which codes forget their spot; a membership change
+        // no longer implies it, because leaving a container to open canvas must
+        // leave the code exactly where it was dropped
+        for (const code of d.tidy ?? []) delete positions[code];
         set({
           codeAreas: areas,
           codeClusters: clusters,

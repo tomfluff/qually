@@ -188,15 +188,58 @@ test("applyMapDrop moving codes between theme islands keeps one entry and lets t
   const depth = useStore.getState().undoStack.length;
   useStore.getState().applyMapDrop({
     stage: "reconcile",
-    chips: { alpha: { x: 1, y: 1 } },
+    tidy: ["alpha"],                      // it joined an island: the packer appends it
     themes: [{ code: "alpha", gi: 1 }],   // alpha moves to island Two
   });
   const s = useStore.getState();
   expect(s.undoStack.length).toBe(depth + 1);
   expect(s.codeGroups[1].codes).toContain("alpha");
   expect(s.codeGroups[0].codes).not.toContain("alpha");
-  // a code that changed island is filed by the packer, not left at a stale spot
+  // a code that JOINED is filed by the packer, not left at a stale spot
   expect(s.mapPositions.reconcile.alpha).toBeUndefined();
+  useStore.getState().setCodeGroups([]);
+});
+
+// The rule the whole map now turns on: inside a container coordinates mean
+// nothing (so they are forgotten), outside they are the only thing carrying
+// intent (so they are kept).
+test("joining appends at the end; the members already inside do not move", () => {
+  const st = useStore.getState();
+  st.setCodeGroups([{ name: "One", codes: ["alpha", "beta"] }]);
+  useStore.getState().applyMapDrop({
+    stage: "themes", tidy: ["gamma"], themes: [{ code: "gamma", gi: 0 }],
+  });
+  // appended LAST, so nothing already in the island shifts when it arrives
+  expect(useStore.getState().codeGroups[0].codes).toEqual(["alpha", "beta", "gamma"]);
+  useStore.getState().setCodeGroups([]);
+});
+
+test("leaving a container to open canvas keeps the exact spot it was dropped at", () => {
+  const st = useStore.getState();
+  st.setCodeGroups([{ name: "One", codes: ["alpha", "beta"] }]);
+  useStore.getState().applyMapDrop({
+    stage: "themes",
+    chips: { alpha: { x: 640, y: 480 } },   // no tidy: it left, it stays put
+    themes: [{ code: "alpha", gi: -1 }],
+  });
+  const s = useStore.getState();
+  expect(s.codeGroups[0].codes).not.toContain("alpha");
+  expect(s.mapPositions.themes.alpha).toEqual({ x: 640, y: 480 });
+  useStore.getState().setCodeGroups([]);
+  useStore.getState().resetMapLayout("themes");
+});
+
+test("dropping on the catch-all takes the code out AND forgets where it was", () => {
+  const st = useStore.getState();
+  st.setCodeGroups([{ name: "One", codes: ["alpha", "beta"] }]);
+  st.recordMapPosition("alpha", { x: 12, y: 34 }, false, "themes");
+  useStore.getState().applyMapDrop({
+    stage: "themes", tidy: ["alpha"], themes: [{ code: "alpha", gi: -1 }],
+  });
+  const s = useStore.getState();
+  expect(s.codeGroups[0].codes).not.toContain("alpha");
+  // forgotten, so the packer tidies it in with the other unfiled codes
+  expect(s.mapPositions.themes.alpha).toBeUndefined();
   useStore.getState().setCodeGroups([]);
 });
 
@@ -265,7 +308,7 @@ test("filing a code into an area forgets where it was dropped, so the view repac
   const st = useStore.getState();
   st.setCodeAreas([{ name: "Strategies", codes: ["alpha"] }], "sig");
   st.recordMapPosition("beta", { x: 500, y: 500 }, false, "reconcile");
-  useStore.getState().applyMapDrop({ stage: "reconcile", chips: { beta: { x: 7, y: 7 } }, areas: [{ code: "beta", ai: 0 }] });
+  useStore.getState().applyMapDrop({ stage: "reconcile", tidy: ["beta"], areas: [{ code: "beta", ai: 0 }] });
   expect(useStore.getState().mapPositions.reconcile.beta).toBeUndefined();
   useStore.getState().setCodeAreas([], "");
   useStore.getState().resetMapLayout("reconcile");

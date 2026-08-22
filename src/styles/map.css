@@ -165,7 +165,9 @@
 .mapOrbitTag { color:var(--accent); font-size:.55em; font-weight:600;
   border:1px solid var(--accent); border-radius:99px; padding:.1em .6em; }
 /* badges are Reconcile-stage furniture */
-.stage-themes .mapActBadge { display:none; }
+/* the plan badges are Reconcile furniture — exhaustive by construction: only
+   that view shows them, so a new view can never sprout them by accident */
+#codemap:not(.view-reconcile) .mapActBadge { display:none; }
 /* the cluster card: verdicts on the selected constellation */
 .mapCardRat { color:var(--muted); font-size:.85em; padding:0 12px 6px; line-height:1.35; }
 .mapCardActions { display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--line); }
@@ -207,11 +209,21 @@
 .mapPlanHead:active { cursor:grabbing; }
 /* the minimap must not sit ON the zoom controls when both share bottom-left */
 .mapCanvas .react-flow__minimap.bottom.left { margin-left:56px; }
-/* the lens select rides the bar compactly, labeled once instead of per-option */
-.mapLensWrap { display:inline-flex; align-items:center; gap:6px; flex:none;
-  height:var(--ctl-h); }
-.mapLensLabel { color:var(--muted); font-size:.9em; }
-.mapBar .mapLens { flex:none; width:auto; padding-inline:8px; }
+/* what a drag does in THIS view: permanently visible, because the same motion
+   means three different things across the views and nothing else says which */
+.mapDragHint { color:var(--muted); font-size:.9em; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; max-width:44ch; }
+/* the view menu: two tiers, each row carrying its status and its drag meaning */
+.mapViewMenu { max-width:46ch; }
+.mapViewMenu button { display:block; text-align:left; width:100%; }
+.mapViewMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
+  line-height:1.35; margin-top:1px; }
+.mapViewMenu button.on { font-weight:600; }
+.mapViewMenu .mapViewGroup + .mapViewGroup { border-top:1px solid var(--line); margin-top:4px; padding-top:4px; }
+/* the canvas takes focus after a view switch, but never draws a focus ring for
+   a pointer user — the announcement is what carries the change */
+.mapCanvas:focus { outline:none; }
+.mapCanvas:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 /* the plan panel folds to its header line */
 .mapPlanHead .mapPlanMin { padding:2px 7px; }
 /* the rename input types like an input, not a drag handle */

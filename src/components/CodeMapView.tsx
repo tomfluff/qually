@@ -1,13 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// The Code map: the whole codebook as a spatial surface, in two explicit
-// stages on one canvas. RECONCILE lays every pending merge-cluster out as a
-// HALO — a capsule field hugging its packed member chips, captioned above
-// with the proposed name of the merged code. Membership is containment:
-// inside the halo is in the merge, outside is out, and a dropped chip KEEPS
-// the spot you gave it (park a code beside a group until you decide). While
-// you hold a chip, the halo it would join outlines in the accent. THEMES
-// shows the islands (groups) and never any merge structure.
+// The Code map: the whole codebook as a spatial surface, in ONE view at a
+// time. A view says what containers you see and what a drag means in them —
+// there is no second selector, because there never were two independent
+// dimensions here (see VIEWS below).
+//
+// The rule that makes a drag anticipatable across all of them:
+//
+//   Position and membership are mutually exclusive carriers of meaning.
+//   INSIDE a container a code's coordinates mean nothing — it is a set — so
+//   the view packs them. OUTSIDE, coordinates are the only thing carrying the
+//   researcher's intent, so nothing touches them.
+//
+// From that: dropping a code into a container appends it (nothing already
+// inside moves); dropping it on open canvas takes it out and leaves it exactly
+// where you let go; dropping it on the catch-all pile takes it out AND forgets
+// its spot, so the packer tidies it in with the other unfiled codes.
 // Performance shape per the react-flow skill: uncontrolled flow, narrow
 // per-component subscriptions, memo'd nodes, imperative marquee.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -17,7 +25,7 @@ import {
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useStore, bestSurvivor } from "../state/store";
+import { useStore, bestSurvivor, type MapStage } from "../state/store";
 import { codeStats } from "../codeStats";
 import { preselectBrowse } from "./BrowseView";
 import { CodeCounts } from "./CodeCounts";
@@ -102,26 +110,58 @@ type SimilarData = {
 type SimilarNodeT = Node<SimilarData, "similar">;
 type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT;
 
+// THE VIEWS. One value, five entries — not a stage crossed with a lens. The
+// old pair could express eight situations for a product that has five, and
+// every feature had to answer "is this a stage thing or a lens thing?" with
+// "neither, it depends". Each view declares what a drag means in it and which
+// layout slot it owns; `layout: null` marks a DERIVED view whose piles come
+// from counts, where there is no membership to edit and so nothing moves at
+// all — better an absent gesture than one that silently does nothing.
+export type MapView = "reconcile" | "themes" | "areas" | "pids" | "segs";
+type ViewSpec = {
+  label: string;
+  group: "work" | "explore";
+  /** said out loud beside the view name, and announced on every switch */
+  drag: string;
+  /** the layout slot this view owns, or null when nothing here can move */
+  layout: MapStage | null;
+};
+const VIEWS: Record<MapView, ViewSpec> = {
+  reconcile: {
+    label: "Reconcile", group: "work", layout: "reconcile",
+    drag: "Dragging a code in or out of a capsule changes what gets merged",
+  },
+  themes: {
+    label: "Themes", group: "work", layout: "themes",
+    drag: "Dragging a code between islands changes its theme",
+  },
+  areas: {
+    label: "AI areas", group: "explore", layout: "areas",
+    drag: "Dragging a code files it into an area",
+  },
+  pids: {
+    label: "Transcript buckets", group: "explore", layout: null,
+    drag: "Looking only — nothing here moves and nothing changes",
+  },
+  segs: {
+    label: "Excerpt buckets", group: "explore", layout: null,
+    drag: "Looking only — nothing here moves and nothing changes",
+  },
+};
+const VIEW_ORDER: MapView[] = ["reconcile", "themes", "areas", "pids", "segs"];
+
 // session view state that outlives the unmounting view; positions ride the
 // store's undo history and the camera persists in ui (across reloads)
 const remembered = {
-  // the stage override: null = derived (Reconcile while anything is pending)
-  stage: null as null | "reconcile" | "themes",
+  // the view override: null = derived (Reconcile while anything is pending).
+  // NULLABLE on purpose — an eager value stops the default following the work.
+  view: null as MapView | null,
   selected: new Set<string>(),
   // which halos have their card unfolded (session)
   openCards: new Set<number>(),
   // where the researcher parked the Revision plan panel (screen offset)
   planPos: { x: 0, y: 0 },
   planMin: false,
-  // the transient arrangement lens: a way of LOOKING, never written anywhere
-  lens: "default" as "default" | "pids" | "segs" | "topics",
-  // hand-moves made while a lens is up: session-only, per lens, never written
-  // to the store — switching back to normal restores the manual layout intact.
-  // Keys are `i:<group>` and `c:<code>@<group>`, NOT node ids: a chip's
-  // position is relative to its pile, so when the grouping shifts under it
-  // (a bucket boundary moves, topics re-run) the old spot is meaningless and
-  // must be forgotten rather than re-applied against a different parent.
-  lensPos: {} as Partial<Record<"pids" | "segs" | "topics", Record<string, { x: number; y: number }>>>,
 };
 
 // A project swap makes every one of these meaningless — they are keyed by
@@ -129,13 +169,11 @@ const remembered = {
 // meanings. The map is remounted by then, so the reset only has to clear the
 // module state the next mount reads.
 onProjectSwap(function forgetMapSession() {
-  remembered.stage = null;
+  remembered.view = null; // stays NULL, so the next project derives its own
   remembered.selected = new Set();
   remembered.openCards = new Set();
   remembered.planPos = { x: 0, y: 0 };
   remembered.planMin = false;
-  remembered.lens = "default";
-  remembered.lensPos = {};
 });
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -172,7 +210,7 @@ const openInCodebook = (list: string[]) => {
 // and nothing else in the tree does.
 const selectedIdsSel = (s: { nodes: Node[] }) =>
   s.nodes.filter((n) => n.selected && n.type === "chip").map((n) => n.id).join("\n");
-function SelectionHud({ lensOn, onSelectionChanged }: { lensOn: boolean; onSelectionChanged: () => void }) {
+function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onSelectionChanged: () => void }) {
   const joined = useFlowStore(selectedIdsSel);
   const sel = useMemo(() => (joined ? joined.split("\n") : []), [joined]);
   useEffect(() => { remembered.selected = new Set(sel); }, [sel]);
@@ -181,8 +219,8 @@ function SelectionHud({ lensOn, onSelectionChanged }: { lensOn: boolean; onSelec
   const clusters = useStore((st) => st.codeClusters);
   const { getNodes } = useReactFlow();
   // the keyboard path for eviction: dragging out is pointer-only, this is not.
-  // Hidden under a lens — halos aren't rendered there, so eviction would park
-  // chips at the world origin with no visible effect.
+  // Only offered in the Reconcile view — capsules are not drawn anywhere else,
+  // so eviction would have no visible effect.
   const inMerge = sel.filter((c) => clusters.some((x) => x.codes.includes(c)));
   const evictSelected = () => {
     const st = useStore.getState();
@@ -202,7 +240,7 @@ function SelectionHud({ lensOn, onSelectionChanged }: { lensOn: boolean; onSelec
     <Panel position="top-right" className="mapSelPanel"
       style={{ visibility: sel.length > 0 ? "visible" : "hidden" }}>
       <span className="mapSelCount">{sel.length} selected</span>
-      {inMerge.length > 0 && !lensOn && (
+      {inMerge.length > 0 && canEvict && (
         <button className="btn" onClick={evictSelected}
           title="Move the selected codes out of their merge groups (they park beside them)">
           Remove from merge
@@ -568,9 +606,6 @@ function MapInner() {
       { name: similar.source, def: st.codebook[similar.source]?.def ?? "", excerpts: [] }, book, red);
     return { inTok, cost: costOf(modelOf(st.ai.model), inTok, estimateTokens(" ".repeat(240))) };
   }, [similar]);
-  // the arrangement views: transient bucket and AI-area views for finding your way
-  const [lens, setLens] = useState(remembered.lens);
-  useEffect(() => { remembered.lens = lens; }, [lens]);
   // the areas view is project data: it survives a reload and travels in the file
   const topicGroups = useStore((s) => s.codeAreas);
   const topicFp = useStore((s) => s.codeAreasFp);
@@ -579,8 +614,8 @@ function MapInner() {
   const codebookFp = useMemo(() => Object.keys(codebook).sort().join("\n"), [codebook]);
   const topicsStale = topicFp !== codebookFp;
   const [topicAiOpen, setTopicAiOpen] = useState(false);
-  // bumped when a view's own session placements change, so the layout rebuilds
-  const [lensNonce, setLensNonce] = useState(0);
+  const [viewMenu, setViewMenu] = useState<{ left: number; y: number } | null>(null);
+  const viewMenuRef = useKeepOnScreen<HTMLDivElement>([viewMenu]);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   useEffect(() => { remembered.openCards = openCards; }, [openCards]);
   const [genCi, setGenCi] = useState<number | null>(null);
@@ -657,12 +692,17 @@ function MapInner() {
     }
     prevSurvivors.current = clusters.map((c) => c.survivor);
   }, [clusters]);
-  // stage: Reconcile while ANYTHING is pending, Themes on an empty plan —
-  // unless the researcher flipped the toggle this session
-  const [stageOverride, setStageOverride] = useState(remembered.stage);
-  useEffect(() => { remembered.stage = stageOverride; }, [stageOverride]);
-  const stage: "reconcile" | "themes" =
-    stageOverride ?? (clusters.length + plan.length > 0 ? "reconcile" : "themes");
+  // The view: Reconcile while ANYTHING is pending, Themes on an empty plan —
+  // unless the researcher picked one this session. The override stays NULL
+  // until they do, which is what keeps the default following the work rather
+  // than freezing on whatever the map opened with.
+  const [viewOverride, setViewOverride] = useState(remembered.view);
+  useEffect(() => { remembered.view = viewOverride; }, [viewOverride]);
+  const view: MapView =
+    viewOverride ?? (clusters.length + plan.length > 0 ? "reconcile" : "themes");
+  const spec = VIEWS[view];
+  // the layout slot this view owns; null means nothing here moves
+  const slot = spec.layout;
   const setPlan = useCallback((updater: CodeAction[] | ((p: CodeAction[]) => CodeAction[])) => {
     const st = useStore.getState();
     st.setCodePlan(typeof updater === "function" ? updater(st.codePlan) : updater);
@@ -725,52 +765,38 @@ function MapInner() {
       return [...ns, node];
     };
     const actOf = new Map(plan.map((a) => [a.code, a]));
+    // A chip INSIDE a container is packed, always: its coordinates carry no
+    // meaning there, so a hand position is neither read nor kept. A FREE chip
+    // is the opposite — its position is the only thing carrying intent, so the
+    // stored one wins over the packer's.
+    const hand = slot ? mapPositions[slot] : {};
     const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
       type: "chip" as const,
-      position: mapPositions[stage][c] ?? position,
+      position: parentId ? position : hand[c] ?? position,
       ...(parentId ? { parentId } : {}),
       width: widths.get(c)!, height: ch,
       selected: remembered.selected.has(c),
+      draggable: slot !== null,
       data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c) },
     });
+    // Codes in no container: the ones you placed by hand stay exactly there and
+    // are NOT packed; the rest fall to the catch-all pile. That is what makes
+    // "drop out and it stays put" and "drop onto Unassigned and it tidies in"
+    // two visibly different things instead of one ambiguous state.
+    const splitLoose = (list: string[]) => ({
+      free: list.filter((c) => hand[c]),
+      packed: list.filter((c) => !hand[c]),
+    });
 
-    if (lens !== "default") {
-      // buckets from counts, or the AI areas — arranged as islands you can
-      // move within the view; nothing is written to the project
-      // `ai` is set only by the areas view: the index of this pile in the
-      // stored areas (-1 = the Unassigned catch-all), which survives the
-      // filtering of empty ones
-      let lensGroups: { name: string; list: string[]; ai?: number }[] = [];
-      if (lens === "pids" || lens === "segs") {
-        const val = (c: string) => (lens === "pids" ? stats[c]?.pids ?? 0 : stats[c]?.segs ?? 0);
-        const buckets: [string, (n: number) => boolean][] = lens === "pids"
-          ? [["1 transcript", (n) => n <= 1], ["2–4 transcripts", (n) => n <= 4], ["5+ transcripts", () => true]]
-          : [["1 excerpt", (n) => n <= 1], ["2–5 excerpts", (n) => n <= 5], ["6–15 excerpts", (n) => n <= 15], ["16+ excerpts", () => true]];
-        lensGroups = buckets.map(([name]) => ({ name, list: [] as string[] }));
-        for (const c of codes) {
-          const n = val(c);
-          const bi = buckets.findIndex(([, fits]) => fits(n));
-          lensGroups[bi].list.push(c);
-        }
-        lensGroups = lensGroups.filter((g) => g.list.length > 0);
-      } else if (lens === "topics") {
-        const grouped = new Set(topicGroups.flatMap((g) => g.codes));
-        lensGroups = topicGroups
-          .map((g, ai) => ({ name: g.name, list: g.codes.filter(inBook), ai }))
-          .filter((g) => g.list.length > 0);
-        // codes the areas have never seen — added, or renamed since the run —
-        // collect here rather than vanishing: file them by hand, or re-run
-        const untopiced = codes.filter((c) => !grouped.has(c));
-        if (untopiced.length) lensGroups.push({ name: "Unassigned", list: untopiced, ai: -1 });
-      }
-      // islands layout. In the areas view a drop FILES the code (see
-      // onNodeDragStop); in the bucket views membership is derived from counts,
-      // so moving is only parking.
-      // hand-placements live in remembered.lensPos (session, per lens), never
-      // in the store, so Arrange: normal restores the manual layout intact
-      const lp = remembered.lensPos[lens] ?? {};
-      const blocks = lensGroups.map((g, gi) => ({
+    // Piles of codes rendered as islands — shared by the derived bucket views
+    // and the AI areas. `islandId` gives each pile a stable identity: row order
+    // shifts as piles empty and refill, so positions must not hang off it.
+    const pileNodes = (
+      piles: { name: string; list: string[]; ai?: number }[],
+      opts: { islandId: (p: { name: string }) => string; movable: boolean; freeChips?: string[] },
+    ) => {
+      const blocks = piles.map((g, gi) => ({
         name: g.name, gi, list: g.list, ai: g.ai, ...pack(g.list, near(g.list)),
         // the caption reads "name · count" and carries no buttons
         cap: captionBox(fs, 1, 7, `${g.name} · ${g.list.length}`, 1, family),
@@ -779,37 +805,64 @@ function MapInner() {
         ...blocks.map((b) => b.cap.w));
       const islands: IslandNodeT[] = [];
       const children: ChipNodeT[] = [];
+      const stored = opts.movable && slot ? mapIslandPos[slot] : {};
       let ix = 0, iy = blocks[0]?.cap.h ?? 0, rowH = 0;
       for (const b of blocks) {
-        const key = `lens:${b.gi}`;
+        const key = opts.islandId(b);
         const bw = b.w + 2 * PAD, bh = b.h + 2 * PAD;
         // the caption overhangs a narrow island: reserve ITS width for spacing
         const stepW = Math.max(bw, b.cap.w);
         if (ix > 0 && ix + stepW > rowW) { ix = 0; iy += rowH + ISLAND_GAP + b.cap.h; rowH = 0; }
-        // positions hang off the pile's NAME: gi is row order, and a bucket
-        // emptying or the piles re-sorting would hand one pile's spot to
-        // another
         islands.push({
           id: key, type: "island" as const,
-          position: lp[`i:${b.name}`] ?? { x: ix, y: iy }, width: bw, height: bh,
-          draggable: true, selectable: false, focusable: false,
+          position: stored[key] ?? { x: ix, y: iy }, width: bw, height: bh,
+          draggable: opts.movable, selectable: false, focusable: false,
           dragHandle: ".mapIslandLabel",
           data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list, gkey: b.name,
             ...(b.ai !== undefined ? { ai: b.ai } : {}) },
         });
-        for (const c of b.list) {
-          const home = { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y };
-          // a chip's session spot is only valid inside the pile it was
-          // dropped in — the key carries that pile, so a regrouping forgets it
-          children.push({ ...chipNode(c, home, key), position: lp[`c:${c}@${b.name}`] ?? home });
-        }
+        for (const c of b.list)
+          children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
         ix += stepW + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
       }
-      return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
+      // hand-placed unfiled codes float beside the piles at their own spots
+      const free = (opts.freeChips ?? []).map((c) => chipNode(c, { x: 0, y: 0 }));
+      return [...islands, ...children, ...free] as MapNode[];
+    };
+
+    // DERIVED views: piles come from counts, so there is no membership to edit
+    // and nothing here moves — not the chips, not the piles.
+    if (view === "pids" || view === "segs") {
+      const val = (c: string) => (view === "pids" ? stats[c]?.pids ?? 0 : stats[c]?.segs ?? 0);
+      const buckets: [string, (n: number) => boolean][] = view === "pids"
+        ? [["1 transcript", (n) => n <= 1], ["2–4 transcripts", (n) => n <= 4], ["5+ transcripts", () => true]]
+        : [["1 excerpt", (n) => n <= 1], ["2–5 excerpts", (n) => n <= 5], ["6–15 excerpts", (n) => n <= 15], ["16+ excerpts", () => true]];
+      const piles = buckets.map(([name]) => ({ name, list: [] as string[] }));
+      for (const c of codes) piles[buckets.findIndex(([, fits]) => fits(val(c)))].list.push(c);
+      return { nodes: withSimilar(pileNodes(piles.filter((g) => g.list.length > 0), {
+        islandId: (p) => `bucket:${p.name}`, movable: false,
+      })) };
     }
 
-    if (stage === "reconcile") {
+    // AI AREAS: real project data, so a drop files the code. `ai` is the index
+    // of the pile in the stored areas (-1 = the Unassigned parking lot), which
+    // survives the filtering of empty ones — row order does not.
+    if (view === "areas") {
+      const grouped = new Set(topicGroups.flatMap((g) => g.codes));
+      const piles = topicGroups
+        .map((g, ai) => ({ name: g.name, list: g.codes.filter(inBook), ai }))
+        .filter((g) => g.list.length > 0);
+      // codes the areas have never seen — added, or renamed since the run —
+      // collect here rather than vanishing: file them by hand, or re-run
+      const { free, packed } = splitLoose(codes.filter((c) => !grouped.has(c)));
+      if (packed.length) piles.push({ name: "Unassigned", list: packed, ai: -1 });
+      return { nodes: withSimilar(pileNodes(piles, {
+        islandId: (p) => `area:${p.name}`, movable: true, freeChips: free,
+      })) };
+    }
+
+    if (view === "reconcile") {
       const live = clusters
         .map((c, ci) => ({ ...c, ci, codes: c.codes.filter(inBook) }))
         .filter((c) => c.codes.length >= 2);
@@ -909,18 +962,21 @@ function MapInner() {
       return { nodes: withSimilar([...haloNodes, ...chipNodes, ...extraNodes] as MapNode[]) };
     }
 
+    // THEMES
     const groups = codeGroups
       .map((g, gi) => ({ ...g, gi, codes: g.codes.filter(inBook) }))
       .filter((g) => g.codes.length > 0);
     const grouped = new Set(groups.flatMap((g) => g.codes));
-    const loose = codes.filter((c) => !grouped.has(c));
+    // same parking-lot rule as the areas view: hand-placed ungrouped codes keep
+    // their spot, the rest gather in the catch-all island
+    const { free: looseFree, packed: loosePacked } = splitLoose(codes.filter((c) => !grouped.has(c)));
 
     if (groups.length === 0) {
       const flat = pack(codes, near(codes));
       return { nodes: withSimilar(codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[]) };
     }
     const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
-      ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
+      ...(loosePacked.length ? [{ name: "Ungrouped", gi: -1, list: loosePacked }] : [])]
       .map((b) => ({ ...b, ...pack(b.list, near(b.list)),
         // name plus the dissolve button; editable captions can also grow
         cap: captionBox(fs, 1, 7, b.name, 2, family) }));
@@ -947,9 +1003,10 @@ function MapInner() {
       ix += stepW + ISLAND_GAP;
       rowH = Math.max(rowH, bh);
     }
+    for (const c of looseFree) children.push(chipNode(c, { x: 0, y: 0 }));
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, similar, simTokens, lensNonce]);
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, topicGroups, similar, simTokens]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -1200,7 +1257,7 @@ function MapInner() {
         } : {}),
       });
       announce(verdict + missed);
-      if (nC) setStageOverride("reconcile");
+      if (nC) setViewOverride("reconcile");
     } catch (e) {
       const msg = e instanceof AiError ? e.message : (e as Error).message;
       earcon.error();
@@ -1239,13 +1296,12 @@ function MapInner() {
     return () => cancelAnimationFrame(frame);
   }, [similar, getViewport, setViewport]);
 
-  // Take me to what the run produced. Halos only exist in Reconcile and only
-  // outside a lens, so clear both first, then wait for React Flow to render
-  // the nodes before framing them.
-  const showNodes = useCallback((ids: string[], stageWanted: "reconcile" | "themes" = "reconcile") => {
+  // Take me to what the run produced. Halos only exist in the Reconcile view,
+  // islands only in Themes, so switch there first and then wait for React Flow
+  // to render the nodes before framing them.
+  const showNodes = useCallback((ids: string[], wanted: MapView = "reconcile") => {
     if (!ids.length) return;
-    setStageOverride(stageWanted);
-    setLens("default");
+    setViewOverride(wanted);
     let tries = 0, frame = 0;
     const tick = () => {
       const live = getNodes().filter((n) => ids.includes(n.id));
@@ -1264,6 +1320,56 @@ function MapInner() {
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [getNodes, fitView, rfSetNodes]);
+
+  // Switching view: keep the ZOOM. Every switch used to fitView, which on 178
+  // codes lands near 20% where nothing is readable — the losing-your-place bug.
+  // The camera only moves when the new layout left you looking at empty canvas,
+  // and then it pans (same zoom) to the content rather than zooming out to it.
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const switchView = useCallback((next: MapView) => {
+    if (next === view) { setViewMenu(null); return; }
+    // the areas view cannot exist before the AI has worked them out
+    if (next === "areas" && topicGroups.length === 0) { setViewMenu(null); setTopicAiOpen(true); return; }
+    setViewOverride(next);
+    setViewMenu(null);
+    let frame = 0, tries = 0;
+    const settle = () => {
+      const el = canvasRef.current;
+      const ns = getNodes().filter((n) => !n.parentId);
+      if (!el || !ns.length) { if (tries++ < 12) frame = requestAnimationFrame(settle); return; }
+      const vp = getViewport();
+      const view0 = {
+        x: -vp.x / vp.zoom, y: -vp.y / vp.zoom,
+        w: el.clientWidth / vp.zoom, h: el.clientHeight / vp.zoom,
+      };
+      const seen = ns.some((n) => n.position.x < view0.x + view0.w && n.position.x + (n.width ?? 0) > view0.x
+        && n.position.y < view0.y + view0.h && n.position.y + (n.height ?? 0) > view0.y);
+      let moved = false;
+      if (!seen) {
+        // pan to the middle of what this view drew, at the SAME zoom
+        const minX = Math.min(...ns.map((n) => n.position.x));
+        const maxX = Math.max(...ns.map((n) => n.position.x + (n.width ?? 0)));
+        const minY = Math.min(...ns.map((n) => n.position.y));
+        const maxY = Math.max(...ns.map((n) => n.position.y + (n.height ?? 0)));
+        void setViewport({
+          zoom: vp.zoom,
+          x: el.clientWidth / 2 - ((minX + maxX) / 2) * vp.zoom,
+          y: el.clientHeight / 2 - ((minY + maxY) / 2) * vp.zoom,
+        }, { duration: 240 });
+        moved = true;
+      }
+      const spec2 = VIEWS[next];
+      const containers = ns.filter((n) => n.type === "halo" || n.type === "island").length;
+      announce(`${spec2.label}. ${containers
+        ? `${containers} ${next === "reconcile" ? "merge capsule" : next === "themes" ? "island" : "pile"}${containers === 1 ? "" : "s"}, `
+        : ""}${codes.length} codes. ${spec2.drag}.${moved ? " Moved the view to where they are." : ""}`);
+      // focus lands somewhere predictable — never on whichever chip happened to
+      // be under the pointer
+      el.focus({ preventScroll: true });
+    };
+    frame = requestAnimationFrame(settle);
+    return () => cancelAnimationFrame(frame);
+  }, [view, topicGroups.length, getNodes, getViewport, setViewport, codes.length]);
 
   // Adjust to zoom: measure what is on screen — every top-level thing plus the
   // caption floating above it, at THIS zoom — then nudge only the boxes that
@@ -1305,33 +1411,9 @@ function MapInner() {
       const pos = { x: n.position.x + dx, y: n.position.y + dy };
       if (n.type === "chip") chips[n.id] = pos; else islands[n.id] = pos;
     });
-    if (lens !== "default") {
-      // a view's arrangement is session-only, so tidying it is session-only
-      // too: no store write, no undo entry, and Reset in this view just drops
-      // these moves again
-      const store = (remembered.lensPos[lens] ??= {});
-      for (const n of nodes) {
-        const pos = { ...chips, ...islands }[n.id];
-        if (!pos) continue;
-        store[`i:${(n.data as IslandData).gkey ?? n.id}`] = pos;
-      }
-      setLensNonce((v) => v + 1);
-      announce(moved
-        ? `Tidied ${moved} pile${moved === 1 ? "" : "s"} in this view`
-        : "Nothing was overlapping in this view");
-      return;
-    }
-    useStore.getState().applyMapLayout(chips, islands, moved, stage);
-  }, [getZoom, getNodes, lens]);
-  // Reset inside a view drops only what you moved HERE; your free-form layout
-  // is a different thing and is never touched from inside a view.
-  const resetLensLayout = useCallback(() => {
-    if (lens === "default") return;
-    const had = Object.keys(remembered.lensPos[lens] ?? {}).length;
-    delete remembered.lensPos[lens];
-    setLensNonce((v) => v + 1);
-    announce(had ? "This view is back to its own arrangement" : "You have not moved anything in this view");
-  }, [lens]);
+    if (!slot) return; // a derived view has no layout to tidy
+    useStore.getState().applyMapLayout(chips, islands, moved, slot);
+  }, [getZoom, getNodes, slot]);
 
   const selectSimilar = useCallback(() => {
     const cur = similar;
@@ -1375,16 +1457,16 @@ function MapInner() {
   // AND the crossing sounds key off transitions of this one value
   const dragOver = useRef<string | null>(null);
   const onNodeDragStart = useCallback((_: unknown, n: Node) => {
-    if (remembered.lens !== "default" || stage !== "reconcile" || n.type !== "chip") return;
+    if (remembered.view !== "reconcile" || n.type !== "chip") return;
     const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
     // seed with where the chip already sits, so lifting a member inside its
     // own halo doesn't chirp "entered"
     dragOver.current = haloAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2)?.id ?? null;
     earcon.grab();
-  }, [stage, getInternalNode, haloAt]);
+  }, [getInternalNode, haloAt]);
   const onNodeDrag = useCallback((_: unknown, n: Node) => {
-    if (remembered.lens !== "default") return; // no halos to highlight under a lens
-    if (stage !== "reconcile" || n.type !== "chip" || dragFrame.current) return;
+    // capsules exist only in Reconcile; nothing to outline anywhere else
+    if (remembered.view !== "reconcile" || n.type !== "chip" || dragFrame.current) return;
     dragFrame.current = requestAnimationFrame(() => {
       dragFrame.current = 0;
       const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
@@ -1399,12 +1481,14 @@ function MapInner() {
         dragOver.current = over;
       }
     });
-  }, [stage, getInternalNode, haloAt]);
+  }, [getInternalNode, haloAt]);
 
-  // A drop is a filing action, and the chip KEEPS the spot you gave it.
-  // Reconcile: inside a halo = in that merge (relative position), outside =
-  // out (absolute position) — one undoable entry either way. Themes: same
-  // shape against islands.
+  // ONE drop rule, every view that has containers:
+  //   into a container  → joins, APPENDED at the end (its hand position is
+  //                       forgotten, so the packer puts it after the others)
+  //   onto the catch-all→ leaves, and forgets its position so it tidies in
+  //   open canvas       → leaves, and stays exactly where you let go
+  // Derived views never get here: nothing in them is draggable.
   const onNodeDragStop = useCallback((_: unknown, n: Node, dragged: Node[]) => {
     // the last onNodeDrag's frame is still pending: let it run and it repaints
     // a stale .will outline and chirps a crossing on top of the drop's own mark
@@ -1413,108 +1497,75 @@ function MapInner() {
     // React Flow reports a multi-selection drag ONCE, with the whole set in the
     // third argument. File every node in it, or the ones you did not happen to
     // grab snap back to their packed spots on the next rebuild.
+    if (!slot) return; // derived view: nothing here moves
     const moved = dragged?.length ? dragged : [n];
-    if (lens === "topics") {
-      // The areas view is real project data, so a drop FILES the code the way
-      // it does on the Themes islands: into the pile you dropped it on, or out
-      // to Unassigned when you drop it in open space. It repacks neatly inside
-      // its new home rather than keeping the spot you let go of.
-      const piles = getNodes().filter((x) => x.type === "island");
-      const areas: { code: string; ai: number }[] = [];
-      const lensStore = (remembered.lensPos.topics ??= {});
-      let joined = 0, evicted = 0;
-      for (const x of moved) {
-        if (x.type !== "chip") {
-          // a whole pile was moved: that is a placement, not a filing
-          const gkey = (x.data as IslandData).gkey ?? x.id;
-          lensStore[`i:${gkey}`] = x.position;
-          continue;
-        }
-        const abs = getInternalNode(x.id)?.internals.positionAbsolute ?? x.position;
-        const cx = abs.x + (x.width ?? 0) / 2, cy = abs.y + (x.height ?? 0) / 2;
-        const hit = piles.find((r) => cx >= r.position.x && cx <= r.position.x + (r.width ?? 0)
-          && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
-        const ai = hit ? (hit.data as IslandData).ai ?? -1 : -1;
-        const was = useStore.getState().codeAreas.findIndex((a) => a.codes.includes(x.id));
-        if (was === ai) continue;
-        areas.push({ code: x.id, ai });
-        if (ai >= 0) joined++; else evicted++;
-        // the packer files it: forget wherever it was let go
-        for (const k of Object.keys(lensStore)) if (k.startsWith(`c:${x.id}@`)) delete lensStore[k];
-      }
-      if (areas.length) {
-        // "areas", NOT the stage behind this view: passing the stage wrote into
-        // that stage's layout and deleted positions placed there by hand
-        useStore.getState().applyMapDrop({ stage: "areas", areas });
-        if (joined) earcon.join(); else if (evicted) earcon.evict();
-        announce(joined && !evicted
-          ? `Moved ${joined} code${joined === 1 ? "" : "s"} into that area`
-          : !joined && evicted
-            ? `Moved ${evicted} code${evicted === 1 ? "" : "s"} to Unassigned`
-            : `Refiled ${areas.length} codes`);
-      }
-      setLensNonce((v) => v + 1);
-      return;
-    }
-    if (lens !== "default") {
-      // the bucket views are derived from counts, so there is nothing to file:
-      // moving is just parking, in the view's own session overlay
-      const store = (remembered.lensPos[lens] ??= {});
-      for (const x of moved) {
-        const parent = x.parentId ? getNodes().find((p) => p.id === x.parentId) : null;
-        const gkey = (parent?.data as IslandData | undefined)?.gkey;
-        // key by IDENTITY, not node id: a chip's spot is relative to its pile,
-        // so when the grouping shifts under it the old spot is meaningless
-        store[gkey ? `c:${x.id}@${gkey}` : `i:${(x.data as IslandData).gkey ?? x.id}`] = x.position;
-      }
-      return;
-    }
-    const st = useStore.getState();
     // A group is selected only when all of its codes are, so a group drag
     // carries its members in the set too. React Flow already moves children
     // with their parent, so filing them again would bake in a doubled offset —
-    // and they never left their capsule anyway.
+    // and they never left their container anyway.
     const movedIds = new Set(moved.map((x) => x.id));
     const carried = moved.filter((x) => !(x.parentId && movedIds.has(x.parentId)));
+
     const chips: Record<string, { x: number; y: number }> = {};
     const islands: Record<string, { x: number; y: number }> = {};
+    const tidy: string[] = [];
     const reconcile: { code: string; ci: number | null }[] = [];
     const themes: { code: string; gi: number }[] = [];
+    const areas: { code: string; ai: number }[] = [];
     const absOf = (x: Node) => getInternalNode(x.id)?.internals.positionAbsolute ?? x.position;
-    const liveIslands = stage === "reconcile" ? [] : getNodes().filter((x) => x.type === "island");
+    const containers = getNodes().filter((x) => x.type === (view === "reconcile" ? "halo" : "island"));
+    let joined = 0, freed = 0, tidied = 0, into = "";
+
     for (const x of carried) {
       if (x.type === "island" || x.type === "halo") { islands[x.id] = x.position; continue; }
       if (x.type !== "chip") continue;
       const abs = absOf(x);
       const cx = abs.x + (x.width ?? 0) / 2, cy = abs.y + (x.height ?? 0) / 2;
-      if (stage === "reconcile") {
-        const hit = haloAt(cx, cy);
-        reconcile.push({ code: x.id, ci: hit ? (hit.data as HaloData).ci : null });
-        chips[x.id] = hit ? { x: abs.x - hit.position.x, y: abs.y - hit.position.y } : abs;
-      } else if (!liveIslands.length) {
-        chips[x.id] = x.position;
-      } else {
-        const hit = liveIslands.find((r) => cx >= r.position.x && cx <= r.position.x + (r.width ?? 0)
-          && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
-        themes.push({ code: x.id, gi: hit ? (hit.data as IslandData).gi : -1 });
-        chips[x.id] = x.position;
+      const hit = containers.find((r) => cx >= r.position.x && cx <= r.position.x + (r.width ?? 0)
+        && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
+      const d = hit?.data as (HaloData & IslandData) | undefined;
+      // the catch-all is a PARKING LOT, not a container: landing on it means
+      // "take me out and tidy me in with the other unfiled codes"
+      const isCatchAll = view !== "reconcile" && !!hit && (d?.gi === -1 || d?.ai === -1);
+      const inside = !!hit && !isCatchAll;
+
+      if (inside) { tidy.push(x.id); joined++; into = d?.gkey ?? d?.name ?? into; }
+      else if (isCatchAll) { tidy.push(x.id); tidied++; }
+      else { chips[x.id] = abs; freed++; }
+
+      if (view === "reconcile") reconcile.push({ code: x.id, ci: inside ? d!.ci : null });
+      else if (view === "themes") themes.push({ code: x.id, gi: inside ? d!.gi : -1 });
+      else areas.push({ code: x.id, ai: inside ? d!.ai ?? -1 : -1 });
+    }
+    if (view === "reconcile") clearWill();
+
+    const st = useStore.getState();
+    const membershipOf = (code: string) => view === "reconcile"
+      ? st.codeClusters.findIndex((c) => c.codes.includes(code))
+      : view === "themes"
+        ? st.codeGroups.findIndex((g) => g.codes.includes(code))
+        : st.codeAreas.findIndex((a) => a.codes.includes(code));
+    const before = new Map([...reconcile, ...themes, ...areas].map((m) => [m.code, membershipOf(m.code)]));
+    st.applyMapDrop({ stage: slot, chips, islands, tidy, reconcile, themes, areas });
+
+    // Say what actually happened — every drop, single or not. A count ("moved 3
+    // things") is not a consequence, and a lone drag used to make no sound at
+    // all beyond an earcon.
+    if (!before.size) {
+      if (Object.keys(islands).length) {
+        announce(`Moved ${Object.keys(islands).length === 1 ? "a group" : `${Object.keys(islands).length} groups`}`);
       }
+      return;
     }
-    if (stage === "reconcile") clearWill();
-    const before = new Map(reconcile.map((r) =>
-      [r.code, st.codeClusters.findIndex((c) => c.codes.includes(r.code))]));
-    st.applyMapDrop({ stage, chips, islands, reconcile, themes });
-    // one mark per gesture, describing what actually happened to the set
-    const after = useStore.getState().codeClusters;
-    let joined = 0, left = 0;
-    for (const [code, was] of before) {
-      const now = after.findIndex((c) => c.codes.includes(code));
-      if (now >= 0 && now !== was) joined++;
-      else if (now < 0 && was >= 0) left++;
-    }
-    if (joined) earcon.join(); else if (left) earcon.evict();
-    if (moved.length > 1) announce(`Moved ${moved.length} things`);
-  }, [getNodes, getInternalNode, stage, haloAt, lens]);
+    const noun = (k: number) => `${k} code${k === 1 ? "" : "s"}`;
+    const what = view === "reconcile" ? "the merge" : view === "themes" ? "the theme" : "the area";
+    if (joined) earcon.join(); else if (freed || tidied) earcon.evict();
+    const parts: string[] = [];
+    if (joined) parts.push(`${noun(joined)} joined ${into ? `“${into}”` : what}`);
+    if (tidied) parts.push(`${noun(tidied)} moved to ${view === "themes" ? "Ungrouped" : "Unassigned"}`);
+    if (freed) parts.push(`${noun(freed)} left ${what} and stayed where you dropped ${freed === 1 ? "it" : "them"}`);
+    if (parts.length) announce(parts.join("; "));
+  }, [getNodes, getInternalNode, view, slot]);
   // a drag can end by unmount too; never leave a frame pointed at dead nodes
   useEffect(() => () => { if (dragFrame.current) cancelAnimationFrame(dragFrame.current); }, []);
   const onNodeDoubleClick = useCallback((_: unknown, n: Node) => {
@@ -1640,8 +1691,8 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !layoutMenu) return;
-    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setLayoutMenu(null); };
+    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !layoutMenu && !viewMenu) return;
+    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setLayoutMenu(null); setViewMenu(null); };
     const down = (e: MouseEvent) => {
       const t = e.target as Element;
       // the help button toggles itself; let its own handler run
@@ -1654,10 +1705,10 @@ function MapInner() {
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, layoutMenu]);
+  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, layoutMenu, viewMenu]);
 
   return (
-    <div id="codemap" className={"stage-" + stage} style={{ fontSize: sidebarFontSize }}>
+    <div id="codemap" className={"view-" + view} style={{ fontSize: sidebarFontSize }}>
       <div className="mapBar">
         <span className="mapTitle">Code map</span>
         <button className="btn iconbtn mapHelpBtn" aria-expanded={helpOpen}
@@ -1667,27 +1718,33 @@ function MapInner() {
           <Icon name="help" size={15} />
         </button>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+        {/* what a drag does HERE — the same motion means three different things
+            across the views, and this is the only thing that says which */}
+        <span className="mapDragHint" aria-live="off">{spec.drag}</span>
         <span className="mapBarGap" />
-        <label className="mapLensWrap" title="A view: arranges the map for looking. Your free-form layout is untouched and one click away.">
-          <span className="mapLensLabel">Arrange</span>
-          <select className="settext mapLens" aria-label="Arrange the map by"
-            value={lens} onChange={(e) => {
-              const v = e.target.value as typeof lens;
-              if (v === "topics" && topicGroups.length === 0) { setTopicAiOpen(true); return; }
-              setLens(v);
-              // the lens lays out from the world origin with different extents —
-              // without a fitView a zoomed-in camera lands on empty canvas
-              requestAnimationFrame(() => fitView({ duration: 200 }));
-              announce(v === "default" ? "Back to your free-form layout."
-                : `Arranged by ${{ pids: "transcript buckets", segs: "excerpt buckets", topics: "AI areas" }[v]}. A view only — your free-form layout is untouched.`);
-            }}>
-            <option value="default">Free-form (your layout)</option>
-            <option value="pids">Transcript buckets</option>
-            <option value="segs">Excerpt buckets</option>
-            <option value="topics">AI areas</option>
-          </select>
-        </label>
-        {lens === "topics" && (
+        {/* the two work views stay one click away: this is the switch made most
+            often, and the menu below holds the same five views */}
+        <div className="segmented mapStage" role="radiogroup" aria-label="Working view">
+          {(["reconcile", "themes"] as const).map((v) => (
+            <button key={v} className={"seg" + (view === v ? " on" : "")} role="radio"
+              aria-checked={view === v} onClick={() => switchView(v)}
+              title={v === "reconcile"
+                ? "Clean the codebook: merge capsules, renames, rejects"
+                : "Group the cleaned codebook into theme islands"}>
+              {VIEWS[v].label}
+            </button>
+          ))}
+        </div>
+        <button className="btn iconlabel mapViewBtn" aria-haspopup="menu" aria-expanded={!!viewMenu}
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setViewMenu(viewMenu ? null : { left: r.left, y: r.bottom + 8 });
+          }}
+          title="Choose what the map shows">
+          <span className="blabel">View: {spec.label}</span>
+          <Icon name={viewMenu ? "chevron-up" : "chevron-down"} size={13} />
+        </button>
+        {view === "areas" && (
           <button className="btn" onClick={() => setTopicAiOpen(true)}
             title={topicsStale
               ? "The codebook changed since these areas were worked out — re-run to refresh them"
@@ -1695,26 +1752,16 @@ function MapInner() {
             {topicsStale ? "Areas are stale — re-run…" : "Re-run areas…"}
           </button>
         )}
-        <div className="segmented mapStage" role="radiogroup" aria-label="Map stage">
-          <button className={"seg" + (stage === "reconcile" ? " on" : "")} role="radio"
-            aria-checked={stage === "reconcile"} onClick={() => setStageOverride("reconcile")}
-            title="Clean the codebook: merge constellations, renames, rejects">Reconcile</button>
-          <button className={"seg" + (stage === "themes" ? " on" : "")} role="radio"
-            aria-checked={stage === "themes"} onClick={() => setStageOverride("themes")}
-            title="Group the cleaned codebook into theme islands">Themes</button>
-        </div>
-        {stage === "reconcile" ? (
+        {/* each view's own AI verb; the derived views have none */}
+        {view === "reconcile" && (
           <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
-            disabled={lens !== "default"}
-            title={lens !== "default" ? "Switch Arrange back to normal first — the result lands on the normal layout"
-              : "AI proposes merge groups and per-code revisions for your review"}>
+            title="AI proposes merge groups and per-code revisions for your review">
             <Icon name="sparkle" size={15} /> <span className="blabel">Reconcile with AI</span>
           </button>
-        ) : (
+        )}
+        {view === "themes" && (
           <button className="btn iconlabel" onClick={() => setThemeAiOpen(true)}
-            disabled={lens !== "default"}
-            title={lens !== "default" ? "Switch Arrange back to normal first — the islands land on the normal layout"
-              : "AI groups the cleaned codebook into theme islands for you to reshape"}>
+            title="AI groups the cleaned codebook into theme islands for you to reshape">
             <Icon name="sparkle" size={15} /> <span className="blabel">Group into themes with AI</span>
           </button>
         )}
@@ -1735,7 +1782,8 @@ function MapInner() {
           <Icon name={layoutMenu ? "chevron-up" : "chevron-down"} size={13} />
         </button>
       </div>
-      <div className="mapCanvas">
+      <div className="mapCanvas" ref={canvasRef} tabIndex={-1}
+        aria-label={`${spec.label} view. ${spec.drag}.`}>
         {codes.length === 0
           ? <div className="empty">No codes yet — the map draws itself as you code.</div>
           : (
@@ -1778,8 +1826,8 @@ function MapInner() {
               </Panel>
             )}
             <RafSelectionMarquee />
-            <SelectionHud lensOn={lens !== "default"} onSelectionChanged={syncGroupSelection} />
-            {stage === "reconcile" && plan.length > 0 && (
+            <SelectionHud canEvict={view === "reconcile"} onSelectionChanged={syncGroupSelection} />
+            {view === "reconcile" && plan.length > 0 && (
               <Panel position="top-left" className="mapPlan"
                 style={{ transform: `translate(${planPos.x}px, ${planPos.y}px)` }}>
                 <div className="mapPlanHead" onPointerDown={dragPlan}
@@ -1788,12 +1836,10 @@ function MapInner() {
                   <b>Revision plan</b> <span className="mapPlanCount">{plan.length}</span>
                   {!planMin && <>
                     <span className="mapPlanKey">✎ rename · ⊘ reject · merge groups show as halos</span>
-                    <button className="btn" disabled={lens !== "default"}
-                      title={lens !== "default" ? "Switch Arrange back to Normal to apply the plan" : "Apply every remaining proposal"}
+                    <button className="btn" title="Apply every remaining proposal"
                       onClick={() => { [...plan].forEach((a) => applyAction(a, false)); earcon.accept(); }}>Accept all</button>
-                    <button className="btn" disabled={lens !== "default"}
-                      onClick={() => setPlan([])}
-                      title={lens !== "default" ? "Switch Arrange back to Normal to edit the plan" : "Discard every remaining proposal"}>Clear</button>
+                    <button className="btn" onClick={() => setPlan([])}
+                      title="Discard every remaining proposal">Clear</button>
                   </>}
                   <button className="btn iconbtn mapPlanMin" onClick={() => setPlanMin((m) => !m)}
                     aria-expanded={!planMin}
@@ -1810,8 +1856,8 @@ function MapInner() {
                         {a.action === "rename" ? <><b>{a.code}</b> → {a.newName}</>
                           : <>reject <b>{a.code}</b>'s excerpts</>}
                       </span>
-                      <button className="btn ok" disabled={lens !== "default"} onClick={() => applyAction(a)} title={"Apply — " + a.rationale}>✓</button>
-                      <button className="btn" disabled={lens !== "default"} onClick={() => skipAction(a)} title="Skip this proposal">✗</button>
+                      <button className="btn ok" onClick={() => applyAction(a)} title={"Apply — " + a.rationale}>✓</button>
+                      <button className="btn" onClick={() => skipAction(a)} title="Skip this proposal">✗</button>
                     </div>
                   ))}
                 </div>}
@@ -1824,22 +1870,21 @@ function MapInner() {
       {topicAiOpen && (
         <GroupModal transient
           onClose={() => setTopicAiOpen(false)}
-          onReconcileInstead={() => { setTopicAiOpen(false); setStageOverride("reconcile"); }}
+          onReconcileInstead={() => { setTopicAiOpen(false); switchView("reconcile"); }}
           onGroups={(groups) => {
             useStore.getState().setCodeAreas(groups.map((g) => ({ name: g.name, codes: g.codes })), codebookFp);
-            delete remembered.lensPos.topics; // fresh areas, fresh placement
-            setLens("topics");
+            setViewOverride("areas");
             requestAnimationFrame(() => fitView({ duration: 200 }));
           }} />
       )}
       {themeAiOpen && (
         <GroupModal
           onClose={() => setThemeAiOpen(false)}
-          onReconcileInstead={() => { setThemeAiOpen(false); setStageOverride("reconcile"); }}
+          onReconcileInstead={() => { setThemeAiOpen(false); switchView("reconcile"); }}
           onGroups={(groups) => { useStore.getState().applyThemeGroups(groups); }} />
       )}
       {aiOpen && (
-        <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope} lensed={lens !== "default"}
+        <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope} lensed={false}
           onClose={() => setAiOpen(false)}
           onPlan={(p: ReconcilePlan, scope) => {
             const st = useStore.getState();
@@ -1907,21 +1952,45 @@ function MapInner() {
           <div className="mapHelpFoot">Esc, or the ? button, closes this.</div>
         </div>
       )}
+      {viewMenu && (
+        <div ref={viewMenuRef} className="ctxmenu mapMenu mapViewMenu" role="menu" aria-label="Map view"
+          style={{ left: viewMenu.left, top: viewMenu.y, fontSize: sidebarFontSize }}>
+          {(["work", "explore"] as const).map((g) => (
+            <div key={g} className="mapViewGroup">
+              {/* the two tiers carry what a flat list of five would lose: these
+                  two are phases of the work, those three are ways of looking */}
+              <div className="mapMenuHead">{g === "work" ? "Work on the codebook" : "Look at it by"}</div>
+              {VIEW_ORDER.filter((v) => VIEWS[v].group === g).map((v) => {
+                const s = VIEWS[v];
+                const status = v === "reconcile" && clusters.length + plan.length > 0
+                  ? `${clusters.length + plan.length} pending`
+                  : v === "areas"
+                    ? (topicGroups.length === 0 ? "not worked out yet"
+                      : `${topicGroups.length} areas${topicsStale ? " · stale" : ""}`)
+                    : v === "themes" && codeGroups.length ? `${codeGroups.length} islands` : "";
+                return (
+                  <button key={v} role="menuitemradio" aria-checked={view === v}
+                    className={view === v ? "on" : ""}
+                    onClick={() => switchView(v)}>
+                    {view === v ? "✓ " : ""}{s.label}
+                    <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
       {layoutMenu && (
         <div className="ctxmenu mapMenu mapLayoutMenu" role="menu" aria-label="Layout"
           style={{ right: layoutMenu.right, top: layoutMenu.y, fontSize: sidebarFontSize }}>
           <button role="menuitem" onClick={() => {
             const at = layoutMenu;
             setLayoutMenu(null);
-            if (lens !== "default") { resetLensLayout(); return; } // a view's own moves: no confirm needed
-            setConfirmRelayout(at);   // resetting your own layout discards work: confirm it
+            setConfirmRelayout(at);   // resetting discards hand placement: confirm it
           }}>
             Reset layout
-            <span className="mapMenuNote">
-              {lens === "default"
-                ? "Back to the packed layout"
-                : "Undo the moves you made in this view"}
-            </span>
+            <span className="mapMenuNote">Back to the packed layout, in this view only</span>
           </button>
           <button role="menuitem" onClick={() => { setLayoutMenu(null); cleanUpLayout(); }}>
             Clean up layout
@@ -1941,7 +2010,7 @@ function MapInner() {
             <button className="btn primary" autoFocus
               onClick={() => {
                 setConfirmRelayout(null);
-                if (useStore.getState().resetMapLayout(stage))
+                if (slot && useStore.getState().resetMapLayout(slot))
                   requestAnimationFrame(() => fitView({ duration: 200 }));
               }}>Re-layout</button>
             <button className="btn" onClick={() => setConfirmRelayout(null)}>Cancel</button>
@@ -2011,27 +2080,25 @@ function MapInner() {
               Find similar codes…
             </button>
           )}
-          {stage === "reconcile" && (
+          {view === "reconcile" && (
             <button role="menuitem" onClick={() => {
               setConfirmFocus({ codes: menu.sel, x: menu.x, y: menu.y }); setMenu(null);
             }}>
               AI: where {menu.sel.length === 1 ? "does this code" : "do these codes"} belong…
             </button>
           )}
-          {/* structural edits stay off under a lens — their effect (halos,
-              islands, direct merges) is invisible until Arrange goes back to
-              normal; the focus-reconcile ask above is the lens's own workflow */}
-          {menu.sel.length > 1 && stage === "reconcile" && lens === "default" && (
+          {/* each view offers only the structural edit it can show */}
+          {menu.sel.length > 1 && view === "reconcile" && (
             <button role="menuitem" onClick={() => clusterSelection(menu.sel)}>
               Propose merging these {menu.sel.length} codes
             </button>
           )}
-          {menu.sel.length > 1 && stage === "themes" && lens === "default" && (
+          {menu.sel.length > 1 && view === "themes" && (
             <button role="menuitem" onClick={() => groupSelection(menu.sel)}>
               Group {menu.sel.length} codes together
             </button>
           )}
-          {menu.sel.length > 1 && lens === "default" && <>
+          {menu.sel.length > 1 && slot !== null && <>
             <div className="mapMenuHead">Merge {menu.sel.length} into…</div>
             {menu.sel.map((c) => (
               <button key={c} role="menuitem" onClick={() => mergeSel(menu.sel, c)}>
