@@ -19,12 +19,9 @@ import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
 export type ReconcileScope = number | "all" | { focus: string[] };
-export function ReconcileModal({ groups, initialScope = "all", lensed = false, onPlan, onClose }: {
+export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }: {
   groups: CodeGroup[];
   initialScope?: ReconcileScope;
-  // a transient Arrange lens is up: the results land on the normal layout,
-  // which is not what the researcher is looking at
-  lensed?: boolean;
   onPlan: (plan: ReconcilePlan, scope: ReconcileScope, meta?: { replaced: number; unreviewed: string[] }) => void;
   onClose: () => void;
 }) {
@@ -166,9 +163,6 @@ export function ReconcileModal({ groups, initialScope = "all", lensed = false, o
                 discards it). Nothing has changed yet, and "remove" only rejects a code's excerpts —
                 the data stays in the file.
               </p>
-              {lensed && (
-                <div className="settings-note">You're looking through an Arrange lens — the proposals are on your normal layout. Switch Arrange back to Normal to review them.</div>
-              )}
               {done.replaced != null && done.replaced > 0 && (
                 <div className="settings-note">Replaced {done.replaced} pending proposal{done.replaced === 1 ? "" : "s"} that touched the reviewed codes.</div>
               )}

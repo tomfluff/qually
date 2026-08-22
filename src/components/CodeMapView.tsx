@@ -89,7 +89,7 @@ type ChipNodeT = Node<ChipData, "chip">;
 // lens islands are synthetic (gi indexes the LENS grouping, not codeGroups),
 // so they carry their member list — the context menu must never reach into
 // saved theme groups through a lens island's gi
-type IslandData = { name: string; gi: number; lens?: boolean; list?: string[];
+type IslandData = { name: string; gi: number; pile?: boolean; list?: string[];
   // areas view only: which stored area this pile is (-1 = Unassigned)
   ai?: number;
   // lens islands only: the grouping's own name, without the count suffix —
@@ -288,7 +288,7 @@ const IslandNode = memo(function IslandNode({ data }: NodeProps<IslandNodeT>) {
   return (
     <div className={"mapIsland" + (data.gi === -1 ? " loose" : "")}>
       <div className="mapIslandLabel" style={{ fontSize }}>
-        {data.lens || data.gi === -1 ? (
+        {data.pile || data.gi === -1 ? (
           <span className={"mapIslandName" + (data.gi === -1 ? " loose" : "")}>{data.name}</span>
         ) : editing ? (
           <input className="mapIslandEdit nodrag" value={draft} autoFocus
@@ -818,7 +818,7 @@ function MapInner() {
           position: stored[key] ?? { x: ix, y: iy }, width: bw, height: bh,
           draggable: opts.movable, selectable: false, focusable: false,
           dragHandle: ".mapIslandLabel",
-          data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list, gkey: b.name,
+          data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, pile: true, list: b.list, gkey: b.name,
             ...(b.ai !== undefined ? { ai: b.ai } : {}) },
         });
         for (const c of b.list)
@@ -1578,10 +1578,10 @@ function MapInner() {
     e.preventDefault();
     if (n.type === "island") {
       const d = n.data as IslandData;
-      // a lens island's gi indexes the LENS grouping — acting through
-      // codeGroups[gi] would open/reconcile an unrelated saved theme. Its
+      // a bucket or area pile's gi indexes THAT grouping, not codeGroups —
+      // acting through codeGroups[gi] would open an unrelated saved theme. Its
       // member list becomes a plain selection menu instead.
-      if (d.lens) {
+      if (d.pile) {
         const list = (d.list ?? []).filter((c) => c in codebook);
         if (list.length) setMenu({ x: e.clientX, y: e.clientY, sel: list });
         return;
@@ -1884,7 +1884,7 @@ function MapInner() {
           onGroups={(groups) => { useStore.getState().applyThemeGroups(groups); }} />
       )}
       {aiOpen && (
-        <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope} lensed={false}
+        <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope}
           onClose={() => setAiOpen(false)}
           onPlan={(p: ReconcilePlan, scope) => {
             const st = useStore.getState();
@@ -1946,8 +1946,9 @@ function MapInner() {
             <dt>Reconcile</dt><dd>A capsule is a proposed merge: drag chips in or out. Its caption names the merged code; the arrow opens the reasoning.</dd>
             <dt>Merge vs group</dt><dd>A <b>merge</b> says these are one code and folds them into one, shrinking the codebook. A <b>group</b> says they are different codes that belong together, and changes nothing about them.</dd>
             <dt>Themes</dt><dd>Drag codes between islands, or an island by its caption.</dd>
-            <dt>Arrange</dt><dd>Views for looking only — buckets by size, or AI areas. Free-form is your own layout, always one click away.</dd>
-            <dt>Spread</dt><dd>Nudges groups apart until names stop overlapping.</dd>
+            <dt>Views</dt><dd>One list: Reconcile and Themes are where you work, the buckets and AI areas are ways of looking. Each keeps its own layout, and the bar always says what a drag does in the one you are in.</dd>
+            <dt>Dragging</dt><dd>Into a group it joins, and lands after the ones already there. Out to open canvas it leaves and stays where you drop it. Onto the catch-all pile it leaves and tidies in.</dd>
+            <dt>Layout</dt><dd>Reset packs this view again; Clean up nudges things apart until names stop overlapping.</dd>
           </dl>
           <div className="mapHelpFoot">Esc, or the ? button, closes this.</div>
         </div>

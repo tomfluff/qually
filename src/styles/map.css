@@ -145,7 +145,7 @@
 .mapActBadge.rename, .mapActBadge.merge { color:var(--accent); }
 /* the chip's pending-proposal marker */
 .mapActBadge { flex:none; }
-/* stage toggle rides the bar */
+/* the work-view pair rides the bar */
 .mapBar .mapStage { flex:none; }
 .mapBar .mapStage .seg { padding-inline:12px; font-weight:500; }
 /* the halo: a capsule field hugging its packed member chips — containment IS
@@ -164,7 +164,7 @@
 .mapHaloCount { color:var(--muted); font-size:.6em; font-weight:700; }
 .mapOrbitTag { color:var(--accent); font-size:.55em; font-weight:600;
   border:1px solid var(--accent); border-radius:99px; padding:.1em .6em; }
-/* badges are Reconcile-stage furniture */
+/* badges are Reconcile furniture */
 /* the plan badges are Reconcile furniture — exhaustive by construction: only
    that view shows them, so a new view can never sprout them by accident */
 #codemap:not(.view-reconcile) .mapActBadge { display:none; }
