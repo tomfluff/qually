@@ -140,19 +140,19 @@ const VIEWS: Record<MapView, ViewSpec> = {
   },
   pids: {
     label: "By document count", layout: null,
-    drag: "Just looking — nothing moves here",
+    drag: "Drag a group to rearrange; the codes inside stay put",
   },
   segs: {
     label: "By segment count", layout: null,
-    drag: "Just looking — nothing moves here",
+    drag: "Drag a group to rearrange; the codes inside stay put",
   },
   defs: {
     label: "By definition", layout: null,
-    drag: "Just looking — nothing moves here",
+    drag: "Drag a group to rearrange; the codes inside stay put",
   },
   speaker: {
     label: "By speaker", layout: null,
-    drag: "Just looking — nothing moves here",
+    drag: "Drag a group to rearrange; the codes inside stay put",
   },
 };
 const VIEW_ORDER: MapView[] = ["reconcile", "themes", "areas", "pids", "segs", "defs", "speaker"];
