@@ -140,11 +140,11 @@ const VIEWS: Record<MapView, ViewSpec> = {
   },
   pids: {
     label: "By document count", layout: null,
-    drag: "Looking only — nothing here moves and nothing changes",
+    drag: "Just looking — nothing moves here",
   },
   segs: {
     label: "By segment count", layout: null,
-    drag: "Looking only — nothing here moves and nothing changes",
+    drag: "Just looking — nothing moves here",
   },
 };
 const VIEW_ORDER: MapView[] = ["reconcile", "themes", "areas", "pids", "segs"];
@@ -1961,7 +1961,11 @@ function MapInner() {
                   className={view === v ? "on" : ""}
                   onClick={() => switchView(v)}>
                   {view === v ? "✓ " : ""}{s.label}
-                  <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
+                  {/* the count views explain themselves under the Grouping
+                      head; the bar's drag line covers them once inside */}
+                  {s.layout && (
+                    <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
+                  )}
                 </button>
               </Fragment>
             );
