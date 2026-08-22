@@ -42,8 +42,12 @@ button { font-family:inherit; }
    beside its label. 0.055em is the measured gap between Segoe's glyph-band
    centre and its line-box centre; translate is paint-only, so no layout moves.
    Applies to ALL our icons (Icon.tsx stamps .icn) so icon-only buttons stay on
-   the same optical line as their labelled neighbours. */
-.icn { translate: 0 0.055em; }
+   the same optical line as their labelled neighbours — and to every colour
+   swatch and lens dot, which sit beside text the same way. */
+:root { --ink-nudge: 0.055em; }
+.icn,
+.swatch, .mSw, .nDot, .mapDot, .lensdot, .ai-lens-dot, .evdot {
+  translate: 0 var(--ink-nudge); }
 
 /* Visually hidden, exposed to screen readers — the live region and text-only
    labels use this. clip-path alone isn't enough for some SRs; the 1px box is. */
