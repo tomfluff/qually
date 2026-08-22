@@ -487,6 +487,11 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
   const zoom = useFlowStore(zoomSel);
   const scale = 1 / zoom;
   const codebook = useStore((s) => s.codebook);
+  // the node anchors at the chip's bottom edge; the 14px breathing gap is
+  // SCREEN ink (translate inside the counter-scale), so the stem drawn by
+  // .mapSimNode::before bridges chip and panel exactly at every zoom — a
+  // world-unit gap left the panel adrift 42px below its chip at zoom 3
+  const transform = `scale(${scale}) translate(0, 14px)`;
   const groups = useStore((s) => s.codeGroups);
   const clusters = useStore((s) => s.codeClusters);
   const homeOf = (code: string) => {
@@ -497,7 +502,7 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
   const n = data.ticked.size;
   return (
     <div className="mapSimNode nodrag nowheel"
-      style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
+      style={{ transform, transformOrigin: "top left" }}>
       <div className="mapSimHead">
         <b>Similar to “{data.source}”</b>
         <button className="mapNoteX" aria-label="Close" onClick={() => simEvent("close")}>×</button>
@@ -849,7 +854,9 @@ function MapInner() {
       }
       const node: SimilarNodeT = {
         id: "similar", type: "similar",
-        position: { x: abs.x, y: abs.y + (host.height ?? ch) + 14 },
+        // flush with the chip's bottom edge: the visual gap is screen-sized
+        // by the node's own transform, not world-sized here
+        position: { x: abs.x, y: abs.y + (host.height ?? ch) },
         width: Math.max(330, fs * 24),
         draggable: false, selectable: false, focusable: false,
         zIndex: 20,
@@ -1512,6 +1519,36 @@ function MapInner() {
     frame = requestAnimationFrame(settle);
     return () => cancelAnimationFrame(frame);
   }, [view, topicGroups.length, getNodes, getViewport, setViewport, codes.length]);
+
+  // The similar panel is glued to the map, so nothing guarantees the screen
+  // shows it: opened under a chip in the lower half of the canvas, its action
+  // buttons land below the window — reachable only by panning, which is
+  // exactly the work a magnified view makes expensive. Pan the CAMERA (never
+  // the layout) the least distance that brings the panel fully into view, at
+  // open and again when the AI pass reshapes it. Ticking rows does not
+  // re-trigger this, so the camera never fights the user mid-conversation.
+  useEffect(() => {
+    if (!similar) return;
+    let frame = 0, tries = 0;
+    const settle = () => {
+      const canvas = canvasRef.current;
+      const el = canvas?.querySelector(".mapSimNode");
+      if (!canvas || !el) { if (tries++ < 12) frame = requestAnimationFrame(settle); return; }
+      const r = el.getBoundingClientRect();
+      const c = canvas.getBoundingClientRect();
+      const pad = 12;
+      // top-left wins when the panel is larger than the canvas: the header
+      // names the question and the list starts there
+      const dx = Math.min(0, c.right - pad - r.right) - Math.min(0, r.left - (c.left + pad));
+      const dy = Math.min(0, c.bottom - pad - r.bottom) - Math.min(0, r.top - (c.top + pad));
+      if (!dx && !dy) return;
+      const vp = getViewport();
+      void setViewport({ x: vp.x + dx, y: vp.y + dy, zoom: vp.zoom }, { duration: 240 });
+    };
+    frame = requestAnimationFrame(settle);
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [similar?.source, similar?.ai, getViewport, setViewport]);
 
   // Adjust to zoom: measure what is on screen — every top-level thing plus the
   // caption floating above it, at THIS zoom — then nudge only the boxes that
