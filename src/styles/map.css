@@ -175,7 +175,9 @@
   background:var(--panel); color:var(--muted); font:inherit; font-size:.6em;
   padding:.05em .5em; cursor:pointer; }
 .mapHaloArrow:hover { color:var(--fg); border-color:var(--muted); }
-/* the stem card node: headerless (the halo caption names the merge) */
+/* the stem card node: headerless (the halo caption names the merge). It
+   FLOATS — opening one must never move the map, so it is not reserved in the
+   packing and simply draws over whatever is under it. */
 .react-flow__node-card { pointer-events:auto !important; }
 .mapCardNode { background:var(--panel); border:1px solid var(--line); border-radius:10px;
   box-shadow:0 6px 18px rgba(0,0,0,.28); width:100%; box-sizing:border-box; position:relative; }
@@ -219,7 +221,17 @@
 .mapCanvas .react-flow__minimap.top.left { margin-top:64px; }
 /* "Find similar codes": a ranked panel at the cursor. Rows are labels so the
    whole row is a hit target (the chips are small; the list should not be). */
-.mapSimilar { width:min(370px, 92vw); padding:0; overflow:hidden; }
+/* the results node: tethered under the chip you asked about, on a stem like
+   the halo's card, so it pans and zooms with the map */
+.react-flow__node-similar { pointer-events:auto !important; }
+.mapSimNode { width:100%; box-sizing:border-box; background:var(--panel);
+  border:1px solid var(--line); border-radius:11px; position:relative;
+  box-shadow:0 10px 28px rgba(0,0,0,.32); overflow:hidden; }
+.mapSimNode::before { content:""; position:absolute; left:26px; top:-14px;
+  width:2px; height:14px; background:var(--accent); }
+.mapSimNode .mapSimHead .mapNoteX { position:absolute; right:8px; top:7px; border:none;
+  background:none; color:var(--muted); font:inherit; cursor:pointer; padding:0 4px; }
+.mapSimNode .mapSimHead .mapNoteX:hover { color:var(--fg); }
 .mapSimHead { padding:9px 12px 8px; border-bottom:1px solid var(--line); font-weight:700; }
 .mapSimHead span { display:block; color:var(--muted); font-weight:400; font-size:.85em; margin-top:2px; }
 .mapSimEmpty { padding:10px 12px; color:var(--muted); font-size:.9em; }
@@ -241,4 +253,42 @@
 .mapSimBar i { display:block; height:100%; background:var(--accent); }
 .mapSimAi { display:block; width:calc(100% - 20px); margin:9px 10px; text-align:left; }
 .mapSimNote { padding:8px 12px 0; color:var(--muted); font-size:.85em; }
-.mapSimilar .mapCardActions { border-top:1px solid var(--line); margin-top:6px; }
+.mapSimNode .mapCardActions { border-top:1px solid var(--line); margin-top:6px; }
+
+/* ---- popups on the map: real buttons, not menu rows -----------------------
+   These panels borrow .ctxmenu for its chrome, which also carries MENU-ITEM
+   button styling — including `button:disabled:hover { background:transparent }`,
+   which erased a filled primary button on hover. Restore proper button states
+   for anything that is a .btn inside one of them. */
+.mapMenu .btn:hover:not(:disabled) { background:var(--sel); border-color:var(--accent); }
+.mapMenu .btn.primary:hover:not(:disabled) { background:var(--accent); border-color:var(--accent);
+  filter:brightness(1.12); }
+.mapMenu .btn:disabled { opacity:.45; cursor:default; }
+.mapMenu .btn:disabled:hover { background:var(--bg); border-color:var(--line); filter:none; }
+/* a disabled primary keeps its shape and colour, just dimmed — so the eye can
+   still find the main action and see that it is waiting on something */
+.mapMenu .btn.primary:disabled,
+.mapMenu .btn.primary:disabled:hover { background:var(--accent); border-color:var(--accent); }
+
+/* the bar's text sits in the same box as its controls, so nothing reads as
+   half a line off */
+.mapBar .mapTitle, .mapBar .mapCount { display:inline-flex; align-items:center;
+  height:var(--ctl-h); line-height:1; }
+
+/* the gestures panel scrolls instead of running off a short screen */
+.mapHelp { max-height:calc(100vh - 120px); overflow-y:auto; }
+/* the answer to "where do these belong" — it stays until dismissed, because a
+   run that proposes nothing must not look like a run that did nothing */
+.mapFocusNote { display:flex; align-items:center; gap:12px; max-width:min(70ch, 80vw);
+  padding:8px 12px; background:var(--panel); border:1px solid var(--accent);
+  border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,.3); }
+.mapFocusNote .mapFocusCost { color:var(--muted); font-size:.85em; white-space:nowrap; }
+.mapFocusNote .btn { flex:none; }
+/* the node's own button states (it is no longer inside menu chrome, so it
+   inherits nothing): a disabled action dims but keeps its shape, an enabled
+   one lifts clearly on hover */
+.mapSimNode .btn:disabled, .mapCardNode .btn:disabled { opacity:.45; cursor:default; }
+.mapSimNode .btn:hover:not(:disabled),
+.mapCardNode .btn:hover:not(:disabled) { background:var(--sel); border-color:var(--accent); }
+.mapSimNode .btn.primary:hover:not(:disabled),
+.mapCardNode .btn.primary:hover:not(:disabled) { background:var(--accent); filter:brightness(1.12); }

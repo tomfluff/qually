@@ -10,7 +10,7 @@
 // shows the islands (groups) and never any merge structure.
 // Performance shape per the react-flow skill: uncontrolled flow, narrow
 // per-component subscriptions, memo'd nodes, imperative marquee.
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, MiniMap, Controls, Panel, SelectionMode,
   useReactFlow, useStore as useFlowStore, useStoreApi as useFlowStoreApi,
@@ -36,7 +36,7 @@ import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
 import { findSimilar } from "../similar";
 import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
-import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
+import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, reconcileFocus, mergeFocusResults, estimateFocusTokens, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -90,7 +90,15 @@ type HaloData = { name: string; renamed: boolean; joins: boolean; ci: number; co
 type HaloNodeT = Node<HaloData, "halo">;
 type CardData = { ci: number; gen: boolean }; // gen: a glimpse is being written
 type CardNodeT = Node<CardData, "card">;
-type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT;
+// the "find similar" results: a node tethered to the code you asked about, so
+// it pans and zooms with the map instead of floating over it
+type SimilarRow = { name: string; score: number; why: string; band?: "very" | "related" };
+type SimilarData = {
+  source: string; rows: SimilarRow[]; ticked: Set<string>;
+  ai: "idle" | "busy" | "done"; cost?: number; inTok: number; costEst: number;
+};
+type SimilarNodeT = Node<SimilarData, "similar">;
+type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT;
 
 // session view state that outlives the unmounting view; positions ride the
 // store's undo history and the camera persists in ui (across reloads)
@@ -374,7 +382,86 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   );
 });
 
-const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode, card: CardNode };
+// The similar-results node: same tethered-to-its-subject rule as the card.
+// It talks to the view through events, so the node stays memo-cheap and the
+// state lives in one place.
+const simEvent = (name: string, detail?: unknown) =>
+  window.dispatchEvent(new CustomEvent(`qually:sim${name}`, { detail }));
+const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>) {
+  const stats = useStore((s) => s.hotbarCache && null); // never re-renders on hotbar
+  void stats;
+  const codebook = useStore((s) => s.codebook);
+  const groups = useStore((s) => s.codeGroups);
+  const clusters = useStore((s) => s.codeClusters);
+  const homeOf = (code: string) => {
+    const cl = clusters.find((c) => c.codes.includes(code));
+    if (cl) return `merge: ${cl.newName ?? cl.survivor}`;
+    return groups.find((g) => g.codes.includes(code))?.name ?? null;
+  };
+  const n = data.ticked.size;
+  return (
+    <div className="mapSimNode nodrag nowheel">
+      <div className="mapSimHead">
+        <b>Similar to “{data.source}”</b>
+        <button className="mapNoteX" aria-label="Close" onClick={() => simEvent("close")}>×</button>
+        <span>{data.rows.length} of {Object.keys(codebook).length - 1} codes · {n} ticked</span>
+      </div>
+      {data.rows.length === 0 && (
+        <div className="mapSimEmpty">
+          {data.ai === "done"
+            ? "No relatives found. This code is doing its own work."
+            : "Nothing here shares wording with this code. A semantic look may still find relatives."}
+        </div>
+      )}
+      <div className="mapSimList nicescroll">
+        {data.rows.map((m) => {
+          const home = homeOf(m.name);
+          return (
+            <label key={m.name} className="mapSimRow">
+              <input type="checkbox" checked={data.ticked.has(m.name)}
+                onChange={() => simEvent("toggle", m.name)} />
+              <span className="mapSimName">
+                <b>{m.name}</b>
+                {home && (
+                  <span className="mapSimHome"
+                    title={home.startsWith("merge: ")
+                      ? "Already in another merge proposal — taking it here removes it from that one"
+                      : "Already in this theme island — a merge leaves that alone, grouping moves it here"}>
+                    in {home}
+                  </span>
+                )}
+                <i>{m.why}</i>
+              </span>
+              <span className="mapSimBar" aria-hidden="true">
+                <i style={{ width: `${Math.round(Math.min(1, m.score) * 100)}%` }} />
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      {data.ai !== "done" && (
+        <button className="btn mapSimAi" disabled={data.ai === "busy"} onClick={() => simEvent("ai")}>
+          {data.ai === "busy" ? "Reading the codebook…"
+            : <>Ask the AI for semantic matches — <b>≈{data.inTok.toLocaleString()} tokens · ≈${data.costEst.toFixed(4)}</b></>}
+        </button>
+      )}
+      {data.ai === "done" && data.cost != null && (
+        <div className="mapSimNote">AI pass done · ${data.cost.toFixed(4)} · logged</div>
+      )}
+      <div className="mapCardActions">
+        <button className="btn primary" disabled={!n} onClick={() => simEvent("take", "merge")}
+          title="Propose merging these into one code — lands as a halo you can still edit">
+          Propose merge{n ? ` (${n + 1})` : ""}
+        </button>
+        <button className="btn" disabled={!n} onClick={() => simEvent("take", "group")}
+          title="Put these in one theme island">Group</button>
+        <button className="btn" disabled={!n} onClick={() => simEvent("select")}
+          title="Select these on the map and close">Select</button>
+      </div>
+    </div>
+  );
+});
+const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode, card: CardNode, similar: SimilarNode };
 
 // React Flow commits its marquee through React on EVERY pointer event with no
 // rAF gate (verified in the installed v12.11.3 source with codex): a high-rate
@@ -417,6 +504,25 @@ function RafSelectionMarquee() {
   return <div ref={elementRef} className="mapRafMarquee" aria-hidden="true" />;
 }
 
+// Popups are placed at the pointer, which near an edge puts half of them
+// off-screen. Measure once after they render and nudge them back in — cheaper
+// and more honest than guessing each panel's size in advance.
+function useKeepOnScreen<T extends HTMLElement>(deps: unknown[]) {
+  const ref = useRef<T>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.transform = ""; // measure where CSS actually put it
+    const r = el.getBoundingClientRect();
+    const pad = 8;
+    const dx = Math.min(0, window.innerWidth - pad - r.right) - Math.min(0, r.left - pad);
+    const dy = Math.min(0, window.innerHeight - pad - r.bottom) - Math.min(0, r.top - pad);
+    if (dx || dy) el.style.transform = `translate(${dx}px, ${dy}px)`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return ref;
+}
+
 function MapInner() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
@@ -429,7 +535,7 @@ function MapInner() {
   const setUi = useStore((s) => s.setUi);
   const mapPositions = useStore((s) => s.mapPositions);
   const mapIslandPos = useStore((s) => s.mapIslandPos);
-  const { setNodes: rfSetNodes, getNodes, getInternalNode, fitView, getZoom } = useReactFlow();
+  const { setNodes: rfSetNodes, getNodes, getInternalNode, fitView, getZoom, getViewport, setViewport } = useReactFlow();
   // the nudged positions while spread out (null = contracted)
   const [spreadPos, setSpreadPos] = useState(remembered.spreadPos);
   useEffect(() => { remembered.spreadPos = spreadPos; }, [spreadPos]);
@@ -444,13 +550,24 @@ function MapInner() {
   // the gestures used to sit in the bar as a paragraph; they are reference,
   // not something to read every session, so they live behind a button
   const [helpOpen, setHelpOpen] = useState(false);
+  const menuRef = useKeepOnScreen<HTMLDivElement>([menu]);
   // "find similar codes": a ranked panel at the cursor. Local matches appear
   // instantly; the AI pass is a second, paid step inside the same panel.
   const [similar, setSimilar] = useState<null | {
-    source: string; x: number; y: number;
-    rows: { name: string; score: number; why: string; band?: "very" | "related" }[];
+    source: string; rows: SimilarRow[];
     ticked: Set<string>; ai: "idle" | "busy" | "done"; cost?: number;
   }>(null);
+  // the quote for the optional AI pass, computed when the panel opens
+  const simTokens = useMemo(() => {
+    const st = useStore.getState();
+    if (!similar) return { inTok: 0, cost: 0 };
+    const red = redactor(st.ai.redactTerms);
+    const book = Object.keys(st.codebook).filter((n) => n !== similar.source)
+      .map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
+    const inTok = estimateSimilarTokens(
+      { name: similar.source, def: st.codebook[similar.source]?.def ?? "", excerpts: [] }, book, red);
+    return { inTok, cost: costOf(modelOf(st.ai.model), inTok, estimateTokens(" ".repeat(240))) };
+  }, [similar]);
   // the arrangement lens: transient bucket/co-occurrence views for triage
   const [lens, setLens] = useState(remembered.lens);
   useEffect(() => { remembered.lens = lens; }, [lens]);
@@ -467,6 +584,14 @@ function MapInner() {
   useEffect(() => { remembered.openCards = openCards; }, [openCards]);
   const [genCi, setGenCi] = useState<number | null>(null);
   const [confirmAi, setConfirmAi] = useState<{ ci: number; x: number; y: number } | null>(null);
+  const aiConfirmRef = useKeepOnScreen<HTMLDivElement>([confirmAi]);
+  // "where do these belong": the same one-line consent the group description
+  // uses. The full modal was the wrong weight for a question you ask often.
+  const [confirmFocus, setConfirmFocus] = useState<{ codes: string[]; x: number; y: number } | null>(null);
+  const focusConfirmRef = useKeepOnScreen<HTMLDivElement>([confirmFocus]);
+  const [focusBusy, setFocusBusy] = useState(false);
+  // what the run actually said, shown on the map until dismissed
+  const [focusNote, setFocusNote] = useState<{ text: string; cost: number } | null>(null);
   // card fold/unfold arrives from the node components as an event
   useEffect(() => {
     const onToggle = (e: Event) => setOpenCards((old) => {
@@ -476,6 +601,40 @@ function MapInner() {
     window.addEventListener("qually:togglecard", onToggle);
     return () => window.removeEventListener("qually:togglecard", onToggle);
   }, []);
+  // the similar node talks back through events, so it stays a cheap memo'd
+  // component and every decision lives here
+  useEffect(() => {
+    const onToggleRow = (e: Event) => {
+      const name = (e as CustomEvent<string>).detail;
+      setSimilar((s) => {
+        if (!s) return s;
+        const t = new Set(s.ticked);
+        t.has(name) ? t.delete(name) : t.add(name);
+        return { ...s, ticked: t };
+      });
+    };
+    const onClose = () => setSimilar(null);
+    const onAi = () => void runSimilarAiRef.current?.();
+    const onTake = (e: Event) => takeSimilarRef.current?.((e as CustomEvent<"merge" | "group">).detail);
+    const onSelect = () => selectSimilarRef.current?.();
+    window.addEventListener("qually:simtoggle", onToggleRow);
+    window.addEventListener("qually:simclose", onClose);
+    window.addEventListener("qually:simai", onAi);
+    window.addEventListener("qually:simtake", onTake);
+    window.addEventListener("qually:simselect", onSelect);
+    return () => {
+      window.removeEventListener("qually:simtoggle", onToggleRow);
+      window.removeEventListener("qually:simclose", onClose);
+      window.removeEventListener("qually:simai", onAi);
+      window.removeEventListener("qually:simtake", onTake);
+      window.removeEventListener("qually:simselect", onSelect);
+    };
+  }, []);
+  // the handlers close over changing state, so the listeners reach them
+  // through refs rather than re-subscribing on every keystroke
+  const runSimilarAiRef = useRef<() => void>(null);
+  const takeSimilarRef = useRef<(m: "merge" | "group") => void>(null);
+  const selectSimilarRef = useRef<() => void>(null);
   // the pending revision plan is PROJECT data — it survives reloads and travels
   // in the file, so the review can continue in a later session
   const plan = useStore((st) => st.codePlan);
@@ -537,6 +696,29 @@ function MapInner() {
       return Math.max(460, Math.sqrt(area) * 1.5);
     };
     const inBook = (c: string) => c in codebook;
+    // "Find similar" hangs off the chip you asked about, so it pans and zooms
+    // with the map. It is placed LAST, after positions are known, and never
+    // participates in packing — asking a question must not move the map.
+    const withSimilar = (ns: MapNode[]): MapNode[] => {
+      if (!similar) return ns;
+      const host = ns.find((n) => n.type === "chip" && n.id === similar.source);
+      if (!host) return ns;
+      const abs = { x: host.position.x, y: host.position.y };
+      // a child of an island carries a parent-relative position; walk up once
+      if (host.parentId) {
+        const parent = ns.find((n) => n.id === host.parentId);
+        if (parent) { abs.x += parent.position.x; abs.y += parent.position.y; }
+      }
+      const node: SimilarNodeT = {
+        id: "similar", type: "similar",
+        position: { x: abs.x, y: abs.y + (host.height ?? ch) + 14 },
+        width: Math.max(330, fs * 24),
+        draggable: false, selectable: false, focusable: false,
+        zIndex: 20,
+        data: { ...similar, inTok: simTokens.inTok, costEst: simTokens.cost },
+      };
+      return [...ns, node];
+    };
     // Spread applies the nudges computed on toggle to TOP-LEVEL things only
     // (groups, halos, loose chips); a chip inside a group keeps its place in
     // the frame, because the captions that collide belong to groups, not
@@ -655,7 +837,7 @@ function MapInner() {
         ix += stepW + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
       }
-      return { nodes: spreadOut([...islands, ...children] as MapNode[]) };
+      return { nodes: withSimilar(spreadOut([...islands, ...children] as MapNode[])) };
     }
 
     if (stage === "reconcile") {
@@ -683,12 +865,17 @@ function MapInner() {
         // under an "AI glimpse" header, so it neither shares the rationale's
         // width nor comes free — and while it generates, the pulse line stands
         // in for text that isn't there yet
+        // Card height is measured but NOT reserved: unfolding a card used to
+        // grow its row, which re-wrapped the packing and slid every halo after
+        // it to a new place — you opened one thing and the map moved under
+        // you. The card now floats over whatever is beneath it (it is a
+        // transient detail, and it is the thing you are looking at), so
+        // opening and folding never disturb a single position.
         const ratLines = open ? Math.max(1, lines(c.rationale ?? "", cardW - 24)) : 0;
         const glimpseLines = open && showGlimpse
           ? Math.max(1, lines(genCi === c.ci ? "" : c.desc ?? "", cardW - 41)) : 0;
-        const cardH = open
-          ? (ratLines + glimpseLines) * fs * 1.45 + (showGlimpse ? fs * 1.1 + 26 : 0) + fs * 5 + 22
-          : 0;
+        void ratLines; void glimpseLines;
+        const cardH = 0;
         // the halo caption carries the name plus tag, count and fold arrow —
         // and CSS clips it at max(200%, 30ch), so reserving its full measured
         // width would just waste space on a long merged name
@@ -734,6 +921,7 @@ function MapInner() {
             id: `card:${b.c.ci}`, type: "card" as const,
             position: { x: 12, y: b.h + 22 }, parentId: key,
             draggable: false, selectable: false, focusable: false,
+            zIndex: 15, // it floats over the field below instead of pushing it
             width: Math.max(280, Math.min(420, b.w - 24)),
             data: { ci: b.c.ci, gen: genCi === b.c.ci },
           });
@@ -746,7 +934,7 @@ function MapInner() {
       const offY = blocks.length ? y + rowH + HALO_GAP : 0;
       for (const c of singles)
         chipNodes.push(chipNode(c, { x: flat.pos[c].x, y: offY + flat.pos[c].y }));
-      return { nodes: spreadOut([...haloNodes, ...chipNodes, ...extraNodes] as MapNode[]) };
+      return { nodes: withSimilar(spreadOut([...haloNodes, ...chipNodes, ...extraNodes] as MapNode[])) };
     }
 
     const groups = codeGroups
@@ -757,7 +945,7 @@ function MapInner() {
 
     if (groups.length === 0) {
       const flat = pack(codes, near(codes));
-      return { nodes: spreadOut(codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[]) };
+      return { nodes: withSimilar(spreadOut(codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[])) };
     }
     const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
       ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
@@ -788,8 +976,8 @@ function MapInner() {
       rowH = Math.max(rowH, bh);
     }
     // parents strictly before children (RF sub-flow requirement)
-    return { nodes: spreadOut([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, spreadPos]);
+    return { nodes: withSimilar(spreadOut([...islands, ...children] as MapNode[])) };
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, spreadPos, similar, simTokens]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -871,12 +1059,12 @@ function MapInner() {
     const g = st.codeGroups.find((x) => x.codes.includes(code));
     return g ? g.name : null;
   }, []);
-  const openSimilar = useCallback((source: string, x: number, y: number) => {
+  const openSimilar = useCallback((source: string) => {
     const st = useStore.getState();
     const book = Object.keys(st.codebook).map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
     const rows = findSimilar(source, book).map((m) => ({ ...m }));
     setSimilar({
-      source, x, y, rows, ai: "idle",
+      source, rows, ai: "idle",
       // codes already filed stay unticked: taking one is a deliberate act
       ticked: new Set(rows.filter((m) => !homeOf(m.name)).map((m) => m.name)),
     });
@@ -968,6 +1156,110 @@ function MapInner() {
     }
     setSimilar(null);
   }, [similar]);
+
+  // the focus run, inline: gather evidence, send, land the plan, and SAY what
+  // came back — the old modal reported its result on a screen you had already
+  // dismissed, so an empty answer looked like nothing happened
+  const focusInputs = useCallback((codes: string[]) => {
+    const st = useStore.getState();
+    const focusSet = new Set(codes.filter((c) => c in st.codebook));
+    const byCode = new Map<string, string[]>();
+    for (const seg of st.segments) {
+      if (seg.status !== "accepted" || !st.transcripts[seg.pid]) continue;
+      const cap = focusSet.has(seg.code) ? 8 : 2;
+      const arr = byCode.get(seg.code) ?? [];
+      if (arr.length >= cap) continue;
+      const ex = segExcerpt(seg, st.transcripts[seg.pid].lines).excerpt;
+      if (ex) { arr.push(ex); byCode.set(seg.code, arr); }
+    }
+    const mk = (name: string) => ({ name, def: st.codebook[name]?.def ?? "", excerpts: byCode.get(name) ?? [] });
+    return {
+      focus: [...focusSet].map(mk),
+      context: Object.keys(st.codebook).filter((c) => !focusSet.has(c)).map(mk),
+    };
+  }, []);
+  const runFocus = useCallback(async (codes: string[]) => {
+    const st = useStore.getState();
+    const key = getKey();
+    if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
+    const { focus, context } = focusInputs(codes);
+    if (!focus.length || !context.length) { announce("Nothing to compare these against.", { assertive: true }); return; }
+    const red = redactor(st.ai.redactTerms);
+    setFocusBusy(true);
+    earcon.aiStart();
+    announce(`Asking where ${focus.length} code${focus.length === 1 ? "" : "s"} belong…`);
+    try {
+      const r = await reconcileFocus({ key, model: st.ai.model, focus, context, redaction: red, mode: "consolidate" });
+      const s2 = useStore.getState();
+      const merged = mergeFocusResults(s2.codeClusters, s2.codePlan, r.plan, new Set(r.reviewed));
+      s2.applyReconcilePlan(merged.clusters, merged.actions, false);
+      s2.logAiCall({
+        at: new Date().toISOString(), model: st.ai.model, task: "reconcile",
+        pid: `(focus: ${focus.length} codes)`, lines: focus.length + context.length,
+        redactions: [...focus, ...context].reduce((n, c) =>
+          n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
+        inTok: r.usage.inTok, outTok: r.usage.outTok, costUsd: +r.usage.costUsd.toFixed(5),
+      });
+      earcon.aiDone();
+      const nC = r.plan.clusters.length, nA = r.plan.actions.length;
+      // the answer is often "these are fine" — say so out loud rather than
+      // leaving the map looking unchanged and unexplained
+      const verdict = nC + nA === 0
+        ? `No changes proposed — the AI reads ${focus.length === 1 ? "this code" : "these codes"} as already belonging where ${focus.length === 1 ? "it is" : "they are"}.`
+        : `${nC} merge proposal${nC === 1 ? "" : "s"} and ${nA} rename or reject${nA === 1 ? "" : "s"} — on the map now.`;
+      const missed = r.unreviewed.length ? ` ${r.unreviewed.length} code${r.unreviewed.length === 1 ? "" : "s"} came back unreviewed.` : "";
+      setFocusNote({ text: verdict + missed, cost: r.usage.costUsd });
+      announce(verdict + missed);
+      if (nC) setStageOverride("reconcile");
+    } catch (e) {
+      const msg = e instanceof AiError ? e.message : (e as Error).message;
+      earcon.error();
+      setFocusNote({ text: `That request failed: ${msg}`, cost: 0 });
+      announce(`Where-do-these-belong failed: ${msg}`, { assertive: true });
+    } finally {
+      setFocusBusy(false);
+    }
+  }, [focusInputs]);
+
+  // The results node lives in world space, so a code near the bottom of the
+  // screen puts its panel below the fold. Pan by the smallest amount that
+  // brings it fully into view — once, on open, never fighting the researcher
+  // afterwards. React Flow renders the node a frame or two after the state
+  // changes, so this waits for it rather than measuring thin air.
+  useEffect(() => {
+    if (!similar) return;
+    let tries = 0, frame = 0;
+    const tick = () => {
+      const el = document.querySelector(".react-flow__node-similar");
+      const canvas = document.querySelector(".mapCanvas");
+      if (!el || !canvas) {
+        if (tries++ < 12) frame = requestAnimationFrame(tick);
+        return;
+      }
+      const r = el.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+      const pad = 14;
+      const dx = Math.min(0, c.right - pad - r.right) - Math.min(0, r.left - c.left - pad);
+      const dy = Math.min(0, c.bottom - pad - r.bottom) - Math.min(0, r.top - c.top - pad);
+      if (dx || dy) {
+        const vp = getViewport();
+        void setViewport({ ...vp, x: vp.x + dx, y: vp.y + dy }, { duration: 220 });
+      }
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [similar, getViewport, setViewport]);
+
+  const selectSimilar = useCallback(() => {
+    const cur = similar;
+    if (!cur) return;
+    const pick = new Set([cur.source, ...cur.ticked]);
+    rfSetNodes((ns) => ns.map((n) => ({ ...n, selected: n.type === "chip" && pick.has(n.id) })));
+    setSimilar(null);
+    announce(`${pick.size} codes selected on the map`);
+  }, [similar, rfSetNodes]);
+  runSimilarAiRef.current = runSimilarAi;
+  takeSimilarRef.current = takeSimilar;
+  selectSimilarRef.current = selectSimilar;
 
   const groupSelection = (sel: string[]) => {
     const cleaned = codeGroups.map((g) => ({ ...g, codes: g.codes.filter((c) => !sel.includes(c)) }));
@@ -1171,18 +1463,21 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar) return;
-    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setSimilar(null); };
+    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus) return;
+    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); };
     const down = (e: MouseEvent) => {
       const t = e.target as Element;
       // the help button toggles itself; let its own handler run
       if (!t.closest(".mapMenu") && !t.closest(".mapHelpBtn")) close();
+      // the similar results are a NODE on the canvas, not a menu: panning and
+      // clicking around the map must not dismiss them. Escape and its own ×
+      // close it, like the halo's card.
     };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); setSimilar(null); } };
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi, confirmRelayout, helpOpen, similar]);
+  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus]);
 
   return (
     <div id="codemap" className={"stage-" + stage} style={{ fontSize: sidebarFontSize }}>
@@ -1324,6 +1619,17 @@ function MapInner() {
                 the duration of a box-drag costs one render at gesture start/end
                 instead of aggregate scans per membership change (codex consult) */}
             {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
+            {(focusBusy || focusNote) && (
+              <Panel position="top-center" className="mapFocusNote">
+                {focusBusy
+                  ? <span className="mapNoteGen">Asking where these codes belong…</span>
+                  : <>
+                      <span>{focusNote!.text}</span>
+                      {focusNote!.cost > 0 && <span className="mapFocusCost">${focusNote!.cost.toFixed(4)} · logged</span>}
+                      <button className="btn" onClick={() => setFocusNote(null)}>Dismiss</button>
+                    </>}
+              </Panel>
+            )}
             <RafSelectionMarquee />
             <SelectionHud lensOn={lens !== "default"} />
             {stage === "reconcile" && plan.length > 0 && (
@@ -1408,95 +1714,30 @@ function MapInner() {
             }
           }} />
       )}
-      {similar && (() => {
+      {confirmFocus && (() => {
         const st = useStore.getState();
-        const total = Object.keys(st.codebook).length;
-        const tickable = similar.rows.length;
-        const nSel = similar.ticked.size;
-        const toggle = (name: string) => setSimilar((s) => {
-          if (!s) return s;
-          const t = new Set(s.ticked);
-          t.has(name) ? t.delete(name) : t.add(name);
-          return { ...s, ticked: t };
-        });
-        // the AI cost, quoted before it is spent — the same one-line consent
-        // the group description uses
+        const { focus, context } = focusInputs(confirmFocus.codes);
         const red = redactor(st.ai.redactTerms);
-        const book = Object.keys(st.codebook).filter((n) => n !== similar.source)
-          .map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
-        const inTok = estimateSimilarTokens(
-          { name: similar.source, def: st.codebook[similar.source]?.def ?? "", excerpts: [] }, book, red);
+        const inTok = estimateFocusTokens(focus, context, red);
         const model = modelOf(st.ai.model);
-        const aiCost = costOf(model, inTok, estimateTokens(" ".repeat(240)));
+        const cost = costOf(model, inTok, estimateTokens(" ".repeat(400)));
+        const n = focus.length;
         return (
-          <div className="ctxmenu mapMenu mapSimilar" role="dialog"
-            aria-label={`Codes similar to ${similar.source}`}
-            // a chip near the bottom would push the panel off-screen: anchor it
-            // to the pointer and let it grow UPWARD instead
-            style={similar.y > window.innerHeight / 2
-              ? { left: Math.min(similar.x, window.innerWidth - 380), bottom: window.innerHeight - similar.y, fontSize: sidebarFontSize }
-              : { left: Math.min(similar.x, window.innerWidth - 380), top: similar.y, fontSize: sidebarFontSize }}>
-            <div className="mapSimHead">
-              <b>Similar to “{similar.source}”</b>
-              <span>{tickable} of {total - 1} codes · {nSel} ticked</span>
+          <div ref={focusConfirmRef} className="ctxmenu mapMenu mapAiConfirm" role="alertdialog"
+            aria-label="Confirm AI request" aria-describedby="focus-confirm-text"
+            style={{ left: confirmFocus.x, top: confirmFocus.y, fontSize: sidebarFontSize }}>
+            <div className="mapAiConfirmText" id="focus-confirm-text">
+              Where {n === 1 ? "does this code" : "do these codes"} belong? Sends {n} code{n === 1 ? "" : "s"} with
+              their excerpts <b>plus your other {context.length} codes</b> as possible homes —
+              <b> ≈{inTok.toLocaleString()} tokens · ≈${cost.toFixed(4)}</b> to OpenAI ({model.id}).
+              Excerpts are participant data.
             </div>
-            {tickable === 0 && similar.ai !== "done" && (
-              <div className="mapSimEmpty">Nothing here shares wording with this code. A semantic look may still find relatives.</div>
-            )}
-            {tickable === 0 && similar.ai === "done" && (
-              <div className="mapSimEmpty">No relatives found. This code is doing its own work.</div>
-            )}
-            <div className="mapSimList nicescroll">
-              {similar.rows.map((m) => {
-                const home = homeOf(m.name);
-                const stat = stats[m.name];
-                return (
-                  <label key={m.name} className="mapSimRow">
-                    <input type="checkbox" checked={similar.ticked.has(m.name)}
-                      onChange={() => toggle(m.name)} />
-                    <span className="mapSimName">
-                      <b>{m.name}</b>
-                      <span className="mapSimCount">{stat?.segs ?? 0}</span>
-                      {home && (
-                        <span className="mapSimHome"
-                          title={home.startsWith("merge: ")
-                            ? "Already in another merge proposal — taking it here removes it from that one"
-                            : "Already in this theme island — a merge leaves that alone, grouping moves it here"}>
-                          in {home}
-                        </span>
-                      )}
-                      <i>{m.why}</i>
-                    </span>
-                    <span className="mapSimBar" aria-hidden="true">
-                      <i style={{ width: `${Math.round(Math.min(1, m.score) * 100)}%` }} />
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            {similar.ai !== "done" && (
-              <button className="btn mapSimAi" disabled={similar.ai === "busy"} onClick={() => void runSimilarAi()}>
-                {similar.ai === "busy"
-                  ? "Reading the codebook…"
-                  : <>Ask the AI for semantic matches — <b>≈{inTok.toLocaleString()} tokens · ≈${aiCost.toFixed(4)}</b></>}
-              </button>
-            )}
-            {similar.ai === "done" && similar.cost != null && (
-              <div className="mapSimNote">AI pass done · ${similar.cost.toFixed(4)} · logged</div>
-            )}
             <div className="mapCardActions">
-              <button className="btn primary" disabled={!nSel} onClick={() => takeSimilar("merge")}
-                title="Propose merging these into one code — lands as a halo you can still edit">
-                Propose merge{nSel ? ` (${nSel + 1})` : ""}
+              <button className="btn primary" autoFocus disabled={focusBusy}
+                onClick={() => { const c = confirmFocus.codes; setConfirmFocus(null); void runFocus(c); }}>
+                {focusBusy ? "Asking…" : "Send"}
               </button>
-              <button className="btn" disabled={!nSel} onClick={() => takeSimilar("group")}
-                title="Put these in one theme island">Group</button>
-              <button className="btn" disabled={!nSel} title="Select these on the map and close"
-                onClick={() => {
-                  const pick = new Set([similar.source, ...similar.ticked]);
-                  rfSetNodes((ns) => ns.map((n) => ({ ...n, selected: n.type === "chip" && pick.has(n.id) })));
-                  setSimilar(null);
-                }}>Select</button>
+              <button className="btn" onClick={() => setConfirmFocus(null)}>Cancel</button>
             </div>
           </div>
         );
@@ -1550,7 +1791,7 @@ function MapInner() {
         const model = modelOf(st.ai.model);
         const cost = costOf(model, inTok, estimateTokens(" ".repeat(80)));
         return (
-          <div className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm AI request"
+          <div ref={aiConfirmRef} className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm AI request"
             aria-describedby="ai-confirm-text"
             style={{ left: confirmAi.x, top: confirmAi.y, fontSize: sidebarFontSize }}>
             <div className="mapAiConfirmText" id="ai-confirm-text">
@@ -1566,7 +1807,7 @@ function MapInner() {
         );
       })()}
       {menu && menu.halo && (
-        <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
+        <div ref={menuRef} className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => {
             const list = clusters[menu.halo!.ci]?.codes.filter((c) => c in codebook) ?? [];
             openInCodebook(list); setMenu(null);
@@ -1579,7 +1820,7 @@ function MapInner() {
         </div>
       )}
       {menu && menu.island && (
-        <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
+        <div ref={menuRef} className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => {
             const list = menu.island!.gi === -1
               ? codes.filter((c) => !codeGroups.some((g) => g.codes.includes(c)))
@@ -1596,21 +1837,19 @@ function MapInner() {
         </div>
       )}
       {menu && !menu.island && !menu.halo && menu.sel.length > 0 && (
-        <div className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
+        <div ref={menuRef} className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>
           {menu.sel.length === 1 && (
-            <button role="menuitem" onClick={() => {
-              const { x, y, sel } = menu;
-              setMenu(null);
-              openSimilar(sel[0], x, y);
-            }}>
+            <button role="menuitem" onClick={() => { const c = menu.sel[0]; setMenu(null); openSimilar(c); }}>
               Find similar codes…
             </button>
           )}
           {stage === "reconcile" && (
-            <button role="menuitem" onClick={() => { setAiOpen({ scope: { focus: menu.sel } }); setMenu(null); }}>
+            <button role="menuitem" onClick={() => {
+              setConfirmFocus({ codes: menu.sel, x: menu.x, y: menu.y }); setMenu(null);
+            }}>
               AI: where {menu.sel.length === 1 ? "does this code" : "do these codes"} belong…
             </button>
           )}
