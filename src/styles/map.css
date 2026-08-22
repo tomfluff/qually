@@ -292,3 +292,9 @@
 .mapCardNode .btn:hover:not(:disabled) { background:var(--sel); border-color:var(--accent); }
 .mapSimNode .btn.primary:hover:not(:disabled),
 .mapCardNode .btn.primary:hover:not(:disabled) { background:var(--accent); filter:brightness(1.12); }
+/* the Layout menu: two named actions, each with a line saying what it does —
+   "reset" and "adjust" are easy to confuse when one of them discards work */
+.mapLayoutMenu { max-width:34ch; }
+.mapLayoutMenu button { display:block; text-align:left; width:100%; }
+.mapLayoutMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
+  line-height:1.35; margin-top:1px; }

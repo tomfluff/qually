@@ -333,6 +333,9 @@ export interface State {
   setCodeClusters: (clusters: CodeCluster[]) => void;
   // one undoable entry per completed map gesture
   recordMapPosition: (id: string, pos: { x: number; y: number }, island?: boolean) => void;
+  // a whole-map nudge (Adjust to zoom): every moved thing, ONE entry
+  applyMapLayout: (chips: Record<string, { x: number; y: number }>,
+    islands: Record<string, { x: number; y: number }>) => void;
   reconcileDrop: (code: string, pos: { x: number; y: number }, targetCi: number | null) => void;
   // Themes-stage drop: position + island membership, ONE entry. gi -1 = no island.
   themesDrop: (code: string, pos: { x: number; y: number }, gi: number) => void;
@@ -1576,6 +1579,21 @@ export const useStore = create<State>()(
             codes: i === gi ? [...g.codes, code] : g.codes.filter((c) => c !== code),
           })).filter((g) => g.codes.length > 0),
         });
+      },
+      // Adjusting the layout is a layout EDIT, not a view mode: it writes the
+      // nudged positions like a hand-drag would, so it persists, exports, and
+      // comes back with one undo — unlike the old view-only spread, which
+      // vanished on reload and could not be reasoned about.
+      applyMapLayout: (chips, islands) => {
+        const s = get();
+        const moved = Object.keys(chips).length + Object.keys(islands).length;
+        if (!moved) { announce("Nothing needed moving at this zoom"); return; }
+        get().pushUndo();
+        set({
+          mapPositions: { ...s.mapPositions, ...chips },
+          mapIslandPos: { ...s.mapIslandPos, ...islands },
+        });
+        announce(`Adjusted ${moved} position${moved === 1 ? "" : "s"} so nothing overlaps at this zoom`);
       },
       recordMapPosition: (id, pos, island) => {
         get().pushUndo();

@@ -124,12 +124,6 @@ const remembered = {
   // (a bucket boundary moves, topics re-run) the old spot is meaningless and
   // must be forgotten rather than re-applied against a different parent.
   lensPos: {} as Partial<Record<"pids" | "segs" | "cooc" | "topics", Record<string, { x: number; y: number }>>>,
-  // Spread: a reversible view state, like full-screen. Null is the normal,
-  // contracted map; otherwise it holds the nudged position of every top-level
-  // thing, computed once by overlap removal so nothing travels further than it
-  // must. Nothing inside a group moves, nothing is written to the project, and
-  // clearing it restores the exact layout (hand-placed or packed).
-  spreadPos: null as null | Record<string, { x: number; y: number }>,
 };
 
 // A project swap makes every one of these meaningless — they are keyed by
@@ -146,7 +140,6 @@ onProjectSwap(function forgetMapSession() {
   remembered.topicGroups = [];
   remembered.topicFp = "";
   remembered.lensPos = {};
-  remembered.spreadPos = null;
 });
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -536,9 +529,6 @@ function MapInner() {
   const mapPositions = useStore((s) => s.mapPositions);
   const mapIslandPos = useStore((s) => s.mapIslandPos);
   const { setNodes: rfSetNodes, getNodes, getInternalNode, fitView, getZoom, getViewport, setViewport } = useReactFlow();
-  // the nudged positions while spread out (null = contracted)
-  const [spreadPos, setSpreadPos] = useState(remembered.spreadPos);
-  useEffect(() => { remembered.spreadPos = spreadPos; }, [spreadPos]);
   // menu state carries the selection it acts on, captured at open — the menu
   // needs no live subscription
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[];
@@ -547,6 +537,7 @@ function MapInner() {
   const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" | { focus: string[] } }>(false);
   const [themeAiOpen, setThemeAiOpen] = useState(false);
   const [confirmRelayout, setConfirmRelayout] = useState<{ right: number; y: number } | null>(null);
+  const [layoutMenu, setLayoutMenu] = useState<{ right: number; y: number } | null>(null);
   // the gestures used to sit in the bar as a paragraph; they are reference,
   // not something to read every session, so they live behind a button
   const [helpOpen, setHelpOpen] = useState(false);
@@ -723,12 +714,6 @@ function MapInner() {
       };
       return [...ns, node];
     };
-    // Spread applies the nudges computed on toggle to TOP-LEVEL things only
-    // (groups, halos, loose chips); a chip inside a group keeps its place in
-    // the frame, because the captions that collide belong to groups, not
-    // chips. Purely positional, so contracting is exact.
-    const spreadOut = (ns: MapNode[]): MapNode[] => !spreadPos ? ns
-      : ns.map((n) => n.parentId || !spreadPos[n.id] ? n : { ...n, position: spreadPos[n.id] });
     const actOf = new Map(plan.map((a) => [a.code, a]));
     const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
@@ -841,7 +826,7 @@ function MapInner() {
         ix += stepW + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
       }
-      return { nodes: withSimilar(spreadOut([...islands, ...children] as MapNode[])) };
+      return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
     }
 
     if (stage === "reconcile") {
@@ -938,7 +923,7 @@ function MapInner() {
       const offY = blocks.length ? y + rowH + HALO_GAP : 0;
       for (const c of singles)
         chipNodes.push(chipNode(c, { x: flat.pos[c].x, y: offY + flat.pos[c].y }));
-      return { nodes: withSimilar(spreadOut([...haloNodes, ...chipNodes, ...extraNodes] as MapNode[])) };
+      return { nodes: withSimilar([...haloNodes, ...chipNodes, ...extraNodes] as MapNode[]) };
     }
 
     const groups = codeGroups
@@ -949,7 +934,7 @@ function MapInner() {
 
     if (groups.length === 0) {
       const flat = pack(codes, near(codes));
-      return { nodes: withSimilar(spreadOut(codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[])) };
+      return { nodes: withSimilar(codes.map((c) => chipNode(c, flat.pos[c])) as MapNode[]) };
     }
     const blocks = [...groups.map((g) => ({ name: g.name, gi: g.gi, list: g.codes })),
       ...(loose.length ? [{ name: "Ungrouped", gi: -1, list: loose }] : [])]
@@ -980,8 +965,8 @@ function MapInner() {
       rowH = Math.max(rowH, bh);
     }
     // parents strictly before children (RF sub-flow requirement)
-    return { nodes: withSimilar(spreadOut([...islands, ...children] as MapNode[])) };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, spreadPos, similar, simTokens]);
+    return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
+  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, stage, mapPositions, mapIslandPos, openCards, genCi, lens, segments, topicGroups, similar, simTokens]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -1291,6 +1276,36 @@ function MapInner() {
     return () => cancelAnimationFrame(frame);
   }, [getNodes, fitView, rfSetNodes]);
 
+  // Adjust to zoom: measure what is on screen — every top-level thing plus the
+  // caption floating above it, at THIS zoom — then nudge only the boxes that
+  // actually collide, by the least that clears them. Nothing inside a group
+  // moves, the camera does not move, and it lands as one undoable layout edit.
+  const adjustToZoom = useCallback(() => {
+    const zoom = getZoom();
+    const nodes = getNodes().filter((n) => !n.parentId && n.type !== "card" && n.type !== "similar");
+    if (nodes.length < 2) { announce("Nothing needed moving at this zoom"); return; }
+    const boxes = nodes.map((n) => {
+      const el = document.querySelector(`.react-flow__node[data-id="${CSS.escape(n.id)}"] .mapIslandLabel`);
+      const w = n.width ?? 0, h = n.height ?? 0;
+      if (!el) return { id: n.id, x: n.position.x, y: n.position.y, w, h };
+      const r = el.getBoundingClientRect();
+      const capW = r.width / zoom, capH = r.height / zoom;
+      // an island's caption is left-aligned, a halo's is centred on its capsule
+      const left = n.type === "halo" ? n.position.x - Math.max(0, (capW - w) / 2) : n.position.x;
+      return { id: n.id, x: left, y: n.position.y - capH, w: Math.max(w, capW), h: h + capH };
+    });
+    const relaxed = relaxBoxes(boxes, Math.max(16, 24 / zoom));
+    const chips: Record<string, { x: number; y: number }> = {};
+    const islands: Record<string, { x: number; y: number }> = {};
+    nodes.forEach((n, i) => {
+      const dx = relaxed[i].x - boxes[i].x, dy = relaxed[i].y - boxes[i].y;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return; // it did not need to move
+      const pos = { x: n.position.x + dx, y: n.position.y + dy };
+      if (n.type === "chip") chips[n.id] = pos; else islands[n.id] = pos;
+    });
+    useStore.getState().applyMapLayout(chips, islands);
+  }, [getZoom, getNodes]);
+
   const selectSimilar = useCallback(() => {
     const cur = similar;
     if (!cur) return;
@@ -1505,8 +1520,8 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus) return;
-    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); };
+    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !layoutMenu) return;
+    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setLayoutMenu(null); };
     const down = (e: MouseEvent) => {
       const t = e.target as Element;
       // the help button toggles itself; let its own handler run
@@ -1519,7 +1534,7 @@ function MapInner() {
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus]);
+  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, layoutMenu]);
 
   return (
     <div id="codemap" className={"stage-" + stage} style={{ fontSize: sidebarFontSize }}>
@@ -1589,50 +1604,15 @@ function MapInner() {
           title="Move the minimap to the next corner">
           <Icon name="pip" size={15} />
         </button>
-        <button className="btn iconlabel" aria-pressed={!!spreadPos}
-          onClick={() => {
-            if (spreadPos) { setSpreadPos(null); announce("Map contracted to its own layout"); return; }
-            // Measure what is actually on screen — each top-level thing plus
-            // the caption floating above it, at THIS zoom — then nudge the
-            // boxes apart by the minimum that clears them. The camera is not
-            // touched: the map rearranges under a still view.
-            const zoom = getZoom();
-            const nodes = getNodes().filter((n) => !n.parentId && n.type !== "card");
-            const boxes = nodes.map((n) => {
-              const el = document.querySelector(`.react-flow__node[data-id="${CSS.escape(n.id)}"] .mapIslandLabel`);
-              const w = n.width ?? 0, h = n.height ?? 0;
-              if (!el) return { id: n.id, x: n.position.x, y: n.position.y, w, h };
-              const r = el.getBoundingClientRect();
-              const capW = r.width / zoom, capH = r.height / zoom;
-              // an island's caption is left-aligned, a halo's is centred
-              const left = n.type === "halo" ? n.position.x - Math.max(0, (capW - w) / 2) : n.position.x;
-              return { id: n.id, x: left, y: n.position.y - capH, w: Math.max(w, capW), h: h + capH };
-            });
-            const relaxed = relaxBoxes(boxes, Math.max(16, 24 / zoom));
-            const byId = new Map(boxes.map((b, i) => [b.id, { dx: relaxed[i].x - b.x, dy: relaxed[i].y - b.y }]));
-            const next: Record<string, { x: number; y: number }> = {};
-            for (const n of nodes) {
-              const d = byId.get(n.id)!;
-              next[n.id] = { x: n.position.x + d.dx, y: n.position.y + d.dy };
-            }
-            setSpreadPos(next);
-            announce("Map spread just enough to clear the group names — toggle to contract");
-          }}
-          title={spreadPos
-            ? "Contract the map back to its own layout"
-            : "Nudge groups apart until their names stop overlapping at this zoom — the view stays put, nothing moves inside a group, and this toggles straight back"}>
-          <Icon name={spreadPos ? "arrows-in" : "arrows-out"} size={15} />
-          <span className="blabel">{spreadPos ? "Contract" : "Spread"}</span>
-        </button>
-        <button className="btn iconlabel" aria-label="Re-layout the map"
+        <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!layoutMenu}
           disabled={lens !== "default"}
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setConfirmRelayout({ right: window.innerWidth - r.right, y: r.bottom + 8 });
+            setLayoutMenu(layoutMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
           }}
           title={lens !== "default" ? "A lens hides your layout — switch Arrange back to Normal first"
-            : "Lay the whole map out fresh (replaces your hand-placed layout)"}>
-          <Icon name="refresh" size={15} /> <span className="blabel">Re-layout</span>
+            : "Reset the layout, or adjust it so nothing overlaps at this zoom"}>
+          <Icon name="refresh" size={15} /> <span className="blabel">Layout</span>
         </button>
       </div>
       <div className="mapCanvas">
@@ -1805,6 +1785,23 @@ function MapInner() {
             <dt>Spread</dt><dd>Nudges groups apart until names stop overlapping.</dd>
           </dl>
           <div className="mapHelpFoot">Esc, or the ? button, closes this.</div>
+        </div>
+      )}
+      {layoutMenu && (
+        <div className="ctxmenu mapMenu mapLayoutMenu" role="menu" aria-label="Layout"
+          style={{ right: layoutMenu.right, top: layoutMenu.y, fontSize: sidebarFontSize }}>
+          <button role="menuitem" onClick={() => {
+            const at = layoutMenu;
+            setLayoutMenu(null);
+            setConfirmRelayout(at);   // resetting throws away hand placement: confirm it
+          }}>
+            Reset layout
+            <span className="mapMenuNote">Back to the packed layout</span>
+          </button>
+          <button role="menuitem" onClick={() => { setLayoutMenu(null); adjustToZoom(); }}>
+            Adjust to zoom
+            <span className="mapMenuNote">Nudge things apart until nothing overlaps at this zoom</span>
+          </button>
         </div>
       )}
       {confirmRelayout && (
