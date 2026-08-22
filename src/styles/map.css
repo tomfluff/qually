@@ -3,7 +3,9 @@
 /* Code map: the codebook on a React Flow canvas. The chips are ours; React
    Flow owns the viewport (pan/zoom/box-select) and the minimap. Its stylesheet
    is imported by the component; here we theme what shows and style the chips. */
-#codemap { display:flex; flex-direction:column; height:100%; min-width:0; }
+/* position:relative: the help panel sizes against THIS pane, not the viewport
+   — a viewport guess breaks as soon as large text makes the chrome taller */
+#codemap { display:flex; flex-direction:column; height:100%; min-width:0; position:relative; }
 /* The bar is one row of controls, so they share ONE height — set in em, so it
    rides the app's text-size ramp instead of pinning a pixel value that clips
    at large accessible sizes. Every control opts in through the same rule
@@ -295,7 +297,7 @@
   height:var(--ctl-h); line-height:1; }
 
 /* the gestures panel scrolls instead of running off a short screen */
-.mapHelp { max-height:calc(100vh - 130px); overflow-y:auto; }
+.mapHelp { max-height:calc(100% - 64px); overflow-y:auto; }
 .mapHelpFoot { color:var(--muted); font-size:.85em; margin-top:8px; }
 /* the answer to "where do these belong" — it stays until dismissed, because a
    run that proposes nothing must not look like a run that did nothing */
