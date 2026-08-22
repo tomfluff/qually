@@ -120,7 +120,6 @@ type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT;
 export type MapView = "reconcile" | "themes" | "areas" | "pids" | "segs";
 type ViewSpec = {
   label: string;
-  group: "work" | "explore";
   /** said out loud beside the view name, and announced on every switch */
   drag: string;
   /** the layout slot this view owns, or null when nothing here can move */
@@ -128,23 +127,23 @@ type ViewSpec = {
 };
 const VIEWS: Record<MapView, ViewSpec> = {
   reconcile: {
-    label: "Reconcile", group: "work", layout: "reconcile",
+    label: "Reconcile", layout: "reconcile",
     drag: "Dragging a code in or out of a capsule changes what gets merged",
   },
   themes: {
-    label: "Themes", group: "work", layout: "themes",
+    label: "Themes", layout: "themes",
     drag: "Dragging a code between islands changes its theme",
   },
   areas: {
-    label: "AI areas", group: "explore", layout: "areas",
+    label: "AI areas", layout: "areas",
     drag: "Dragging a code files it into an area",
   },
   pids: {
-    label: "Transcript buckets", group: "explore", layout: null,
+    label: "Transcript buckets", layout: null,
     drag: "Looking only — nothing here moves and nothing changes",
   },
   segs: {
-    label: "Excerpt buckets", group: "explore", layout: null,
+    label: "Excerpt buckets", layout: null,
     drag: "Looking only — nothing here moves and nothing changes",
   },
 };
@@ -1722,37 +1721,7 @@ function MapInner() {
             across the views, and this is the only thing that says which */}
         <span className="mapDragHint" aria-live="off">{spec.drag}</span>
         <span className="mapBarGap" />
-        {/* the two work views stay one click away: this is the switch made most
-            often, and the menu below holds the same five views */}
-        <div className="segmented mapStage" role="radiogroup" aria-label="Working view">
-          {(["reconcile", "themes"] as const).map((v) => (
-            <button key={v} className={"seg" + (view === v ? " on" : "")} role="radio"
-              aria-checked={view === v} onClick={() => switchView(v)}
-              title={v === "reconcile"
-                ? "Clean the codebook: merge capsules, renames, rejects"
-                : "Group the cleaned codebook into theme islands"}>
-              {VIEWS[v].label}
-            </button>
-          ))}
-        </div>
-        <button className="btn iconlabel mapViewBtn" aria-haspopup="menu" aria-expanded={!!viewMenu}
-          onClick={(e) => {
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setViewMenu(viewMenu ? null : { left: r.left, y: r.bottom + 8 });
-          }}
-          title="Choose what the map shows">
-          <span className="blabel">View: {spec.label}</span>
-          <Icon name={viewMenu ? "chevron-up" : "chevron-down"} size={13} />
-        </button>
-        {view === "areas" && (
-          <button className="btn" onClick={() => setTopicAiOpen(true)}
-            title={topicsStale
-              ? "The codebook changed since these areas were worked out — re-run to refresh them"
-              : "Ask the AI to work the areas out again"}>
-            {topicsStale ? "Areas are stale — re-run…" : "Re-run areas…"}
-          </button>
-        )}
-        {/* each view's own AI verb; the derived views have none */}
+        {/* the current view's own actions; the derived views have none */}
         {view === "reconcile" && (
           <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
             title="AI proposes merge groups and per-code revisions for your review">
@@ -1765,6 +1734,26 @@ function MapInner() {
             <Icon name="sparkle" size={15} /> <span className="blabel">Group into themes with AI</span>
           </button>
         )}
+        {view === "areas" && (
+          <button className="btn" onClick={() => setTopicAiOpen(true)}
+            title={topicsStale
+              ? "The codebook changed since these areas were worked out — re-run to refresh them"
+              : "Ask the AI to work the areas out again"}>
+            {topicsStale ? "Areas are stale — re-run…" : "Re-run areas…"}
+          </button>
+        )}
+        {/* everything right of this line applies to EVERY view */}
+        <span className="mapBarDivider" role="separator" aria-orientation="vertical" />
+        <button className="btn iconlabel mapViewBtn" aria-haspopup="menu" aria-expanded={!!viewMenu}
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setViewMenu(viewMenu ? null : { left: r.left, y: r.bottom + 8 });
+          }}
+          title="Choose what the map shows">
+          <span className="mapViewKicker">View</span>
+          <span className="blabel mapViewName">{spec.label}</span>
+          <Icon name={viewMenu ? "chevron-up" : "chevron-down"} size={13} />
+        </button>
         <button className="btn iconbtn" aria-label="Move the minimap to the next corner"
           onClick={() => setUi({ mapMinimap: NEXT_CORNER[mapMinimap] })}
           title="Move the minimap to the next corner">
@@ -1956,30 +1945,25 @@ function MapInner() {
       {viewMenu && (
         <div ref={viewMenuRef} className="ctxmenu mapMenu mapViewMenu" role="menu" aria-label="Map view"
           style={{ left: viewMenu.left, top: viewMenu.y, fontSize: sidebarFontSize }}>
-          {(["work", "explore"] as const).map((g) => (
-            <div key={g} className="mapViewGroup">
-              {/* the two tiers carry what a flat list of five would lose: these
-                  two are phases of the work, those three are ways of looking */}
-              <div className="mapMenuHead">{g === "work" ? "Work on the codebook" : "Look at it by"}</div>
-              {VIEW_ORDER.filter((v) => VIEWS[v].group === g).map((v) => {
-                const s = VIEWS[v];
-                const status = v === "reconcile" && clusters.length + plan.length > 0
-                  ? `${clusters.length + plan.length} pending`
-                  : v === "areas"
-                    ? (topicGroups.length === 0 ? "not worked out yet"
-                      : `${topicGroups.length} areas${topicsStale ? " · stale" : ""}`)
-                    : v === "themes" && codeGroups.length ? `${codeGroups.length} islands` : "";
-                return (
-                  <button key={v} role="menuitemradio" aria-checked={view === v}
-                    className={view === v ? "on" : ""}
-                    onClick={() => switchView(v)}>
-                    {view === v ? "✓ " : ""}{s.label}
-                    <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {/* one flat list: every view is a peer, each with its own actions in
+              the bar — the status line under each name says what lives there */}
+          {VIEW_ORDER.map((v) => {
+            const s = VIEWS[v];
+            const status = v === "reconcile" && clusters.length + plan.length > 0
+              ? `${clusters.length + plan.length} pending`
+              : v === "areas"
+                ? (topicGroups.length === 0 ? "not worked out yet"
+                  : `${topicGroups.length} areas${topicsStale ? " · stale" : ""}`)
+                : v === "themes" && codeGroups.length ? `${codeGroups.length} islands` : "";
+            return (
+              <button key={v} role="menuitemradio" aria-checked={view === v}
+                className={view === v ? "on" : ""}
+                onClick={() => switchView(v)}>
+                {view === v ? "✓ " : ""}{s.label}
+                <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
+              </button>
+            );
+          })}
         </div>
       )}
       {layoutMenu && (

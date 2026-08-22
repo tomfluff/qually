@@ -145,9 +145,17 @@
 .mapActBadge.rename, .mapActBadge.merge { color:var(--accent); }
 /* the chip's pending-proposal marker */
 .mapActBadge { flex:none; }
-/* the work-view pair rides the bar */
-.mapBar .mapStage { flex:none; }
-.mapBar .mapStage .seg { padding-inline:12px; font-weight:500; }
+/* the bar splits at the divider: view-specific actions left of it, the
+   controls that apply to every view (View, minimap, Layout) right of it */
+.mapBarDivider { flex:none; align-self:stretch; width:1px; margin-block:4px;
+  background:var(--line); }
+/* the View button holds one width no matter which view is on, so the divider
+   and everything around it never shifts as you switch */
+.mapViewBtn { width:26ch; flex:none; justify-content:flex-start; text-align:left; }
+.mapViewBtn .mapViewKicker { color:var(--muted); font-size:.8em; font-weight:600;
+  letter-spacing:.4px; text-transform:uppercase; flex:none; }
+.mapViewBtn .mapViewName { flex:1 1 0; min-width:0; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
 /* the halo: a capsule field hugging its packed member chips — containment IS
    membership. The body is click-through; the caption (drag handle + menu
    target) is the live part. While a chip is held over it, .will outlines it
@@ -213,13 +221,12 @@
    means three different things across the views and nothing else says which */
 .mapDragHint { color:var(--muted); font-size:.9em; white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis; max-width:44ch; }
-/* the view menu: two tiers, each row carrying its status and its drag meaning */
+/* the view menu: one flat list, each row carrying its status and drag meaning */
 .mapViewMenu { max-width:46ch; }
 .mapViewMenu button { display:block; text-align:left; width:100%; }
 .mapViewMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
   line-height:1.35; margin-top:1px; }
 .mapViewMenu button.on { font-weight:600; }
-.mapViewMenu .mapViewGroup + .mapViewGroup { border-top:1px solid var(--line); margin-top:4px; padding-top:4px; }
 /* the canvas takes focus after a view switch, but never draws a focus ring for
    a pointer user — the announcement is what carries the change */
 .mapCanvas:focus { outline:none; }
