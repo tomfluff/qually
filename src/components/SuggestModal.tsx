@@ -17,6 +17,7 @@ import { segExcerpt } from "../contract/excerpt";
 import { chunksOf, renderSuggestChunk, estimateSuggestTokens, suggestChunk, overlapsExisting,
   SUGGEST_EXEMPLARS, type SuggestCode } from "../ai/suggest";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
 export function SuggestModal({ pid: initial, choose, onClose }: {
@@ -128,6 +129,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     }
     setBusy(true); setErr(null);
     announce(`Suggesting codes for ${pid} across ${chunks.length} window${chunks.length === 1 ? "" : "s"}…`);
+    earcon.aiStart();
     abort.current = new AbortController();
     const by = `AI · ${model.name}`;
     let added = 0, skipped = 0, cost = 0, pushed = false;
@@ -155,11 +157,13 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
         setProgress(i + 1);
       }
       setDone({ added, skipped, cost });
+      earcon.aiDone();
       announce(`Suggestions complete: ${added} candidate coding${added === 1 ? "" : "s"} added.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
+      earcon.error();
       announce(`Suggestion run failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);

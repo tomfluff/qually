@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useState } from "react";
 import { installScrollSpeed } from "./scrollSpeed";
+import { setSounds } from "./earcons";
 import { useStore, isTranscriptView } from "./state/store";
 import { Toolbar } from "./components/Toolbar";
 import { Tabs } from "./components/Tabs";
@@ -117,6 +118,7 @@ export function App() {
   const accent = useStore((s) => s.ui.accent);
   const minimapWidth = useStore((s) => s.ui.minimapWidth);
   const fontFamily = useStore((s) => s.ui.fontFamily);
+  const sounds = useStore((s) => s.ui.mapSounds);
   const zen = useStore((s) => s.ui.zen);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const searchOpen = useStore((s) => s.search.open);
@@ -147,6 +149,11 @@ export function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--read-font", READ_FONTS[fontFamily]);
   }, [fontFamily]);
+
+  // earcons deliberately import nothing (the store sounds undo and coding, so
+  // reading the store from there would close an import cycle) — the setting is
+  // mirrored in instead
+  useEffect(() => { setSounds(sounds); }, [sounds]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

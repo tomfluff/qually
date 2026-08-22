@@ -7,6 +7,7 @@ import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine, spanLens } from "../ai/flag";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
 // The consent gate. Choose what to look for (lenses) and whose speech to scan
@@ -122,6 +123,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
     }
     setBusy(true); setErr(null);
     announce(`Scanning “${pid}” with AI, ${chunks.length} chunk${chunks.length === 1 ? "" : "s"}…`);
+    earcon.aiStart();
     abort.current = new AbortController();
     const st = useStore.getState();
     let errors = 0, notices = 0, cost = 0;
@@ -142,6 +144,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
         setProgress(i + 1);
       }
       setDone({ errors, notices, cost });
+      earcon.aiDone();
       announce(errors + notices === 0
         ? "AI scan complete. Nothing marked."
         : `AI scan complete: ${errors} possible transcription error${errors === 1 ? "" : "s"}, ${notices} observation${notices === 1 ? "" : "s"}.`);
@@ -149,6 +152,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
+      earcon.error();
       announce(`AI scan failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);

@@ -12,6 +12,7 @@ import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { chunksOfItems, renderGroundChunk, estimateGroundTokens, groundChunk, groundHash, type GroundItem } from "../ai/ground";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
 export function GroundModal({ onClose }: { onClose: () => void }) {
@@ -66,6 +67,7 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
     }
     setBusy(true); setErr(null);
     announce(`Grounding ${todo.length} coded segment${todo.length === 1 ? "" : "s"} with AI…`);
+    earcon.aiStart();
     abort.current = new AbortController();
     const st = useStore.getState();
     let grounded = 0, empty = 0, cost = 0;
@@ -85,11 +87,13 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
         setProgress(i + 1);
       }
       setDone({ grounded, empty, cost });
+      earcon.aiDone();
       announce(`Grounding complete: ${grounded} segment${grounded === 1 ? "" : "s"} grounded.`);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
+      earcon.error();
       announce(`Grounding failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);

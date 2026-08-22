@@ -15,6 +15,7 @@ import { segExcerpt } from "../contract/excerpt";
 import { describeCodes, renderDescribePayload, estimateDescribeTokens, DESC_EXEMPLARS,
   type DescCodeInput } from "../ai/describe";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { SORTS, sortCodes, type SortBy } from "../codeStats";
 import { AiModal, ModelPicker } from "./AiModal";
 
@@ -116,6 +117,7 @@ export function DescribeModal({ initial, onClose }: {
     }
     setBusy(true); setErr(null);
     announce(`Drafting definitions for ${sent.length} codes…`);
+    earcon.aiStart();
     abort.current = new AbortController();
     try {
       const { drafts, usage } = await describeCodes({
@@ -133,6 +135,7 @@ export function DescribeModal({ initial, onClose }: {
       // definition changes nothing and must not be counted as a write
       const names = applyDrafts(drafts.map((d) => ({ code: d.code, def: d.definition })));
       setDone({ names, cost: usage.costUsd });
+      earcon.aiDone();
       announce(names.length
         ? `${names.length} definition${names.length === 1 ? "" : "s"} written.`
         : "The model returned no definitions.");
@@ -140,6 +143,7 @@ export function DescribeModal({ initial, onClose }: {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
+      earcon.error();
       announce(`Describe run failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);

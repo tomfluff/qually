@@ -405,7 +405,7 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
       <div className="mapCardRat">{c.rationale}</div>
       {(data.gen || c.desc) && (
         <div className="mapCardGlimpse">
-          <span className="mapNoteWho">AI glimpse{stale && <span className="mapGlimpseStale" title="The group's members changed after this was written — re-run “AI: describe this group” for a fresh one">may be outdated</span>}</span>
+          <span className="mapNoteWho">AI glimpse{stale && <span className="mapGlimpseStale" title="The group's members changed after this was written — re-run “Describe this group” for a fresh one">may be outdated</span>}</span>
           {data.gen
             ? <div className="mapNoteGen">Reading the codes and their excerpts…</div>
             : <div>{c.desc}</div>}
@@ -1492,9 +1492,11 @@ function MapInner() {
       // hand positions live in the session, not the store
       remembered.bucketPos[view] = { ...(remembered.bucketPos[view] ?? {}), ...islands };
       setBucketRev((r) => r + 1);
+      if (moved) earcon.settle();
       announce(moved ? `Moved ${moved === 1 ? "1 group" : `${moved} groups`} apart` : "Nothing needed moving at this zoom");
       return;
     }
+    if (moved) earcon.settle();
     useStore.getState().applyMapLayout(chips, islands, moved, slot);
   }, [getZoom, getNodes, slot, view]);
 
@@ -1528,34 +1530,43 @@ function MapInner() {
   // the camera persists across tab switches AND reloads
   const [initialViewport] = useState(() => useStore.getState().ui.mapViewport);
   const onMoveEnd = useCallback((_: unknown, vp: Viewport) => { setUi({ mapViewport: vp }); }, [setUi]);
-  // While you hold a chip (Reconcile), the halo it would join outlines in the
-  // accent — rAF-coalesced imperative class toggle, no React work per move.
+  // While you hold a chip, the container it would join is tracked — in
+  // Reconcile it also outlines in the accent. rAF-coalesced imperative class
+  // toggle, no React work per move.
   const dragFrame = useRef(0);
   const clearWill = () => document.querySelectorAll(".mapHalo.will").forEach((el) => el.classList.remove("will"));
-  const haloAt = useCallback((cx: number, cy: number) =>
-    getNodes().find((h) => h.type === "halo"
+  // The container kind this view drops into, or null where a drag files
+  // nothing (the grouping views move whole piles, never chips).
+  const dropTarget: "halo" | "island" | null =
+    view === "reconcile" ? "halo" : view === "themes" || view === "areas" ? "island" : null;
+  const containerAt = useMemo(() => dropTarget === null ? null : (cx: number, cy: number) =>
+    getNodes().find((h) => h.type === dropTarget
       && cx >= h.position.x && cx <= h.position.x + (h.width ?? 0)
-      && cy >= h.position.y && cy <= h.position.y + (h.height ?? 0)) ?? null, [getNodes]);
-  // the halo under the held chip, tracked across the drag: the .will outline
-  // AND the crossing sounds key off transitions of this one value
+      && cy >= h.position.y && cy <= h.position.y + (h.height ?? 0)) ?? null, [getNodes, dropTarget]);
+  // the container under the held chip, tracked across the drag: the .will
+  // outline AND the crossing sounds key off transitions of this one value
   const dragOver = useRef<string | null>(null);
   const onNodeDragStart = useCallback((_: unknown, n: Node) => {
-    if (remembered.view !== "reconcile" || n.type !== "chip") return;
+    if (!containerAt || n.type !== "chip") return;
     const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
     // seed with where the chip already sits, so lifting a member inside its
-    // own halo doesn't chirp "entered"
-    dragOver.current = haloAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2)?.id ?? null;
-    earcon.grab();
-  }, [getInternalNode, haloAt]);
+    // own container doesn't chirp "entered"
+    dragOver.current = containerAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2)?.id ?? null;
+  }, [getInternalNode, containerAt]);
   const onNodeDrag = useCallback((_: unknown, n: Node) => {
-    // capsules exist only in Reconcile; nothing to outline anywhere else
-    if (remembered.view !== "reconcile" || n.type !== "chip" || dragFrame.current) return;
+    // every view WITH containers previews the crossing: the same gesture means
+    // join/leave in Reconcile, Themes and Areas alike, and the sound is what
+    // says which side of an edge you are on without looking
+    if (!containerAt || n.type !== "chip" || dragFrame.current) return;
     dragFrame.current = requestAnimationFrame(() => {
       dragFrame.current = 0;
       const abs = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
-      const hit = haloAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2);
+      const hit = containerAt(abs.x + (n.width ?? 0) / 2, abs.y + (n.height ?? 0) / 2);
       clearWill();
-      if (hit) document.querySelector(`.react-flow__node[data-id="${hit.id}"] .mapHalo`)?.classList.add("will");
+      // only capsules carry the .will outline; islands show membership by
+      // containment, which the dragged chip already demonstrates
+      if (hit && remembered.view === "reconcile")
+        document.querySelector(`.react-flow__node[data-id="${hit.id}"] .mapHalo`)?.classList.add("will");
       const over = hit?.id ?? null;
       if (over !== dragOver.current) {
         // crossing a field boundary mid-drag: a quiet preview of what release
@@ -1564,7 +1575,7 @@ function MapInner() {
         dragOver.current = over;
       }
     });
-  }, [getInternalNode, haloAt]);
+  }, [getInternalNode, containerAt]);
 
   // ONE drop rule, every view that has containers:
   //   into a container  → joins, APPENDED at the end (its hand position is
@@ -2097,11 +2108,14 @@ function MapInner() {
                 if (!slot && remembered.bucketPos[view]) {
                   delete remembered.bucketPos[view];
                   setBucketRev((r) => r + 1);
+                  earcon.settle();
                   requestAnimationFrame(() => fitView({ duration: 200 }));
                   return;
                 }
-                if (slot && useStore.getState().resetMapLayout(slot))
+                if (slot && useStore.getState().resetMapLayout(slot)) {
+                  earcon.settle();
                   requestAnimationFrame(() => fitView({ duration: 200 }));
+                }
               }}>Re-layout</button>
             <button className="btn" onClick={() => setConfirmRelayout(null)}>Cancel</button>
           </div>
@@ -2138,8 +2152,10 @@ function MapInner() {
           }}>
             Open these codes in Codebook
           </button>
+          {/* the sparkle IS the "this asks the AI" mark, app-wide — saying it
+              in words too made every such row read as a category, not an act */}
           <button role="menuitem" onClick={() => { setConfirmAi({ ci: menu.halo!.ci, x: menu.x, y: menu.y }); setMenu(null); }}>
-            AI: describe this group…
+            <Icon name="sparkle" size={16} /> Describe this group…
           </button>
         </div>
       )}
@@ -2174,7 +2190,7 @@ function MapInner() {
             <button role="menuitem" onClick={() => {
               setConfirmFocus({ codes: menu.sel, x: menu.x, y: menu.y }); setMenu(null);
             }}>
-              AI: where {menu.sel.length === 1 ? "does this code" : "do these codes"} belong…
+              <Icon name="sparkle" size={16} /> Where {menu.sel.length === 1 ? "does this code" : "do these codes"} belong…
             </button>
           )}
           {/* each view offers only the structural edit it can show */}

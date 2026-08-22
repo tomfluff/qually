@@ -109,3 +109,23 @@ test("a fresh edit after undo invalidates the redo branch", () => {
   useStore.getState().redo(); // no-op
   expect(useStore.getState().transcripts.P01.lines[0].text).toBe("version B");
 });
+
+// The edge of the history is an ANSWER, not a no-op: undo with an empty stack
+// used to return in silence, which for a screen-reader user is
+// indistinguishable from "the undo worked and changed nothing".
+test("undo and redo at the edge of the history change nothing and do not throw", () => {
+  // read the stack FRESH each turn — a captured state object keeps the length
+  // it had when captured, and the loop never ends
+  for (let i = 0; useStore.getState().undoStack.length && i < 200; i++) useStore.getState().undo();
+  expect(useStore.getState().undoStack).toHaveLength(0);
+  const before = JSON.stringify(useStore.getState().transcripts);
+  useStore.getState().undo(); // the guarded path
+  expect(JSON.stringify(useStore.getState().transcripts)).toBe(before);
+  expect(useStore.getState().undoStack).toHaveLength(0);
+
+  for (let i = 0; useStore.getState().redoStack.length && i < 200; i++) useStore.getState().redo();
+  const after = JSON.stringify(useStore.getState().transcripts);
+  useStore.getState().redo();
+  expect(JSON.stringify(useStore.getState().transcripts)).toBe(after);
+  expect(useStore.getState().redoStack).toHaveLength(0);
+});

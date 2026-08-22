@@ -15,6 +15,7 @@ import { redactor } from "../ai/redact";
 import { renderSummaryPayload, estimateSummaryTokens, summarize } from "../ai/summarize";
 import { useSummaryData } from "../useSummaryData";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 import { openSummary } from "./SummaryView";
 
@@ -78,6 +79,7 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
     }
     setBusy(true); setErr(null);
     announce(`Drafting a session summary for ${pid}…`);
+    earcon.aiStart();
     abort.current = new AbortController();
     try {
       const { summary, usage } = await summarize({
@@ -90,11 +92,13 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
       setDraft({ text: summary, cost: usage.costUsd });
+      earcon.aiDone();
       announce("Summary draft ready — review it before it replaces anything.");
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
+      earcon.error();
       announce(`Summary draft failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);

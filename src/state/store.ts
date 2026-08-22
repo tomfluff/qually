@@ -17,6 +17,10 @@ import { forgetScroll, renameScroll } from "../scrollMemory";
 import { projectSwapped } from "../sessionReset";
 import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
 import { announce } from "../announce";
+// earcons imports this store back, but only reads it inside call bodies — the
+// cycle never resolves at module-eval time. Sounding undo HERE covers the
+// keyboard and the toolbar buttons at once, instead of at every caller.
+import { earcon } from "../earcons";
 import { SORTS, type SortBy } from "../codeStats";
 
 // The code palette (codeColors.ts owns it, and the assignment logic with it).
@@ -876,7 +880,10 @@ export const useStore = create<State>()(
           if (i === ids.length || ids[i] !== prev + 1) { get().addSegment(s.selection.pid, start, prev, code); start = ids[i]; }
           prev = ids[i];
         }
-        // the visual confirmation is a lane bar appearing; this is its audible twin
+        // the visual confirmation is a lane bar appearing; these are its
+        // audible twins — the most frequent act in the app, so the mark is one
+        // short note rather than an interval
+        earcon.code();
         announce(ids.length === 1 ? `Coded line ${ids[0]} as ${code}` : `Coded lines ${ids[0]} to ${ids[ids.length - 1]} as ${code}`);
       },
 
@@ -1529,6 +1536,7 @@ export const useStore = create<State>()(
         const grounds = { ...get().aiGrounds };
         delete grounds[sid]; // its grounding dies with it
         set({ segments: get().segments.filter((x) => x.sid !== sid), aiGrounds: grounds });
+        earcon.uncode();
         announce("Segment deleted");
       },
       // The way out of a suggestion run you didn't want: rejecting each candidate
@@ -2015,22 +2023,26 @@ export const useStore = create<State>()(
       // the same slice of state, so undo/redo round-trips whichever kind it meets.
       undo: () => {
         const s = get();
-        if (!s.undoStack.length) return;
+        // the edge of the history is a real answer, not a no-op: say so, or a
+        // silent nothing reads as "the undo worked and changed nothing"
+        if (!s.undoStack.length) { earcon.nothing(); announce("Nothing left to undo"); return; }
         const raw = s.undoStack[s.undoStack.length - 1];
         const o = JSON.parse(raw);
         const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? raw : snapshot(s);
         set({ redoStack: [...s.redoStack, back], undoStack: s.undoStack.slice(0, -1) });
         if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, raw);
+        earcon.undo();
         announce("Undone");
       },
       redo: () => {
         const s = get();
-        if (!s.redoStack.length) return;
+        if (!s.redoStack.length) { earcon.nothing(); announce("Nothing left to redo"); return; }
         const raw = s.redoStack[s.redoStack.length - 1];
         const o = JSON.parse(raw);
         const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? raw : snapshot(s);
         set({ undoStack: [...s.undoStack, back], redoStack: s.redoStack.slice(0, -1) });
         if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, raw);
+        earcon.redo();
         announce("Redone");
       },
 

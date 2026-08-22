@@ -13,6 +13,7 @@ import { segExcerpt } from "../contract/excerpt";
 import { dedupeCodes, renderMergePayload, estimateMergeTokens, MERGE_EXEMPLARS,
   type MergeCodeInput, type MergeProposal } from "../ai/dedupe";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
 export function MergeModal({ onProposals, onClose }: {
@@ -64,6 +65,7 @@ export function MergeModal({ onProposals, onClose }: {
     }
     setBusy(true); setErr(null);
     announce(`Looking for near-duplicate codes across ${codes.length} codes…`);
+    earcon.aiStart();
     abort.current = new AbortController();
     try {
       const { proposals, usage } = await dedupeCodes({
@@ -76,6 +78,7 @@ export function MergeModal({ onProposals, onClose }: {
       });
       onProposals(proposals);
       setDone({ found: proposals.length, cost: usage.costUsd });
+      earcon.aiDone();
       announce(proposals.length
         ? `${proposals.length} possible duplicate${proposals.length === 1 ? "" : "s"} to review.`
         : "No near-duplicate codes found.");
@@ -83,6 +86,7 @@ export function MergeModal({ onProposals, onClose }: {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
+      earcon.error();
       announce(`Merge check failed: ${msg}`, { assertive: true });
     } finally {
       setBusy(false);

@@ -13,6 +13,7 @@ import { redactor } from "../ai/redact";
 import { askQuestion, renderAskPayload, estimateAskTokens } from "../ai/ask";
 import { buildCorpus, type AskScope } from "../askCorpus";
 import { announce } from "../announce";
+import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
 // Beyond this the payload is too big to answer well, whatever the context window
@@ -71,6 +72,7 @@ export function AskModal({ question, scope, onAsked, onClose }: {
     inFlight.current = true;
     setBusy(true); setErr(null);
     announce("Asking your coded material…");
+    earcon.aiStart();
     const ctl = new AbortController();
     abort.current = ctl;
     try {
@@ -90,6 +92,7 @@ export function AskModal({ question, scope, onAsked, onClose }: {
         question, points: reply.points, unsupported: reply.unsupported,
         scope, model: model.id, costUsd: usage.costUsd,
       });
+      earcon.aiDone();
       announce(reply.points.length
         ? `${reply.points.length} point${reply.points.length === 1 ? "" : "s"}, grounded in your material.`
         : "Nothing in the material in scope answers that.");
@@ -99,6 +102,7 @@ export function AskModal({ question, scope, onAsked, onClose }: {
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
+      earcon.error();
       announce(`Ask failed: ${msg}`, { assertive: true });
     } finally {
       inFlight.current = false;

@@ -4,7 +4,11 @@
 // assets, offline) that confirm state changes multimodally — this app's
 // audience may not catch a subtle visual change, so each mark maps 1:1 to a
 // semantic action and never plays as decoration. Gated on ui.mapSounds.
-import { useStore } from "./state/store";
+//
+// This module imports NOTHING. The store sounds undo, coding and deletion, so
+// reading the store from here would close an import cycle — which deadlocked
+// vitest's module graph whenever the store was imported first. The setting is
+// pushed IN instead: App mirrors ui.mapSounds through setSounds.
 
 let ctx: AudioContext | null = null;
 // Lifecycle guard: construction can throw (no WebAudio), and a context can sit
@@ -37,16 +41,20 @@ function tone(freq: number, at: number, dur: number, gain = 0.05, type: Oscillat
   o.stop(t0 + dur + 0.02);
 }
 
-const on = () => useStore.getState().ui.mapSounds;
+// default ON, matching the store's own default: a sound that only starts
+// working after App's first effect would miss the actions taken before it
+let sounds = true;
+export const setSounds = (v: boolean) => { sounds = v; };
+const on = () => sounds;
 
 export const earcon = {
   // a code joins a merge group: short rising pair
   join() { if (!on()) return; tone(440, 0, 0.09); tone(660, 0.07, 0.11); },
   // a code leaves a merge group: falling pair
   evict() { if (!on()) return; tone(520, 0, 0.09); tone(340, 0.07, 0.12); },
-  // drag telemetry, one notch quieter than the commits they preview:
-  // picking a chip up
-  grab() { if (!on()) return; tone(660, 0, 0.04, 0.02, "triangle"); },
+  // drag telemetry, one notch quieter than the commits they preview.
+  // (No pick-up mark: it fired on every drag including the ones that go
+  // nowhere, so it carried no information the crossings do not.)
   // the held chip crosses INTO a group's field (would join on release)
   hoverIn() { if (!on()) return; tone(587, 0, 0.06, 0.022); },
   // the held chip crosses OUT of a group's field (would leave on release)
@@ -62,6 +70,19 @@ export const earcon = {
   reject() { if (!on()) return; tone(392, 0, 0.1, 0.05); tone(294, 0.08, 0.16, 0.05); },
   // a proposal was skipped/dismissed: muted tap
   skip() { if (!on()) return; tone(300, 0, 0.06, 0.03, "triangle"); },
+  // a code was applied to a selection: the app's most frequent act, so the
+  // mark is short and unobtrusive — one clean note, no interval
+  code() { if (!on()) return; tone(784, 0, 0.07, 0.035); },
+  // a coded segment was removed: the same note a fifth down
+  uncode() { if (!on()) return; tone(523, 0, 0.08, 0.035); },
+  // a step was undone: a backwards sweep, high to low
+  undo() { if (!on()) return; tone(659, 0, 0.07, 0.035, "triangle"); tone(494, 0.06, 0.1, 0.035, "triangle"); },
+  // and redone: the same sweep forwards
+  redo() { if (!on()) return; tone(494, 0, 0.07, 0.035, "triangle"); tone(659, 0.06, 0.1, 0.035, "triangle"); },
+  // the edge of the history: nothing there to undo or redo
+  nothing() { if (!on()) return; tone(233, 0, 0.09, 0.025, "triangle"); },
+  // an arrangement settled (Clean up / Reset layout): a soft landing
+  settle() { if (!on()) return; tone(392, 0, 0.09, 0.03); tone(523, 0.07, 0.13, 0.03); },
   // something failed: low buzz
   error() { if (!on()) return; tone(180, 0, 0.22, 0.05, "square"); },
 };

@@ -249,11 +249,11 @@ export function SettingsButton() {
                 </label>
                 <div className="settings-note">Leads every exported filename, with the export date. Saved in the project file.</div>
                 <label className="srow">
-                  <span>Map sounds</span>
+                  <span>Sounds</span>
                   <input type="checkbox" checked={mapSounds}
                     onChange={(e) => setUi({ mapSounds: e.target.checked })} />
                 </label>
-                <div className="settings-note">Quiet sound-marks confirm Code map actions — joining or leaving a merge group, AI requests, accepts. Multimodal feedback that doesn't depend on catching a visual change.</div>
+                <div className="settings-note">Quiet sound-marks confirm what happened — coding a line, undo and redo, joining or leaving a group, AI requests, accepts. Multimodal feedback that doesn't depend on catching a visual change.</div>
                 <div className="srow">
                   <span>Code name style</span>
                   <div className="segmented">
