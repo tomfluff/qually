@@ -353,7 +353,10 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 /* scope groups: same rows as the worklists, but a membership tick rather than a
    focus highlight — these decide what is SENT, not what is shown */
 .askGroup { margin-bottom:6px; }
-.askGrpHead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+/* baseline, not center: Firefox forces line-height:normal on buttons, so the
+   all/none button's box is shorter than the heading's — centring the boxes
+   left "none" floating above TRANSCRIPTS/CODES. Text aligns on the baseline. */
+.askGrpHead { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
 /* quiet by COLOUR, not opacity (see base.css): opacity over --muted text drops
    it under AA, and the label saying WHY a group is inert must stay readable */
 .askGroup.off { pointer-events:none; }
