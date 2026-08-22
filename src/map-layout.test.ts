@@ -79,7 +79,7 @@ test("reconcileDrop leaves OTHER clusters' survivors alone", () => {
   st.reconcileDrop("gamma", { x: 1, y: 1 }, null);
   expect(useStore.getState().codeClusters[0].survivor).toBe("beta");
   st.setCodeClusters([]);
-  st.resetMapLayout(); // the drop parked a position; leave the map packed
+  st.resetMapLayout("reconcile"); // the drop parked a position; leave the map packed
 });
 
 test("a preferred survivor wins when it is a member — merge direction is deliberate", () => {
@@ -114,37 +114,37 @@ test("resetMapLayout: no-op on packed map, one undo entry otherwise", () => {
   const st = useStore.getState();
   st.setCodePlan([]); // isolate history around the calls below
   const depth0 = useStore.getState().undoStack.length;
-  st.resetMapLayout(); // nothing placed -> no entry
+  st.resetMapLayout("reconcile"); // nothing placed -> no entry
   expect(useStore.getState().undoStack.length).toBe(depth0);
-  st.recordMapPosition("alpha", { x: 5, y: 7 });
+  st.recordMapPosition("alpha", { x: 5, y: 7 }, false, "reconcile");
   const depth1 = useStore.getState().undoStack.length;
-  st.resetMapLayout();
+  st.resetMapLayout("reconcile");
   expect(useStore.getState().undoStack.length).toBe(depth1 + 1);
-  expect(Object.keys(useStore.getState().mapPositions)).toHaveLength(0);
+  expect(Object.keys(useStore.getState().mapPositions.reconcile)).toHaveLength(0);
   useStore.getState().undo();
-  expect(useStore.getState().mapPositions.alpha).toEqual({ x: 5, y: 7 });
+  expect(useStore.getState().mapPositions.reconcile.alpha).toEqual({ x: 5, y: 7 });
 });
 
 // The casing sweep touches every code-keyed table; a rename that forgets one
 // of them silently throws away work the researcher did by hand.
 test("normalizeCodeCase carries map placements, glimpse membership and the plan", () => {
   const st = useStore.getState();
-  st.recordMapPosition("alpha", { x: 11, y: 22 });
+  st.recordMapPosition("alpha", { x: 11, y: 22 }, false, "reconcile");
   st.setCodeClusters([{ survivor: "alpha", codes: ["alpha", "beta"], rationale: "",
     desc: "a glimpse", descCodes: ["alpha", "beta"] }]);
   st.setCodePlan([{ code: "gamma", action: "rename", newName: "gamma clearer", rationale: "" }]);
   st.normalizeCodeCase("capital");
   const s = useStore.getState();
   expect(Object.keys(s.codebook).sort()).toEqual(["Alpha", "Beta", "Gamma"]);
-  expect(s.mapPositions.Alpha).toEqual({ x: 11, y: 22 });   // layout followed the rename
-  expect(s.mapPositions.alpha).toBeUndefined();
+  expect(s.mapPositions.reconcile.Alpha).toEqual({ x: 11, y: 22 });   // layout followed the rename
+  expect(s.mapPositions.reconcile.alpha).toBeUndefined();
   expect(s.codeClusters[0].codes).toEqual(["Alpha", "Beta"]);
   expect(s.codeClusters[0].descCodes).toEqual(["Alpha", "Beta"]); // same members: NOT stale
   expect(s.codePlan[0].code).toBe("Gamma");
   useStore.getState().undo();
   expect(Object.keys(useStore.getState().codebook).sort()).toEqual(["alpha", "beta", "gamma"]);
   const back = useStore.getState();
-  back.setCodeClusters([]); back.setCodePlan([]); back.resetMapLayout();
+  back.setCodeClusters([]); back.setCodePlan([]); back.resetMapLayout("reconcile");
 });
 
 test("normalizeCodeCase on an already-conforming book is a no-op with no history entry", () => {
@@ -161,6 +161,7 @@ test("applyMapDrop files every dragged code: positions and membership, one entry
   st.setCodeClusters([{ survivor: "beta", codes: ["beta", "gamma"], rationale: "" }]);
   const depth = useStore.getState().undoStack.length;
   useStore.getState().applyMapDrop({
+    stage: "reconcile",
     chips: { alpha: { x: 10, y: 20 }, beta: { x: 30, y: 40 } },
     islands: { "halo:0": { x: 5, y: 6 } },
     reconcile: [
@@ -170,22 +171,23 @@ test("applyMapDrop files every dragged code: positions and membership, one entry
   });
   const s = useStore.getState();
   expect(s.undoStack.length).toBe(depth + 1);           // ONE entry for the gesture
-  expect(s.mapPositions.alpha).toEqual({ x: 10, y: 20 }); // every position kept
-  expect(s.mapPositions.beta).toEqual({ x: 30, y: 40 });
-  expect(s.mapIslandPos["halo:0"]).toEqual({ x: 5, y: 6 });
+  expect(s.mapPositions.reconcile.alpha).toEqual({ x: 10, y: 20 }); // every position kept
+  expect(s.mapPositions.reconcile.beta).toEqual({ x: 30, y: 40 });
+  expect(s.mapIslandPos.reconcile["halo:0"]).toEqual({ x: 5, y: 6 });
   expect([...s.codeClusters[0].codes].sort()).toEqual(["alpha", "beta"]);
   s.undo();
-  expect(useStore.getState().mapPositions.alpha).toBeUndefined();
+  expect(useStore.getState().mapPositions.reconcile.alpha).toBeUndefined();
   useStore.getState().setCodeClusters([]);
-  useStore.getState().resetMapLayout();
+  useStore.getState().resetMapLayout("reconcile");
 });
 
 test("applyMapDrop moving codes between theme islands keeps one entry and lets the packer refile", () => {
   const st = useStore.getState();
   st.setCodeGroups([{ name: "One", codes: ["alpha", "beta"] }, { name: "Two", codes: ["gamma"] }]);
-  st.recordMapPosition("alpha", { x: 99, y: 99 });
+  st.recordMapPosition("alpha", { x: 99, y: 99 }, false, "reconcile");
   const depth = useStore.getState().undoStack.length;
   useStore.getState().applyMapDrop({
+    stage: "reconcile",
     chips: { alpha: { x: 1, y: 1 } },
     themes: [{ code: "alpha", gi: 1 }],   // alpha moves to island Two
   });
@@ -194,7 +196,7 @@ test("applyMapDrop moving codes between theme islands keeps one entry and lets t
   expect(s.codeGroups[1].codes).toContain("alpha");
   expect(s.codeGroups[0].codes).not.toContain("alpha");
   // a code that changed island is filed by the packer, not left at a stale spot
-  expect(s.mapPositions.alpha).toBeUndefined();
+  expect(s.mapPositions.reconcile.alpha).toBeUndefined();
   useStore.getState().setCodeGroups([]);
 });
 
@@ -234,4 +236,64 @@ test("AI areas ride the undo stack and the project file", async () => {
   expect(round.codeAreasFp).toBe("sig");
   useStore.getState().undo();
   expect(useStore.getState().codeAreas).toEqual([]);
+});
+
+test("a drop in the areas view files the code, and out of every area means Unassigned", () => {
+  const st = useStore.getState();
+  st.setCodeAreas([
+    { name: "Strategies", codes: ["alpha"] },
+    { name: "Opinions", codes: ["beta", "gamma"] },
+  ], "sig");
+  const depth = useStore.getState().undoStack.length;
+  // dropped on the first pile: it joins, and leaves the one it was in
+  useStore.getState().applyMapDrop({ stage: "reconcile", areas: [{ code: "beta", ai: 0 }] });
+  let s = useStore.getState();
+  expect(s.undoStack.length).toBe(depth + 1);          // one entry per gesture
+  expect(s.codeAreas[0].codes).toEqual(["alpha", "beta"]);
+  expect(s.codeAreas[1].codes).toEqual(["gamma"]);
+  // dropped in open space: out of every area, so the map files it Unassigned
+  useStore.getState().applyMapDrop({ stage: "reconcile", areas: [{ code: "beta", ai: -1 }] });
+  s = useStore.getState();
+  expect(s.codeAreas.flatMap((a) => a.codes)).not.toContain("beta");
+  // an area emptied by the move disappears rather than lingering
+  useStore.getState().applyMapDrop({ stage: "reconcile", areas: [{ code: "gamma", ai: 0 }] });
+  expect(useStore.getState().codeAreas.map((a) => a.name)).toEqual(["Strategies"]);
+  useStore.getState().setCodeAreas([], "");
+});
+
+test("filing a code into an area forgets where it was dropped, so the view repacks it", () => {
+  const st = useStore.getState();
+  st.setCodeAreas([{ name: "Strategies", codes: ["alpha"] }], "sig");
+  st.recordMapPosition("beta", { x: 500, y: 500 }, false, "reconcile");
+  useStore.getState().applyMapDrop({ stage: "reconcile", chips: { beta: { x: 7, y: 7 } }, areas: [{ code: "beta", ai: 0 }] });
+  expect(useStore.getState().mapPositions.reconcile.beta).toBeUndefined();
+  useStore.getState().setCodeAreas([], "");
+  useStore.getState().resetMapLayout("reconcile");
+});
+
+// Reconcile and Themes show different structures, so they are different pieces
+// of work: laying one out must never disturb the other.
+test("the two stages keep separate layouts", () => {
+  const st = useStore.getState();
+  st.recordMapPosition("alpha", { x: 10, y: 10 }, false, "reconcile");
+  st.recordMapPosition("alpha", { x: 90, y: 90 }, false, "themes");
+  st.recordMapPosition("halo:0", { x: 5, y: 5 }, true, "reconcile");
+  st.recordMapPosition("island:0", { x: 50, y: 50 }, true, "themes");
+
+  // resetting one stage leaves the other exactly as it was
+  useStore.getState().resetMapLayout("reconcile");
+  let s = useStore.getState();
+  expect(s.mapPositions.reconcile).toEqual({});
+  expect(s.mapIslandPos.reconcile).toEqual({});
+  expect(s.mapPositions.themes.alpha).toEqual({ x: 90, y: 90 });
+  expect(s.mapIslandPos.themes["island:0"]).toEqual({ x: 50, y: 50 });
+
+  // and a tidy-up in one stage writes only into that stage
+  useStore.getState().applyMapLayout({ alpha: { x: 1, y: 2 } }, {}, 1, "reconcile");
+  s = useStore.getState();
+  expect(s.mapPositions.reconcile.alpha).toEqual({ x: 1, y: 2 });
+  expect(s.mapPositions.themes.alpha).toEqual({ x: 90, y: 90 });
+
+  useStore.getState().resetMapLayout("reconcile");
+  useStore.getState().resetMapLayout("themes");
 });

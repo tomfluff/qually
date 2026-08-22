@@ -59,6 +59,10 @@ export interface CodePlanAction {
 // a pending merge-CLUSTER: 2+ member codes proposed as ONE concept. survivor is
 // one of the members; newName optionally renames the merged concept. Persisted
 // as a sibling of codePlan so older app versions simply ignore it.
+export type MapStage = "reconcile" | "themes";
+export type StageLayout = Record<MapStage, Record<string, { x: number; y: number }>>;
+const emptyLayout = (): StageLayout => ({ reconcile: {}, themes: {} });
+
 export interface CodeCluster {
   survivor: string; codes: string[]; newName?: string; rationale: string;
   // an AI-generated glimpse of what this group means (halo menu), persisted,
@@ -230,8 +234,11 @@ export interface State {
   codeClusters: CodeCluster[];
   // Code map layout positions (session-only: ride the undo history, never the
   // project file). Keys: chip name or island/orbit node id.
-  mapPositions: Record<string, { x: number; y: number }>;
-  mapIslandPos: Record<string, { x: number; y: number }>;
+  // Reconcile and Themes are different stages showing different structures
+  // (merge capsules vs theme islands), so they keep SEPARATE layouts: laying
+  // one out, tidying it, or resetting it must never disturb the other.
+  mapPositions: StageLayout;
+  mapIslandPos: StageLayout;
   // the transcript you were last ON (session-only): the Notes stamp and other
   // "what was I just doing" readers need it after you switch to a reserved view
   lastPid: string;
@@ -339,17 +346,20 @@ export interface State {
   setCodePlan: (plan: CodePlanAction[]) => void;
   setCodeClusters: (clusters: CodeCluster[]) => void;
   // one undoable entry per completed map gesture
-  recordMapPosition: (id: string, pos: { x: number; y: number }, island?: boolean) => void;
+  recordMapPosition: (id: string, pos: { x: number; y: number }, island: boolean, stage: MapStage) => void;
   // a whole-map nudge (Adjust to zoom): every moved thing, ONE entry
   applyMapLayout: (chips: Record<string, { x: number; y: number }>,
-    islands: Record<string, { x: number; y: number }>, moved: number) => void;
+    islands: Record<string, { x: number; y: number }>, moved: number, stage: MapStage) => void;
   // a drop that moved SEVERAL things at once (a multi-selection drag): every
   // position and every membership change, ONE undoable entry
   applyMapDrop: (d: {
+    stage: MapStage;
     chips?: Record<string, { x: number; y: number }>;
     islands?: Record<string, { x: number; y: number }>;
     reconcile?: { code: string; ci: number | null }[];
     themes?: { code: string; gi: number }[];
+    // the AI areas view: ai = index into codeAreas, -1 = unassigned
+    areas?: { code: string; ai: number }[];
   }) => void;
   reconcileDrop: (code: string, pos: { x: number; y: number }, targetCi: number | null) => void;
   // Themes-stage drop: position + island membership, ONE entry. gi -1 = no island.
@@ -359,7 +369,7 @@ export interface State {
   // a Themes grouping run landing: islands + fresh layout, ONE entry
   applyThemeGroups: (groups: CodeGroup[]) => void;
   // wipe every hand-placed position: the packer lays the stage out fresh (one entry)
-  resetMapLayout: () => boolean;
+  resetMapLayout: (stage: MapStage) => boolean;
   // the whole cluster is applied as ONE undoable step
   applyCluster: (ci: number) => void;
   setLastPid: (pid: string) => void;
@@ -632,7 +642,7 @@ export const useStore = create<State>()(
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: {}, mapIslandPos: {}, lastPid: "",
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -646,7 +656,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: {}, mapIslandPos: {}, lastPid: "",
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1544,13 +1554,17 @@ export const useStore = create<State>()(
         set({ codeAreas: areas.filter((g) => g.codes.length > 0), codeAreasFp: fp });
       },
       setCodePlan: (plan) => { get().pushUndo(); set({ codePlan: plan }); },
-      resetMapLayout: () => {
+      resetMapLayout: (stage) => {
         const s = get();
-        if (!Object.keys(s.mapPositions).length && !Object.keys(s.mapIslandPos).length) {
+        if (!Object.keys(s.mapPositions[stage]).length && !Object.keys(s.mapIslandPos[stage]).length) {
           announce("The map is already in its packed layout"); return false;
         }
         get().pushUndo();
-        set({ mapPositions: {}, mapIslandPos: {} });
+        // only THIS stage: the other one's layout is a different piece of work
+        set({
+          mapPositions: { ...s.mapPositions, [stage]: {} },
+          mapIslandPos: { ...s.mapIslandPos, [stage]: {} },
+        });
         announce("Map laid out fresh");
         return true;
       },
@@ -1558,7 +1572,9 @@ export const useStore = create<State>()(
         get().pushUndo();
         set({
           codeGroups: groups.filter((g) => g.codes.length > 0),
-          mapPositions: {}, mapIslandPos: {},
+          // a fresh theming lays the ISLAND stage out again; Reconcile keeps its own
+          mapPositions: { ...get().mapPositions, themes: {} },
+          mapIslandPos: { ...get().mapIslandPos, themes: {} },
         });
       },
       applyReconcilePlan: (clusters, actions, resetLayout) => {
@@ -1569,7 +1585,10 @@ export const useStore = create<State>()(
           codeClusters: clusters.filter((c) => c.codes.length >= 2)
             .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) })),
           codePlan: actions,
-          ...(resetLayout ? { mapPositions: {}, mapIslandPos: {} } : {}),
+          ...(resetLayout ? {
+            mapPositions: { ...get().mapPositions, reconcile: {} },
+            mapIslandPos: { ...get().mapIslandPos, reconcile: {} },
+          } : {}),
         });
       },
       // a completed Reconcile drop: position + membership change, ONE entry.
@@ -1581,6 +1600,7 @@ export const useStore = create<State>()(
       applyMapDrop: (d) => {
         get().pushUndo();
         const s = get();
+        const stage = d.stage;
         let clusters = s.codeClusters;
         for (const { code, ci } of d.reconcile ?? []) {
           const cur = clusters.findIndex((c) => c.codes.includes(code));
@@ -1598,7 +1618,7 @@ export const useStore = create<State>()(
             .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) }));
         }
         let groups = s.codeGroups;
-        const positions = { ...s.mapPositions, ...(d.chips ?? {}) };
+        const positions = { ...s.mapPositions[stage], ...(d.chips ?? {}) };
         for (const { code, gi } of d.themes ?? []) {
           const cur = groups.findIndex((g) => g.codes.includes(code));
           if (cur === gi) continue;
@@ -1611,11 +1631,25 @@ export const useStore = create<State>()(
           }));
         }
         if (groups !== s.codeGroups) groups = groups.filter((g) => g.codes.length > 0);
+        let areas = s.codeAreas;
+        for (const { code, ai } of d.areas ?? []) {
+          const cur = areas.findIndex((a) => a.codes.includes(code));
+          if (cur === ai) continue;
+          // the code is filed, not parked: drop any hand position so the view
+          // packs it neatly inside its new area
+          delete positions[code];
+          areas = areas.map((a, i) => ({
+            ...a,
+            codes: i === ai ? [...a.codes, code] : a.codes.filter((x) => x !== code),
+          }));
+        }
+        if (areas !== s.codeAreas) areas = areas.filter((a) => a.codes.length > 0);
         set({
+          codeAreas: areas,
           codeClusters: clusters,
           codeGroups: groups,
-          mapPositions: positions,
-          mapIslandPos: { ...s.mapIslandPos, ...(d.islands ?? {}) },
+          mapPositions: { ...s.mapPositions, [stage]: positions },
+          mapIslandPos: { ...s.mapIslandPos, [stage]: { ...s.mapIslandPos[stage], ...(d.islands ?? {}) } },
         });
       },
       reconcileDrop: (code, pos, targetCi) => {
@@ -1636,17 +1670,18 @@ export const useStore = create<State>()(
           // (an evicted survivor is no longer a member and falls back)
           .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) }));
         }
-        set({ codeClusters: clusters, mapPositions: { ...s.mapPositions, [code]: pos } });
+        set({ codeClusters: clusters,
+          mapPositions: { ...s.mapPositions, reconcile: { ...s.mapPositions.reconcile, [code]: pos } } });
       },
       themesDrop: (code, pos, gi) => {
         get().pushUndo();
         const s = get();
         const cur = s.codeGroups.findIndex((g) => g.codes.includes(code));
-        const positions = { ...s.mapPositions };
+        const positions = { ...s.mapPositions.themes };
         if (cur === gi) positions[code] = pos; // same home: the drop position holds
         else delete positions[code];           // new home: the packer files it in
         set({
-          mapPositions: positions,
+          mapPositions: { ...s.mapPositions, themes: positions },
           codeGroups: cur === gi ? s.codeGroups : s.codeGroups.map((g, i) => ({
             ...g,
             codes: i === gi ? [...g.codes, code] : g.codes.filter((c) => c !== code),
@@ -1657,23 +1692,24 @@ export const useStore = create<State>()(
       // nudged positions like a hand-drag would, so it persists, exports, and
       // comes back with one undo — unlike the old view-only spread, which
       // vanished on reload and could not be reasoned about.
-      applyMapLayout: (chips, islands, moved) => {
+      applyMapLayout: (chips, islands, moved, stage) => {
         const s = get();
         // `moved` counts what actually shifted; the maps carry EVERY top-level
         // position so the packer cannot refill the gaps that were just opened
         if (!moved) { announce("Nothing was overlapping at this zoom"); return; }
         get().pushUndo();
         set({
-          mapPositions: { ...s.mapPositions, ...chips },
-          mapIslandPos: { ...s.mapIslandPos, ...islands },
+          mapPositions: { ...s.mapPositions, [stage]: { ...s.mapPositions[stage], ...chips } },
+          mapIslandPos: { ...s.mapIslandPos, [stage]: { ...s.mapIslandPos[stage], ...islands } },
         });
         announce(`Adjusted ${moved} position${moved === 1 ? "" : "s"} so nothing overlaps at this zoom`);
       },
-      recordMapPosition: (id, pos, island) => {
+      recordMapPosition: (id, pos, island, stage) => {
         get().pushUndo();
+        const s = get();
         set(island
-          ? { mapIslandPos: { ...get().mapIslandPos, [id]: pos } }
-          : { mapPositions: { ...get().mapPositions, [id]: pos } });
+          ? { mapIslandPos: { ...s.mapIslandPos, [stage]: { ...s.mapIslandPos[stage], [id]: pos } } }
+          : { mapPositions: { ...s.mapPositions, [stage]: { ...s.mapPositions[stage], [id]: pos } } });
       },
       applyCluster: (ci) => {
         const s0 = get();
@@ -1840,7 +1876,10 @@ export const useStore = create<State>()(
             ...(c.descCodes ? { descCodes: c.descCodes.map((x) => x === code ? name : x) } : {}) })),
           // the map's hand-placed spots are keyed by code name: miss this and
           // a rename silently throws the researcher's layout away
-          mapPositions: renameKey(s.mapPositions, code, name),
+          mapPositions: {
+            reconcile: renameKey(s.mapPositions.reconcile, code, name),
+            themes: renameKey(s.mapPositions.themes, code, name),
+          },
         });
         set({ hotbarCache: hotbarCodes(get()) });
       },
@@ -1874,7 +1913,10 @@ export const useStore = create<State>()(
             // same members under new spelling: the glimpse is NOT stale
             ...(c.descCodes ? { descCodes: c.descCodes.map(r) } : {}) })),
           // a case sweep must not cost the researcher their map layout
-          mapPositions: Object.fromEntries(Object.entries(s.mapPositions).map(([k, v]) => [r(k), v])),
+          mapPositions: {
+            reconcile: Object.fromEntries(Object.entries(s.mapPositions.reconcile).map(([k, v]) => [r(k), v])),
+            themes: Object.fromEntries(Object.entries(s.mapPositions.themes).map(([k, v]) => [r(k), v])),
+          },
         });
         set({ hotbarCache: hotbarCodes(get()) });
         announce(`${ren.size} code name${ren.size === 1 ? "" : "s"} now start ${style === "lower" ? "lowercase" : "with a capital"}`);

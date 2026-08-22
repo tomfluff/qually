@@ -82,6 +82,8 @@ type ChipNodeT = Node<ChipData, "chip">;
 // so they carry their member list — the context menu must never reach into
 // saved theme groups through a lens island's gi
 type IslandData = { name: string; gi: number; lens?: boolean; list?: string[];
+  // areas view only: which stored area this pile is (-1 = Unassigned)
+  ai?: number;
   // lens islands only: the grouping's own name, without the count suffix —
   // the stable key session positions hang off (gi is just row order)
   gkey?: string };
@@ -726,7 +728,7 @@ function MapInner() {
     const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
       type: "chip" as const,
-      position: mapPositions[c] ?? position,
+      position: mapPositions[stage][c] ?? position,
       ...(parentId ? { parentId } : {}),
       width: widths.get(c)!, height: ch,
       selected: remembered.selected.has(c),
@@ -736,7 +738,10 @@ function MapInner() {
     if (lens !== "default") {
       // buckets from counts, or the AI areas — arranged as islands you can
       // move within the view; nothing is written to the project
-      let lensGroups: { name: string; list: string[] }[] = [];
+      // `ai` is set only by the areas view: the index of this pile in the
+      // stored areas (-1 = the Unassigned catch-all), which survives the
+      // filtering of empty ones
+      let lensGroups: { name: string; list: string[]; ai?: number }[] = [];
       if (lens === "pids" || lens === "segs") {
         const val = (c: string) => (lens === "pids" ? stats[c]?.pids ?? 0 : stats[c]?.segs ?? 0);
         const buckets: [string, (n: number) => boolean][] = lens === "pids"
@@ -752,19 +757,21 @@ function MapInner() {
       } else if (lens === "topics") {
         const grouped = new Set(topicGroups.flatMap((g) => g.codes));
         lensGroups = topicGroups
-          .map((g) => ({ name: g.name, list: g.codes.filter(inBook) }))
+          .map((g, ai) => ({ name: g.name, list: g.codes.filter(inBook), ai }))
           .filter((g) => g.list.length > 0);
         // codes the areas have never seen — added, or renamed since the run —
         // collect here rather than vanishing: file them by hand, or re-run
         const untopiced = codes.filter((c) => !grouped.has(c));
-        if (untopiced.length) lensGroups.push({ name: "Unassigned", list: untopiced });
+        if (untopiced.length) lensGroups.push({ name: "Unassigned", list: untopiced, ai: -1 });
       }
-      // islands layout — structurally read-only, but everything still MOVES:
+      // islands layout. In the areas view a drop FILES the code (see
+      // onNodeDragStop); in the bucket views membership is derived from counts,
+      // so moving is only parking.
       // hand-placements live in remembered.lensPos (session, per lens), never
       // in the store, so Arrange: normal restores the manual layout intact
       const lp = remembered.lensPos[lens] ?? {};
       const blocks = lensGroups.map((g, gi) => ({
-        name: g.name, gi, list: g.list, ...pack(g.list, near(g.list)),
+        name: g.name, gi, list: g.list, ai: g.ai, ...pack(g.list, near(g.list)),
         // the caption reads "name · count" and carries no buttons
         cap: captionBox(fs, 1, 7, `${g.name} · ${g.list.length}`, 1, family),
       }));
@@ -787,7 +794,8 @@ function MapInner() {
           position: lp[`i:${b.name}`] ?? { x: ix, y: iy }, width: bw, height: bh,
           draggable: true, selectable: false, focusable: false,
           dragHandle: ".mapIslandLabel",
-          data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list, gkey: b.name },
+          data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, lens: true, list: b.list, gkey: b.name,
+            ...(b.ai !== undefined ? { ai: b.ai } : {}) },
         });
         for (const c of b.list) {
           const home = { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y };
@@ -859,7 +867,7 @@ function MapInner() {
           // which is left-aligned), so a name wider than its capsule bleeds
           // backwards too — offset the capsule by half the overhang and both
           // gaps come out at exactly HALO_GAP
-          position: mapIslandPos[key] ?? { x: x + Math.max(0, (b.cap.w - b.w) / 2), y },
+          position: mapIslandPos.reconcile[key] ?? { x: x + Math.max(0, (b.cap.w - b.w) / 2), y },
           width: b.w, height: b.h,
           // NOT pointer-selectable: a group counts as selected when every one
           // of its codes is (see the derivation effect), so brushing a capsule
@@ -929,7 +937,7 @@ function MapInner() {
       islands.push({
         id: key,
         type: "island" as const,
-        position: mapIslandPos[key] ?? { x: ix, y: iy },
+        position: mapIslandPos.themes[key] ?? { x: ix, y: iy },
         width: bw, height: bh,
         draggable: true, selectable: false, focusable: false,
         dragHandle: ".mapIslandLabel",
@@ -1313,7 +1321,7 @@ function MapInner() {
         : "Nothing was overlapping in this view");
       return;
     }
-    useStore.getState().applyMapLayout(chips, islands, moved);
+    useStore.getState().applyMapLayout(chips, islands, moved, stage);
   }, [getZoom, getNodes, lens]);
   // Reset inside a view drops only what you moved HERE; your free-form layout
   // is a different thing and is never touched from inside a view.
@@ -1406,10 +1414,49 @@ function MapInner() {
     // third argument. File every node in it, or the ones you did not happen to
     // grab snap back to their packed spots on the next rebuild.
     const moved = dragged?.length ? dragged : [n];
+    if (lens === "topics") {
+      // The areas view is real project data, so a drop FILES the code the way
+      // it does on the Themes islands: into the pile you dropped it on, or out
+      // to Unassigned when you drop it in open space. It repacks neatly inside
+      // its new home rather than keeping the spot you let go of.
+      const piles = getNodes().filter((x) => x.type === "island");
+      const areas: { code: string; ai: number }[] = [];
+      const lensStore = (remembered.lensPos.topics ??= {});
+      let joined = 0, evicted = 0;
+      for (const x of moved) {
+        if (x.type !== "chip") {
+          // a whole pile was moved: that is a placement, not a filing
+          const gkey = (x.data as IslandData).gkey ?? x.id;
+          lensStore[`i:${gkey}`] = x.position;
+          continue;
+        }
+        const abs = getInternalNode(x.id)?.internals.positionAbsolute ?? x.position;
+        const cx = abs.x + (x.width ?? 0) / 2, cy = abs.y + (x.height ?? 0) / 2;
+        const hit = piles.find((r) => cx >= r.position.x && cx <= r.position.x + (r.width ?? 0)
+          && cy >= r.position.y && cy <= r.position.y + (r.height ?? 0));
+        const ai = hit ? (hit.data as IslandData).ai ?? -1 : -1;
+        const was = useStore.getState().codeAreas.findIndex((a) => a.codes.includes(x.id));
+        if (was === ai) continue;
+        areas.push({ code: x.id, ai });
+        if (ai >= 0) joined++; else evicted++;
+        // the packer files it: forget wherever it was let go
+        for (const k of Object.keys(lensStore)) if (k.startsWith(`c:${x.id}@`)) delete lensStore[k];
+      }
+      if (areas.length) {
+        useStore.getState().applyMapDrop({ stage, areas });
+        if (joined) earcon.join(); else if (evicted) earcon.evict();
+        announce(joined && !evicted
+          ? `Moved ${joined} code${joined === 1 ? "" : "s"} into that area`
+          : !joined && evicted
+            ? `Moved ${evicted} code${evicted === 1 ? "" : "s"} to Unassigned`
+            : `Refiled ${areas.length} codes`);
+      }
+      setLensNonce((v) => v + 1);
+      return;
+    }
     if (lens !== "default") {
-      // moving under a lens is fine — parking, comparing, tidying a pile — but
-      // it stays in the lens's own session overlay: no store write, no
-      // membership change, and the normal layout comes back untouched
+      // the bucket views are derived from counts, so there is nothing to file:
+      // moving is just parking, in the view's own session overlay
       const store = (remembered.lensPos[lens] ??= {});
       for (const x of moved) {
         const parent = x.parentId ? getNodes().find((p) => p.id === x.parentId) : null;
@@ -1454,7 +1501,7 @@ function MapInner() {
     if (stage === "reconcile") clearWill();
     const before = new Map(reconcile.map((r) =>
       [r.code, st.codeClusters.findIndex((c) => c.codes.includes(r.code))]));
-    st.applyMapDrop({ chips, islands, reconcile, themes });
+    st.applyMapDrop({ stage, chips, islands, reconcile, themes });
     // one mark per gesture, describing what actually happened to the set
     const after = useStore.getState().codeClusters;
     let joined = 0, left = 0;
@@ -1892,7 +1939,7 @@ function MapInner() {
             <button className="btn primary" autoFocus
               onClick={() => {
                 setConfirmRelayout(null);
-                if (useStore.getState().resetMapLayout())
+                if (useStore.getState().resetMapLayout(stage))
                   requestAnimationFrame(() => fitView({ duration: 200 }));
               }}>Re-layout</button>
             <button className="btn" onClick={() => setConfirmRelayout(null)}>Cancel</button>
