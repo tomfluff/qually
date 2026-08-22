@@ -129,3 +129,28 @@ test("undo and redo at the edge of the history change nothing and do not throw",
   expect(JSON.stringify(useStore.getState().transcripts)).toBe(after);
   expect(useStore.getState().redoStack).toHaveLength(0);
 });
+
+// Coding a selection that is ALREADY coded that way writes nothing. The
+// rollback for that has to put the WHOLE history back, not just the segments:
+// pushUndo clears the redo stack, so popping one undo entry leaves the redo
+// you were holding gone for good.
+test("a coding that dedups to nothing does not eat a pending redo", () => {
+  useStore.getState().selectLine(1);
+  useStore.getState().applyCode("alpha");
+  useStore.getState().selectLine(2);
+  useStore.getState().applyCode("beta");
+  const both = useStore.getState().segments.length;
+
+  useStore.getState().undo();                      // beta is now pending in redo
+  expect(useStore.getState().redoStack).toHaveLength(1);
+  const afterUndo = useStore.getState().segments.length;
+
+  // line 1 is still coded alpha, so this writes nothing at all
+  useStore.getState().selectLine(1);
+  useStore.getState().applyCode("alpha");
+  expect(useStore.getState().segments).toHaveLength(afterUndo);   // nothing written
+  expect(useStore.getState().redoStack).toHaveLength(1);          // and beta survives
+
+  useStore.getState().redo();
+  expect(useStore.getState().segments).toHaveLength(both);
+});

@@ -883,7 +883,10 @@ export const useStore = create<State>()(
       applyCode: (code) => {
         const s = get();
         if (!s.selection.pid || !s.selection.lines.size) return;
-        const before = s.segments;
+        // the WHOLE history, not just the segments: pushUndo also clears the
+        // redo stack and, at the cap, shifts the oldest entry off — so undoing
+        // it by popping one entry would quietly eat both
+        const before = { segments: s.segments, undoStack: s.undoStack, redoStack: s.redoStack, selRun: s.selRun };
         s.pushUndo();
         const ids = [...s.selection.lines].sort((a, b) => a - b);
         let start = ids[0], prev = ids[0], wrote = 0;
@@ -899,7 +902,7 @@ export const useStore = create<State>()(
         // happened that did not, and the undo entry we pushed would then eat a
         // real edit instead. Take both back.
         if (!wrote) {
-          set({ undoStack: get().undoStack.slice(0, -1), segments: before });
+          set(before);
           announce(`Already coded as ${code}`);
           return;
         }
