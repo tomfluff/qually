@@ -28,6 +28,12 @@
 .mapBar .btn .blabel, .mapBar .mapTitle, .mapBar .mapCount, .mapBar .mapDragHint,
 .mapBar .segmented .seg {
   text-box: trim-both cap alphabetic; }
+/* Firefox has no text-box yet: there, meet the low-hanging Segoe ink halfway
+   by nudging the icons down a hair instead (~0.06em is the measured gap
+   between Segoe UI's glyph-band centre and its line-box centre) */
+@supports not (text-box: trim-both cap alphabetic) {
+  .mapBar .btn svg { translate: 0 0.055em; }
+}
 .mapBar .segmented { padding:0; }
 .mapBar .btn.iconbtn { justify-content:center; aspect-ratio:1; padding-inline:0; }
 .mapBar .mapTitle { font-weight:600; }
