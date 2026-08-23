@@ -1359,6 +1359,10 @@ function MapInner() {
     if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
     const red = redactor(st.ai.redactTerms);
     const inputs = glimpseInputs(ci);
+    // the capsule's id, taken NOW: the answer lands seconds later, and an
+    // index held across that gap names whatever proposal slid into its place
+    // if a merge or a dismissal reordered the list in between
+    const cid = st.codeClusters[ci]?.cid;
     // the glimpse streams into the card — open it so the loading pulse shows
     setOpenCards((old) => new Set(old).add(ci));
     setGenCi(ci);
@@ -1368,8 +1372,11 @@ function MapInner() {
         key, model: st.ai.model, codes: inputs, redaction: red,
       });
       const s2 = useStore.getState();
-      s2.setCodeClusters(s2.codeClusters.map((c, i) =>
-        (i === ci ? { ...c, desc: glimpse, descCodes: [...c.codes] } : c)));
+      // by id, and only if the capsule still stands — a description of a
+      // proposal that was settled mid-flight has nowhere honest to land
+      if (cid !== undefined && s2.codeClusters.some((c) => c.cid === cid))
+        s2.setCodeClusters(s2.codeClusters.map((c) =>
+          (c.cid === cid ? { ...c, desc: glimpse, descCodes: [...c.codes] } : c)));
       s2.logAiCall({
         at: new Date().toISOString(), model: st.ai.model, task: "glimpse", pid: "(codebook)",
         lines: inputs.length, redactions: 0,
@@ -1382,7 +1389,9 @@ function MapInner() {
       announce(`Describe failed: ${msg}`, { assertive: true });
       earcon.error();
     } finally {
-      setGenCi(null);
+      // only clear a pulse this run still owns: a second question started on
+      // another capsule mid-flight must not lose its pulse to this finish
+      setGenCi((cur) => (cur === ci ? null : cur));
     }
   }, [glimpseInputs]);
 
@@ -1395,6 +1404,8 @@ function MapInner() {
     if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
     const red = redactor(st.ai.redactTerms);
     const inputs = glimpseInputs(ci);
+    // same id-not-index discipline as the glimpse: see runGlimpse
+    const cid = st.codeClusters[ci]?.cid;
     setOpenCards((old) => new Set(old).add(ci));
     setGenCi(ci);
     earcon.aiStart();
@@ -1403,8 +1414,9 @@ function MapInner() {
         key, model: st.ai.model, codes: inputs, redaction: red,
       });
       const s2 = useStore.getState();
-      s2.setCodeClusters(s2.codeClusters.map((c, i) =>
-        (i === ci ? { ...c, against, againstWeak: weak, againstCodes: [...c.codes] } : c)));
+      if (cid !== undefined && s2.codeClusters.some((c) => c.cid === cid))
+        s2.setCodeClusters(s2.codeClusters.map((c) =>
+          (c.cid === cid ? { ...c, against, againstWeak: weak, againstCodes: [...c.codes] } : c)));
       s2.logAiCall({
         at: new Date().toISOString(), model: st.ai.model, task: "against", pid: "(codebook)",
         lines: inputs.length, redactions: 0,
@@ -1417,7 +1429,7 @@ function MapInner() {
       announce(`Could not argue: ${msg}`, { assertive: true });
       earcon.error();
     } finally {
-      setGenCi(null);
+      setGenCi((cur) => (cur === ci ? null : cur));
     }
   }, [glimpseInputs]);
 
