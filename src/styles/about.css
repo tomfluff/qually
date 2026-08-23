@@ -117,6 +117,10 @@
    unrelated lines. Below ~2 columns' worth of room it collapses to one full-width
    column instead. */
 .ai-lenses { display:grid; grid-template-columns:repeat(auto-fit, minmax(19em, 1fr)); gap:3px 14px; }
+/* The consolidation permissions are three short titles, not lens descriptions,
+   so they sit on one row and wrap only when the text size leaves them no
+   choice — three ticks read as one question that way, rather than as a list. */
+.recAsks { display:flex; flex-wrap:wrap; gap:3px 22px; }
 /* baseline, not center — same fix as .segdiff-side above: when a label wraps to two
    lines, centering left the checkbox floating in the middle of the block, attached to
    neither line. Baseline pins it to the first one. */

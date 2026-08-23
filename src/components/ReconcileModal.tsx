@@ -224,7 +224,7 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
                     settings and said nothing about the one thing that
                     mattered: whether a model may suggest throwing work away. */}
                 <div className="ai-sec">May propose <span className="ai-sec-hint">every proposal still waits for your verdict</span></div>
-                <div className="ai-lenses">
+                <div className="ai-lenses recAsks">
                   {/* the titles carry it; the long explanations moved to the
                       tooltip, where they are there for the one reading that
                       needs them and out of the way of the nine that do not */}
