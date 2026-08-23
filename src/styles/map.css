@@ -320,6 +320,20 @@
 
 /* the gestures panel scrolls instead of running off a short screen */
 .mapHelp { max-height:calc(100% - 64px); overflow-y:auto; }
+/* co-occurrence: the offline counter-evidence on a pair card, and the
+   companions section of the similar panel — quiet, informational, no accent */
+.mapCardCo { margin:6px 10px 8px; padding:6px 9px; line-height:1.45;
+  border-left:3px solid var(--line); border-radius:0 7px 7px 0;
+  color:var(--fg-dim); background:color-mix(in srgb, var(--fg) 4%, transparent);
+  user-select:text; -webkit-user-select:text; cursor:text; }
+.mapSimCo { border-top:1px solid var(--line); padding:7px 12px 4px; }
+.mapSimCoHead { font-size:.72em; font-weight:700; letter-spacing:.4px;
+  text-transform:uppercase; color:var(--fg-dim); margin-bottom:4px; }
+.mapSimCoHead span { color:var(--muted); font-weight:600; letter-spacing:.2px; }
+.mapSimCoRow { display:flex; justify-content:space-between; gap:10px;
+  line-height:1.5; }
+.mapSimCoRow span { color:var(--muted); font-variant-numeric:tabular-nums; }
+
 /* the answer to "where do these belong" — it stays until dismissed, because a
    run that proposes nothing must not look like a run that did nothing */
 .mapFocusNote { display:flex; align-items:center; gap:12px; max-width:min(70ch, 80vw);

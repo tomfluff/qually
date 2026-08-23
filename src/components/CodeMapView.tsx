@@ -43,6 +43,7 @@ import { onProjectSwap } from "../sessionReset";
 import { relaxBoxes } from "../mapRelax";
 import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
+import { cooccurrence, pairOf, companionsOf, type Companion } from "../cooccur";
 import { findSimilar } from "../similar";
 import { sweepWording, refusedPairs, familyReason } from "../sweep";
 import { openTailQueue } from "./TailQueue";
@@ -105,13 +106,17 @@ type HaloData = { name: string; renamed: boolean; joins: boolean; ci: number; co
   /** whose idea this merge was — the capsule says so on its face (see SOURCE_MARK) */
   source?: DecisionSource };
 type HaloNodeT = Node<HaloData, "halo">;
-type CardData = { ci: number; gen: boolean }; // gen: a glimpse is being written
+type CardData = { ci: number; gen: boolean; // gen: a glimpse is being written
+  /** how often a PAIR's two codes land on the same lines — cited against the merge */
+  co?: number };
 type CardNodeT = Node<CardData, "card">;
 // the "find similar" results: a node tethered to the code you asked about, so
 // it pans and zooms with the map instead of floating over it
 type SimilarRow = { name: string; score: number; why: string; band?: "very" | "related" };
 type SimilarData = {
   source: string; rows: SimilarRow[]; ticked: Set<string>;
+  /** codes that keep landing on the source's lines — companionship, not duplication */
+  companions: Companion[];
   ai: "idle" | "busy" | "done"; cost?: number; inTok: number; costEst: number;
   /** what filing these together MEANS in the view you are in, or null where
       nothing files (the derived groupings edit no membership) */
@@ -543,6 +548,14 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   return (
     <div className="mapCardNode nodrag nowheel">
       <div className="mapCardRat">{c.rationale}</div>
+      {/* offline counter-evidence: two codes deliberately laid on the same
+          moments are usually two lenses, not one idea typed twice */}
+      {data.co !== undefined && data.co >= 2 && (
+        <div className="mapCardCo">
+          These two land on the same lines {data.co}× — co-coding often marks two
+          different things about one moment.
+        </div>
+      )}
       {(c.against || c.againstWeak) && (
         // the case against sits with the case for, not in a dialog you dismiss
         // before deciding — and a shrug is drawn as a shrug, not as an objection
@@ -642,6 +655,20 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
           );
         })}
       </div>
+      {data.companions.length > 0 && (
+        // the other axis: not "spelled the same" but "used together" — these
+        // are theme material, which is why there is no checkbox here: folding
+        // a companion into a merge is exactly the mistake this list prevents
+        <div className="mapSimCo">
+          <div className="mapSimCoHead">On the same lines <span>· theme material, not merge</span></div>
+          {data.companions.slice(0, 6).map((c) => (
+            <div key={c.name} className="mapSimCoRow">
+              <b>{c.name}</b>
+              <span>{c.count}× · {c.pids} transcript{c.pids === 1 ? "" : "s"}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {/* two lines: the act, then what it costs in smaller type — one long
           wrapping line read as a paragraph, not a button */}
       {data.ai !== "done" && (
@@ -820,7 +847,7 @@ function MapInner() {
   // "find similar codes": a ranked panel at the cursor. Local matches appear
   // instantly; the AI pass is a second, paid step inside the same panel.
   const [similar, setSimilar] = useState<null | {
-    source: string; rows: SimilarRow[];
+    source: string; rows: SimilarRow[]; companions: Companion[];
     ticked: Set<string>; ai: "idle" | "busy" | "done"; cost?: number;
   }>(null);
   // the quote for the optional AI pass, computed when the panel opens
@@ -986,6 +1013,8 @@ function MapInner() {
   const layout = useMemo(() => {
     const fs = MAP_FS;
     const ch = chipH(fs);
+    // which codes share lines — cheap, offline, and cited on the pair cards
+    const cooc = cooccurrence(segments);
     const family = getComputedStyle(document.body).fontFamily; // read once per rebuild
     const widths = new Map(codes.map((c) => [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0)]));
     const pack = (list: string[], targetW: number, dimsOf?: (c: string) => { w: number; h: number }) => {
@@ -1314,7 +1343,9 @@ function MapInner() {
             // floor matches .mapCardNode's min-width:400px, so RF's box for
             // the node is the box the card actually paints
             width: Math.max(400, Math.min(420, b.w - 24)),
-            data: { ci: b.c.ci, gen: genCi === b.c.ci },
+            data: { ci: b.c.ci, gen: genCi === b.c.ci,
+              ...(b.c.codes.length === 2
+                ? { co: pairOf(cooc, b.c.codes[0], b.c.codes[1])?.count } : {}) },
           });
         }
         x += stepW + HALO_GAP;
@@ -1513,8 +1544,12 @@ function MapInner() {
     const st = useStore.getState();
     const book = liveCodes(st.codebook).map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
     const rows = findSimilar(source, book).map((m) => ({ ...m }));
+    // companions come back norm'd; the panel speaks display names
+    const display = new Map(book.map((x) => [norm(x.name), x.name]));
+    const companions = companionsOf(cooccurrence(st.segments), source)
+      .flatMap((c) => { const d = display.get(c.name); return d ? [{ ...c, name: d }] : []; });
     setSimilar({
-      source, rows, ai: "idle",
+      source, rows, companions, ai: "idle",
       // codes already filed stay unticked: taking one is a deliberate act
       ticked: new Set(rows.filter((m) => !homeOf(m.name)).map((m) => m.name)),
     });
