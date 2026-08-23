@@ -7,6 +7,7 @@
 // about the codes themselves changes.
 import { callJson, estimateTokens, type Usage } from "./openai";
 import { restore, type Redaction } from "./redact";
+import { styleSuffix } from "./style";
 import { renderMergePayload, type MergeCodeInput } from "./dedupe";
 
 export interface ClusterGroup { name: string; codes: string[]; rationale?: string }
@@ -18,7 +19,7 @@ This is NOT thematic hierarchy building. Group by how the codes are actually use
 Rules:
 - Groups have 2 to 8 codes. A code that resembles nothing stays out of every group — do NOT force coverage. Leaving many codes ungrouped is a good answer.
 - Every code appears in AT MOST one group.
-- Name each group in 2-4 plain words describing the shared usage (sentence case).
+- Name each group in 2-4 plain words describing the shared usage, in the codebook's own style.
 - Give each group one sentence of rationale naming the shared usage and the evidence.
 - Use the exact code names given.
 
@@ -37,7 +38,7 @@ Rules:
 - Aim for 5 to 9 areas for a codebook of any size. Fewer, bigger shelves is the goal; a pile of 20 two-code groups is a failure.
 - Every code belongs to exactly one area, and put EVERY code somewhere — this is a way of looking at the whole book, so leaving codes out defeats it.
 - An area holds as many codes as it needs; 20 or 30 in one area is fine and expected.
-- Name each area in 2-5 plain words for what it is about (sentence case), e.g. "Strategies and workarounds", "Opinions about the baseline", "Difficulties reading charts".
+- Name each area in 2-5 plain words for what it is about, in the codebook's own style, e.g. "Strategies and workarounds", "Opinions about the baseline", "Difficulties reading charts".
 - One sentence of rationale per area saying what belongs there.
 - Use the exact code names given.
 
@@ -47,7 +48,7 @@ export type ClusterKind = "usage" | "areas";
 const promptFor = (kind: ClusterKind) => (kind === "areas" ? AREAS_SYSTEM : SYSTEM);
 
 export const estimateClusterTokens = (codes: MergeCodeInput[], r: Redaction, kind: ClusterKind = "usage") =>
-  estimateTokens(promptFor(kind)) + estimateTokens(renderMergePayload(codes, r));
+  estimateTokens(promptFor(kind) + styleSuffix(codes.map((c) => c.name))) + estimateTokens(renderMergePayload(codes, r));
 
 const SCHEMA = {
   type: "object",
@@ -57,7 +58,7 @@ const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          name: { type: "string", description: "short group name, sentence case" },
+          name: { type: "string", description: "short group name, in the codebook's style" },
           codes: { type: "array", items: { type: "string" }, description: "exact code names" },
           rationale: { type: "string", description: "one sentence: the shared usage and the evidence" },
         },
@@ -77,7 +78,8 @@ export async function clusterCodes(opts: {
   const { data, usage } = await callJson<{ groups: ClusterGroup[] }>({
     key: opts.key,
     model: opts.model,
-    system: promptFor(opts.kind ?? "usage"),
+    // group names read best in the researcher's own register too
+    system: promptFor(opts.kind ?? "usage") + styleSuffix(opts.codes.map((c) => c.name)),
     user: renderMergePayload(opts.codes, opts.redaction),
     schemaName: "cluster_codes",
     schema: SCHEMA,

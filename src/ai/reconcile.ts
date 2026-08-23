@@ -13,6 +13,7 @@ import { callJson, estimateTokens, type Usage } from "./openai";
 import { restore, type Redaction } from "./redact";
 import { renderMergePayload, type MergeCodeInput } from "./dedupe";
 import { norm } from "../contract/segments";
+import { styleSuffix } from "./style";
 
 export interface CodeAction {
   code: string;
@@ -38,7 +39,7 @@ PART 1 — MERGE CLUSTERS. A cluster is a set of 2 or more codes that are THE SA
 Calibration: this is redundancy detection, NOT thematic grouping. Codes that are merely related, adjacent, or under the same theme are NOT a cluster — a cluster's members' excerpts could swap labels without anyone noticing. Most clusters have 2-3 members; a cluster of 5+ should be rare and obviously justified. On a well-coded book MOST codes belong to no cluster at all — that is the expected, good outcome. When in doubt, do not cluster.
 
 PART 2 — PER-CODE ACTIONS on codes that are in no cluster:
-- "rename": the name misdescribes what the excerpts show, or is too vague to find again. Give a clearer, specific name (sentence case, concise).
+- "rename": the name misdescribes what the excerpts show, or is too vague to find again. Give a clearer, specific name, concise and in the codebook's own style.
 - "remove": the code carries no analytic value (an artifact, a stray, fully covered elsewhere with nothing of its own). Removal REJECTS the code's excerpts rather than deleting them; propose it sparingly — a thin code that still says something unique is a keep.
 - Codes that are fine get NO action. Most codes should get no action.
 
@@ -70,7 +71,7 @@ export function asksSuffix(asks: ReconcileAsks): string {
 }
 
 export const estimateReconcileTokens = (codes: MergeCodeInput[], r: Redaction) =>
-  estimateTokens(SYSTEM) + estimateTokens(renderMergePayload(codes, r));
+  estimateTokens(SYSTEM + styleSuffix(codes.map((c) => c.name))) + estimateTokens(renderMergePayload(codes, r));
 
 const SCHEMA = {
   type: "object",
@@ -116,7 +117,7 @@ export async function reconcileCodes(opts: {
   const { data, usage } = await callJson<{ clusters: ClusterProposal[]; actions: CodeAction[] }>({
     key: opts.key,
     model: opts.model,
-    system: SYSTEM + asksSuffix(asks),
+    system: SYSTEM + asksSuffix(asks) + styleSuffix(opts.codes.map((c) => c.name)),
     user: renderMergePayload(opts.codes, opts.redaction),
     schemaName: "reconcile_codes",
     schema: SCHEMA,
@@ -315,7 +316,7 @@ const NAME_AREA_SCHEMA = {
 } as const;
 
 export const estimateNameAreaTokens = (codes: MergeCodeInput[], r: Redaction) =>
-  estimateTokens(NAME_AREA_SYSTEM) + estimateTokens(renderMergePayload(codes, r));
+  estimateTokens(NAME_AREA_SYSTEM + styleSuffix(codes.map((c) => c.name))) + estimateTokens(renderMergePayload(codes, r));
 
 export async function nameArea(opts: {
   key: string; model: string; codes: MergeCodeInput[]; redaction: Redaction; signal?: AbortSignal;
@@ -323,7 +324,7 @@ export async function nameArea(opts: {
   const { data, usage } = await callJson<{ name: string; about: string }>({
     key: opts.key,
     model: opts.model,
-    system: NAME_AREA_SYSTEM,
+    system: NAME_AREA_SYSTEM + styleSuffix(opts.codes.map((c) => c.name)),
     user: renderMergePayload(opts.codes, opts.redaction),
     schemaName: "name_area",
     schema: NAME_AREA_SCHEMA,
@@ -360,7 +361,8 @@ export const renderFocusPayload = (
   `FOCUS CODES (propose dispositions for these only):\n\n${renderMergePayload(focus, r)}\n\nCONTEXT CODEBOOK (merge targets and context only):\n\n${renderMergePayload(context, r)}`;
 
 export const estimateFocusTokens = (focus: MergeCodeInput[], context: MergeCodeInput[], r: Redaction) =>
-  estimateTokens(FOCUS_SYSTEM) + estimateTokens(renderFocusPayload(focus, context, r));
+  estimateTokens(FOCUS_SYSTEM + styleSuffix([...focus, ...context].map((c) => c.name)))
+  + estimateTokens(renderFocusPayload(focus, context, r));
 
 const FOCUS_SCHEMA = {
   type: "object",
@@ -408,7 +410,8 @@ export async function reconcileFocus(opts: {
   const { data, usage } = await callJson<{ reviewedFocus: string[]; clusters: ClusterProposal[]; actions: CodeAction[] }>({
     key: opts.key,
     model: opts.model,
-    system: FOCUS_SYSTEM + asksSuffix(asks),
+    system: FOCUS_SYSTEM + asksSuffix(asks)
+      + styleSuffix([...opts.focus, ...opts.context].map((c) => c.name)),
     user: renderFocusPayload(opts.focus, opts.context, opts.redaction),
     schemaName: "reconcile_focus",
     schema: FOCUS_SCHEMA,
