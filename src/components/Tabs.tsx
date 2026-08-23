@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useStore } from "../state/store";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useStore, liveCodes } from "../state/store";
 import { SCROLL_BASE, wheelPixels } from "../scrollSpeed";
-import { useDismiss } from "../usePopover";
+import { useClampToViewport, useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
+import { codeStats } from "../codeStats";
+import { tailQueue, type TailLimit } from "./TailQueue";
 import { parseCSV } from "../contract/csv";
 import { isMarkerRows } from "../markers";
 import { announce } from "../announce";
@@ -53,6 +55,9 @@ export function Tabs() {
     const onWheel = (e: WheelEvent) => {
       // ctrl+wheel is browser zoom; a real horizontal wheel already works natively
       if (e.ctrlKey || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      // a popover opened FROM the strip lives inside it, so its wheel bubbles
+      // here — and scrolling a menu used to drag the whole tab row sideways
+      if (e.target instanceof Element && e.target.closest(".ctxmenu")) return;
       const max = el.scrollWidth - el.clientWidth;
       if (max <= 1) return;
       const lh = parseFloat(getComputedStyle(el).lineHeight) || 20;
@@ -338,39 +343,115 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
   );
 }
 
-// Picks which Assist panel shows (Observations / Merge / Suggest). Lives on the
-// Assist tab rather than inside the view, so switching panels is one click from
-// anywhere and the choice persists (ui.assistPanel). Selecting also opens the tab.
-const ASSIST_PANELS = [
-  { id: "observations", label: "Observations", hint: "AI observations to triage into codes" },
-  { id: "merge", label: "Merge codes", hint: "near-duplicate codes to fold together" },
-  { id: "describe", label: "Definitions", hint: "AI-drafted code definitions from your excerpts" },
-  { id: "suggest", label: "Suggest codes", hint: "candidate codings from your codebook" },
-  { id: "summary", label: "Transcript summary", hint: "AI-drafted session summaries to edit and own" },
-  { id: "ask", label: "Ask", hint: "questions answered from your codes, excerpts and events" },
-  { id: "tail", label: "The thin tail", hint: "codes resting on one excerpt, read one at a time" },
-  { id: "decisions", label: "Decisions", hint: "what you decided about the codebook, and why" },
+// The Assist tab's panels, grouped by WHAT THEY WORK ON rather than by which
+// of them happen to use a model. Eight items is past the size where a flat
+// list reads as a list — you scan it instead of choosing from it — and the
+// three groups are the three things a researcher is actually doing: coding a
+// transcript, working on the codebook, or looking back at what they did.
+const ASSIST_GROUPS = [
+  {
+    name: "While you code",
+    items: [
+      { id: "observations", label: "Observations", hint: "AI observations to triage into codes" },
+      { id: "suggest", label: "Suggest codes", hint: "candidate codings from your codebook" },
+      { id: "summary", label: "Transcript summary", hint: "AI-drafted session summaries to edit and own" },
+    ],
+  },
+  {
+    name: "On the codebook",
+    items: [
+      { id: "tail", label: "The thin tail", hint: "codes resting on one excerpt, read one at a time" },
+      { id: "merge", label: "Merge codes", hint: "near-duplicate codes to fold together" },
+      { id: "describe", label: "Definitions", hint: "AI-drafted code definitions from your excerpts" },
+    ],
+  },
+  {
+    name: "Looking back",
+    items: [
+      { id: "ask", label: "Ask", hint: "questions answered from your codes, excerpts and events" },
+      { id: "decisions", label: "Decisions", hint: "what you decided about the codebook, and why" },
+    ],
+  },
 ] as const;
+type AssistPanelId = (typeof ASSIST_GROUPS)[number]["items"][number]["id"];
+
+// What each panel HAS in it right now, said before you go there — the same
+// slot the Code map's view menu uses. Only the counts that are cheap to derive
+// and honest: a panel whose state lives in the view itself (Merge's proposals)
+// says nothing rather than guessing.
+function useAssistCounts(): Partial<Record<AssistPanelId, string>> {
+  const segments = useStore((s) => s.segments);
+  const transcripts = useStore((s) => s.transcripts);
+  const codebook = useStore((s) => s.codebook);
+  const aiFlags = useStore((s) => s.aiFlags);
+  const ledger = useStore((s) => s.ledger);
+  const answers = useStore((s) => s.answers);
+  const summaries = useStore((s) => s.summaries);
+  const tailLimit = useStore((s) => s.ui.tailLimit) as TailLimit;
+  return useMemo(() => {
+    const out: Partial<Record<AssistPanelId, string>> = {};
+    const notices = Object.values(aiFlags)
+      .reduce((n, f) => n + f.spans.filter((x) => (x.lens ?? "transcription") !== "transcription").length, 0);
+    if (notices) out.observations = `${notices} to review`;
+    const cand = segments.filter((x) => x.status === "candidate").length;
+    if (cand) out.suggest = `${cand} candidate${cand === 1 ? "" : "s"}`;
+    const written = Object.keys(summaries).filter((p) => (summaries[p] ?? "").trim() && transcripts[p]).length;
+    const pids = Object.keys(transcripts).length;
+    if (pids) out.summary = `${written} of ${pids} written`;
+    const undef = liveCodes(codebook).filter((c) => !(codebook[c]?.def ?? "").trim()).length;
+    if (undef) out.describe = `${undef} without one`;
+    const stats = codeStats(segments, transcripts);
+    const left = tailQueue(codebook, stats, ledger, tailLimit).length;
+    if (left) out.tail = `${left} left to read`;
+    if (answers.length) out.ask = `${answers.length} answered`;
+    if (ledger.length) out.decisions = `${ledger.length} recorded`;
+    return out;
+  }, [segments, transcripts, codebook, aiFlags, ledger, answers, summaries, tailLimit]);
+}
 
 function AssistMenu({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const current = useStore((s) => s.ui.assistPanel);
+  const counts = useAssistCounts();
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose);
-  const pick = (id: (typeof ASSIST_PANELS)[number]["id"]) => {
+  // it grows with the text setting and with every panel added, so measure and
+  // pull it back rather than trusting the anchor
+  useClampToViewport(ref, [fs]);
+  const pick = (id: AssistPanelId) => {
     useStore.getState().setUi({ assistPanel: id });
     useStore.getState().setActive("assist");
     onClose();
   };
+  // Up/Down walk every item in reading order, whatever the columns do
+  const onArrows = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const items = Array.from(ref.current?.querySelectorAll("button") ?? []);
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length].focus();
+  };
   return (
     <div className="ctxmenu assistmenu" ref={ref} role="menu" aria-label="Assist panel"
-      style={{ left: Math.min(x, window.innerWidth - 240), top: y, fontSize: fs }}>
-      {ASSIST_PANELS.map((p) => (
-        <button key={p.id} role="menuitemradio" aria-checked={current === p.id}
-          className={current === p.id ? "on" : ""} onClick={() => pick(p.id)}>
-          <span className="assistmenu-check"><Icon name="check" size={fs} /></span>
-          <span className="assistmenu-label">{p.label}<em>{p.hint}</em></span>
-        </button>
+      onKeyDown={onArrows}
+      style={{ left: Math.max(8, Math.min(x, window.innerWidth - 260)), top: y, fontSize: fs }}>
+      {ASSIST_GROUPS.map((g) => (
+        // the caption is a picture of the split; role="group" is what carries
+        // the same split into the accessibility tree (as the map's view menu)
+        <div key={g.name} className="amGroup" role="group" aria-label={g.name}>
+          <div className="amGroupHead" aria-hidden="true">{g.name}</div>
+          {g.items.map((p) => (
+            <button key={p.id} role="menuitemradio" aria-checked={current === p.id}
+              className={current === p.id ? "on" : ""} onClick={() => pick(p.id)}>
+              <span className="assistmenu-check"><Icon name="check" size={fs} /></span>
+              <span className="assistmenu-label">
+                <span className="amTop">{p.label}{counts[p.id] && <span className="amCount">{counts[p.id]}</span>}</span>
+                <em>{p.hint}</em>
+              </span>
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   );

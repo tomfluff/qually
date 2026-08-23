@@ -77,9 +77,33 @@
 .assistcaret:hover { opacity:1; }
 
 /* Assist panel picker: a radio menu of the three panels */
-.assistmenu button { display:flex; align-items:center; gap:8px; width:100%; text-align:left; }
-.assistmenu .assistmenu-check { width:1.1em; display:inline-flex; justify-content:center; opacity:0; flex:none; }
+/* Eight panels in three groups. The columns are a grid that fits as many
+   groups across as the room allows and stacks the rest — the menu has to hold
+   at 13px on a wide screen and at 36px on a narrow one, and a fixed column
+   count can only be right for one of those. Written in em so the breakpoint
+   rides the app's text ramp instead of a pixel guess. */
+.assistmenu { max-width:min(52em, 94vw); display:grid; align-items:start;
+  grid-template-columns:repeat(auto-fit, minmax(12em, 1fr)); gap:2px 12px;
+  /* it has to keep reading as something that hangs off the Assist tab. The
+     base .ctxmenu cap is the whole viewport, which at a large text size turned
+     this into a full-height panel — two thirds of the screen at most, and the
+     narrower columns above mean it rarely gets near that. */
+  max-height:min(68vh, 30em); }
+.amGroup { display:flex; flex-direction:column; gap:1px; min-width:0; }
+.amGroupHead { font-size:.74em; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--muted); padding:8px 8px 3px; }
+/* every head sits on the same line as its neighbours: the grid aligns the
+   columns' tops, so a different first-child padding would break the row */
+.assistmenu button { display:flex; align-items:flex-start; gap:8px; width:100%; text-align:left; }
+.assistmenu .assistmenu-check { width:1.1em; display:inline-flex; justify-content:center;
+  opacity:0; flex:none; padding-top:.15em; }
 .assistmenu button.on .assistmenu-check { opacity:1; color:var(--accent); }
-.assistmenu-label { display:flex; flex-direction:column; line-height:1.25; }
+.assistmenu-label { display:flex; flex-direction:column; line-height:1.25; min-width:0; }
 .assistmenu-label em { font-style:normal; color:var(--muted); font-size:.82em; }
+/* the count sits with the name, not under it: it is part of what the panel IS
+   right now, and the hint below already carries the sentence */
+.amTop { display:flex; align-items:baseline; gap:.5em; flex-wrap:wrap; }
+.amCount { color:var(--accent); font-size:.8em; font-variant-numeric:tabular-nums;
+  white-space:nowrap; }
+.assistmenu button.on .amCount { color:var(--accent); }
 

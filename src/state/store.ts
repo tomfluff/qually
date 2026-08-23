@@ -500,6 +500,8 @@ export interface State {
   setParked: (code: string, parked: boolean, why?: string) => void;
   /** the tail queue's two verdicts that change nothing: this code stands / this code needs more coding */
   noteVerdict: (kind: "keep" | "promote", code: string, why?: string) => void;
+  /** take one of those back — they changed nothing, so the history stack has nothing to give */
+  retractVerdict: (at: number) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
   // returns the codes it actually wrote — a draft that echoes what is already
   // stored changes nothing, and the receipt must not claim it did
@@ -608,8 +610,19 @@ export function bestSurvivor(s: State, codes: string[], preferred?: string): str
 // alive at one time, and they are never exported as a promise to anything else.
 // Seeded past whatever a loaded project already carries.
 let nextCid = 1;
-export function stampCids(clusters: CodeCluster[]): CodeCluster[] {
+export function stampCids(clusters: CodeCluster[], opts: { fromFile?: boolean } = {}): CodeCluster[] {
   for (const c of clusters) if (c.cid !== undefined && c.cid >= nextCid) nextCid = c.cid + 1;
+  // A whole set arriving FROM A FILE with no ids at all is a pre-cid layout,
+  // and its hand-placed capsule positions are keyed by INDEX ("halo:0"…).
+  // Those clusters take their index as their id, so every capsule keeps the
+  // spot it was given — fresh monotonic ids here would shear the arrangement
+  // one last time on the way in, which is the very bug ids exist to end.
+  // Only for file loads: a mid-session set with no ids is new proposals, and
+  // those must never take an index that a stale stored position still names.
+  if (opts.fromFile && clusters.length && clusters.every((c) => c.cid === undefined)) {
+    if (clusters.length > nextCid) nextCid = clusters.length;
+    return clusters.map((c, i) => ({ ...c, cid: i }));
+  }
   return clusters.map((c) => (c.cid === undefined ? { ...c, cid: nextCid++ } : c));
 }
 
@@ -1644,7 +1657,7 @@ export const useStore = create<State>()(
               survivor: a.into!, codes: [a.code, a.into!],
               ...(a.newName ? { newName: a.newName } : {}), rationale: a.rationale,
             })),
-          ]),
+          ], { fromFile: true }),
           answers: p.answers ?? [],
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
@@ -2203,6 +2216,15 @@ export const useStore = create<State>()(
             : "Under-applied — worth coding more of this") });
         announce(kind === "keep" ? `${code} kept` : `${code} marked as worth coding more`);
       },
+      // The counterpart to noteVerdict. These rows are invisible to undo by
+      // design, so taking one back is its own act: the row stays, marked, and
+      // the code goes back into whatever queue was skipping it.
+      retractVerdict: (at) => {
+        const d = get().ledger[at];
+        if (!d || d.undone || !INERT_DECISIONS.has(d.kind)) return;
+        set({ ledger: get().ledger.map((x, i) => (i === at ? { ...x, undone: true } : x)) });
+        announce(`Took back: ${d.codes[0] ?? "that decision"}`);
+      },
       togglePin: (code) => {
         const p = get().hotbar.pinned;
         const pinned = p.includes(code) ? p.filter((c) => c !== code) : [...p, code];
@@ -2362,7 +2384,7 @@ export const useStore = create<State>()(
         s.pinnedTabs ??= [];
         s.aiGrounds ??= {};
         s.ledger ??= [];
-        s.codeClusters = stampCids(s.codeClusters ?? []);
+        s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
         s.ui.assistPanel ??= "observations";
         s.ui.tailLimit ??= 1;
         s.ui.eventSort ??= "type";

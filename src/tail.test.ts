@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 // The thin tail queue: what it puts in front of you, and what it stops asking.
 import { describe, it, expect } from "vitest";
-import { tailQueue, triaged } from "./components/TailQueue";
+import { tailQueue, tailSequence, triaged, lastVerdicts } from "./components/TailQueue";
 import type { Decision } from "./state/store";
 
 const cb = (...names: string[]) =>
@@ -35,22 +35,64 @@ describe("what the tail queue holds", () => {
   });
 
   it("stops asking once you have decided", () => {
-    for (const kind of ["keep", "promote", "park", "merge", "delete", "remove"] as const) {
+    for (const kind of ["keep", "promote", "park", "remove"] as const) {
       expect(tailQueue(book, counts, [d(kind, ["stray"])], 1)).toEqual([]);
     }
+    // a merge is a verdict on its survivor too — the row names it first
+    expect(tailQueue(book, counts, [d("merge", ["stray", "gone"])], 1)).toEqual([]);
+  });
+
+  it("asks about a name recoded after a delete — a name is not an identity", () => {
+    // the ledger row is about a code that no longer exists; a live code with
+    // the same name is a NEW code that has not been read. A WITHDRAWN code is
+    // different: it is still in the book, and it was just decided about.
+    expect(tailQueue(book, counts, [d("delete", ["stray"])], 1)).toEqual(["stray"]);
+    expect(tailQueue(book, counts, [d("remove", ["stray"])], 1)).toEqual([]);
+    // same for a name that was folded away and later typed again
+    expect(tailQueue(book, counts, [d("merge", ["solid", "stray"])], 1)).toEqual(["stray"]);
   });
 
   it("asks again if the decision was undone", () => {
     expect(tailQueue(book, counts, [d("keep", ["stray"], { undone: true })], 1)).toEqual(["stray"]);
   });
 
-  it("counts a code merged away elsewhere as dealt with", () => {
-    // a merge row names survivor first, then what was folded in — both are done
-    expect(triaged([d("merge", ["solid", "stray"])])).toEqual(new Set(["solid", "stray"]));
+  it("counts a merge as a verdict on the survivor only", () => {
+    // survivor first is the row's contract; the folded-away name is out of
+    // the book already, and marking it would block a future code that
+    // happens to reuse the name
+    expect(triaged([d("merge", ["solid", "stray"])])).toEqual(new Set(["solid"]));
   });
 
   it("does not treat a turned-down proposal as a verdict on its codes", () => {
     // dismissing a merge says nothing about whether those codes are thin
     expect(tailQueue(book, counts, [d("dismiss", ["stray", "thin"])], 1)).toEqual(["stray"]);
+  });
+});
+
+describe("walking back through verdicts", () => {
+  const book = cb("stray", "thin");
+  const counts = stats({ stray: 1, thin: 1 });
+
+  it("bringing a code back opens its card again", () => {
+    const after = [d("park", ["stray"]), d("unpark", ["stray"])];
+    expect(triaged(after).has("stray")).toBe(false);
+    expect(tailQueue(book, counts, after, 1)).toEqual(["stray", "thin"]);
+  });
+
+  it("reports the verdict a card currently carries, and only the last one", () => {
+    const v = lastVerdicts([d("keep", ["stray"]), d("promote", ["stray"])]);
+    expect(v.get("stray")?.kind).toBe("promote");
+    expect(v.get("stray")?.at).toBe(1);
+  });
+
+  it("forgets a verdict that was taken back", () => {
+    expect(lastVerdicts([d("keep", ["stray"], { undone: true })]).has("stray")).toBe(false);
+  });
+
+  it("keeps every thin code in the sequence, decided or not, so you can walk back", () => {
+    expect(tailSequence(book, counts, 1)).toEqual(["stray", "thin"]);
+    // …including one set aside: changing your mind about it has to be reachable
+    expect(tailSequence({ ...book, stray: { def: "", parked: true } }, counts, 1))
+      .toEqual(["stray", "thin"]);
   });
 });

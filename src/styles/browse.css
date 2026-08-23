@@ -499,3 +499,17 @@ button.dvCode:not(.first) { color:var(--muted); }
 .tqTargets .cnt { color:var(--muted); font-variant-numeric:tabular-nums; }
 .tqKeys { display:flex; align-items:center; gap:.5em; margin:22px 0 0; color:var(--muted);
   font-size:.86em; max-width:60ch; }
+/* what the last key did, and the way back from it */
+.tqLast { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px;
+  padding:7px 11px; margin-bottom:16px; color:var(--fg-dim); font-size:.94em; }
+.tqLast .nBtn { margin-left:auto; flex:none; }
+.tqLast kbd { font:inherit; font-size:.85em; color:var(--muted); border:1px solid var(--line);
+  border-bottom-width:2px; border-radius:4px; padding:0 .3em; margin-left:.4em; }
+
+/* walking the pile: where you are, and the way both ways */
+.tqNav { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+.tqNav .tqPos { color:var(--muted); font-size:.88em; font-variant-numeric:tabular-nums; }
+.tqNav .nBtn:last-child { margin-left:auto; }
+.tqKeys kbd { font:inherit; font-size:.9em; border:1px solid var(--line); border-bottom-width:2px;
+  border-radius:4px; padding:0 .3em; }

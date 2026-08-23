@@ -403,3 +403,19 @@ test("clusters carry stable ids, never reused", () => {
   expect(new Set(ids).size).toBe(2);
   expect(ids).not.toContain(first.cid); // a dead id is never handed out again
 });
+
+// A pre-cid file keyed its hand-placed capsule spots by INDEX ("halo:0"…), so
+// migration must hand those clusters their index as their id — anything else
+// shears the saved arrangement once on the way in.
+test("a pre-cid file's clusters take their index as their id", async () => {
+  const { stampCids } = await import("./state/store");
+  const legacy = [
+    { survivor: "a", codes: ["a", "b"], rationale: "" },
+    { survivor: "c", codes: ["c", "d"], rationale: "" },
+  ];
+  expect(stampCids(legacy, { fromFile: true }).map((c) => c.cid)).toEqual([0, 1]);
+  // mid-session sets with no ids are NEW proposals: monotonic, never an index
+  // that a stale stored position might still name
+  const fresh = stampCids([{ survivor: "a", codes: ["a", "b"], rationale: "" }]);
+  expect(fresh[0].cid).toBeGreaterThanOrEqual(2);
+});
