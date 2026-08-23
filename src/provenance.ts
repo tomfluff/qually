@@ -104,6 +104,13 @@ export function methodsParagraph(ledger: Decision[], codes: string[], coder = "T
   } else if (live.length) {
     bits.push("No language model proposed any of them.");
   }
+  // the number the question "did the model shape your analysis" actually wants
+  const blind = live.filter((d) => d.blind);
+  if (blind.length) {
+    const agreed = blind.filter((d) => d.blind === "agreed").length;
+    bits.push(`On ${blind.length} proposal${blind.length === 1 ? "" : "s"} the researcher recorded a verdict `
+      + `before seeing the model's, agreeing with it on ${agreed} and differing on ${blind.length - agreed}.`);
+  }
   if (undone) bits.push(`A further ${undone} decision${undone === 1 ? " was" : "s were"} made and then reversed.`);
   if (live.length) bits.push("Each decision, its stated reason and the excerpts it rested on are listed in the accompanying decisions file.");
   return bits.join(" ");

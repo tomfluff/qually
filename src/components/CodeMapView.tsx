@@ -203,6 +203,10 @@ const remembered = {
   // where the researcher parked the Revision plan panel (screen offset)
   planPos: { x: 0, y: 0 },
   planMin: false,
+  // the verdict recorded BEFORE the model's reasoning was shown, by cluster
+  // id. Session-only on purpose: the blind order is a way of reading a
+  // proposal, and a call you made last week is not one you remember making.
+  blindCalls: new Map<number, "merge" | "apart">(),
   // hand-moved PILES in the derived grouping views (session only: the piles
   // themselves drift as coding continues, so remembering them across sessions
   // would pin stale geography). Chips inside never move — only the groups do.
@@ -220,6 +224,7 @@ onProjectSwap(function forgetMapSession() {
   remembered.planPos = { x: 0, y: 0 };
   remembered.planMin = false;
   remembered.bucketPos = {};
+  remembered.blindCalls = new Map();
 });
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -479,19 +484,66 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
 // (double-click it to rename the merged concept).
 const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   const cluster = useStore((st) => st.codeClusters[data.ci]);
+  const blindOn = useStore((st) => st.ui.blindVerdict);
+  // re-render when the call is made; the map's own state is not the place for
+  // something this transient (see remembered.blindCalls)
+  const [, bump] = useState(0);
   if (!cluster) return null;
   const c = cluster;
   const st = () => useStore.getState();
-  const skip = () => { st().dismissCluster(data.ci); earcon.skip(); };
   const canAccept = c.codes.length >= 2;
+  // Only the model's proposals are held back. A capsule you built by hand, or
+  // one the wording pass matched, has no reasoning you could be anchored by —
+  // its rationale is a list of the words it matched on.
+  const called = c.cid !== undefined ? remembered.blindCalls.get(c.cid) : undefined;
+  const blind = blindOn && c.source === "ai" && !called;
+  const agreement = called ? (called === "merge" ? "agreed" : "differed") : undefined;
+  const call = (v: "merge" | "apart") => {
+    if (c.cid !== undefined) remembered.blindCalls.set(c.cid, v);
+    earcon.accept();
+    announce(v === "merge"
+      ? "You would merge these. Here is what the model said."
+      : "You would keep these apart. Here is what the model said.");
+    bump((n) => n + 1);
+  };
+  // agreement is about the two VERDICTS, not about what you finally do: the
+  // model proposed a merge, so calling "merge" is agreeing with it whatever
+  // you decide afterwards
+  const skip = () => { st().dismissCluster(data.ci, agreement); earcon.skip(); };
   // the glimpse described a membership; if the group changed since, say so
   // rather than silently presenting an outdated description
   const stale = !!c.desc && !!c.descCodes &&
     [...c.codes].sort().join("\n") !== [...c.descCodes].sort().join("\n");
   const againstStale = !!c.against && !!c.againstCodes &&
     [...c.codes].sort().join("\n") !== [...c.againstCodes].sort().join("\n");
+  if (blind) {
+    return (
+      <div className="mapCardNode nodrag nowheel">
+        {/* The model has proposed this merge and given its reasons. You get
+            the reasons after you have said what you think — shown an answer
+            first you check it, asked first you read the codes. The two
+            verdicts are only comparable if they were formed apart. */}
+        <div className="mapCardBlind">
+          <b>Your call first</b>
+          <div>The AI proposed merging these {c.codes.length}. What do you say?</div>
+        </div>
+        <div className="mapCardActions">
+          <button className="btn primary" onClick={() => call("merge")}>One code</button>
+          <button className="btn" onClick={() => call("apart")}>Keep apart</button>
+          <button className="btn" onClick={skip} title="Discard this proposal without calling it">Skip</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="mapCardNode nodrag nowheel">
+      {called && (
+        <div className={"mapCardAgree " + agreement}>
+          {agreement === "agreed"
+            ? "You said one code, and so did the AI."
+            : "You said keep apart; the AI proposed merging them."}
+        </div>
+      )}
       <div className="mapCardRat">{c.rationale}</div>
       {(c.against || c.againstWeak) && (
         // the case against sits with the case for, not in a dialog you dismiss
@@ -514,7 +566,7 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
       )}
       <div className="mapCardActions">
         <button className="btn primary" disabled={!canAccept}
-          onClick={() => { st().applyCluster(data.ci); earcon.accept(); }}
+          onClick={() => { st().applyCluster(data.ci, agreement); earcon.accept(); }}
           title={canAccept ? `Merge ${c.codes.length} codes into ${c.newName ?? c.survivor} — one undo step` : "A merge needs at least 2 members"}>
           Accept merge
         </button>
@@ -732,6 +784,7 @@ function MapInner() {
   const dark = useStore((s) => s.ui.dark);
   const mapMinimap = useStore((s) => s.ui.mapMinimap);
   const mapRing = useStore((s) => s.ui.mapRing);
+  const blindVerdict = useStore((s) => s.ui.blindVerdict);
   const codeGroups = useStore((s) => s.codeGroups);
   const setCodeGroups = useStore((s) => s.setCodeGroups);
   const setUi = useStore((s) => s.setUi);
@@ -2567,6 +2620,16 @@ function MapInner() {
         <div ref={mapSetRef} className="ctxmenu mapMenu mapSetMenu" role="dialog" aria-label="Map settings"
           style={{ right: mapSetMenu.right, top: mapSetMenu.y, fontSize: sidebarFontSize }}>
           <div className="set-h">Map</div>
+          <div className="srow">
+            <label htmlFor="blindv">Your call first</label>
+            <input id="blindv" type="checkbox" checked={blindVerdict}
+              onChange={(e) => setUi({ blindVerdict: e.target.checked })} />
+          </div>
+          <p className="settings-note">
+            Hold an AI proposal's reasoning back until you have said what you think of it.
+            Agreement is only worth counting when the two verdicts were formed apart —
+            and Decisions counts it.
+          </p>
           <div className="srow">
             <span id="mapring-h">Selection ring</span>
             <div className="segmented" role="radiogroup" aria-labelledby="mapring-h">

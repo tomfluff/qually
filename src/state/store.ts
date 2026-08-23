@@ -153,6 +153,11 @@ export interface Ui {
   // what the thin-tail queue counts as thin (1, 2 or 3 excerpts) — the
   // researcher's call, and the map's launcher can set it on the way in
   tailLimit: number;
+  // Consolidate: hold a model's reasoning back until you have made your own
+  // call on its proposal. On by default — being shown an answer first turns
+  // reading into checking, and the agreement rate is only meaningful if the
+  // two verdicts were formed independently.
+  blindVerdict: boolean;
   // the Summary tab's split between the detailed timeline and the summary text:
   // side by side, stacked, or one pane at a time. The split position is a fraction
   // of the container (not px) so it survives both orientations and window resizes.
@@ -261,6 +266,10 @@ export interface Decision {
   // the only place the number survives, since the codes it counted are gone.
   moved?: number;          // excerpts that changed code, were rejected, or were deleted
   now?: number;            // excerpts the surviving code carries afterwards
+  // Set when the researcher recorded a verdict BEFORE seeing the model's (the
+  // Consolidate view's blind order). It is the number a methods section can
+  // actually use: "the researcher and the model agreed on 34 of 41 proposals".
+  blind?: "agreed" | "differed";
 }
 
 export interface State {
@@ -433,7 +442,7 @@ export interface State {
   setCodePlan: (plan: CodePlanAction[]) => void;
   setCodeClusters: (clusters: CodeCluster[]) => void;
   /** turn a merge proposal down — the record wants the noes as much as the yeses */
-  dismissCluster: (ci: number) => void;
+  dismissCluster: (ci: number, blind?: "agreed" | "differed") => void;
   // one undoable entry per completed map gesture
   recordMapPosition: (id: string, pos: { x: number; y: number }, island: boolean, stage: MapStage) => void;
   // a whole-map nudge (Adjust to zoom): every moved thing, ONE entry
@@ -468,7 +477,7 @@ export interface State {
   // wipe every hand-placed position: the packer lays the stage out fresh (one entry)
   resetMapLayout: (stage: MapStage) => boolean;
   // the whole cluster is applied as ONE undoable step
-  applyCluster: (ci: number) => void;
+  applyCluster: (ci: number, blind?: "agreed" | "differed") => void;
   setLastPid: (pid: string) => void;
   addAnswer: (a: Omit<Answer, "aid" | "at">) => void;
   deleteAnswer: (aid: number) => void;
@@ -791,7 +800,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, blindVerdict: true, eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
@@ -1916,7 +1925,7 @@ export const useStore = create<State>()(
           ? { mapIslandPos: { ...s.mapIslandPos, [stage]: { ...s.mapIslandPos[stage], [id]: pos } } }
           : { mapPositions: { ...s.mapPositions, [stage]: { ...s.mapPositions[stage], [id]: pos } } });
       },
-      applyCluster: (ci) => {
+      applyCluster: (ci, blind) => {
         const s0 = get();
         const c = s0.codeClusters[ci];
         if (!c || c.codes.length < 2) return;
@@ -1958,12 +1967,13 @@ export const useStore = create<State>()(
           ...(c.model ? { model: c.model } : {}),
           why: c.rationale || `Merged ${c.codes.length} codes into “${kept}”`,
           moved, now: countCode(get(), kept),
+          ...(blind ? { blind } : {}),
         });
         announce(`Merged ${c.codes.length} codes into ${c.newName ?? c.survivor}`);
       },
       // A rejected proposal is evidence: "the model suggested 41 merges and the
       // researcher took 34" is only sayable if the sevens are written down too.
-      dismissCluster: (ci) => {
+      dismissCluster: (ci, blind) => {
         const c = get().codeClusters[ci];
         if (!c) return;
         get().pushUndo();
@@ -1978,6 +1988,7 @@ export const useStore = create<State>()(
           source: c.source ?? "you",
           ...(c.model ? { model: c.model } : {}),
           why: c.rationale || "No reason recorded",
+          ...(blind ? { blind } : {}),
         });
       },
       setCodeClusters: (clusters) => { get().pushUndo(); set({ codeClusters: stampCids(clusters)
@@ -2415,6 +2426,7 @@ export const useStore = create<State>()(
         s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
         s.ui.assistPanel ??= "observations";
         s.ui.tailLimit ??= 1;
+        s.ui.blindVerdict ??= true;
         s.ui.eventSort ??= "type";
         // normalize, not just default: a corrupt persisted value would make the
         // sidebar chip index SORTS with -1 and crash the whole sidebar

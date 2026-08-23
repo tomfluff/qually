@@ -88,3 +88,20 @@ describe("methods paragraph", () => {
     expect(methodsParagraph([], ["a"])).toBe("The first author consolidated the codebook to 1 code.");
   });
 });
+
+describe("the agreement rate", () => {
+  it("reports verdicts formed before the model's was shown", () => {
+    const p = methodsParagraph([
+      d("merge", ["a", "b"], "ai", { blind: "agreed" }),
+      d("merge", ["c", "e"], "ai", { blind: "agreed" }),
+      d("dismiss", ["f", "g"], "ai", { blind: "differed" }),
+    ], ["a", "c"]);
+    expect(p).toContain("On 3 proposals the researcher recorded a verdict before seeing the model's");
+    expect(p).toContain("agreeing with it on 2 and differing on 1");
+  });
+
+  it("says nothing about agreement when nothing was called blind", () => {
+    expect(methodsParagraph([d("merge", ["a", "b"], "ai")], ["a"]))
+      .not.toContain("before seeing");
+  });
+});
