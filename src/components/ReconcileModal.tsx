@@ -225,22 +225,21 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
                     mattered: whether a model may suggest throwing work away. */}
                 <div className="ai-sec">May propose <span className="ai-sec-hint">every proposal still waits for your verdict</span></div>
                 <div className="ai-lenses">
+                  {/* the titles carry it; the long explanations moved to the
+                      tooltip, where they are there for the one reading that
+                      needs them and out of the way of the nine that do not */}
                   {([
-                    ["merge", "Merges", "sets of codes that are one concept, with a survivor"],
-                    ["rename", "Renames", "a name that misdescribes what its excerpts show"],
-                    ["remove", "Withdrawals", "codes it judges to carry nothing of their own — accepting rejects that code's excerpts, and the data stays in the file"],
+                    ["merge", "Code merges", "Sets of codes that are one concept, with a survivor"],
+                    ["rename", "Code renaming", "A name that misdescribes what its excerpts show"],
+                    ["remove", "Code omissions (soft)", "Codes it judges to carry nothing of their own. Accepting one rejects that code's excerpts — the data stays in the file"],
                   ] as const).map(([id, label, hint]) => (
-                    <label key={id} className="ai-lens">
+                    <label key={id} className="ai-lens" title={hint}>
                       <input type="checkbox" checked={asks[id]}
                         onChange={() => setAsks((a) => ({ ...a, [id]: !a[id] }))} />
-                      <span>{label} <em>{hint}</em></span>
+                      <span>{label}</span>
                     </label>
                   ))}
                 </div>
-                {/* The scope follows what you had selected when you opened this.
-                    Nothing selected is the plain case and gets no control at
-                    all; a selection gets the choice, defaulting to itself —
-                    you selected those codes for a reason. */}
                 {picked.length > 0 && (
                   <div className="srow" role="radiogroup" aria-label="Scope">
                     <span>Scope</span>
