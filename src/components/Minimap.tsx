@@ -6,7 +6,7 @@ import { laneAssign, speakerColor, weightOf } from "../state/store";
 import type { Ui } from "../state/store";
 import { lensOf, spanLens, type Flag } from "../ai/flag";
 import { markerColor, markerKey } from "../markers";
-import { stretchColor, type Stretch } from "../stretches";
+import { stretchColorOf, type Stretch } from "../stretches";
 import type { Item } from "./TranscriptView";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
@@ -182,7 +182,7 @@ export const Minimap = forwardRef<MinimapHandle, {
           if (gi0 === undefined || gi1 === undefined) continue;
           // same line-id → row math as the code-lane bars below
           const y0 = yOf(gi0), y1 = yOf(gi1 + 1);
-          ctx.fillStyle = stretchColor(st.value);
+          ctx.fillStyle = stretchColorOf(st.value, ui.stretchColors);
           ctx.globalAlpha = 0.9;
           ctx.fillRect(col * stPitch, y0, sw, Math.max(2, y1 - y0));
           ctx.globalAlpha = 1;
@@ -338,6 +338,7 @@ export const Minimap = forwardRef<MinimapHandle, {
       stretches, stretchDimList, // the strips redraw when spans are (un)marked
       ui.speakerColors, ui.speakerWeight, // recolour the rail when the speaker map changes
       ui.markerColors, // and the event lane when a type is recoloured
+      ui.stretchColors, // and the stretch strips when a value is recoloured
       ui.dark]); // repaint on theme flip so the muted amount-bars pick up the new --muted
 
   // ONE observer for the component's lifetime: re-creating it on every data-dep

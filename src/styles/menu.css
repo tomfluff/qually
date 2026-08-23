@@ -11,12 +11,16 @@
   max-height:calc(100vh - 16px); overflow-y:auto; }
 .ctxmenu .ctxhead { font-weight:700; color:var(--fg); padding:5px 8px 3px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.ctxmenu button { text-align:left; background:transparent; border:none; color:var(--fg);
+/* :not(.btn) throughout — a bare button here is a MENU ITEM; a .btn is a form
+   control inside the menu (Mark, Recolour's confirm) and keeps buttons.css:
+   the item rules out-specified .btn.primary, turning its hover grey and its
+   disabled hover fully transparent (a vanishing button) */
+.ctxmenu button:not(.btn) { text-align:left; background:transparent; border:none; color:var(--fg);
   padding:7px 8px; border-radius:6px; cursor:pointer; font-size:inherit;
   display:flex; align-items:center; gap:7px; }
-.ctxmenu button:hover { background:var(--sel); }
-.ctxmenu button:disabled, .ctxmenu button[aria-disabled="true"] { color:var(--muted); cursor:default; }
-.ctxmenu button:disabled:hover, .ctxmenu button[aria-disabled="true"]:hover { background:transparent; }
+.ctxmenu button:not(.btn):hover { background:var(--sel); }
+.ctxmenu button:not(.btn):disabled, .ctxmenu button:not(.btn)[aria-disabled="true"] { color:var(--muted); cursor:default; }
+.ctxmenu button:not(.btn):disabled:hover, .ctxmenu button:not(.btn)[aria-disabled="true"]:hover { background:transparent; }
 .ctxmenu button svg { flex-shrink:0; color:var(--muted); }
 /* :not(.btn) -- a menu ITEM is red ink on the menu's own ground, but a .btn
    inside a form here is a filled danger button and already carries its own

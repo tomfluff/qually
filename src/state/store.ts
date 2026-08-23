@@ -174,6 +174,9 @@ export interface Ui {
   // chosen colours per event type (right-click the type). Unset = the stable hash
   // colour from markers.ts, so this stays empty until someone actually picks one.
   markerColors: Record<string, string>;
+  // hand-picked stretch value colours, keyed by lowercased/trimmed value —
+  // overriding the hash-derived default (see stretchColorOf)
+  stretchColors: Record<string, string>;
   // grounding emphasis in Browse excerpts — independent, combinable (D6)
   groundBold: boolean; groundWash: boolean; groundUnderline: boolean;
   // how the OTHER speakers' rows step back — independent, combinable effects
@@ -445,6 +448,8 @@ export interface State {
   setCodeAreas: (areas: CodeGroup[], fp: string) => void;
   markStretch: (st: Stretch) => void;
   unmarkStretch: (i: number) => void;
+  editStretch: (i: number, dim: string, value: string) => void;
+  setStretchColor: (value: string, color: string) => void;
   setCodePlan: (plan: CodePlanAction[]) => void;
   setCodeClusters: (clusters: CodeCluster[]) => void;
   /** turn a merge proposal down — the record wants the noes as much as the yeses */
@@ -852,7 +857,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, stretchColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
@@ -872,7 +877,7 @@ export const useStore = create<State>()(
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
-          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {} },
+          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {}, stretchColors: {} },
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
@@ -1721,6 +1726,7 @@ export const useStore = create<State>()(
           ledger: s.ledger,   // what was decided, and why — the methods appendix
           markers: s.markers, // session events + field notes: study data, not a preference
           markerColors: s.ui.markerColors,
+          stretchColors: s.ui.stretchColors,
           summaries: s.summaries, // session summaries: the researcher's artifact, study data
           projectNotes: s.projectNotes, // the project memo document — ditto
           projectName: s.projectName,     // the study's name — ditto
@@ -1758,7 +1764,8 @@ export const useStore = create<State>()(
           // speakerFocus doesn't travel between studies — a stale name matching a
           // speaker in the loaded project would silently dim everyone else
           ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {},
-            markerColors: p.markerColors ?? {} },
+            markerColors: p.markerColors ?? {},
+            stretchColors: p.stretchColors ?? {} },
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: p.pinnedTabs ?? [], active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
@@ -1887,6 +1894,21 @@ export const useStore = create<State>()(
         get().pushUndo();
         set({ stretches: get().stretches.filter((_, k) => k !== i) });
       },
+      // re-label ONE stretch in place (the pill's right-click edit): same
+      // dup-guard as markStretch, one undo entry
+      editStretch: (i, dim, value) => {
+        const cur = get().stretches;
+        const st = cur[i];
+        const d = dim.trim(), v = value.trim();
+        if (!st || !d || !v || (st.dim === d && st.value === v)) return;
+        if (cur.some((x, k) => k !== i && x.pid === st.pid && x.start === st.start
+          && x.end === st.end && x.dim === d && x.value === v)) return;
+        get().pushUndo();
+        set({ stretches: cur.map((x, k) => (k === i ? { ...x, dim: d, value: v } : x)) });
+      },
+      setStretchColor: (value, color) =>
+        set({ ui: { ...get().ui, stretchColors: { ...get().ui.stretchColors, [value.toLowerCase().trim()]: color } },
+          redoStack: [] }),
       setCodePlan: (plan) => { get().pushUndo(); set({ codePlan: plan }); },
       resetMapLayout: (stage) => {
         const s = get();
@@ -2574,6 +2596,7 @@ export const useStore = create<State>()(
         s.ui.mapMinimap ??= "bottom-right";
         s.ui.mapViewport ??= null;
         s.ui.mapSounds ??= true;
+        s.ui.stretchColors ??= {};
         s.ui.soundVolume ??= 1;
         s.ui.mapRing ??= "md";
         s.ui.summarySplit = clampSummarySplit(s.ui.summarySplit ?? 0.5);

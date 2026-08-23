@@ -38,6 +38,11 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
+/** the value's colour, honouring a hand-picked override; keys are normalized
+    the same way the hash reads the value, so "Baseline " finds "baseline" */
+export const stretchColorOf = (value: string, overrides?: Record<string, string>): string =>
+  overrides?.[value.toLowerCase().trim()] ?? stretchColor(value);
+
 export const stretchOverlaps = (s: Stretch, start: number, end: number): boolean =>
   s.start <= end && s.end >= start;
 

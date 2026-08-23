@@ -60,6 +60,7 @@ export interface Project {
   // event-type colours, for the same reason the speaker map travels: which colour
   // "BREAK" is, is a fact about the study, not about my screen
   markerColors?: Record<string, string>;
+  stretchColors?: Record<string, string>;
   // per-transcript session summaries (Summary tab) — the researcher's own artifact
   summaries?: Record<string, string>;
   // the project memo document (Notes tab) — optional: absent before it existed
@@ -158,6 +159,7 @@ export function parseProject(text: string): Project {
         raw: m.raw && typeof m.raw === "object" && !Array.isArray(m.raw) ? m.raw : {},
       })),
     markerColors: p.markerColors ?? {},
+    stretchColors: p.stretchColors ?? {},
     summaries: Object.fromEntries(Object.entries(p.summaries ?? {})
       .filter(([, v]) => typeof v === "string")) as Project["summaries"],
     projectNotes: typeof p.projectNotes === "string" ? p.projectNotes : "",

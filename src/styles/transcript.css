@@ -325,7 +325,7 @@
 /* the sticky labels: vertical, riding their band's column, pinned to the top
    of the viewport while inside the stretch (see syncStretchLabels) */
 .stretchLabels { position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden; }
-.stretchLabels .stFloatLabel { position:absolute; writing-mode:vertical-rl;
+.stretchLabels .stFloatLabel { position:absolute; writing-mode:vertical-rl; user-select:none;
   font-weight:700; letter-spacing:.04em; text-transform:uppercase;
   white-space:nowrap; line-height:1; pointer-events:auto;
   /* the booklet tab: solid pill in the lane's colour, rounded on the left,
@@ -333,12 +333,15 @@
   border-radius:99px 0 0 99px; padding:9px 0; text-align:center;
   box-sizing:border-box; }
 
-/* the mark-stretch menu's little form */
-.stretchMenu { min-width:240px; }
+/* the mark-stretch menu's little form. overflow:visible overrides the menu's
+   scroll cap so the comboboxes' anchored lists can overlay it instead of
+   being clipped into a scrollbar; the form is small, the clamp keeps it on
+   screen. */
+.stretchMenu { min-width:280px; overflow:visible; }
 .stForm { display:flex; gap:6px; padding:6px 10px 8px; }
-.stForm input { flex:1; min-width:0; font:inherit; padding:3px 7px;
-  background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:7px; }
-.stForm .btn { flex:none; }
+.stForm .stComboWrap { flex:1; min-width:0; margin-bottom:0; }
+.stForm .stComboWrap .signinput { width:100%; }
+.stForm .btn { flex:none; align-self:flex-start; }
 .stUnmark { display:flex; align-items:center; gap:7px; }
 .stUnmark .stDot { width:9px; height:9px; border-radius:3px; flex:none; }
 .stUnmark .stRange { color:var(--muted); font-variant-numeric:tabular-nums; margin-left:auto; }
