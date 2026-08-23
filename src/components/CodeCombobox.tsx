@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useStore, liveCodes } from "../state/store";
+import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
 
 // subsequence fuzzy match: "vs" matches "visual strain"
@@ -68,7 +69,8 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose, o
   const choose = (en: { type: "code" | "create"; name: string }) => {
     const code = en.type === "create" ? ensureCode(en.name) : en.name;
     if (onPick) onPick(code);
-    else if (hasSel) applyCode(code);
+    else if (hasSel) applyCode(code); // applyCode sounds its own mark
+    else if (en.type === "create") earcon.code(); // a bare new code is still an act
     setDraft(""); setHl(0);
     onClose?.();
   };

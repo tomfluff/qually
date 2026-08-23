@@ -517,7 +517,7 @@ export interface State {
   renameCode: (code: string, newName: string, why?: string, source?: DecisionSource, model?: string,
     /** false when the caller batches this under its own pushUndo (tell-apart's merge-then-rename) */
     undoable?: boolean) => void;
-  normalizeCodeCase: (style: "lower" | "capital") => void;
+  normalizeCodeCase: (style: "lower" | "capital") => string;
   deleteCode: (code: string, why?: string) => void;
   mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string,
     blind?: "agreed" | "differed") => void;
@@ -1834,6 +1834,10 @@ export const useStore = create<State>()(
       setStatus: (sid, status) => {
         get().pushUndo();
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status } : x) });
+        // the audible twin of the status flip — Accept/Reject buttons in the
+        // popover and the Assist queue had no mark at all
+        if (status === "accepted") earcon.accept();
+        else if (status === "rejected") earcon.reject();
         announce(`Segment ${status}`);
       },
       rejectCode: (code, why, source, model) => {
@@ -2230,6 +2234,9 @@ export const useStore = create<State>()(
       // First letter ONLY — the rest of a name is the researcher's wording.
       // One history entry for the whole sweep; pure case changes can't collide
       // (norm-equal names never coexist in the codebook), but guard anyway.
+      // returns what it announces, so the Settings row can SHOW the outcome —
+      // the sweep's visible effect is behind the modal, and a button whose
+      // only answer is a screen-reader line reads as dead
       normalizeCodeCase: (style) => {
         const s = get();
         const tf = (n: string) =>
@@ -2239,7 +2246,10 @@ export const useStore = create<State>()(
           const next = tf(k);
           if (next !== k && !(next in s.codebook)) ren.set(k, next);
         }
-        if (!ren.size) { announce("Code names already match that style"); return; }
+        if (!ren.size) {
+          const msg = "Code names already match that style";
+          announce(msg); return msg;
+        }
         get().pushUndo();
         const r = (n: string) => ren.get(n) ?? n;
         const cb: State["codebook"] = {};
@@ -2260,7 +2270,9 @@ export const useStore = create<State>()(
             (rec) => Object.fromEntries(Object.entries(rec).map(([k, v]) => [r(k), v]))),
         });
         set({ hotbarCache: hotbarCodes(get()) });
-        announce(`${ren.size} code name${ren.size === 1 ? "" : "s"} now start ${style === "lower" ? "lowercase" : "with a capital"}`);
+        const msg = `${ren.size} code name${ren.size === 1 ? "" : "s"} now start ${style === "lower" ? "lowercase" : "with a capital"}`;
+        announce(msg);
+        return msg;
       },
       deleteCode: (code, why) => {
         const s = get();

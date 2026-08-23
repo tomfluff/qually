@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore, liveCodes } from "../state/store";
+import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
 import { openColorPicker } from "../colorPicker";
@@ -107,7 +108,7 @@ export function CodeMenu({ code, x, y, onClose }: {
             <Icon name={isParked ? "undo" : "archive"} size={15} />
             {isParked ? "Bring back into the codebook" : "Set aside"}
           </button>
-          <button className="danger" onClick={() => { deleteCode(code); onClose(); }}>
+          <button className="danger" onClick={() => { deleteCode(code); earcon.reject(); onClose(); }}>
             <Icon name="trash" size={15} />Delete{segCount > 0 ? ` (and ${segCount} segment${segCount > 1 ? "s" : ""})` : ""}
           </button>
         </>

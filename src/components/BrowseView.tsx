@@ -378,13 +378,16 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
   return (
     <div className="cbMenuWrap">
       <button className="btn cbMenuBtn cbViewBtn" ref={btnRef} aria-haspopup="menu" aria-expanded={open}
-        title="View settings" onClick={() => setOpen((v) => !v)}>
-        View <Icon name={open ? "chevron-up" : "chevron-down"} size={12} />
+        title="Codebook options" onClick={() => setOpen((v) => !v)}>
+        Options <Icon name={open ? "chevron-up" : "chevron-down"} size={12} />
         {nonDefault && <span className="cbDot" aria-hidden="true" />}
       </button>
       {open && (
-        <div className="ctxmenu cbMenu cbViewMenu" ref={menuRef} role="group" aria-label="View settings"
+        <div className="ctxmenu cbMenu cbViewMenu" ref={menuRef} role="group" aria-label="Codebook options"
           style={{ fontSize }}>
+          {/* labelled groups like the Assist menu: the button says Options
+              because the list is settings AND sweeps, not just display */}
+          <div className="cbMenuGrp">Display</div>
           {/* a checkbox, like every other boolean in this menu — a switch beside
               checkboxes read as two kinds of on/off in one list */}
           <label className="cbChk"><input type="checkbox" checked={showRejected}
@@ -416,6 +419,19 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
             onRecolor(r);
           }}>
             <Icon name="droplet" size={fontSize + 1} /> Recolour codes…
+          </button>
+          {/* one-shot sweeps like Recolour, and they live beside it — these
+              were a fake "setting" in the Settings modal, where a control
+              that is never "on" read as broken. announce() carries the
+              outcome; one undo step reverses either. */}
+          <div className="cbMenuGrp">Names</div>
+          <button className="cbAct" title="Make every code name start lowercase — one undo step"
+            onClick={() => { setOpen(false); useStore.getState().normalizeCodeCase("lower"); }}>
+            start all lowercase
+          </button>
+          <button className="cbAct" title="Make every code name start with a capital — one undo step"
+            onClick={() => { setOpen(false); useStore.getState().normalizeCodeCase("capital"); }}>
+            Start all with a capital
           </button>
         </div>
       )}

@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { VList, type VListHandle } from "virtua";
 import { stopScrollAnim } from "../scrollSpeed";
 import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, clampMinimapWidth } from "../state/store";
+import { earcon } from "../earcons";
 import { mergeGroups, type Group } from "../merge";
 import { SegmentPopover } from "./SegmentPopover";
 import { CodeMenu } from "./CodeMenu";
@@ -805,7 +806,10 @@ export function TranscriptView() {
       if (which === "start" && gs <= seg.end && (snapped || gs !== seg.start)) apply(gs, seg.end);
       if (which === "end" && ge >= seg.start && (snapped || ge !== seg.end)) apply(seg.start, ge);
     };
-    const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
+    const up = () => {
+      document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
+      if (snapped) earcon.settle(); // one mark per completed drag, not per crossed line
+    };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
   };

@@ -7,6 +7,7 @@
 // axis, and a transcript row carries the sparkle that opens that run's consent gate.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, liveCodes, type Segment } from "../state/store";
+import { earcon } from "../earcons";
 import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
 import { LENSES, hashLine, spanLens, lensOf } from "../ai/flag";
@@ -279,6 +280,7 @@ export function AssistView() {
     // p.model, not the CURRENT default: the proposal may have been made under
     // another model, and it outlives a settings change in this very cache
     useStore.getState().mergeCode(from, into, p.rationale, "ai", p.model ?? useStore.getState().ai.model);
+    earcon.join();
     setProposals((ps) => ps.filter((x) => x !== p));
   };
   const skip = (p: MergeProposal) => {
@@ -287,6 +289,7 @@ export function AssistView() {
       kind: "dismiss", codes: [p.into, p.from], source: "ai", model: p.model ?? useStore.getState().ai.model,
       why: p.rationale || "A proposed merge, turned down",
     });
+    earcon.skip();
     setProposals((ps) => ps.filter((x) => x !== p));
   };
   const toggleFlip = (p: MergeProposal) => setFlipped((f) => {
