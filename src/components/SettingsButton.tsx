@@ -288,24 +288,6 @@ export function SettingsButton() {
                   </div>
                 </div>
                 <div className="srow">
-                  <span>Stretch band</span>
-                  <div className="segmented">
-                    {(["xs", "sm", "md", "lg"] as const).map((sz) => (
-                      <button key={sz} className={"seg" + (stretchBand === sz ? " on" : "")} onClick={() => setUi({ stretchBand: sz })}>{sz}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="settings-note">The coloured bands marking what a span of lines belongs to (select lines, right-click, Mark).</div>
-                <div className="srow">
-                  <span>Stretch label size</span>
-                  <div className="segmented">
-                    {(["sm", "md", "lg"] as const).map((sz) => (
-                      <button key={sz} className={"seg" + (stretchLabel === sz ? " on" : "")} onClick={() => setUi({ stretchLabel: sz })}>{sz}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="settings-note">The vertical labels riding each band — grow them until they read comfortably.</div>
-                <div className="srow">
                   <span>Code patterns</span>
                   <div className="segmented">
                     <button className={"seg" + (!lanePattern ? " on" : "")} onClick={() => setUi({ lanePattern: false })}>Off</button>
@@ -322,6 +304,26 @@ export function SettingsButton() {
                   </div>
                 </div>
                 <div className="settings-note">The <b>!</b> on a segment whose excerpt keeps only its dominant speaker.</div>
+                {/* section marks are not lanes: lanes carry CODES, these say
+                    what a span of lines belongs to (condition, task, …) */}
+                <div className="set-h">Section marks</div>
+                <div className="srow">
+                  <span>Band thickness</span>
+                  <div className="segmented">
+                    {(["xs", "sm", "md", "lg"] as const).map((sz) => (
+                      <button key={sz} className={"seg" + (stretchBand === sz ? " on" : "")} onClick={() => setUi({ stretchBand: sz })}>{sz}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="srow">
+                  <span>Label size</span>
+                  <div className="segmented">
+                    {(["sm", "md", "lg"] as const).map((sz) => (
+                      <button key={sz} className={"seg" + (stretchLabel === sz ? " on" : "")} onClick={() => setUi({ stretchLabel: sz })}>{sz}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-note">Select lines and right-click to mark what they belong to — a condition, a task. The marks live left of the text and on the minimap.</div>
                 <div className="set-h">Shortcuts</div>
                 <div className="srow">
                   <span>Hotbar 1–9</span>

@@ -21,7 +21,10 @@
 .mapBar .btn { height:var(--ctl-h); display:inline-flex; align-items:center; gap:7px; }
 .mapBar .btn.iconbtn { justify-content:center; aspect-ratio:1; padding-inline:0; }
 .mapBar .btn.iconlabel { padding-inline:12px; white-space:nowrap; }
-.mapBar .mapCompareDims .seg { flex:0 0 auto; padding:3px 12px; white-space:nowrap; }
+/* the divide-by menu: checkbox rows, the tick column keeping labels aligned */
+.mapCmpDim { display:flex; align-items:center; gap:8px; }
+.mapCmpDim .mapCmpTick { width:1.1em; color:var(--accent); font-weight:700; }
+.mapCmpDim.on { font-weight:600; }
 /* stale areas: the warning is a colour on the button, explained by its tooltip */
 .mapBar .btn.stale { color:var(--warn, #b45309); }
 /* the gestures, behind the ? button */

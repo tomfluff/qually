@@ -242,8 +242,8 @@ const remembered = {
   // where the researcher parked the Revision plan panel (screen offset)
   planPos: { x: 0, y: 0 },
   planMin: false,
-  // which comparison dimension the compare view groups by (session)
-  compareDim: null as string | null,
+  // which comparison dimensions the compare view divides by (session; null = all)
+  compareDims: null as string[] | null,
   // hand-moved PILES in the derived grouping views (session only: the piles
   // themselves drift as coding continues, so remembering them across sessions
   // would pin stale geography). Chips inside never move — only the groups do.
@@ -261,7 +261,7 @@ onProjectSwap(function forgetMapSession() {
   remembered.planPos = { x: 0, y: 0 };
   remembered.planMin = false;
   remembered.bucketPos = {};
-  remembered.compareDim = null;
+  remembered.compareDims = null;
 });
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -824,14 +824,24 @@ function MapInner() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
   const stretches = useStore((s) => s.stretches);
-  // the comparison axis the compare view groups by; a bump re-derives layout
-  const [compareDim, setCompareDimState] = useState(remembered.compareDim);
-  const setCompareDim = (d: string) => {
-    remembered.compareDim = d; setCompareDimState(d);
-    // the regrouped piles land elsewhere; bring them on screen
-    requestAnimationFrame(() => requestAnimationFrame(() => fitView({ duration: 200 })));
+  // the comparison axes the compare view divides by — mix and match; a code
+  // files under the JOINED values of every ticked dimension it has evidence in
+  const [compareOn, setCompareOnState] = useState(remembered.compareDims);
+  const allDims = useMemo(() => stretchDims(stretches), [stretches]);
+  const activeDims = useMemo(
+    () => (compareOn ?? allDims).filter((d) => allDims.includes(d)),
+    [compareOn, allDims]);
+  const toggleCompareDim = (d: string) => {
+    const cur = new Set(activeDims);
+    cur.has(d) ? cur.delete(d) : cur.add(d);
+    if (!cur.size) return; // at least one axis stays on
+    const next = allDims.filter((x) => cur.has(x));
+    remembered.compareDims = next; setCompareOnState(next);
+    // the regrouped piles land elsewhere; bring them on screen, with margin
+    // enough that the top caption clears the floating pill
+    requestAnimationFrame(() => requestAnimationFrame(() => fitView({ duration: 200, padding: 0.15 })));
   };
-  const compareDims = useMemo(() => stretchDims(stretches), [stretches]);
+  const [compareMenu, setCompareMenu] = useState<{ left: number; y: number } | null>(null);
   const transcripts = useStore((s) => s.transcripts);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const dark = useStore((s) => s.ui.dark);
@@ -1254,33 +1264,38 @@ function MapInner() {
     // every stretch is "unmarked". No stretches yet → everything unmarked, and
     // the pile's name says how to change that.
     if (view === "compare") {
-      const dim = compareDim && compareDims.includes(compareDim) ? compareDim : compareDims[0];
-      const cov = coverageOf(segments, stretches, dim ?? "");
-      const valueOf = (c: string) => {
-        const m = cov.get(c);
+      // one coverage per ticked dimension; a code's pile is the JOINED argmax
+      // values ("baseline · phase 1"), skipping dims it has no marked evidence
+      // in — so a code with only a condition still files under its condition
+      const covs = activeDims.map((d) => ({ d, cov: coverageOf(segments, stretches, d) }));
+      const argmax = (m: Map<string, number> | undefined) => {
         if (!m) return "";
         let best = "", n = -1;
         for (const [v, k] of m) if (k > n || (k === n && v < best)) { best = v; n = k; }
         return best;
       };
+      const partsOf = (c: string) => covs.map(({ cov }) => argmax(cov.get(c))).filter(Boolean);
       const tipOf = (c: string) => {
-        const m = cov.get(c);
-        if (!m) return "no accepted evidence";
-        return [...m.entries()].sort((a, b) => b[1] - a[1])
-          .map(([v, k]) => `${v || "unmarked"} ${k}`).join(" · ");
+        const bits = covs.map(({ d, cov }) => {
+          const m = cov.get(c);
+          if (!m) return null;
+          return `${d}: ` + [...m.entries()].sort((a, b) => b[1] - a[1])
+            .map(([v, k]) => `${v || "unmarked"} ${k}`).join(" · ");
+        }).filter(Boolean);
+        return bits.length ? bits.join("\n") : "no accepted evidence";
       };
-      const byValue = new Map<string, string[]>();
+      const byLabel = new Map<string, string[]>();
       for (const c of codes) {
-        const v = valueOf(c);
-        const arr = byValue.get(v) ?? [];
+        const label = partsOf(c).join(" · ");
+        const arr = byLabel.get(label) ?? [];
         arr.push(c);
-        byValue.set(v, arr);
+        byLabel.set(label, arr);
       }
-      const piles = [...byValue.entries()]
+      const piles = [...byLabel.entries()]
         .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)))
         .map(([v, list]) => ({
           name: v || (stretches.length ? "unmarked" : "unmarked — select lines in a transcript and right-click to mark stretches"),
-          key: v || "\u0000unmarked", list, cover: tipOf,
+          key: `${activeDims.join("+")}:${v || "\u0000unmarked"}`, list, cover: tipOf,
         }));
       return { nodes: withSimilar(pileNodes(piles, {
         islandId: (p) => `bucket:${p.key ?? p.name}`, movable: true,
@@ -1465,7 +1480,7 @@ function MapInner() {
     for (const c of looseFree) children.push(chipNode(c, { x: 0, y: 0 }));
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev, stretches, compareDim, compareDims]);
+  }, [codes, codebook, stats, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev, stretches, activeDims]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -2436,8 +2451,8 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !confirmArea && !layoutMenu && !mapSetMenu) return;
-    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setConfirmArea(null); setLayoutMenu(null); setMapSetMenu(null); };
+    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !confirmArea && !layoutMenu && !mapSetMenu && !compareMenu) return;
+    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setConfirmArea(null); setLayoutMenu(null); setMapSetMenu(null); setCompareMenu(null); };
     const down = (e: MouseEvent) => {
       const t = e.target as Element;
       if (t.closest(".mapMenu")) return;
@@ -2459,7 +2474,7 @@ function MapInner() {
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, confirmArea, layoutMenu, mapSetMenu]);
+  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, confirmArea, layoutMenu, mapSetMenu, compareMenu]);
 
   return (
     <div id="codemap" className={"view-" + view} style={{ fontSize: MAP_FS }}>
@@ -2469,7 +2484,7 @@ function MapInner() {
       <div className="mapBar" role="toolbar" aria-label="Map controls">
         <button className="btn iconbtn mapHelpBtn" aria-expanded={helpOpen}
           aria-label={helpOpen ? "Hide how to use the map" : "How to use the map"}
-          onClick={() => { setLayoutMenu(null); setMapSetMenu(null); setHelpOpen((v) => !v); }}
+          onClick={() => { setLayoutMenu(null); setMapSetMenu(null); setCompareMenu(null); setHelpOpen((v) => !v); }}
           title="How to use the map">
           <Icon name="help" size={16} />
         </button>
@@ -2477,7 +2492,7 @@ function MapInner() {
           aria-label="Map settings"
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setLayoutMenu(null); setHelpOpen(false);
+            setLayoutMenu(null); setHelpOpen(false); setCompareMenu(null);
             setMapSetMenu(mapSetMenu ? null : { left: r.left, y: r.bottom + 8 });
           }}
           title="Map settings: selection ring, minimap">
@@ -2486,7 +2501,7 @@ function MapInner() {
         <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!layoutMenu}
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setMapSetMenu(null); setHelpOpen(false);
+            setMapSetMenu(null); setHelpOpen(false); setCompareMenu(null);
             setLayoutMenu(layoutMenu ? null : { left: r.left, y: r.bottom + 8 });
           }}
           title="Reset or clean up the arrangement you are looking at">
@@ -2495,7 +2510,7 @@ function MapInner() {
         </button>
         {/* the current view's own actions; the derived views have none */}
         {(view === "reconcile" || view === "themes" || view === "segs" || view === "areas"
-          || (view === "compare" && compareDims.length > 1)) && (
+          || (view === "compare" && allDims.length > 0)) && (
           <span className="mapBarDivider" role="separator" aria-orientation="vertical" />
         )}
         {view === "reconcile" && (
@@ -2532,16 +2547,17 @@ function MapInner() {
             <Icon name="list" size={16} /> <span className="blabel">Work the thin tail</span>
           </button>
         )}
-        {view === "compare" && compareDims.length > 1 && (
-          <div className="segmented mapCompareDims" role="group" aria-label="Comparison dimension">
-            {compareDims.map((d) => {
-              const on = (compareDim && compareDims.includes(compareDim) ? compareDim : compareDims[0]) === d;
-              return (
-                <button key={d} className={"seg" + (on ? " on" : "")} aria-pressed={on}
-                  onClick={() => setCompareDim(d)}>{d}</button>
-              );
-            })}
-          </div>
+        {view === "compare" && allDims.length > 0 && (
+          <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!compareMenu}
+            onClick={(e) => {
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setLayoutMenu(null); setMapSetMenu(null); setHelpOpen(false);
+              setCompareMenu(compareMenu ? null : { left: r.left, y: r.bottom + 8 });
+            }}
+            title="Tick the dimensions the piles divide by — several combine (condition · phase)">
+            <Icon name="eye" size={16} /> <span className="blabel">Divide by {activeDims.join(" · ")}</span>
+            <Icon name={compareMenu ? "chevron-up" : "chevron-down"} size={13} />
+          </button>
         )}
         {view === "areas" && (
           // stale is a colour on the button, explained by its tooltip
@@ -2775,6 +2791,23 @@ function MapInner() {
             <dt>Whose idea</dt><dd>Solid and tinted came from the AI, dashed from the wording pass, plain from you.</dd>
             <dt>Merge vs group</dt><dd>A merge folds codes into one; a group keeps separate codes together.</dd>
           </dl>
+        </div>
+      )}
+      {compareMenu && (
+        <div className="ctxmenu mapMenu" role="menu" aria-label="Divide the piles by"
+          style={{ left: compareMenu.left, top: compareMenu.y, fontSize: sidebarFontSize }}>
+          <div className="ctxhead">Divide by</div>
+          {allDims.map((d) => {
+            const on = activeDims.includes(d);
+            return (
+              <button key={d} role="menuitemcheckbox" aria-checked={on}
+                className={"mapCmpDim" + (on ? " on" : "")}
+                title={on && activeDims.length === 1 ? "At least one axis stays on" : undefined}
+                onClick={() => toggleCompareDim(d)}>
+                <span className="mapCmpTick">{on ? "✓" : ""}</span>{d}
+              </button>
+            );
+          })}
         </div>
       )}
       {mapSetMenu && (

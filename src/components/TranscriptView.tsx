@@ -129,7 +129,7 @@ const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 // font px per size step — the label rides its band, so a dimension costs a
 // band plus one letter-height, not a column of prose
 const STRETCH_BAND_PX = { xs: 3, sm: 5, md: 8, lg: 12 } as const;
-const STRETCH_LABEL_PX = { sm: 9, md: 11, lg: 13 } as const;
+const STRETCH_LABEL_PX = { sm: 9, md: 12, lg: 16 } as const;
 // lazy: this module is imported by node-side tests where document is absent
 let stMeasure: CanvasRenderingContext2D | null = null;
 
@@ -196,8 +196,11 @@ export function TranscriptView() {
     const idx = itemIdxRef.current;
     const listEl = ov.parentElement?.querySelector(".tviewlist");
     const ovRect = ov.getBoundingClientRect();
-    const listRect = listEl?.getBoundingClientRect();
-    const baseX = listRect ? listRect.left - ovRect.left : 0;
+    // anchor to a rendered gutter cell: the rows carry left padding the list
+    // edge knows nothing about, and the labels must sit IN their columns
+    const cellEl = listEl?.querySelector(".stretchCell");
+    if (!cellEl) { ov.replaceChildren(); return; }
+    const baseX = cellEl.getBoundingClientRect().left - ovRect.left;
     const frag = document.createDocumentFragment();
     for (const st of ctx.list) {
       const gi0 = idx?.get(st.start), gi1 = idx?.get(st.end);
@@ -972,16 +975,17 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, stretchW, onEdit
     // Right-click anywhere on the row recolours the TYPE (every event of it) — the
     // gesture the codebook swatches use; the textarea keeps its native menu.
     <div className="markerRow" id={`mrow-${marker.mid}`}
-      style={{ "--mk-c": color, "--spk-c": color } as CSSProperties}
+      // the gutter is section space: the event card (and its coloured border)
+      // begins after it, so section labels never run through an event's edge.
+      // + the 8px flex gap the line rows put after their gutter cell, so the
+      // ts chip stays on the SAME left edge as theirs (border+pad match)
+      style={{ "--mk-c": color, "--spk-c": color, ...(stretchW ? { marginLeft: `calc(${stretchW} + 8px)` } : {}) } as CSSProperties}
       onContextMenu={(e) => {
         if ((e.target as HTMLElement).closest(".mkedit")) return;
         e.preventDefault(); e.stopPropagation();
         openColorPicker(color, (v) => useStore.getState().setMarkerColor(key, v),
           { x: e.clientX, y: e.clientY });
       }}>
-      {/* the stretch gutter's room, kept empty: a marker is a moment, not a span —
-          the bands break here on purpose, but the column rhythm holds */}
-      {stretchW && <span className="stretchCell" style={{ width: stretchW }} aria-hidden="true" />}
       {showLid && <span className="lid" aria-hidden="true" />}
       <button className="ts" tabIndex={-1} title="Play from here"
         onClick={() => seekVideo(lineTs)}>{lineTs}</button>
