@@ -104,6 +104,12 @@ export interface CodeCluster {
   // with the membership it described — a drifted membership marks it stale
   desc?: string;
   descCodes?: string[];
+  // the case AGAINST this merge, when the researcher asked for one. Kept with
+  // the membership it argued about, for the same reason, and with whether the
+  // model found no real case — an objection and a shrug must not read alike.
+  against?: string;
+  againstWeak?: boolean;
+  againstCodes?: string[];
 }
 export interface Selection { pid: string | null; anchor: number | null; head: number | null; lines: Set<number>; }
 export interface Ui {
@@ -2106,7 +2112,8 @@ export const useStore = create<State>()(
             survivor: c.survivor === code ? name : c.survivor,
             codes: c.codes.map((x) => x === code ? name : x),
             // the glimpse still describes the same members under a new name
-            ...(c.descCodes ? { descCodes: c.descCodes.map((x) => x === code ? name : x) } : {}) })),
+            ...(c.descCodes ? { descCodes: c.descCodes.map((x) => x === code ? name : x) } : {}),
+            ...(c.againstCodes ? { againstCodes: c.againstCodes.map((x) => x === code ? name : x) } : {}) })),
           // the map's hand-placed spots are keyed by code name: miss this and
           // a rename silently throws the researcher's layout away
           // map over the slots, never list them: a new view's layout would
@@ -2147,7 +2154,8 @@ export const useStore = create<State>()(
           codePlan: s.codePlan.map((a) => ({ ...a, code: r(a.code), ...(a.into ? { into: r(a.into) } : {}) })),
           codeClusters: s.codeClusters.map((c) => ({ ...c, survivor: r(c.survivor), codes: c.codes.map(r),
             // same members under new spelling: the glimpse is NOT stale
-            ...(c.descCodes ? { descCodes: c.descCodes.map(r) } : {}) })),
+            ...(c.descCodes ? { descCodes: c.descCodes.map(r) } : {}),
+            ...(c.againstCodes ? { againstCodes: c.againstCodes.map(r) } : {}) })),
           // a case sweep must not cost the researcher their map layout
           mapPositions: mapLayouts(s.mapPositions,
             (rec) => Object.fromEntries(Object.entries(rec).map(([k, v]) => [r(k), v]))),

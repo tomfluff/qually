@@ -434,3 +434,41 @@ describe("locating a run's proposals on the map", () => {
     expect(haloIdsFor([{ survivor: "a", codes: ["a", "b"], rationale: "" }], fresh)).toEqual(["halo:i0"]);
   });
 });
+
+describe("arguing against a merge", () => {
+  it("asks for the case against, and lets the model find none", async () => {
+    const { argueAgainst, estimateAgainstTokens } = await import("./reconcile");
+    const { redactor } = await import("./redact");
+    const red = redactor([]);
+    const codes = [
+      { name: "difficult to see", def: "", excerpts: ["the labels are tiny"] },
+      { name: "hard to see", def: "", excerpts: ["hard to see the boundary"] },
+    ];
+    // the payload is the same one the merge scan discloses, so the cost note
+    // in the map can be trusted
+    expect(estimateAgainstTokens(codes, red)).toBeGreaterThan(0);
+
+    const calls: { system: string; user: string }[] = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (_u: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      calls.push({ system: body.input?.[0]?.content ?? "", user: body.input?.[1]?.content ?? "" });
+      return new Response(JSON.stringify({
+        output: [
+          { type: "reasoning", id: "rs_1", summary: [] },
+          { type: "message", role: "assistant", content: [{ type: "output_text",
+            text: JSON.stringify({ against: "One is the whole chart, one is a boundary.", weak: false }) }] },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      const r = await argueAgainst({ key: "k", model: "gpt-5.6-luna", codes, redaction: red });
+      expect(r.against).toContain("boundary");
+      expect(r.weak).toBe(false);
+      // the prompt has to ask for the case AGAINST, and permit finding none
+      expect(calls[0].system).toMatch(/argue against/i);
+      expect(calls[0].system).toMatch(/no real case/i);
+    } finally { globalThis.fetch = orig; }
+  });
+});

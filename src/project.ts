@@ -71,7 +71,8 @@ export interface Project {
   codeAreas?: { name: string; codes: string[]; rationale?: string }[];
   codeAreasFp?: string;
   codePlan?: { code: string; action: "rename" | "merge" | "remove"; newName?: string; into?: string; rationale: string }[];
-  codeClusters?: { cid?: number; survivor: string; codes: string[]; newName?: string; rationale: string; desc?: string }[];
+  codeClusters?: { cid?: number; survivor: string; codes: string[]; newName?: string; rationale: string;
+    desc?: string; against?: string }[];
   // answers to questions asked of the coded material, each with the scope and
   // model it came from — optional: absent in files written before Ask existed
   answers?: Answer[];

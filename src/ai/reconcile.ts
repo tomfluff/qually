@@ -239,6 +239,51 @@ export async function glimpseCluster(opts: {
   return { glimpse: restore(opts.redaction, (data.glimpse ?? "").trim()), usage };
 }
 
+// The critic. Same model, same evidence, opposite job: the researcher has
+// proposed a merge and asks for the strongest case that they are wrong.
+//
+// This is the one AI surface here where the researcher sets the agenda and the
+// model works for them. A proposing model spends your attention on judging its
+// list; a critiquing one spends its own on the list you made. Same tokens,
+// opposite relationship — and the second one leaves you the analyst.
+//
+// It must be allowed to find nothing. A critic that always objects is noise
+// you learn to click past, so "no real case against this" is a first-class
+// answer with its own flag, and the prompt says so twice.
+const AGAINST_SYSTEM = `A qualitative researcher is about to merge the codes below into one. Argue AGAINST it: give the strongest case that these are NOT the same code and should stay apart.
+
+Argue only from the evidence given — what the excerpts actually say, what the definitions claim, what the names distinguish. Name the distinction that would be LOST by merging, concretely, in at most three sentences. Do not hedge, do not list alternatives, and do not tell the researcher what to do: they will decide.
+
+If there is no real case — the excerpts are interchangeable and no distinction would be lost — say so plainly in one sentence and set weak to true. An objection manufactured out of politeness is worse than none, because it teaches the researcher to stop reading these.
+
+Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
+const AGAINST_SCHEMA = {
+  type: "object",
+  properties: {
+    against: { type: "string", description: "the case against merging, at most three sentences" },
+    weak: { type: "boolean", description: "true when there is no real case against the merge" },
+  },
+  required: ["against", "weak"], additionalProperties: false,
+} as const;
+
+export const estimateAgainstTokens = (codes: MergeCodeInput[], r: Redaction) =>
+  estimateTokens(AGAINST_SYSTEM) + estimateTokens(renderMergePayload(codes, r));
+
+export async function argueAgainst(opts: {
+  key: string; model: string; codes: MergeCodeInput[]; redaction: Redaction; signal?: AbortSignal;
+}): Promise<{ against: string; weak: boolean; usage: Usage }> {
+  const { data, usage } = await callJson<{ against: string; weak: boolean }>({
+    key: opts.key,
+    model: opts.model,
+    system: AGAINST_SYSTEM,
+    user: renderMergePayload(opts.codes, opts.redaction),
+    schemaName: "argue_against",
+    schema: AGAINST_SCHEMA,
+    signal: opts.signal,
+  });
+  return { against: restore(opts.redaction, (data.against ?? "").trim()), weak: !!data.weak, usage };
+}
+
 // ---------------------------------------------------------------------------
 // FOCUS reconcile: the researcher selects a handful of codes and asks where
 // they belong — against the WHOLE codebook. Asymmetric evidence keeps the

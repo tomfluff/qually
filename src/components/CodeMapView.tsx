@@ -48,7 +48,7 @@ import { sweepWording, refusedPairs, familyReason } from "../sweep";
 import { openTailQueue } from "./TailQueue";
 import { TellApartModal } from "./TellApartModal";
 import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
-import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
+import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, argueAgainst, estimateAgainstTokens, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -488,9 +488,22 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   // rather than silently presenting an outdated description
   const stale = !!c.desc && !!c.descCodes &&
     [...c.codes].sort().join("\n") !== [...c.descCodes].sort().join("\n");
+  const againstStale = !!c.against && !!c.againstCodes &&
+    [...c.codes].sort().join("\n") !== [...c.againstCodes].sort().join("\n");
   return (
     <div className="mapCardNode nodrag nowheel">
       <div className="mapCardRat">{c.rationale}</div>
+      {(c.against || c.againstWeak) && (
+        // the case against sits with the case for, not in a dialog you dismiss
+        // before deciding — and a shrug is drawn as a shrug, not as an objection
+        <div className={"mapCardAgainst" + (c.againstWeak ? " weak" : "")}>
+          <span className="mapNoteWho">
+            {c.againstWeak ? "No real case against" : "The case against"}
+            {againstStale && <span className="mapGlimpseStale" title="The group's members changed after this was written — ask again for a fresh one">may be outdated</span>}
+          </span>
+          <div>{c.against}</div>
+        </div>
+      )}
       {(data.gen || c.desc) && (
         <div className="mapCardGlimpse">
           <span className="mapNoteWho">AI glimpse{stale && <span className="mapGlimpseStale" title="The group's members changed after this was written — re-run “Describe this group” for a fresh one">may be outdated</span>}</span>
@@ -778,7 +791,10 @@ function MapInner() {
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   useEffect(() => { remembered.openCards = openCards; }, [openCards]);
   const [genCi, setGenCi] = useState<number | null>(null);
-  const [confirmAi, setConfirmAi] = useState<{ ci: number; x: number; y: number } | null>(null);
+  // one cost gate, two questions: describing the group and arguing against it
+  // send the same payload and differ only in what they ask of it
+  const [confirmAi, setConfirmAi] = useState<
+    { ci: number; x: number; y: number; ask: "describe" | "against" } | null>(null);
   const aiConfirmRef = useKeepOnScreen<HTMLDivElement>([confirmAi]);
   // "where do these belong": the same one-line consent the group description
   // uses. The full modal was the wrong weight for a question you ask often.
@@ -1364,6 +1380,41 @@ function MapInner() {
     } catch (e) {
       const msg = e instanceof AiError ? e.message : (e as Error).message;
       announce(`Describe failed: ${msg}`, { assertive: true });
+      earcon.error();
+    } finally {
+      setGenCi(null);
+    }
+  }, [glimpseInputs]);
+
+  // The critic: same payload as the glimpse, opposite question. It goes into
+  // the card beside the reasoning, because the case against a merge belongs
+  // next to the case for it — not in a dialog you dismiss before deciding.
+  const runAgainst = useCallback(async (ci: number) => {
+    const st = useStore.getState();
+    const key = getKey();
+    if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
+    const red = redactor(st.ai.redactTerms);
+    const inputs = glimpseInputs(ci);
+    setOpenCards((old) => new Set(old).add(ci));
+    setGenCi(ci);
+    earcon.aiStart();
+    try {
+      const { against, weak, usage } = await argueAgainst({
+        key, model: st.ai.model, codes: inputs, redaction: red,
+      });
+      const s2 = useStore.getState();
+      s2.setCodeClusters(s2.codeClusters.map((c, i) =>
+        (i === ci ? { ...c, against, againstWeak: weak, againstCodes: [...c.codes] } : c)));
+      s2.logAiCall({
+        at: new Date().toISOString(), model: st.ai.model, task: "against", pid: "(codebook)",
+        lines: inputs.length, redactions: 0,
+        inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
+      });
+      announce(weak ? "No real case against this merge." : "The case against this merge is on the card.");
+      earcon.aiDone();
+    } catch (e) {
+      const msg = e instanceof AiError ? e.message : (e as Error).message;
+      announce(`Could not argue: ${msg}`, { assertive: true });
       earcon.error();
     } finally {
       setGenCi(null);
@@ -2601,7 +2652,8 @@ function MapInner() {
         const st = useStore.getState();
         const red = redactor(st.ai.redactTerms);
         const inputs = glimpseInputs(confirmAi.ci);
-        const inTok = estimateGlimpseTokens(inputs, red);
+        const inTok = confirmAi.ask === "against"
+          ? estimateAgainstTokens(inputs, red) : estimateGlimpseTokens(inputs, red);
         const model = modelOf(st.ai.model);
         const cost = costOf(model, inTok, estimateTokens(" ".repeat(80)));
         return (
@@ -2609,12 +2661,17 @@ function MapInner() {
             aria-describedby="ai-confirm-text"
             style={{ left: confirmAi.x, top: confirmAi.y, fontSize: sidebarFontSize }}>
             <div className="mapAiConfirmText" id="ai-confirm-text">
-              Describe with AI — sends <b>{inputs.length} codes · ≈{inTok.toLocaleString()} tokens
+              {confirmAi.ask === "against" ? "Argue against this merge" : "Describe with AI"} — sends
+              {" "}<b>{inputs.length} codes · ≈{inTok.toLocaleString()} tokens
               · ≈${cost.toFixed(4)}</b> to OpenAI ({model.id}).
             </div>
             <div className="mapCardActions">
               <button className="btn primary" autoFocus
-                onClick={() => { const ci = confirmAi.ci; setConfirmAi(null); void runGlimpse(ci); }}>Send</button>
+                onClick={() => {
+                  const { ci, ask } = confirmAi;
+                  setConfirmAi(null);
+                  void (ask === "against" ? runAgainst(ci) : runGlimpse(ci));
+                }}>Send</button>
               <button className="btn" onClick={() => setConfirmAi(null)}>Cancel</button>
             </div>
           </div>
@@ -2634,8 +2691,14 @@ function MapInner() {
               aria-hidden, so the accessible name has to carry it in words —
               an off-device, paid action must not read like a local one */}
           <button role="menuitem" aria-label="Describe this group with AI"
-            onClick={() => { setConfirmAi({ ci: menu.halo!.ci, x: menu.x, y: menu.y }); setMenu(null); }}>
+            onClick={() => { setConfirmAi({ ci: menu.halo!.ci, x: menu.x, y: menu.y, ask: "describe" }); setMenu(null); }}>
             <Icon name="sparkle" size={16} /> Describe this group…
+          </button>
+          {/* the same model, the opposite job: the researcher proposed this
+              merge and is asking for the strongest case that they are wrong */}
+          <button role="menuitem" aria-label="Ask the AI to argue against this merge"
+            onClick={() => { setConfirmAi({ ci: menu.halo!.ci, x: menu.x, y: menu.y, ask: "against" }); setMenu(null); }}>
+            <Icon name="sparkle" size={16} /> Argue against this merge…
           </button>
         </div>
       )}

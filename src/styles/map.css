@@ -433,3 +433,17 @@
   background:color-mix(in srgb, var(--fg) 4%, transparent); }
 /* the drop target still wins over all three */
 .mapHalo.will { border-color:var(--accent); }
+
+/* The case against a merge, on the same card as the case for it. Bordered in
+   the warning colour rather than the accent: it is the one thing on this card
+   arguing the other way, and it has to be findable at a glance among rows of
+   proposals that all look like agreement. A shrug ("no real case") drops to
+   the quiet treatment — an objection and an absence of one must not read
+   alike, or the reader learns to skip both. */
+.mapCardAgainst { margin-top:8px; padding:7px 9px; border-radius:8px;
+  border:1px solid color-mix(in srgb, var(--warn, #b45309) 45%, var(--line));
+  background:color-mix(in srgb, var(--warn, #b45309) 7%, transparent); line-height:1.45; }
+.mapCardAgainst.weak { border-color:var(--line); background:transparent; color:var(--muted); }
+/* the header colour is the loudest part of the block, so the shrug drops it
+   too — otherwise "no real case against" reads as an objection at a glance */
+.mapCardAgainst.weak .mapNoteWho { color:var(--muted); }
