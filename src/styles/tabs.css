@@ -82,8 +82,11 @@
    at 13px on a wide screen and at 36px on a narrow one, and a fixed column
    count can only be right for one of those. Written in em so the breakpoint
    rides the app's text ramp instead of a pixel guess. */
-.assistmenu { max-width:min(52em, 94vw); display:grid; align-items:start;
-  grid-template-columns:repeat(auto-fit, minmax(12em, 1fr)); gap:2px 12px;
+.assistmenu { max-width:min(64em, 94vw); display:grid; align-items:start;
+  /* 20em because that is what the longest row needs — "Transcript summary"
+     plus its count — and a count that wraps under its own label reads as a
+     stray number rather than as part of the name */
+  grid-template-columns:repeat(auto-fit, minmax(20em, 1fr)); gap:2px 14px;
   /* it has to keep reading as something that hangs off the Assist tab. The
      base .ctxmenu cap is the whole viewport, which at a large text size turned
      this into a full-height panel — two thirds of the screen at most, and the
@@ -102,8 +105,11 @@
 .assistmenu-label em { font-style:normal; color:var(--muted); font-size:.82em; }
 /* the count sits with the name, not under it: it is part of what the panel IS
    right now, and the hint below already carries the sentence */
-.amTop { display:flex; align-items:baseline; gap:.5em; flex-wrap:wrap; }
+/* the count flows WITH the name, like the last words of a sentence — as a flex
+   row it wrapped onto a line of its own and read as a stray number under the
+   label rather than part of it */
+.amTop { display:block; }
 .amCount { color:var(--accent); font-size:.8em; font-variant-numeric:tabular-nums;
-  white-space:nowrap; }
+  white-space:nowrap; margin-left:.5em; }
 .assistmenu button.on .amCount { color:var(--accent); }
 
