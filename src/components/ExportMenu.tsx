@@ -40,6 +40,7 @@ export function ExportMenu() {
   const editCount = useStore((s) => Object.values(s.transcripts)
     .reduce((n, t) => n + t.lines.filter((l) => l.orig !== undefined).length, 0));
   const aiCalls = useStore((s) => s.aiLog.length);
+  const decisions = useStore((s) => s.ledger.length);
   const answerCount = useStore((s) => s.answers.length);
   const noticeCount = useStore((s) => Object.values(s.aiFlags)
     .reduce((n, f) => n + f.spans.filter((x) => (x.lens ?? "transcription") !== "transcription").length, 0));
@@ -117,6 +118,7 @@ transcript-edits.csv  every transcription correction (original vs corrected)
 events.csv            session events and field notes, as loaded (with your edits)
 ai-observations.csv   instances the AI marked for review (not codes)
 ai-provenance.csv     every AI request made: model, lines sent, cost
+decisions.csv         every codebook decision: what, why, whose idea
 
 These CSVs are for pipelines, co-authors, and appendices.
 To CONTINUE this work in QuAlly, use the project file (.qually.json) —
@@ -139,6 +141,7 @@ it round-trips everything, including corrections and AI observations.
     if (eventCount) files.push({ name: "events.csv", text: st.exportMarkers() });
     if (noticeCount) files.push({ name: "ai-observations.csv", text: st.exportNotices() });
     if (aiCalls) files.push({ name: "ai-provenance.csv", text: st.exportAiLog() });
+    if (st.ledger.length) files.push({ name: "decisions.csv", text: st.exportLedger() });
     if (answerCount) files.push({ name: "answers.csv", text: st.exportAnswers() });
     save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
       new Date()), `${b}-csv.zip`);
@@ -177,6 +180,8 @@ it round-trips everything, including corrections and AI observations.
             withBase((b) => { saveText(s().exportAnswers(), `${b}-answers.csv`); setOpen(false); }))}
           {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost. Your methods appendix.",
             withBase((b) => { saveText(s().exportAiLog(), `${b}-ai-provenance.csv`); setOpen(false); }))}
+          {decisions > 0 && item(`Decisions (.csv) · ${decisions}`, "Every merge, rename and removal: the reason, and whose idea it was.",
+            withBase((b) => { saveText(s().exportLedger(), `${b}-decisions.csv`); setOpen(false); }))}
         </div>
       )}
       {nameGate && (

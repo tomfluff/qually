@@ -19,7 +19,7 @@
 // what colour each one is, is a fact about the STUDY, not a display preference — a
 // colleague opening the file should see the same people marked the same way. Optional,
 // so a v1 file written before this existed still loads (openProject re-guesses).
-import type { Ai, AiCall, Answer, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
+import type { Ai, AiCall, Answer, Decision, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
 import type { GroundRec } from "./ai/ground";
 import type { Marker } from "./markers";
 
@@ -50,6 +50,9 @@ export interface Project {
   aiFlags: Record<string, LineFlags>;
   aiGrounds?: Record<number, GroundRec>; // optional: absent in files written before F1
   aiLog: AiCall[];
+  // the decision ledger — what the researcher decided about the codebook and
+  // why. Optional: absent in files written before it existed.
+  ledger?: Decision[];
   markers?: Marker[]; // optional: absent in files written before session events existed
   // event-type colours, for the same reason the speaker map travels: which colour
   // "BREAK" is, is a fact about the study, not about my screen
@@ -123,6 +126,11 @@ export function parseProject(text: string): Project {
     aiFlags: p.aiFlags ?? {},
     aiGrounds: p.aiGrounds ?? {},
     aiLog: p.aiLog ?? [],
+    // hand-editable like the rest of this file; a row with no kind or no code
+    // list would break the exporter, so it never gets loaded
+    ledger: (Array.isArray(p.ledger) ? p.ledger : []).filter((d): d is Decision =>
+      !!d && typeof d.at === "string" && typeof d.kind === "string"
+      && Array.isArray(d.codes) && d.codes.every((c: unknown) => typeof c === "string")),
     markers: p.markers ?? [],
     markerColors: p.markerColors ?? {},
     summaries: p.summaries ?? {},

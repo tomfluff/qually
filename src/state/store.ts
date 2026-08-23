@@ -206,6 +206,28 @@ export interface AiCall {
   lines: number; redactions: number; inTok: number; outTok: number; costUsd: number;
 }
 
+// The DECISION ledger, the other half of the provenance story. aiLog records
+// what was ASKED of the model; this records what the researcher DID — every
+// merge, rename, rejection and deletion, with the reason and where the idea
+// came from. Undo cannot unwrite history, so an undone decision is FLAGGED
+// rather than dropped (see snapshot/restore): "I merged these and then thought
+// better of it" is itself part of the record, and silently deleting the row
+// would make the ledger a story about a researcher who never changed their mind.
+export type DecisionKind =
+  | "merge" | "rename" | "remove" | "delete"   // wired today
+  | "keep" | "park" | "unpark" | "promote" | "dismiss"; // the tail queue's outcomes
+/** where the idea came from — NOT who performed it. Every decision is the researcher's. */
+export type DecisionSource = "you" | "wording" | "ai";
+export interface Decision {
+  at: string;              // ISO
+  kind: DecisionKind;
+  codes: string[];         // what it touched; for a merge, survivor first
+  why: string;             // the rationale, in whoever's words proposed it
+  source: DecisionSource;
+  model?: string;          // set when source is "ai"
+  undone?: boolean;        // reversed by undo, kept for the record
+}
+
 export interface State {
   transcripts: Record<string, { lines: Line[] }>;
   segments: Segment[];
@@ -227,6 +249,8 @@ export interface State {
   aiFlags: Record<string, LineFlags>; // "pid:lineId" -> flags, valid while the hash matches
   aiGrounds: Record<number, GroundRec>; // sid -> grounding quotes, valid while the hash matches
   aiLog: AiCall[];
+  // every decision the researcher made about the codebook (see Decision)
+  ledger: Decision[];
   // session event log (see markers.ts): imported per transcript from the tab menu.
   // Positions are derived from the time, never stored — so they follow the video offset.
   markers: Marker[];
@@ -341,6 +365,8 @@ export interface State {
   applyFix: (pid: string, id: number, quote: string, fix: string) => void;
   logAiCall: (call: AiCall) => void;
   exportAiLog: () => string;
+  logDecision: (d: Omit<Decision, "at" | "undone"> & { at?: string }) => void;
+  exportLedger: () => string;
   exportCodebook: () => string;
   exportTranscript: (pid: string) => string;
   // events: imported against ONE transcript (the tab you right-clicked), never guessed
@@ -415,7 +441,7 @@ export interface State {
   setStatus: (sid: number, status: string) => void;
   // reconciliation's "remove": every accepted segment of the code is rejected in
   // one undoable step — the data stays in the file, the code goes quiet
-  rejectCode: (code: string) => void;
+  rejectCode: (code: string, why?: string, source?: DecisionSource, model?: string) => void;
   setNotes: (sid: number, notes: string) => void;
   setColor: (code: string, color: string) => void;
   // recolour every code so co-occurring codes differ; keepManual pins the
@@ -428,10 +454,10 @@ export interface State {
   endSelGesture: () => void;
   undo: () => void;
   redo: () => void;
-  renameCode: (code: string, newName: string) => void;
+  renameCode: (code: string, newName: string, why?: string, source?: DecisionSource, model?: string) => void;
   normalizeCodeCase: (style: "lower" | "capital") => void;
-  deleteCode: (code: string) => void;
-  mergeCode: (from: string, into: string) => void;
+  deleteCode: (code: string, why?: string) => void;
+  mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
   // returns the codes it actually wrote — a draft that echoes what is already
   // stored changes nothing, and the receipt must not claim it did
@@ -485,6 +511,9 @@ function snapshot(s: State): string {
     codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp,
     codePlan: s.codePlan, codeClusters: s.codeClusters,
     mapPositions: s.mapPositions, mapIslandPos: s.mapIslandPos,
+    // not the ledger itself — its LENGTH. Undo flags the decisions logged after
+    // this point as undone instead of erasing them (see restore).
+    ledgerLen: s.ledger.length,
     sel: { ...s.selection, lines: [...s.selection.lines] },
   });
 }
@@ -621,6 +650,15 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
     codeClusters: o.codeClusters ?? cur.codeClusters,
     mapPositions: o.mapPositions ?? cur.mapPositions,
     mapIslandPos: o.mapIslandPos ?? cur.mapIslandPos,
+    // decisions logged after this snapshot are marked undone, not deleted; the
+    // same rule read forwards un-marks them on redo. A snapshot from before the
+    // ledger existed carries no length, and leaves it alone.
+    ledger: typeof o.ledgerLen === "number"
+      ? cur.ledger.map((d, i) => {
+          const undone = i >= o.ledgerLen;
+          return !!d.undone === undone ? d : { ...d, undone };
+        })
+      : cur.ledger,
     ui: o.markerColors ? { ...cur.ui, markerColors: o.markerColors } : cur.ui,
     hotbarCache: hotbarCodes(next), selection: sel, active, savedSelections: saved,
     // One cache must own the scroll after a tab change, or the tab's remembered anchor
@@ -674,7 +712,7 @@ export const useStore = create<State>()(
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -688,7 +726,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1298,6 +1336,20 @@ export const useStore = create<State>()(
       },
 
       logAiCall: (call) => set({ aiLog: [...get().aiLog, call] }),
+
+      // Append-only, and deliberately NOT undoable: see Decision. Called from
+      // inside the codebook actions themselves rather than from every caller,
+      // so a merge made from the sidebar, the map or a modal all land the same
+      // row — the caller only has to supply the reason when it has one.
+      logDecision: (d) => set({ ledger: [...get().ledger, { ...d, at: d.at ?? new Date().toISOString() }] }),
+      // Appendix B: what was decided, why, and whose idea it was.
+      exportLedger: () => toCSV(
+        get().ledger.map((d) => ({
+          at: d.at, kind: d.kind, codes: d.codes.join(" | "), why: d.why,
+          source: d.source, model: d.model ?? "", undone: d.undone ? "yes" : "",
+        })),
+        ["at", "kind", "codes", "why", "source", "model", "undone"]
+      ),
       exportAiLog: () => toCSV(
         get().aiLog as unknown as Record<string, unknown>[],
         ["at", "model", "task", "pid", "lines", "redactions", "inTok", "outTok", "costUsd"]
@@ -1466,6 +1518,7 @@ export const useStore = create<State>()(
           extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
           hotbar: s.hotbar, video: s.video,
           ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog,
+          ledger: s.ledger,   // what was decided, and why — the methods appendix
           markers: s.markers, // session events + field notes: study data, not a preference
           markerColors: s.ui.markerColors,
           summaries: s.summaries, // session summaries: the researcher's artifact, study data
@@ -1508,6 +1561,7 @@ export const useStore = create<State>()(
           transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: p.pinnedTabs ?? [], active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
+          ledger: p.ledger ?? [],
           markers: p.markers ?? [],
           summaries: p.summaries ?? {},
           projectNotes: p.projectNotes ?? "",
@@ -1584,12 +1638,14 @@ export const useStore = create<State>()(
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status } : x) });
         announce(`Segment ${status}`);
       },
-      rejectCode: (code) => {
+      rejectCode: (code, why, source, model) => {
         get().pushUndo();
         let n = 0;
         set({ segments: get().segments.map((x) =>
           norm(x.code) === norm(code) && x.status === "accepted" ? (n++, { ...x, status: "rejected" }) : x) });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
+        get().logDecision({ kind: "remove", codes: [code], source: source ?? "you",
+          why: why || `Rejected all ${n} excerpt${n === 1 ? "" : "s"} of this code`, ...(model ? { model } : {}) });
         announce(`${n} excerpt${n === 1 ? "" : "s"} of ${code} rejected`);
       },
       setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x), redoStack: [] }),
@@ -1902,12 +1958,14 @@ export const useStore = create<State>()(
         set({ codebook: next });
         return changed;
       },
-      renameCode: (code, newName) => {
+      renameCode: (code, newName, why, source, model) => {
         const name = newName.trim();
         if (!name || name === code) return;
         const s = get();
         const existing = Object.keys(s.codebook).find((c) => norm(c) === norm(name) && c !== code);
-        if (existing) { get().mergeCode(code, existing); return; } // rename into existing -> merge
+        // rename into existing -> merge, and the ledger row says merge, because
+        // that is what happened to the data
+        if (existing) { get().mergeCode(code, existing, why, source, model); return; }
         get().pushUndo();
         const cb: State["codebook"] = {};
         for (const k of Object.keys(s.codebook)) cb[k === code ? name : k] = s.codebook[k];
@@ -1933,6 +1991,8 @@ export const useStore = create<State>()(
           mapPositions: mapLayouts(s.mapPositions, (rec) => renameKey(rec, code, name)),
         });
         set({ hotbarCache: hotbarCodes(get()) });
+        get().logDecision({ kind: "rename", codes: [name, code], source: source ?? "you",
+          why: why || `Renamed from “${code}”`, ...(model ? { model } : {}) });
       },
       // One coherent first letter across the whole codebook (AI proposals tend
       // to arrive Capitalized while hand-typed codes are often lowercase).
@@ -1970,10 +2030,11 @@ export const useStore = create<State>()(
         set({ hotbarCache: hotbarCodes(get()) });
         announce(`${ren.size} code name${ren.size === 1 ? "" : "s"} now start ${style === "lower" ? "lowercase" : "with a capital"}`);
       },
-      deleteCode: (code) => {
+      deleteCode: (code, why) => {
         const s = get();
         if (!s.codebook[code]) return;
         get().pushUndo();
+        const lost = s.segments.filter((x) => norm(x.code) === norm(code)).length;
         const cb = { ...s.codebook }; delete cb[code];
         set({
           codebook: cb,
@@ -1991,8 +2052,10 @@ export const useStore = create<State>()(
             .filter((c) => c.survivor !== code && c.codes.length >= 2),
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
+        get().logDecision({ kind: "delete", codes: [code], source: "you",
+          why: why || `Deleted the code and its ${lost} coding${lost === 1 ? "" : "s"}` });
       },
-      mergeCode: (from, into) => {
+      mergeCode: (from, into, why, source, model) => {
         if (norm(from) === norm(into)) return;
         get().pushUndo();
         // segment dedup inside includes proposedBy + status: two coders at the
@@ -2001,6 +2064,8 @@ export const useStore = create<State>()(
         // The definition carries over when the survivor has none.
         mergeInto(get, set, from, into);
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
+        get().logDecision({ kind: "merge", codes: [into, from], source: source ?? "you",
+          why: why || `Merged “${from}” into “${into}”`, ...(model ? { model } : {}) });
       },
       togglePin: (code) => {
         const p = get().hotbar.pinned;
