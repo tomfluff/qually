@@ -36,7 +36,8 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose, onCycle }: {
     el.style.top = Math.min(y, window.innerHeight - 200) + "px";
   }, [sidebarFontSize, x, y]);
   useClampToViewport(ref, [sidebarFontSize, x, y]);
-  useDismiss(ref, onClose);
+  // a mousedown on any AI mark is the toggle's business, not an outside click
+  useDismiss(ref, onClose, { ignore: (e) => !!(e.target as Element | null)?.closest?.("[data-ai]") });
 
   return (
     <div className="pop aipop" ref={setRef} role="dialog" tabIndex={-1}

@@ -73,7 +73,13 @@ export function Tabs() {
   }, []);
   const openAssistMenu = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
-    setAssistMenu({ x: r.left, y: r.bottom + 4 });
+    // toggle, not open: the second click on the caret closes (see useDismiss's
+    // ignore in AssistMenu — without it the outside-mousedown closes the menu
+    // a moment before this click would, and the click reopens it). The sibling
+    // closes explicitly: keyboard activation fires click with no mousedown, so
+    // the dismiss handler never saw it.
+    setReopenMenu(null);
+    setAssistMenu((m) => (m ? null : { x: r.left, y: r.bottom + 4 }));
   };
 
   return (
@@ -127,6 +133,7 @@ export function Tabs() {
           aria-label={`Reopen a closed transcript (${closed.length} available)`}
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setAssistMenu(null); // keyboard activation fires no mousedown for the dismiss handler
             setReopenMenu((m) => m ? null : { x: r.left, y: r.bottom + 4 });
           }}>
           <Icon name="plus" size={14} />
@@ -211,7 +218,8 @@ function ReopenMenu({ pids, x, y, onClose }: {
 }) {
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const ref = useRef<HTMLDivElement>(null);
-  useDismiss(ref, onClose);
+  // the + button toggles; its own mousedown must not count as "outside"
+  useDismiss(ref, onClose, { ignore: (e) => !!(e.target as Element | null)?.closest?.(".tabadd") });
   return (
     <div className="ctxmenu" ref={ref} role="menu" aria-label="Reopen a closed transcript"
       style={{ left: Math.min(x, window.innerWidth - 240), top: y, fontSize: fs }}>
@@ -414,7 +422,7 @@ function AssistMenu({ x, y, onClose }: { x: number; y: number; onClose: () => vo
   const current = useStore((s) => s.ui.assistPanel);
   const counts = useAssistCounts();
   const ref = useRef<HTMLDivElement>(null);
-  useDismiss(ref, onClose);
+  useDismiss(ref, onClose, { ignore: (e) => !!(e.target as Element | null)?.closest?.(".assistcaret") });
   // it grows with the text setting and with every panel added, so measure and
   // pull it back rather than trusting the anchor
   useClampToViewport(ref, [fs]);

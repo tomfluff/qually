@@ -2335,8 +2335,17 @@ function MapInner() {
     const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setConfirmArea(null); setLayoutMenu(null); setViewMenu(null); setMapSetMenu(null); };
     const down = (e: MouseEvent) => {
       const t = e.target as Element;
-      // the help button toggles itself; let its own handler run
-      if (!t.closest(".mapMenu") && !t.closest(".mapHelpBtn")) close();
+      if (t.closest(".mapMenu")) return;
+      // the bar's toggles manage their own menus in onClick (a mousedown-close
+      // here would fire a moment before the click reopens) — but pressing one
+      // must still dismiss the canvas popovers, or a bar menu opens over a
+      // still-open node menu or confirm
+      if (t.closest(".mapHelpBtn") || t.closest(".mapBar button[aria-haspopup]")) {
+        setMenu(null); setConfirmAi(null); setConfirmRelayout(null);
+        setConfirmFocus(null); setConfirmArea(null);
+        return;
+      }
+      close();
       // the similar results are a NODE on the canvas, not a menu: panning and
       // clicking around the map must not dismiss them. Escape and its own ×
       // close it, like the halo's card.
@@ -2357,7 +2366,7 @@ function MapInner() {
       <div className="mapBar" role="toolbar" aria-label="Map controls">
         <button className="btn iconbtn mapHelpBtn" aria-expanded={helpOpen}
           aria-label={helpOpen ? "Hide how to use the map" : "How to use the map"}
-          onClick={() => setHelpOpen((v) => !v)}
+          onClick={() => { setViewMenu(null); setLayoutMenu(null); setMapSetMenu(null); setHelpOpen((v) => !v); }}
           title="How to use the map">
           <Icon name="help" size={16} />
         </button>
@@ -2417,6 +2426,7 @@ function MapInner() {
         <button className="btn iconlabel mapViewBtn" aria-haspopup="menu" aria-expanded={!!viewMenu}
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setLayoutMenu(null); setMapSetMenu(null); setHelpOpen(false);
             setViewMenu(viewMenu ? null : { left: r.left, y: r.bottom + 8 });
           }}
           aria-label={`View: ${spec.label}. Choose what the map shows`}
@@ -2429,6 +2439,7 @@ function MapInner() {
           aria-label="Layout"
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setViewMenu(null); setMapSetMenu(null); setHelpOpen(false);
             setLayoutMenu(layoutMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
           }}
           title="Layout — reset or clean up the arrangement you are looking at">
@@ -2438,6 +2449,7 @@ function MapInner() {
           aria-label="Map settings"
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setViewMenu(null); setLayoutMenu(null); setHelpOpen(false);
             setMapSetMenu(mapSetMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
           }}
           title="Map settings: selection ring, minimap">

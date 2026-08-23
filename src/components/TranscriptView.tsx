@@ -356,7 +356,9 @@ export function TranscriptView() {
     const span = flagsByLine.get(lid)?.[k];
     if (!span) return;
     const r = el.getBoundingClientRect();
-    setAiPop({ line: lid, span, x: r.left, y: r.bottom + 6 });
+    // the SAME mark toggles its popover closed (its mousedown is ignored by
+    // the popover's dismiss, so this click is the one deciding)
+    setAiPop((cur) => cur && cur.span === span ? null : { line: lid, span, x: r.left, y: r.bottom + 6 });
   };
 
   // Scroll headroom, VS Code's `scrollBeyondLastLine` but on both ends: a pad of
