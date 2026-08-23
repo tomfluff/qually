@@ -1207,7 +1207,10 @@ export const useStore = create<State>()(
       },
       clearJump: () => set({ jump: null }),
       scrollToLine: (line) => set({ jump: { pid: get().active, line } }), // same-tab scroll, no selection change
-      setPalette: (v) => set({ paletteOpen: v }),
+      setPalette: (v) => {
+        if (v && !get().paletteOpen) earcon.open(); // the window itself is an event
+        set({ paletteOpen: v });
+      },
       setEventAt: (t) => set({ eventAt: t }),
       setFormatOpen: (v) => set({ formatOpen: v }),
       openSearch: () => set({ search: { ...get().search, open: true } }),

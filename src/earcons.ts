@@ -72,11 +72,15 @@ export const earcon = {
   reject() { if (!on()) return; tone(392, 0, 0.1, 0.05); tone(294, 0.08, 0.16, 0.05); },
   // a proposal was skipped/dismissed: muted tap
   skip() { if (!on()) return; tone(300, 0, 0.06, 0.03, "triangle"); },
+  // the code palette opened: a soft short blip — an invitation, not a commit.
+  // Triangle, so it can't be confused with the sine coding marks it precedes.
+  open() { if (!on()) return; tone(659, 0, 0.05, 0.03, "triangle"); },
   // a code was applied to a selection: the app's most frequent act, so the
-  // mark is short and unobtrusive — one clean note, no interval
-  code() { if (!on()) return; tone(784, 0, 0.07, 0.035); },
+  // mark is short and unobtrusive — one clean note, no interval.
+  // (0.05 gain: the earlier 0.035 was reported inaudible on laptop speakers)
+  code() { if (!on()) return; tone(784, 0, 0.09, 0.05); },
   // a coded segment was removed: the same note a fifth down
-  uncode() { if (!on()) return; tone(523, 0, 0.08, 0.035); },
+  uncode() { if (!on()) return; tone(523, 0, 0.09, 0.05); },
   // a step was undone: a backwards sweep, high to low
   undo() { if (!on()) return; tone(659, 0, 0.07, 0.035, "triangle"); tone(494, 0.06, 0.1, 0.035, "triangle"); },
   // and redone: the same sweep forwards
