@@ -343,7 +343,7 @@ export function AssistView() {
         {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
             own menu — this heading just names what's showing. It stays fixed; the
             list below scrolls inside cbList so the scrollbar clears the drag divider. */}
-        <div className="bSideHead">{panel === "tail" ? "The thin tail" : panel === "decisions" ? "Decisions" : panel === "merge" ? "Merge codes" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
+        <div className="bSideHead">{panel === "tail" ? "The thin tail" : panel === "decisions" ? "Decisions" : panel === "merge" ? "Merge duplicates" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
 
         <div className="cbList nicescroll" ref={listRef}
           onScroll={(e) => { remembered.leftScroll[panel] = e.currentTarget.scrollTop; }}>
@@ -851,7 +851,7 @@ function ClearSuggestions({ pid }: { pid: string | null }) {
   );
   return (
     <div className="settings-wrap" ref={ref}>
-      <button className="btn clearSug" aria-haspopup="menu" aria-expanded={open}
+      <button className="btn groundBtn clearSug" aria-haspopup="menu" aria-expanded={open}
         onClick={() => { setOpen((v) => !v); setArmed(false); }}>
         <Icon name="trash" size={14} /> Clear codings
       </button>
@@ -859,9 +859,9 @@ function ClearSuggestions({ pid }: { pid: string | null }) {
         <div className="ctxmenu" role="menu" aria-label="Clear codings" style={{ fontSize: fs }}>
           <div className="ctxhead">{pid ? `In ${pid}, or everywhere` : "Across every transcript"}</div>
           {pid && item(`Rejected in ${pid}`, n("rejected", pid), () => run("rejected", pid))}
-          {item("Rejected everywhere", n("rejected", null), () => run("rejected", null))}
+          {item("All rejected codings", n("rejected", null), () => run("rejected", null))}
           {pid && item(`Candidates in ${pid}`, n("candidate", pid), () => run("candidate", pid))}
-          {item("Candidates everywhere", n("candidate", null), () => run("candidate", null))}
+          {item("All candidate codings", n("candidate", null), () => run("candidate", null))}
           <div className="ctxdiv" />
           {/* accepted coding is the researcher's analysis, not the AI's leftovers:
               it sits behind a second click, under a rule the rest of the menu
@@ -869,7 +869,7 @@ function ClearSuggestions({ pid }: { pid: string | null }) {
           {!armed ? (
             <button role="menuitem" className="danger" disabled={!n("accepted", pid)}
               onClick={() => setArmed(true)}>
-              <Icon name="trash" size={fs} /> Accepted coding{pid ? ` in ${pid}` : " everywhere"}
+              <Icon name="trash" size={fs} /> {pid ? `Accepted in ${pid}` : "All accepted codings"}
               <span className="ctxcount">{n("accepted", pid)}</span>
             </button>
           ) : (

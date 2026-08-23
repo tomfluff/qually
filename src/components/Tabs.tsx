@@ -361,7 +361,7 @@ const ASSIST_GROUPS = [
     name: "On the codebook",
     items: [
       { id: "tail", label: "The thin tail", hint: "codes resting on one excerpt, read one at a time" },
-      { id: "merge", label: "Merge codes", hint: "near-duplicate codes to fold together" },
+      { id: "merge", label: "Merge duplicates", hint: "near-duplicate codes to fold together" },
       { id: "describe", label: "Definitions", hint: "AI-drafted code definitions from your excerpts" },
     ],
   },
