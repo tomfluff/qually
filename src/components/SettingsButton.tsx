@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore, speakersOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, type SpeakerWeight } from "../state/store";
+import { earcon } from "../earcons";
 import { openColorPicker } from "../colorPicker";
 import { PALETTES } from "../palettes";
 import { MODELS, modelOf } from "../ai/openai";
@@ -15,10 +16,19 @@ export function SettingsButton() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"Appearance"|"Reading"|"Media"|"Coding"|"Speakers"|"AI">("Appearance");
   const [dragSpeed, setDragSpeed] = useState<number | null>(null); // scroll slider mid-drag value (%)
+  const [dragVol, setDragVol] = useState<number | null>(null);     // volume slider mid-drag value (%)
+  const commitVol = () => {
+    if (dragVol === null) return;
+    setUi({ soundVolume: dragVol / 100 });
+    setDragVol(null);
+    // sample AT the new level: App's mirror effect runs before this timeout
+    setTimeout(() => earcon.code(), 0);
+  };
   // Esc can close the modal mid-drag — React fires no blur on unmount, so an
   // uncommitted drag value would silently vanish. Commit it on close instead.
   useEffect(() => {
     if (!open && dragSpeed !== null) { setUi({ scrollSpeed: dragSpeed / 100 }); setDragSpeed(null); }
+    if (!open && dragVol !== null) { setUi({ soundVolume: dragVol / 100 }); setDragVol(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   const ref = useRef<HTMLDivElement>(null);
@@ -42,6 +52,7 @@ export function SettingsButton() {
   const coderName = useStore((s) => s.ui.coderName);
   const projectName = useStore((s) => s.projectName);
   const mapSounds = useStore((s) => s.ui.mapSounds);
+  const soundVolume = useStore((s) => s.ui.soundVolume);
   const setProjectName = useStore((s) => s.setProjectName);
   const mergeLines = useStore((s) => s.ui.mergeLines);
   const mergeGapOn = useStore((s) => s.ui.mergeGapOn);
@@ -258,6 +269,20 @@ export function SettingsButton() {
                   </div>
                 </div>
                 <div className="settings-note">Quiet confirmation sounds for coding, undo, and AI replies.</div>
+                {mapSounds && (
+                  <label className="srow">
+                    <span>Volume</span>
+                    {/* commits like the scroll-speed slider; the commit plays
+                        the coding mark so the new level is HEARD, not read */}
+                    <input type="range" min={25} max={200} step={5}
+                      value={dragVol ?? Math.round(soundVolume * 100)}
+                      onChange={(e) => setDragVol(+e.target.value)}
+                      onPointerUp={() => commitVol()} onKeyUp={() => commitVol()} onBlur={() => commitVol()} />
+                    <span className="sval">{dragVol ?? Math.round(soundVolume * 100)}%</span>
+                    <button className="sreset" onClick={(e) => { e.preventDefault(); setDragVol(null); setUi({ soundVolume: 1 }); }}
+                      title="Reset to 100%">Reset</button>
+                  </label>
+                )}
 
                 <label className="srow">
                   <span>Coder name</span>

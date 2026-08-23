@@ -120,6 +120,7 @@ export interface Ui {
   mapViewport: { x: number; y: number; zoom: number } | null;
   // earcons on the Code map (multimodal confirmation for low-vision use)
   mapSounds: boolean;
+  soundVolume: number; // multiplier on the earcon gains: 1 = designed level, 0..2
   /** stretch gutter: band thickness and the room reserved for labels */
   stretchBand: "xs" | "sm" | "md" | "lg";
   stretchLabel: "sm" | "md" | "lg";
@@ -851,7 +852,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
@@ -1594,6 +1595,7 @@ export const useStore = create<State>()(
           // re-number from nextMid: the parse numbered every row, dupes included
           const added = fresh.map((m, i) => ({ ...m, mid: s.nextMid + i }));
           set({ markers: [...get().markers, ...added], nextMid: s.nextMid + added.length });
+          earcon.mark(); // one mark for the batch, not one per row
         }
         return { added: fresh.length, skipped: rows.length - fresh.length };
       },
@@ -1602,6 +1604,7 @@ export const useStore = create<State>()(
         if (!cur || cur.label === label) return; // no change, no undo entry
         get().pushUndo();
         set({ markers: get().markers.map((m) => m.mid === mid ? { ...m, label } : m) });
+        earcon.mark();
       },
       // An event written IN the app (add-event modal), not from a file. event:"marker"
       // and an empty raw: the export writes the canonical columns for it, so it
@@ -1617,6 +1620,7 @@ export const useStore = create<State>()(
         }
         get().pushUndo();
         set({ markers: [...s.markers, marker], nextMid: s.nextMid + 1 });
+        earcon.mark();
         announce("Event added");
       },
 
@@ -1627,6 +1631,7 @@ export const useStore = create<State>()(
         if (next.t === cur.t && next.code === cur.code && next.label === cur.label) return; // no change, no undo entry
         get().pushUndo();
         set({ markers: get().markers.map((x) => x.mid === mid ? next : x) });
+        earcon.mark();
         announce("Event updated");
       },
 
@@ -1656,6 +1661,7 @@ export const useStore = create<State>()(
         if (!get().markers.some((m) => m.mid === mid)) return;
         get().pushUndo();
         set({ markers: get().markers.filter((m) => m.mid !== mid) });
+        earcon.unmark();
         announce("Event deleted");
       },
       // Clear one transcript's event log — the way back out of a wrong events CSV,
@@ -2568,6 +2574,7 @@ export const useStore = create<State>()(
         s.ui.mapMinimap ??= "bottom-right";
         s.ui.mapViewport ??= null;
         s.ui.mapSounds ??= true;
+        s.ui.soundVolume ??= 1;
         s.ui.mapRing ??= "md";
         s.ui.summarySplit = clampSummarySplit(s.ui.summarySplit ?? 0.5);
         s.ui.groundBold ??= true;

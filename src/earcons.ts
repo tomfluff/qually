@@ -34,7 +34,7 @@ function tone(freq: number, at: number, dur: number, gain = 0.05, type: Oscillat
   o.type = type;
   o.frequency.value = freq;
   g.gain.setValueAtTime(0, t0);
-  g.gain.linearRampToValueAtTime(gain, t0 + 0.012);
+  g.gain.linearRampToValueAtTime(gain * volume, t0 + 0.012);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   o.connect(g).connect(a.destination);
   o.start(t0);
@@ -45,7 +45,12 @@ function tone(freq: number, at: number, dur: number, gain = 0.05, type: Oscillat
 // working after App's first effect would miss the actions taken before it
 let sounds = true;
 export const setSounds = (v: boolean) => { sounds = v; };
-const on = () => sounds;
+// pushed in like setSounds (no store import — see the cycle note above).
+// A multiplier on every mark's designed gain, so the shapes keep their
+// relative loudness; 1 is the designed level.
+let volume = 1;
+export const setVolume = (v: number) => { volume = v; };
+const on = () => sounds && volume > 0;
 
 export const earcon = {
   // a code joins a merge group: short rising pair
@@ -94,6 +99,12 @@ export const earcon = {
   // triangle = undo), and marks separated only by register are marks nobody
   // can tell apart.
   settle() { if (!on()) return; tone(392, 0, 0.3, 0.03); },
+  // a session event was placed on the transcript: a dry square tick — its
+  // own timbre (square vs the coding marks' sine), so an event never reads
+  // as a coding. Edits re-use it: the same thing, stamped again.
+  mark() { if (!on()) return; tone(494, 0, 0.05, 0.035, "square"); },
+  // an event was removed: the same tick, dropped low
+  unmark() { if (!on()) return; tone(311, 0, 0.06, 0.035, "square"); },
   // something failed: low buzz
   error() { if (!on()) return; tone(180, 0, 0.22, 0.05, "square"); },
 };

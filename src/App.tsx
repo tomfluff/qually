@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useState } from "react";
 import { installScrollSpeed } from "./scrollSpeed";
-import { setSounds } from "./earcons";
+import { setSounds, setVolume } from "./earcons";
 import { useStore, isTranscriptView } from "./state/store";
 import { Toolbar } from "./components/Toolbar";
 import { Tabs } from "./components/Tabs";
@@ -154,6 +154,8 @@ export function App() {
   // reading the store from there would close an import cycle) — the setting is
   // mirrored in instead
   useEffect(() => { setSounds(sounds); }, [sounds]);
+  const soundVolume = useStore((s) => s.ui.soundVolume);
+  useEffect(() => { setVolume(soundVolume); }, [soundVolume]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
