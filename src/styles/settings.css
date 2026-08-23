@@ -17,10 +17,14 @@
 
 /* head (fixed) · body [nav | scrolling panel] (flex:1) · Zen footer (fixed) */
 .set-body { display:flex; flex:1 1 auto; min-height:0; gap:14px; margin-top:6px; }
-.set-nav { flex:0 0 8em; display:flex; flex-direction:column; gap:2px;
-  border-right:1px solid var(--line); padding-right:12px; }
+/* the nav scrolls like the panel beside it: on a short window it was taller
+   than the body and just painted on over the footer, its bottom tabs
+   unreachable. flex-shrink:0 on the buttons hands the overflow to the scroll
+   instead of letting flex compress the labels (same trick as .set-panel). */
+.set-nav { flex:0 0 8em; display:flex; flex-direction:column; gap:2px; min-height:0;
+  overflow-y:auto; border-right:1px solid var(--line); padding-right:12px; }
 .set-nav button { text-align:left; border:none; background:none; color:var(--fg); font:inherit;
-  font-weight:500; padding:8px 11px; border-radius:8px; cursor:pointer; }
+  font-weight:500; padding:8px 11px; border-radius:8px; cursor:pointer; flex-shrink:0; }
 .set-nav button:hover { background:var(--panel); }
 .set-nav button.on { background:var(--accent); color:#fff; }
 [data-theme=dark] .set-nav button.on { color:#12161a; }
