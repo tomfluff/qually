@@ -203,10 +203,6 @@ const remembered = {
   // where the researcher parked the Revision plan panel (screen offset)
   planPos: { x: 0, y: 0 },
   planMin: false,
-  // the verdict recorded BEFORE the model's reasoning was shown, by cluster
-  // id. Session-only on purpose: the blind order is a way of reading a
-  // proposal, and a call you made last week is not one you remember making.
-  blindCalls: new Map<number, "merge" | "apart">(),
   // hand-moved PILES in the derived grouping views (session only: the piles
   // themselves drift as coding continues, so remembering them across sessions
   // would pin stale geography). Chips inside never move — only the groups do.
@@ -224,7 +220,6 @@ onProjectSwap(function forgetMapSession() {
   remembered.planPos = { x: 0, y: 0 };
   remembered.planMin = false;
   remembered.bucketPos = {};
-  remembered.blindCalls = new Map();
 });
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -413,8 +408,8 @@ const toggleCard = (ci: number) => window.dispatchEvent(new CustomEvent("qually:
 // proposal slid into its place. The survivor rides along so the answer merges
 // in the direction the capsule was already showing.
 const tellApart = (cid: number | undefined, codes: [string, string], survivor: string,
-  newName?: string, blind?: "agreed" | "differed") =>
-  window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { cid, codes, survivor, newName, blind } }));
+  newName?: string) =>
+  window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { cid, codes, survivor, newName } }));
 const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = useStore((s) => s.ui.sidebarFontSize);
@@ -485,66 +480,19 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
 // (double-click it to rename the merged concept).
 const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   const cluster = useStore((st) => st.codeClusters[data.ci]);
-  const blindOn = useStore((st) => st.ui.blindVerdict);
-  // re-render when the call is made; the map's own state is not the place for
-  // something this transient (see remembered.blindCalls)
-  const [, bump] = useState(0);
   if (!cluster) return null;
   const c = cluster;
   const st = () => useStore.getState();
   const canAccept = c.codes.length >= 2;
-  // Only the model's proposals are held back. A capsule you built by hand, or
-  // one the wording pass matched, has no reasoning you could be anchored by —
-  // its rationale is a list of the words it matched on.
-  const called = c.cid !== undefined ? remembered.blindCalls.get(c.cid) : undefined;
-  const blind = blindOn && c.source === "ai" && !called;
-  const agreement = called ? (called === "merge" ? "agreed" : "differed") : undefined;
-  const call = (v: "merge" | "apart") => {
-    if (c.cid !== undefined) remembered.blindCalls.set(c.cid, v);
-    earcon.accept();
-    announce(v === "merge"
-      ? "You would merge these. Here is what the model said."
-      : "You would keep these apart. Here is what the model said.");
-    bump((n) => n + 1);
-  };
-  // agreement is about the two VERDICTS, not about what you finally do: the
-  // model proposed a merge, so calling "merge" is agreeing with it whatever
-  // you decide afterwards
-  const skip = () => { st().dismissCluster(data.ci, agreement); earcon.skip(); };
+  const skip = () => { st().dismissCluster(data.ci); earcon.skip(); };
   // the glimpse described a membership; if the group changed since, say so
   // rather than silently presenting an outdated description
   const stale = !!c.desc && !!c.descCodes &&
     [...c.codes].sort().join("\n") !== [...c.descCodes].sort().join("\n");
   const againstStale = !!c.against && !!c.againstCodes &&
     [...c.codes].sort().join("\n") !== [...c.againstCodes].sort().join("\n");
-  if (blind) {
-    return (
-      <div className="mapCardNode nodrag nowheel">
-        {/* The model has proposed this merge and given its reasons. You get
-            the reasons after you have said what you think — shown an answer
-            first you check it, asked first you read the codes. The two
-            verdicts are only comparable if they were formed apart. */}
-        <div className="mapCardBlind">
-          <b>Your call first</b>
-          <div>The AI proposed merging these {c.codes.length}. What do you say?</div>
-        </div>
-        <div className="mapCardActions">
-          <button className="btn primary" onClick={() => call("merge")}>One code</button>
-          <button className="btn" onClick={() => call("apart")}>Keep apart</button>
-          <button className="btn" onClick={skip} title="Discard this proposal without calling it">Skip</button>
-        </div>
-      </div>
-    );
-  }
   return (
     <div className="mapCardNode nodrag nowheel">
-      {called && (
-        <div className={"mapCardAgree " + agreement}>
-          {agreement === "agreed"
-            ? "You said one code, and so did the AI."
-            : "You said keep apart; the AI proposed merging them."}
-        </div>
-      )}
       <div className="mapCardRat">{c.rationale}</div>
       {(c.against || c.againstWeak) && (
         // the case against sits with the case for, not in a dialog you dismiss
@@ -567,14 +515,14 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
       )}
       <div className="mapCardActions">
         <button className="btn primary" disabled={!canAccept}
-          onClick={() => { st().applyCluster(data.ci, agreement); earcon.accept(); }}
+          onClick={() => { st().applyCluster(data.ci); earcon.accept(); }}
           title={canAccept ? `Merge ${c.codes.length} codes into ${c.newName ?? c.survivor} — one undo step` : "A merge needs at least 2 members"}>
           Accept merge
         </button>
         {c.codes.length === 2 && (
           // only for a pair: the question is "what separates THESE two", and
           // three codes at once is a different, worse question
-          <button className="btn" onClick={() => tellApart(c.cid, c.codes as [string, string], c.survivor, c.newName, agreement)}
+          <button className="btn" onClick={() => tellApart(c.cid, c.codes as [string, string], c.survivor, c.newName)}
             title="Read both sides and write the line between them — or find that you cannot">
             Tell them apart…
           </button>
@@ -785,7 +733,6 @@ function MapInner() {
   const dark = useStore((s) => s.ui.dark);
   const mapMinimap = useStore((s) => s.ui.mapMinimap);
   const mapRing = useStore((s) => s.ui.mapRing);
-  const blindVerdict = useStore((s) => s.ui.blindVerdict);
   const codeGroups = useStore((s) => s.codeGroups);
   const setCodeGroups = useStore((s) => s.setCodeGroups);
   const setUi = useStore((s) => s.setUi);
@@ -872,8 +819,7 @@ function MapInner() {
     return () => window.removeEventListener("qually:togglecard", onToggle);
   }, []);
   // "tell them apart" opens over the map, from a capsule's own card
-  type ApartAsk = { cid?: number; codes: [string, string]; survivor: string;
-    newName?: string; blind?: "agreed" | "differed" };
+  type ApartAsk = { cid?: number; codes: [string, string]; survivor: string; newName?: string };
   const [apart, setApart] = useState<ApartAsk | null>(null);
   useEffect(() => {
     const onApart = (e: Event) => setApart((e as CustomEvent<ApartAsk>).detail);
@@ -2486,7 +2432,7 @@ function MapInner() {
       )}
       {apart && (
         <TellApartModal codes={apart.codes} survivor={apart.survivor} newName={apart.newName}
-          blind={apart.blind} onClose={() => setApart(null)}
+          onClose={() => setApart(null)}
           onDecided={() => {
             // either answer settles the proposal, so the capsule goes. Not
             // through dismissCluster: the ledger already carries the decision
@@ -2628,16 +2574,6 @@ function MapInner() {
         <div ref={mapSetRef} className="ctxmenu mapMenu mapSetMenu" role="dialog" aria-label="Map settings"
           style={{ right: mapSetMenu.right, top: mapSetMenu.y, fontSize: sidebarFontSize }}>
           <div className="set-h">Map</div>
-          <div className="srow">
-            <label htmlFor="blindv">Your call first</label>
-            <input id="blindv" type="checkbox" checked={blindVerdict}
-              onChange={(e) => setUi({ blindVerdict: e.target.checked })} />
-          </div>
-          <p className="settings-note">
-            Hold an AI proposal's reasoning back until you have said what you think of it.
-            Agreement is only worth counting when the two verdicts were formed apart —
-            and Decisions counts it.
-          </p>
           <div className="srow">
             <span id="mapring-h">Selection ring</span>
             <div className="segmented" role="radiogroup" aria-labelledby="mapring-h">
@@ -2807,7 +2743,10 @@ function MapInner() {
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>
-          {menu.sel.length === 1 && (
+          {/* only where its actions (merge, capsule) can land — the derived
+              grouping views are read-only piles, so the panel would be a
+              list of buttons that do nothing there */}
+          {menu.sel.length === 1 && VIEWS[view].layout && (
             <button role="menuitem" onClick={() => { const c = menu.sel[0]; setMenu(null); openSimilar(c); }}>
               Find similar codes…
             </button>

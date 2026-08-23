@@ -153,11 +153,6 @@ export interface Ui {
   // what the thin-tail queue counts as thin (1, 2 or 3 excerpts) — the
   // researcher's call, and the map's launcher can set it on the way in
   tailLimit: number;
-  // Consolidate: hold a model's reasoning back until you have made your own
-  // call on its proposal. On by default — being shown an answer first turns
-  // reading into checking, and the agreement rate is only meaningful if the
-  // two verdicts were formed independently.
-  blindVerdict: boolean;
   // the Summary tab's split between the detailed timeline and the summary text:
   // side by side, stacked, or one pane at a time. The split position is a fraction
   // of the container (not px) so it survives both orientations and window resizes.
@@ -801,7 +796,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, blindVerdict: true, eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
@@ -2428,7 +2423,6 @@ export const useStore = create<State>()(
         s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
         s.ui.assistPanel ??= "observations";
         s.ui.tailLimit ??= 1;
-        s.ui.blindVerdict ??= true;
         s.ui.eventSort ??= "type";
         // normalize, not just default: a corrupt persisted value would make the
         // sidebar chip index SORTS with -1 and crash the whole sidebar

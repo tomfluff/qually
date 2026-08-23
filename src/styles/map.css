@@ -448,14 +448,3 @@
    too — otherwise "no real case against" reads as an objection at a glance */
 .mapCardAgainst.weak .mapNoteWho { color:var(--muted); }
 
-/* The blind gate: what the card shows before you have called a proposal. It
-   deliberately looks like a question, not like a summary with buttons under
-   it — there is nothing here to read except the codes in the capsule above. */
-.mapCardBlind { padding:2px 0 8px; line-height:1.45; }
-.mapCardBlind b { display:block; margin-bottom:2px; }
-.mapCardBlind > div { color:var(--muted); }
-/* and afterwards, whether the two verdicts matched — stated, not scored */
-.mapCardAgree { font-size:.92em; padding:5px 9px; border-radius:7px; margin-bottom:8px;
-  border:1px solid var(--line); color:var(--fg-dim); }
-.mapCardAgree.differed { border-color:color-mix(in srgb, var(--warn, #b45309) 45%, var(--line));
-  background:color-mix(in srgb, var(--warn, #b45309) 7%, transparent); }

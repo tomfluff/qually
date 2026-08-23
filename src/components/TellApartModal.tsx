@@ -20,7 +20,7 @@ import { earcon } from "../earcons";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
-export function TellApartModal({ codes, survivor, newName, blind, onClose, onDecided }: {
+export function TellApartModal({ codes, survivor, newName, onClose, onDecided }: {
   /** exactly two codes: the pair under the question */
   codes: [string, string];
   /** the direction the capsule already proposed — the merge answer honours it,
@@ -28,10 +28,6 @@ export function TellApartModal({ codes, survivor, newName, blind, onClose, onDec
   survivor?: string;
   /** the name the capsule promised the merged code would take, if it was renamed */
   newName?: string;
-  /** whether the researcher's own verdict matched the model's, when it was
-      recorded before the reasoning was shown — it rides onto whichever row
-      this dialog writes, or the agreement count quietly loses a proposal */
-  blind?: "agreed" | "differed";
   onClose: () => void;
   /** either answer settles the question the caller was holding open */
   onDecided?: (outcome: "kept" | "merged") => void;
@@ -65,7 +61,7 @@ export function TellApartModal({ codes, survivor, newName, blind, onClose, onDec
   const keepBoth = () => {
     // one act: the sentence is the line between them, and it only means
     // anything read from either side
-    useStore.getState().defineBoth(a, b, written, blind);
+    useStore.getState().defineBoth(a, b, written);
     earcon.accept();
     onDecided?.("kept");
     setDone("Saved as the definition of both codes. The next pass — yours or a model's — now reasons from your sentence instead of guessing from the names.");
@@ -78,7 +74,7 @@ export function TellApartModal({ codes, survivor, newName, blind, onClose, onDec
     const [from, into] = survivor === a ? [b, a]
       : survivor === b ? [a, b]
       : left.length > right.length ? [b, a] : [a, b];
-    st.mergeCode(from, into, "Could not write a sentence that separates them", "you", undefined, blind);
+    st.mergeCode(from, into, "Could not write a sentence that separates them", "you");
     // the capsule may have been renamed on the map, and the card above says
     // what the merged code will be called — so it is called that
     const named = newName && newName !== into && !st.codebook[newName] ? newName : null;
