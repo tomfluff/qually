@@ -38,8 +38,8 @@ describe("what the tail queue holds", () => {
     for (const kind of ["keep", "promote", "park", "remove"] as const) {
       expect(tailQueue(book, counts, [d(kind, ["stray"])], 1)).toEqual([]);
     }
-    // a merge is a verdict on its survivor too — the row names it first
-    expect(tailQueue(book, counts, [d("merge", ["stray", "gone"])], 1)).toEqual([]);
+    // …but a merge marks nobody: the survivor now holds excerpts nobody read
+    expect(tailQueue(book, counts, [d("merge", ["stray", "gone"])], 1)).toEqual(["stray"]);
   });
 
   it("asks about a name recoded after a delete — a name is not an identity", () => {
@@ -56,11 +56,10 @@ describe("what the tail queue holds", () => {
     expect(tailQueue(book, counts, [d("keep", ["stray"], { undone: true })], 1)).toEqual(["stray"]);
   });
 
-  it("counts a merge as a verdict on the survivor only", () => {
-    // survivor first is the row's contract; the folded-away name is out of
-    // the book already, and marking it would block a future code that
-    // happens to reuse the name
-    expect(triaged([d("merge", ["solid", "stray"])])).toEqual(new Set(["solid"]));
+  it("treats a merge as read by nobody", () => {
+    // the folded-away name is out of the book; the survivor holds evidence
+    // that has just changed under it and gets asked about if it is still thin
+    expect(triaged([d("merge", ["solid", "stray"])])).toEqual(new Set());
   });
 
   it("does not treat a turned-down proposal as a verdict on its codes", () => {

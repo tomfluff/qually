@@ -47,13 +47,12 @@ export function triaged(ledger: Decision[]): Set<string> {
     // and asking about the code you just withdrew is the definition of nagging.
     if (d.kind === "unpark") { d.codes.forEach((c) => seen.delete(c)); continue; }
     if (["keep", "promote", "park", "remove"].includes(d.kind)) d.codes.forEach((c) => seen.add(c));
-    // A merge is a verdict on its SURVIVOR too (codes[0] — survivor first is
-    // the row's contract). The codes folded away are not marked, and neither
-    // is a deleted one: those names are out of the book, which already keeps
-    // them out of the queue — and the only way such a name is live again is as
-    // a NEW code the researcher typed later, which has not been read and must
-    // get its turn. A name is not an identity.
-    else if (d.kind === "merge" && d.codes.length) seen.add(d.codes[0]);
+    // A merge marks NOBODY as read. The name folded away is out of the book,
+    // and the survivor just had someone else's excerpts poured into it — if it
+    // is still thin after that, it is thin with evidence nobody has read, which
+    // is exactly what this queue is for. Deleted names go unmarked for the
+    // other reason: they are gone, and a code someone types later with the same
+    // name is a new code that deserves its turn. A name is not an identity.
   }
   return seen;
 }

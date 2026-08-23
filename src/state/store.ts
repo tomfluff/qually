@@ -1659,7 +1659,12 @@ export const useStore = create<State>()(
             })),
           ], { fromFile: true }),
           answers: p.answers ?? [],
-          // transient state belongs to the old workspace, not the loaded one
+          // transient state belongs to the old workspace, not the loaded one —
+          // the map layouts included: they are keyed by this project's code
+          // names and cluster ids, and the next project reuses both with
+          // different meanings, so its capsules would materialize on the spots
+          // someone arranged for a different study
+          mapPositions: emptyLayout(), mapIslandPos: emptyLayout(),
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
