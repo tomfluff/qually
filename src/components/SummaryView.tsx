@@ -219,9 +219,17 @@ function SplitGrip({ vertical }: { vertical: boolean }) {
   const down = (e: React.MouseEvent) => {
     e.preventDefault();
     const box = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
-    const move = (ev: MouseEvent) => apply(vertical
-      ? (ev.clientX - box.left) / box.width
-      : (ev.clientY - box.top) / box.height);
+    // DELTA from where the drag began, not the cursor's absolute fraction:
+    // the split→pixel mapping carries a constant (pane padding), so an
+    // absolute read made the divider jump to the cursor's raw fraction on
+    // the first millisecond and then track offset by that constant
+    const at = vertical ? e.clientX : e.clientY;
+    const startSplit = useStore.getState().ui.summarySplit;
+    const grip = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // the panes divide the space MINUS the grip, so the fraction does too
+    const size = Math.max(1, (vertical ? box.width : box.height) - (vertical ? grip.width : grip.height));
+    const move = (ev: MouseEvent) =>
+      apply(startSplit + ((vertical ? ev.clientX : ev.clientY) - at) / size);
     const up = () => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
