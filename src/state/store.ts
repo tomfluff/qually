@@ -236,11 +236,12 @@ export interface AiCall {
 // would make the ledger a story about a researcher who never changed their mind.
 export type DecisionKind =
   | "merge" | "rename" | "remove" | "delete"   // wired today
-  | "keep" | "park" | "unpark" | "promote" | "dismiss"; // the tail queue's outcomes
+  | "keep" | "park" | "unpark" | "dismiss"   // the tail queue's outcomes
+  | "promote";                                // legacy: rows written before "code more of this" was dropped
 /** where the idea came from — NOT who performed it. Every decision is the researcher's. */
 export type DecisionSource = "you" | "wording" | "ai";
 /** decisions that record a judgement without changing anything (see restore) */
-const INERT_DECISIONS = new Set<DecisionKind>(["keep", "promote"]);
+const INERT_DECISIONS = new Set<DecisionKind>(["keep", "promote"]);  // promote: legacy rows
 export interface Decision {
   at: string;              // ISO
   kind: DecisionKind;
@@ -498,8 +499,8 @@ export interface State {
   mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string) => void;
   /** set a code aside (or bring it back) without touching its excerpts */
   setParked: (code: string, parked: boolean, why?: string) => void;
-  /** the tail queue's two verdicts that change nothing: this code stands / this code needs more coding */
-  noteVerdict: (kind: "keep" | "promote", code: string, why?: string) => void;
+  /** the tail queue's verdict that changes nothing: I read this code and it stands */
+  noteVerdict: (code: string, why?: string) => void;
   /** take one of those back — they changed nothing, so the history stack has nothing to give */
   retractVerdict: (at: number) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
@@ -2213,13 +2214,11 @@ export const useStore = create<State>()(
       // code and deciding it stands is a decision worth recording — it is what
       // makes a second pass through the tail skip it — but there is nothing to
       // reverse, so undo leaves these alone (see INERT_DECISIONS).
-      noteVerdict: (kind, code, why) => {
+      noteVerdict: (code, why) => {
         if (!get().codebook[code]) return;
-        get().logDecision({ kind, codes: [code], source: "you",
-          why: why || (kind === "keep"
-            ? "Read its excerpts; the code stands as it is"
-            : "Under-applied — worth coding more of this") });
-        announce(kind === "keep" ? `${code} kept` : `${code} marked as worth coding more`);
+        get().logDecision({ kind: "keep", codes: [code], source: "you",
+          why: why || "Read its excerpts; the code stands as it is" });
+        announce(`${code} kept`);
       },
       // The counterpart to noteVerdict. These rows are invisible to undo by
       // design, so taking one back is its own act: the row stays, marked, and

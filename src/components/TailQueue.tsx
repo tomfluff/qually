@@ -10,9 +10,12 @@
 //
 // The default is KEEP, and it is the fastest key. A thin code is not a fault —
 // it is often the most interesting thing in the study, and the queue exists to
-// make sure you saw it, not to talk you out of it. "Code more of this" is the
-// outcome tools forget: thin can mean under-applied rather than unimportant,
-// and that verdict sends you back to the transcripts rather than to a merge.
+// make sure you saw it, not to talk you out of it.
+//
+// There were four ways out for a while: a "code more of this" that recorded an
+// intention and did nothing else. Nobody could say how it differed from Keep,
+// which is the whole test a verdict has to pass in a queue you work at speed.
+// Three outcomes, each of which does something.
 //
 // What you decided is remembered in the ledger, which is also what keeps a
 // second pass from asking again.
@@ -199,7 +202,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
     return (q ? ranked.filter((x) => x.c.toLowerCase().includes(q)) : ranked).slice(0, 8).map((x) => x.c);
   }, [code, codebook, stats, foldQuery]);
 
-  const act = useCallback((what: "keep" | "promote" | "park" | "fold", into?: string) => {
+  const act = useCallback((what: "keep" | "park" | "fold", into?: string) => {
     if (!code) return;
     const st = useStore.getState();
     if (what === "fold" && !into) { setFolding(true); return; }
@@ -220,7 +223,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
       if (cur?.kind !== "park") st.setParked(code, true);
       earcon.evict();
     } else {
-      st.noteVerdict(what, code);
+      st.noteVerdict(code);
       earcon.accept();
     }
     // move on to the next card with no verdict yet, or simply the next one
@@ -271,7 +274,6 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
       }
       const k = e.key.toLowerCase();
       if (e.key === "Enter") { e.preventDefault(); act("keep"); }
-      else if (k === "m") { e.preventDefault(); act("promote"); }
       else if (k === "f") { e.preventDefault(); act("fold"); }
       else if (k === "p") { e.preventDefault(); act("park"); }
       // walking the queue: both directions, freely, decided or not
@@ -297,7 +299,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
   const where = stats[code]?.pids ?? 0;
   const VERDICT_SAID: Partial<Record<string, string>> = {
     keep: "You kept this one.",
-    promote: "You marked this as worth coding more.",
+    promote: "You marked this as worth coding more.",   // legacy rows only
     park: "You set this aside — its excerpts are untouched, and the Codebook keeps it under Set aside.",
     remove: "You withdrew this code's excerpts.",
     merge: "This one absorbed another code.",
@@ -347,7 +349,6 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
       ))}
       <div className="tqActs">
         <button className="nBtn pri" onClick={() => act("keep")}>Keep <kbd>↵</kbd></button>
-        <button className="nBtn" onClick={() => act("promote")}>Code more of this <kbd>M</kbd></button>
         <button className="nBtn" onClick={() => act("fold")}>Fold into… <kbd>F</kbd></button>
         <button className="nBtn" onClick={() => act("park")}>Set aside <kbd>P</kbd></button>
       </div>
