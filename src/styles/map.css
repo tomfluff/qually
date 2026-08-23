@@ -384,12 +384,16 @@
    when the label leaves it no room. */
 .mapSetMenu .segmented { flex:0 0 auto; }
 .mapSetMenu .segmented .seg { flex:0 0 auto; min-width:max-content; padding-inline:9px; }
-/* four corners as a 2x2: the names are too long for one row, and stacking
-   them four deep hides the shape of the choice they describe. The 1px gaps
-   over the border colour ARE the dividers. */
-.mapSetMenu .mapCornerPick { display:grid; grid-template-columns:1fr 1fr; gap:1px;
-  background:var(--muted); }
-.mapSetMenu .mapCornerPick .seg { border-left:0; text-align:center; }
+/* four corners in one row: the icons carry the meaning the names used to, so
+   the group fits beside its label and the shared .segmented row — dividers
+   and all — is all it needs. */
+.mapSetMenu .mapCornerPick .seg { display:flex; align-items:center;
+  justify-content:center; padding-block:5px; }
+/* one icon, flipped: box-align-bottom-left is symmetric on both axes, so a
+   mirrored copy IS each of the other three corners */
+.mapCornerPick [data-corner="bottom-right"] .icn { transform:scaleX(-1); }
+.mapCornerPick [data-corner="top-left"] .icn { transform:scaleY(-1); }
+.mapCornerPick [data-corner="top-right"] .icn { transform:scale(-1); }
 .mapLayoutMenu { max-width:34ch; }
 .mapLayoutMenu button { display:block; text-align:left; width:100%; }
 .mapLayoutMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;

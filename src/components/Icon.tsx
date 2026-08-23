@@ -49,6 +49,11 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   dots: { d: ["M5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M19 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"] },
   notes: { d: ["M5 3m0 2a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z", "M9 7l6 0", "M9 11l6 0", "M9 15l4 0"] },
   "layout-grid": { d: ["M4 4m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z", "M14 4m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z", "M4 14m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z", "M14 14m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z"] },
+  // Tabler's box-align-bottom-left, verbatim. The dots and the box mirror
+  // exactly on both axes, so the other three corners are this one flipped
+  // in CSS (.mapCornerPick) rather than three near-identical copies.
+  "box-align-corner": { d: ["M5 13h5a1 1 0 0 1 1 1v5a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-5a1 1 0 0 1 1 -1",
+    "M4 9v.01", "M4 4v.01", "M9 4v.01", "M15 4v.01", "M15 20v.01", "M20 4v.01", "M20 9v.01", "M20 15v.01", "M20 20v.01"] },
   "message-2": { d: ["M8 9h8", "M8 13h6", "M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z"] }
 };
 

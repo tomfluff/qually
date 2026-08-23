@@ -239,9 +239,10 @@ const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>
 });
 const LOOSE = "\u0000loose";
 
-// Named, not cycled: the old button stepped to "the next corner", so putting
-// the minimap somewhere meant clicking until it landed there and reading an
-// icon that never said where it was going.
+// Four targets, not a cycle: the old button stepped to "the next corner", so
+// putting the minimap somewhere meant clicking until it landed there. Each
+// corner is now its own radio, drawn where it puts the minimap; the label
+// survives as the tooltip and the accessible name.
 const CORNERS = [
   ["top-left", "Top left"], ["top-right", "Top right"],
   ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"],
@@ -2465,9 +2466,11 @@ function MapInner() {
             <div className="segmented mapCornerPick" role="radiogroup" aria-labelledby="mapmini-h">
               {CORNERS.map(([c, label]) => (
                 <button key={c} className={"seg" + (mapMinimap === c ? " on" : "")}
-                  role="radio" aria-checked={mapMinimap === c}
-                  onClick={() => setUi({ mapMinimap: c })}
-                  title={`Put the minimap in the ${label.toLowerCase()}`}>{label}</button>
+                  role="radio" aria-checked={mapMinimap === c} aria-label={label}
+                  data-corner={c} onClick={() => setUi({ mapMinimap: c })}
+                  title={`Put the minimap in the ${label.toLowerCase()}`}>
+                  <Icon name="box-align-corner" size={18} />
+                </button>
               ))}
             </div>
           </div>
