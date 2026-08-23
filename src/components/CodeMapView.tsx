@@ -98,7 +98,9 @@ type IslandData = { name: string; gi: number; pile?: boolean; list?: string[];
   // the stable key session positions hang off (gi is just row order)
   gkey?: string };
 type IslandNodeT = Node<IslandData, "island">;
-type HaloData = { name: string; renamed: boolean; joins: boolean; ci: number; count: number; open: boolean };
+type HaloData = { name: string; renamed: boolean; joins: boolean; ci: number; count: number; open: boolean;
+  /** whose idea this merge was — the capsule says so on its face (see SOURCE_MARK) */
+  source?: DecisionSource };
 type HaloNodeT = Node<HaloData, "halo">;
 type CardData = { ci: number; gen: boolean }; // gen: a glimpse is being written
 type CardNodeT = Node<CardData, "card">;
@@ -410,7 +412,7 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
       : next ? { ...x, newName: next } : (({ newName: _drop, ...rest }) => rest)(x)));
   };
   return (
-    <div className="mapHalo">
+    <div className={"mapHalo" + (data.source ? " src-" + data.source : "")}>
       <div className="mapIslandLabel mapHaloLabel" style={{ fontSize }}>
         {editing ? (
           <input className="mapIslandEdit nodrag" value={draft} autoFocus
@@ -431,6 +433,12 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
             onDoubleClick={(e) => { e.stopPropagation(); setDraft(data.name); setEditing(true); }}>{data.name}</span>
         )}
         {data.renamed && !editing && <span className="mapOrbitTag">{data.joins ? "joins existing" : "new name"}</span>}
+        {data.source && (
+          <span className={"mapHaloSrc " + data.source} title={SOURCE_MARK[data.source].label}
+            aria-label={SOURCE_MARK[data.source].label}>
+            <Icon name={SOURCE_MARK[data.source].icon} size={Math.round(fontSize * 0.8)} />
+          </span>
+        )}
         <span className="mapHaloCount">{data.count}</span>
         <button className="mapHaloArrow nodrag" title={data.open ? "Fold the details" : "Reasoning and the verdict"}
           onPointerDown={(e) => e.stopPropagation()}
@@ -577,6 +585,17 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
 });
 const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode, card: CardNode, similar: SimilarNode };
 
+// A capsule is a proposal, and where it came from changes how much of your
+// attention it has earned. Icon first (colour is never the only carrier here,
+// and the map is already full of colour), the same three icons the rest of the
+// app uses: a sparkle for the model, two sheets for the offline wording pass,
+// a hand-drawn pencil for one you made yourself.
+const SOURCE_MARK: Record<DecisionSource, { icon: string; label: string }> = {
+  ai: { icon: "sparkle", label: "Proposed by the AI" },
+  wording: { icon: "copy", label: "Matched on wording, on this machine" },
+  you: { icon: "pencil", label: "You proposed this merge" },
+};
+
 // React Flow commits its marquee through React on EVERY pointer event with no
 // rAF gate (verified in the installed v12.11.3 source with codex): a high-rate
 // mouse lands several unsynchronized commits per display frame, and the
@@ -716,6 +735,29 @@ function MapInner() {
   const codebookFp = useMemo(() => Object.keys(codebook).sort().join("\n"), [codebook]);
   const topicsStale = topicFp !== codebookFp;
   const [topicAiOpen, setTopicAiOpen] = useState(false);
+  // The bar fits in one row or it sheds, in this order, until it does. A CSS
+  // container query cannot do this job: its `em` resolves against the ROOT
+  // font size, so every threshold would be blind to the text-size setting —
+  // and this app is FOR the reader who turns that up.
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const STEPS = ["shedHint", "shedLabels", "shedCount", "shedTitle"];
+    const fit = () => {
+      el.classList.remove(...STEPS);
+      for (const step of STEPS) {
+        // reading scrollWidth flushes layout, so each step is measured against
+        // the previous one's result rather than the state we started in
+        if (el.scrollWidth <= el.clientWidth + 1) return;
+        el.classList.add(step);
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
   const [viewMenu, setViewMenu] = useState<{ left: number; y: number } | null>(null);
   const viewMenuRef = useKeepOnScreen<HTMLDivElement>([viewMenu]);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
@@ -1112,6 +1154,9 @@ function MapInner() {
             joins: !!b.c.newName && Object.keys(codebook).some((k) =>
               norm(k) === norm(b.c.newName!) && !b.c.codes.some((m) => norm(m) === norm(k))),
             ci: b.c.ci, count: b.c.codes.length, open: openCards.has(b.c.ci),
+            // a proposal from before provenance was recorded says nothing
+            // rather than claiming to be yours
+            source: b.c.source,
           },
         });
         for (const m of b.c.codes)
@@ -2037,7 +2082,7 @@ function MapInner() {
 
   return (
     <div id="codemap" className={"view-" + view} style={{ fontSize: sidebarFontSize }}>
-      <div className="mapBar">
+      <div className="mapBar" ref={barRef}>
         <span className="mapTitle">Code map</span>
         <button className="btn iconbtn mapHelpBtn" aria-expanded={helpOpen}
           aria-label={helpOpen ? "Hide how to use the map" : "How to use the map"}
@@ -2061,14 +2106,14 @@ function MapInner() {
         )}
         {view === "reconcile" && (
           <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
-            title="AI proposes merge groups and per-code revisions for your review">
-            <Icon name="sparkle" size={16} /> <span className="blabel">Reconcile with AI</span>
+            title="The same question as Match on wording, asked of a model: merge groups and per-code revisions, for your review">
+            <Icon name="sparkle" size={16} /> <span className="blabel">Match with AI</span>
           </button>
         )}
         {view === "themes" && (
           <button className="btn iconlabel" onClick={() => setThemeAiOpen(true)}
-            title="AI groups the cleaned codebook into theme islands for you to reshape">
-            <Icon name="sparkle" size={16} /> <span className="blabel">Group into themes with AI</span>
+            title="AI groups the cleaned codebook into theme islands for you to reshape (nothing is applied until you accept)">
+            <Icon name="sparkle" size={16} /> <span className="blabel">Group with AI</span>
           </button>
         )}
         {view === "areas" && (
@@ -2279,6 +2324,7 @@ function MapInner() {
             <dt>Move</dt><dd>Space, middle or right-drag pans; wheel zooms.</dd>
             <dt>Act</dt><dd>Right-click a selection. Double-click reads a code.</dd>
             <dt>Capsules</dt><dd>A proposed merge — drag chips in or out.</dd>
+            <dt>Whose idea</dt><dd>Solid and tinted came from the AI, dashed from the wording pass, plain from you.</dd>
             <dt>Merge vs group</dt><dd>A merge folds codes into one; a group keeps separate codes together.</dd>
           </dl>
         </div>

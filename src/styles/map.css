@@ -11,18 +11,29 @@
    at large accessible sizes. Every control opts in through the same rule
    rather than each carrying its own vertical padding. */
 .mapBar { --ctl-h:2.2em;
-  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  /* ONE row, always. Wrapping put the Layout menu and the settings gear on a
+     second line the moment the text size went up, which moved every control
+     the researcher had just learned the position of. Nothing wraps now: the
+     bar measures itself and sheds, in order, until it fits (see fitBar). */
+  display:flex; align-items:center; gap:10px; flex-wrap:nowrap;
   padding:9px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
-.mapBar .btn,
-.mapBar .settext,
-.mapBar .segmented,
-.mapBar .segmented .seg {
-  /* one font-size for the whole bar — .btn's own 1rem would otherwise ignore
-     the text-size setting AND make `em` resolve differently per control, which
-     is what left the bar with two heights */
-  font-size:1em;
-  height:var(--ctl-h); min-height:var(--ctl-h); padding-block:0;
-  display:inline-flex; align-items:center; }
+/* controls keep their size; the hint and the gap are what give ground */
+.mapBar > .btn, .mapBar > .segmented, .mapBar > .mapTitle, .mapBar > .mapCount { flex:0 0 auto; }
+
+/* The shedding order, least missed first. Container queries cannot do this:
+   their em resolves against the ROOT font size, not the bar's, so every
+   threshold would be blind to the one setting that matters most here — the
+   researcher's text size. The classes come from a ResizeObserver instead.
+   Everything that loses its label keeps its title and accessible name, and
+   the view NAME never sheds: it is the only thing on screen saying which of
+   the seven maps you are looking at. */
+.mapBar.shedHint .mapDragHint { display:none; }
+.mapBar.shedLabels .btn .blabel:not(.mapViewName) { display:none; }
+.mapBar.shedLabels .btn.iconlabel:not(.mapViewBtn) { justify-content:center;
+  aspect-ratio:1; padding-inline:0; }
+.mapBar.shedCount .mapCount { display:none; }
+.mapBar.shedTitle .mapTitle, .mapBar.shedTitle .mapHelpBtn { display:none; }
+
 /* icon-to-ink alignment is app-wide now: base.css nudges every .icn */
 .mapBar .segmented { padding:0; }
 .mapBar .btn.iconbtn { justify-content:center; aspect-ratio:1; padding-inline:0; }
@@ -231,7 +242,12 @@
 /* what a drag does in THIS view: permanently visible, because the same motion
    means three different things across the views and nothing else says which */
 .mapDragHint { color:var(--muted); font-size:.9em; white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; max-width:44ch; }
+  overflow:hidden; text-overflow:ellipsis; max-width:44ch;
+  /* the bar's shock absorber: it gives up width a character at a time so the
+     controls never wrap onto a second row. Thresholds alone could not do this
+     — the room depends on the text size, the tab row and the label lengths at
+     once, and this just measures what is left. */
+  flex:0 1 auto; min-width:0; }
 /* the view menu: one flat list, each row carrying its status and drag meaning */
 .mapViewMenu { max-width:46ch; }
 .mapViewMenu button { display:block; text-align:left; width:100%; }
@@ -383,3 +399,24 @@
 .react-flow__node.selected > .mapIsland { background:color-mix(in srgb, var(--accent) 9%, transparent); }
 /* the one line that separates the two actions people confuse */
 .mapSimChoice { padding:6px 12px 0; }
+
+/* Where a merge proposal came from, on the capsule itself. The icon is the
+   carrier; the border style backs it up, because a map this colourful cannot
+   ask a hue to hold a distinction on its own. */
+.mapHaloSrc { display:inline-flex; align-items:center; color:var(--muted); }
+.mapHaloSrc.ai { color:var(--accent); }
+/* The border does the work at a distance, where the caption's icon is too
+   small to read: a proposal you have not looked at yet (the model's) is the
+   loudest, one the machine computed from your own words is dashed, and one you
+   made yourself is quiet — you already know what it is. */
+.mapHalo.src-ai { border-style:solid; border-width:2px;
+  border-color:color-mix(in srgb, var(--accent) 70%, var(--line));
+  background:color-mix(in srgb, var(--accent) 10%, transparent); }
+.mapHalo.src-wording { border-style:dashed; border-width:2px;
+  border-color:var(--muted);
+  background:color-mix(in srgb, var(--accent) 4%, transparent); }
+.mapHalo.src-you { border-style:solid; border-width:1.5px;
+  border-color:var(--line);
+  background:color-mix(in srgb, var(--fg) 4%, transparent); }
+/* the drop target still wins over all three */
+.mapHalo.will { border-color:var(--accent); }
