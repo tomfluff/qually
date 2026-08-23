@@ -863,7 +863,10 @@ function MapInner() {
       const area = list.reduce((a, c) => a + (widths.get(c)! + GX) * (ch + GY), 0);
       return Math.max(460, Math.sqrt(area) * 1.5);
     };
-    const inBook = (c: string) => c in codebook;
+    // on the MAP, not merely in the codebook: a code you set aside has no chip,
+    // so a cluster or island still listing it would pack against a width that
+    // does not exist and lay the whole row out on NaN
+    const inBook = (c: string) => c in codebook && !codebook[c].parked;
     // "Find similar" hangs off the chip you asked about, so it pans and zooms
     // with the map. It is placed LAST, after positions are known, and never
     // participates in packing — asking a question must not move the map.
