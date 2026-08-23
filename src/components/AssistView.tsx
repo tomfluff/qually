@@ -6,7 +6,7 @@
 // suggest are also where their runs START: each groups by transcript or by its own
 // axis, and a transcript row carries the sparkle that opens that run's consent gate.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useStore, type Segment } from "../state/store";
+import { useStore, liveCodes, type Segment } from "../state/store";
 import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
 import { LENSES, hashLine, spanLens, lensOf } from "../ai/flag";
@@ -137,7 +137,7 @@ export function AssistView() {
   // the main list) take the same sort.
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   const defGroups = useMemo(() => {
-    const all = Object.keys(codebook);
+    const all = liveCodes(codebook);
     const order = (cs: string[]) => sortCodes(cs, stats, defSort);
     return {
       defined: order(all.filter((c) => codebook[c].def)),
@@ -265,7 +265,7 @@ export function AssistView() {
     const keys = suggestBy === "transcript" ? allPids : [...n.keys()].sort();
     return keys.map((key) => ({ key, n: n.get(key) ?? 0 }));
   }, [candidates, suggestBy, allPids]);
-  const hasCodes = Object.keys(codebook).length > 0;
+  const hasCodes = liveCodes(codebook).length > 0;
   // A selection whose row is gone reads as "all", like liveSel and liveProposals
   // already do. Grouped by code the rows come only from codes that still HAVE
   // candidates, so resolving the last one of the code you were working through
@@ -456,14 +456,14 @@ export function AssistView() {
                 ? "Drafted from coded excerpts — code a bit first."
                 : `Drafts the ${shownDefCodes.length} code${shownDefCodes.length === 1 ? "" : "s"} on the right from how you used them. Written straight in; edit here after.`}
             </div>
-            {Object.keys(codebook).length > 0 && (
+            {liveCodes(codebook).length > 0 && (
               <>
                 <div className="aByLabel" id="defScopeLabel">Show</div>
                 <div className="segmented aSuggestBy defScope" role="group" aria-labelledby="defScopeLabel">
                   {DEF_SCOPES.map((s) => (
                     <button key={s.id} className={"seg" + (defScope === s.id ? " on" : "")}
                       aria-pressed={defScope === s.id} onClick={() => pickDefScope(s.id)}
-                      title={s.id === "all" ? `All ${Object.keys(codebook).length} codes`
+                      title={s.id === "all" ? `All ${liveCodes(codebook).length} codes`
                         : s.id === "undefined" ? `${defGroups.undefined.length} codes with no definition yet`
                         : `${defGroups.defined.length} codes that have one`}>
                       {s.label}

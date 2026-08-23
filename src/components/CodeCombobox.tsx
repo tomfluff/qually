@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { useStore, liveCodes } from "../state/store";
 import { norm } from "../contract/segments";
 
 // subsequence fuzzy match: "vs" matches "visual strain"
@@ -49,12 +49,15 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose, o
 
   const query = draft.trim();
   const matches = query
-    ? Object.keys(codebook).filter((c) => fuzzy(query, c)).sort((a, b) => {
+    // a parked code cannot be applied — that is what setting it aside means
+    ? liveCodes(codebook).filter((c) => fuzzy(query, c)).sort((a, b) => {
         const ql = query.toLowerCase();
         const rank = (x: string) => (x.toLowerCase().startsWith(ql) ? 0 : x.toLowerCase().includes(ql) ? 1 : 2);
         return rank(a) - rank(b) || a.length - b.length || a.localeCompare(b);
       })
     : [];
+  // …but it still BLOCKS a new code of the same name, or coding would
+  // silently create a second code the book already has, parked
   const exact = Object.keys(codebook).some((c) => norm(c) === norm(query));
   const entries = [
     ...matches.map((c) => ({ type: "code" as const, name: c })),

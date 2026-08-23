@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { useStore, liveCodes } from "../state/store";
 import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
 import { openColorPicker } from "../colorPicker";
@@ -18,12 +18,16 @@ export function CodeMenu({ code, x, y, onClose }: {
   // pinning only steers the hotbar in "pinned" mode; in auto (by usage) it's inert
   const hotbarMode = useStore((s) => s.hotbar.mode);
   const segCount = segments.filter((z) => norm(z.code) === norm(code)).length;
-  const others = Object.keys(codebook).filter((c) => c !== code).sort();
+  // never offer a parked code as a merge target: folding live work into
+  // something you set aside would hide it without saying so
+  const others = liveCodes(codebook).filter((c) => c !== code).sort();
   const renameCode = useStore((s) => s.renameCode);
   const deleteCode = useStore((s) => s.deleteCode);
   const mergeCode = useStore((s) => s.mergeCode);
   const setColor = useStore((s) => s.setColor);
   const togglePin = useStore((s) => s.togglePin);
+  const setParked = useStore((s) => s.setParked);
+  const isParked = !!codebook[code]?.parked;
   // menu text follows the sidebar text-size setting, like SegmentPopover
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const ref = useRef<HTMLDivElement>(null);
@@ -97,6 +101,12 @@ export function CodeMenu({ code, x, y, onClose }: {
           </button>
           {others.length > 0 && <button onClick={() => setMode("merge")}><Icon name="merge" size={15} />Merge into</button>}
           <div className="ctxdiv" />
+          {/* between keeping and deleting: the code leaves the lists you code
+              from, and every one of its excerpts stays exactly as it is */}
+          <button onClick={() => { setParked(code, !isParked); onClose(); }}>
+            <Icon name={isParked ? "undo" : "archive"} size={15} />
+            {isParked ? "Bring back into the codebook" : "Set aside"}
+          </button>
           <button className="danger" onClick={() => { deleteCode(code); onClose(); }}>
             <Icon name="trash" size={15} />Delete{segCount > 0 ? ` (and ${segCount} segment${segCount > 1 ? "s" : ""})` : ""}
           </button>

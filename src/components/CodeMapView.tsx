@@ -25,7 +25,7 @@ import {
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useStore, bestSurvivor, MAP_RING_PX, type MapStage } from "../state/store";
+import { useStore, bestSurvivor, liveCodes, MAP_RING_PX, type MapStage } from "../state/store";
 import { codeStats } from "../codeStats";
 import { speakerBuckets } from "../speakerBuckets";
 import { preselectBrowse } from "./BrowseView";
@@ -502,7 +502,7 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
       <div className="mapSimHead">
         <b>Similar to “{data.source}”</b>
         <button className="mapNoteX" aria-label="Close" onClick={() => simEvent("close")}>×</button>
-        <span>{data.rows.length} of {Object.keys(codebook).length - 1} codes · {n} ticked</span>
+        <span>{data.rows.length} of {liveCodes(codebook).length - 1} codes · {n} ticked</span>
       </div>
       {data.rows.length === 0 && (
         <div className="mapSimEmpty">
@@ -701,7 +701,7 @@ function MapInner() {
     const st = useStore.getState();
     if (!similar) return { inTok: 0, cost: 0 };
     const red = redactor(st.ai.redactTerms);
-    const book = Object.keys(st.codebook).filter((n) => n !== similar.source)
+    const book = liveCodes(st.codebook).filter((n) => n !== similar.source)
       .map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
     const inTok = estimateSimilarTokens(
       { name: similar.source, def: st.codebook[similar.source]?.def ?? "", excerpts: [] }, book, red);
@@ -832,8 +832,9 @@ function MapInner() {
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   // biggest first: the codes doing the most work anchor the top of the map
+  // codes you set aside are off the map too — the map IS the working codebook
   const codes = useMemo(() =>
-    Object.keys(codebook).sort((a, b) =>
+    liveCodes(codebook).sort((a, b) =>
       (stats[b]?.segs ?? 0) - (stats[a]?.segs ?? 0) || a.localeCompare(b)),
     [codebook, stats]);
 
@@ -1246,7 +1247,7 @@ function MapInner() {
   }, []);
   const openSimilar = useCallback((source: string) => {
     const st = useStore.getState();
-    const book = Object.keys(st.codebook).map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
+    const book = liveCodes(st.codebook).map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
     const rows = findSimilar(source, book).map((m) => ({ ...m }));
     setSimilar({
       source, rows, ai: "idle",
@@ -1265,7 +1266,7 @@ function MapInner() {
     const key = getKey();
     if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
     const red = redactor(st.ai.redactTerms);
-    const book = Object.keys(st.codebook)
+    const book = liveCodes(st.codebook)
       .filter((n) => n !== cur.source)
       .map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
     // a few excerpts of the focus code sharpen the judgement; the rest of the
@@ -1377,7 +1378,7 @@ function MapInner() {
     const mk = (name: string) => ({ name, def: st.codebook[name]?.def ?? "", excerpts: byCode.get(name) ?? [] });
     return {
       focus: [...focusSet].map(mk),
-      context: Object.keys(st.codebook).filter((c) => !focusSet.has(c)).map(mk),
+      context: liveCodes(st.codebook).filter((c) => !focusSet.has(c)).map(mk),
     };
   }, []);
   const runFocus = useCallback(async (codes: string[]) => {

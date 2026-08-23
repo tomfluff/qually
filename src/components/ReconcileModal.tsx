@@ -7,7 +7,7 @@
 // island for a cheaper local refinement. Evidence depth (excerpts per code) is
 // the researcher's dial — more excerpts, better judgments, more tokens.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore, type CodeGroup } from "../state/store";
+import { useStore, liveCodes, type CodeGroup } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -49,13 +49,19 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
       const byCode = new Map<string, string[]>();
       for (const s of segments) {
         if (s.status !== "accepted" || !transcripts[s.pid]) continue;
+        // a code you set aside is out of the analysis, so it is out of the
+        // payload — its excerpts are still there, they are just not evidence
+        // the model is asked to reason about
+        if (codebook[s.code]?.parked) continue;
         if (only && !only.has(s.code)) continue;
         const arr = byCode.get(s.code) ?? [];
         if (arr.length >= cap) continue;
         const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
         if (ex) { arr.push(ex); byCode.set(s.code, arr); }
       }
-      const names = includeEmpty && only ? [...only].filter((n) => n in codebook) : [...byCode.keys()];
+      const names = includeEmpty && only
+        ? [...only].filter((n) => n in codebook && !codebook[n].parked)
+        : [...byCode.keys()];
       return names.map((name) => ({ name, def: codebook[name]?.def ?? "", excerpts: byCode.get(name) ?? [] }));
     };
   }, [segments, transcripts, codebook]);
@@ -71,7 +77,7 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
   }, [gather, focusMode, focusSet, exN, scope, groups]);
   const contextCodes = useMemo<MergeCodeInput[]>(() => {
     if (!focusMode) return [];
-    const rest = new Set(Object.keys(codebook).filter((c) => !focusSet!.has(c)));
+    const rest = new Set(liveCodes(codebook).filter((c) => !focusSet!.has(c)));
     // includeEmpty: "the WHOLE codebook" means it — a definition-only code
     // with no excerpts yet is often exactly the right home for a stray
     return gather(rest, 2, true);

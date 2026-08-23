@@ -28,6 +28,12 @@ import { SORTS, type SortBy } from "../codeStats";
 // hand-picked colour and a generated one come from one vocabulary.
 export const COLORS = PALETTE;
 
+/** the working codebook: everything you have NOT set aside (see `parked`) */
+export const liveCodes = (cb: State["codebook"]): string[] =>
+  Object.keys(cb).filter((c) => !cb[c].parked);
+export const parkedCodes = (cb: State["codebook"]): string[] =>
+  Object.keys(cb).filter((c) => cb[c].parked);
+
 // `active` is a transcript pid or one of these reserved view keys (Codebook / Assist).
 // Both are non-transcript surfaces, so transcript-only chrome and selection bookkeeping
 // gate on isTranscriptView.
@@ -236,7 +242,13 @@ export interface State {
   // defAi: the definition text is untouched AI output. Any manual input — hand-
   // written, or an AI draft edited before/after apply — clears it, so the UI can
   // mark AI-only definitions apart from ones a person has shaped.
-  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean; defAi?: boolean }>;
+  // parked: set aside from the WORKING codebook without touching a single
+  // excerpt. Not a rejection (that says the codings were wrong) and not a
+  // deletion (that loses them): it is "not part of my analysis right now", the
+  // outcome a thin code needs when neither keeping nor destroying it is honest.
+  // Its segments stay exactly as they are; only the lists you code from stop
+  // offering it. See parkedOut()/liveCodes() below.
+  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean; defAi?: boolean; parked?: boolean }>;
   extSegRows: Record<string, string>[];
   tabs: string[];
   pinnedTabs: string[]; // pids pinned to the FRONT of the tab list, in pin order
@@ -458,6 +470,8 @@ export interface State {
   normalizeCodeCase: (style: "lower" | "capital") => void;
   deleteCode: (code: string, why?: string) => void;
   mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string) => void;
+  /** set a code aside (or bring it back) without touching its excerpts */
+  setParked: (code: string, parked: boolean, why?: string) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
   // returns the codes it actually wrote — a draft that echoes what is already
   // stored changes nothing, and the receipt must not claim it did
@@ -698,10 +712,12 @@ const renameRef = (ref: string, from: string, to: string) =>
   ref.startsWith(`${from}:`) || ref.startsWith(`${from}@`) ? to + ref.slice(from.length) : ref;
 
 function hotbarCodes(s: State): string[] {
-  if (s.hotbar.mode === "pinned") return s.hotbar.pinned.slice(0, 9);
+  // a pinned parked code stays pinned (unparking must not cost you the pin) but
+  // never reaches the hotbar, or a digit key would apply a code you set aside
+  if (s.hotbar.mode === "pinned") return s.hotbar.pinned.filter((c) => !s.codebook[c]?.parked).slice(0, 9);
   const count: Record<string, number> = {};
   s.segments.filter((x) => x.status === "accepted").forEach((x) => { count[x.code] = (count[x.code] || 0) + 1; });
-  return Object.keys(s.codebook).sort((a, b) => (count[b] || 0) - (count[a] || 0)).slice(0, 9);
+  return liveCodes(s.codebook).sort((a, b) => (count[b] || 0) - (count[a] || 0)).slice(0, 9);
 }
 
 export const useStore = create<State>()(
@@ -2066,6 +2082,22 @@ export const useStore = create<State>()(
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "merge", codes: [into, from], source: source ?? "you",
           why: why || `Merged “${from}” into “${into}”`, ...(model ? { model } : {}) });
+      },
+      // Parking never touches segments — that is the whole point of it existing
+      // beside rejectCode. hotbarCache is rebuilt because a parked code must
+      // stop being offered by the digit keys.
+      setParked: (code, parked, why) => {
+        const s = get();
+        const cur = s.codebook[code];
+        if (!cur || !!cur.parked === parked) return;
+        get().pushUndo();
+        set({ codebook: { ...s.codebook, [code]: { ...cur, parked: parked || undefined } } });
+        set({ hotbarCache: hotbarCodes(get()) });
+        get().logDecision({ kind: parked ? "park" : "unpark", codes: [code], source: "you",
+          why: why || (parked
+            ? "Set aside from the working codebook; its excerpts are untouched"
+            : "Brought back into the working codebook") });
+        announce(parked ? `${code} set aside` : `${code} back in the codebook`);
       },
       togglePin: (code) => {
         const p = get().hotbar.pinned;

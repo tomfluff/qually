@@ -39,7 +39,10 @@ export interface Project {
   // the live codebook and JSON.stringify keeps unknown keys, so any future
   // normalisation against this type would launder unchecked model text into the
   // file as human-written — the exact failure the def_source column exists to stop.
-  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean; defAi?: boolean }>;
+  // parked (optional) records a code set aside from the working codebook. Its
+  // segments are untouched, so a build that does not know the flag simply shows
+  // the code again — the safe direction for an unknown field.
+  codebook: Record<string, { color: string; def: string; status: string; colorLock?: boolean; defAi?: boolean; parked?: boolean }>;
   extSegRows: Record<string, string>[];
   tabs: string[];
   pinnedTabs?: string[]; // optional: absent in files written before tab pinning

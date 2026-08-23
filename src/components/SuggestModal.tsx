@@ -9,7 +9,7 @@
 // transcript (its menu says "AI for this transcript"), while the Assist tab passes
 // `choose` and picks from the corpus in here — Assist has no active transcript.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { guessQuiet, useStore } from "../state/store";
+import { guessQuiet, liveCodes, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -83,7 +83,9 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   // the codebook as the model sees it: name + def + up to N exemplar excerpts (from
   // this study's accepted segments), which anchor what each code actually means
   const codes = useMemo<SuggestCode[]>(() => {
-    return Object.keys(codebook).map((name) => {
+    // a set-aside code is not offered to the model either — it would come
+    // back as candidate codings for a code you took out of the analysis
+    return liveCodes(codebook).map((name) => {
       const excerpts: string[] = [];
       for (const s of segments) {
         if (excerpts.length >= SUGGEST_EXEMPLARS) break;

@@ -3,7 +3,7 @@
 // The Codebook tab: go over your coding. Codes on the left, their excerpts on the
 // right. The AI's observations moved out to the Assist tab; this view is yours.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useStore, type Segment } from "../state/store";
+import { useStore, liveCodes, parkedCodes, type Segment } from "../state/store";
 import { norm } from "../contract/segments";
 import { segExcerpt } from "../contract/excerpt";
 import { Resizer } from "./Resizer";
@@ -58,6 +58,7 @@ export function BrowseView() {
   const [describeOpen, setDescribeOpen] = useState(false);
   const hasGrounds = Object.keys(aiGrounds).length > 0;
   const setColor = useStore((s) => s.setColor);
+  const setParked = useStore((s) => s.setParked);
   const jumpTo = useStore((s) => s.jumpTo);
   const [selected, setSelected] = useState<Set<string>>(remembered.selected);
   const [anchor, setAnchor] = useState<string | null>(remembered.anchor);
@@ -92,9 +93,17 @@ export function BrowseView() {
   const sortIdx = Math.max(0, SORTS.findIndex((x) => x.id === ui.codeSort));
   const nextSort = SORTS[(sortIdx + 1) % SORTS.length];
   const allCodes = useMemo(
-    () => sortCodes(Object.keys(codebook), counts, ui.codeSort), [codebook, counts, ui.codeSort]);
-  const listed = allCodes.filter((c) => c.toLowerCase().includes(filter.toLowerCase()));
-  const chosen = allCodes.filter((c) => selected.has(c));
+    () => sortCodes(liveCodes(codebook), counts, ui.codeSort), [codebook, counts, ui.codeSort]);
+  // the Codebook is where a set-aside code stays visible — everywhere else has
+  // stopped offering it, so this list is the only way back
+  const parked = useMemo(
+    () => sortCodes(parkedCodes(codebook), counts, ui.codeSort), [codebook, counts, ui.codeSort]);
+  const hit = (c: string) => c.toLowerCase().includes(filter.toLowerCase());
+  const listed = allCodes.filter(hit);
+  const listedParked = parked.filter(hit);
+  // a parked code still reads: its excerpts are untouched, and deciding to
+  // bring it back means looking at them
+  const chosen = [...allCodes, ...parked].filter((c) => selected.has(c));
 
   // selection mirrors transcript lines: plain = one (or deselect), Shift = range, Ctrl = toggle
   const select = (c: string, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => {
@@ -185,6 +194,35 @@ export function BrowseView() {
                 under the code's title on the right, where there is room. */}
           </div>
         ))}
+        {listedParked.length > 0 && (
+          <>
+            <div className="codeHead cbParkHead">
+              <span className="codeTitle">Set aside</span>
+              <span className="cnt">{listedParked.length}</span>
+            </div>
+            {listedParked.map((c) => (
+              <div key={c} className={"bCode parked" + (selected.has(c) ? " sel" : "")} tabIndex={0} role="button"
+                aria-label={`Show excerpts for ${c}, set aside, ${counts[c]?.segs || 0} excerpt${counts[c]?.segs === 1 ? "" : "s"}`}
+                aria-pressed={selected.has(c)} onClick={(e) => select(c, e)}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(c, e); }
+                }}
+                data-tip={`${c} — set aside; its excerpts are untouched`}>
+                <div className="bCodeMain">
+                  <span className="codebar" style={{ background: codebook[c].color }} data-tip="" />
+                  <span className="bCodeName">{c}</span>
+                  <CodeCounts stat={counts[c]} size={cntIcon} />
+                  <button className="rowMenu" aria-label={`Bring ${c} back into the codebook`}
+                    title="Bring back into the codebook"
+                    onClick={(e) => { e.stopPropagation(); setParked(c, false); }}>
+                    <Icon name="undo" size={sidebarFontSize} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
         </div>
       </div>
 

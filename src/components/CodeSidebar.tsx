@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useMemo, useState } from "react";
-import { useStore, patternOf } from "../state/store";
+import { useStore, patternOf, liveCodes } from "../state/store";
 import { codeStats, sortCodes, SORTS } from "../codeStats";
 import { CodeMenu } from "./CodeMenu";
 import { CodeCounts } from "./CodeCounts";
@@ -32,7 +32,7 @@ export function CodeSidebar() {
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
-  const hasCodes = Object.keys(codebook).length > 0;
+  const hasCodes = liveCodes(codebook).length > 0;
   const { open: aiMenu, setOpen: setAiMenu, btnRef: aiBtnRef, menuRef: aiMenuRef } = useToggleMenu();
 
   // keyboard/visible route to the same menu right-click opens, anchored to the row or ⋯ button
@@ -43,7 +43,8 @@ export function CodeSidebar() {
 
   const counts = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   const codes = useMemo(
-    () => sortCodes(Object.keys(codebook), counts, codeSort), [codebook, counts, codeSort]);
+    // codes you set aside are not offered here; the Codebook keeps them
+    () => sortCodes(liveCodes(codebook), counts, codeSort), [codebook, counts, codeSort]);
   // one chip, cycling — three orders is one more than a toggle but still far less
   // room than three pills cost in a 250px panel, and the chip names the order it
   // is IN, so the list is always labelled even when nobody touches it

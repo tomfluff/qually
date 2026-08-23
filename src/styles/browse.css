@@ -449,3 +449,8 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .dvSrc.ai { color:var(--accent); }
 .dvModel { font-variant-numeric:tabular-nums; }
 .dvUndone { display:inline-flex; align-items:center; gap:.35em; }
+
+/* a code you set aside: still readable, plainly not part of the working book */
+.cbParkHead { margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
+.bCode.parked .bCodeName { color:var(--fg-dim); font-style:italic; }
+.bCode.parked .codebar { opacity:.55; }

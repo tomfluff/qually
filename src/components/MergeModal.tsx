@@ -39,6 +39,7 @@ export function MergeModal({ onProposals, onClose }: {
     const byCode = new Map<string, string[]>();
     for (const s of segments) {
       if (s.status !== "accepted" || !transcripts[s.pid]) continue;
+      if (codebook[s.code]?.parked) continue; // set aside means out of the payload too
       const arr = byCode.get(s.code) ?? [];
       if (arr.length >= MERGE_EXEMPLARS) continue;
       const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
