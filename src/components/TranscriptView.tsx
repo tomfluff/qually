@@ -13,7 +13,7 @@ import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
 import { useDismiss } from "../usePopover";
-import { stretchColor, stretchDims, stretchOverlaps, type Stretch } from "../stretches";
+import { stretchColor, stretchDims, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
@@ -201,6 +201,26 @@ export function TranscriptView() {
     if (!cellEl) { ov.replaceChildren(); return; }
     const baseX = cellEl.getBoundingClientRect().left - ovRect.left;
     const frag = document.createDocumentFragment();
+    const vp = v.viewportSize;
+    // the bands first: ONE continuous strip per stretch, clamped to a margin
+    // around the viewport (a stretch can span thousands of rows). Rounded cap
+    // only when its real start is on screen.
+    for (const st of ctx.list) {
+      const gi0 = idx?.get(st.start), gi1 = idx?.get(st.end);
+      if (gi0 === undefined || gi1 === undefined) continue;
+      const y0 = v.getItemOffset(gi0 + 1) - v.scrollOffset;
+      const y1 = v.getItemOffset(gi1 + 2) - v.scrollOffset;
+      if (y1 <= 0 || y0 >= vp) continue;
+      const col = ctx.dims.indexOf(st.dim);
+      if (col < 0) continue;
+      const top = Math.max(y0, -20), bottom = Math.min(y1, vp + 20);
+      const band = document.createElement("span");
+      band.className = "stFloatBand" + (y0 >= -20 ? " stStart" : "");
+      band.title = `${st.dim}: ${st.value} · lines ${st.start}–${st.end}`;
+      band.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW + ctx.pillW}px;` +
+        `top:${top}px;height:${bottom - top}px;width:${ctx.bandPx}px;background:${stretchColor(st.value)};`;
+      frag.appendChild(band);
+    }
     for (const st of ctx.list) {
       const gi0 = idx?.get(st.start), gi1 = idx?.get(st.end);
       if (gi0 === undefined || gi1 === undefined) continue;
@@ -215,7 +235,10 @@ export function TranscriptView() {
       // text advance — canvas measure, no layout read (wide glyphs, CJK)
       stMeasure ??= document.createElement("canvas").getContext("2d")!;
       stMeasure.font = `700 ${ctx.labelPx}px ${getComputedStyle(document.body).fontFamily}`;
-      const len = stMeasure.measureText(st.value.toUpperCase()).width + 18; // pill padding rides along
+      // a first ESTIMATE for placement; the real rendered height is read back
+      // below and re-clamped — letter-spacing and font metrics drift enough
+      // that an estimated pill poked past its band's end
+      const len = stMeasure.measureText(st.value.toUpperCase()).width + 18;
       const top = Math.min(Math.max(y0 + 2, 4), Math.max(y1 - len, y0 + 2));
       const el = document.createElement("span");
       el.className = "stFloatLabel";
@@ -224,9 +247,27 @@ export function TranscriptView() {
       const c = stretchColor(st.value);
       el.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW}px;top:${top}px;` +
         `font-size:${ctx.labelPx}px;background:${c};color:${inkOn(c)};width:${ctx.pillW}px;`;
+      el.dataset.y0 = String(y0); el.dataset.y1 = String(y1);
       frag.appendChild(el);
     }
     ov.replaceChildren(frag);
+    // second pass with REAL heights: the pill must never pass its stretch's
+    // end. Re-clamp against the measured box; when the visible span is
+    // shorter than the label, clip the pill to the span instead of letting
+    // it overhang rows the stretch does not cover. All heights are read
+    // before any top is written — one forced layout per sync, not one per
+    // label (this runs on every scroll frame).
+    const labels = Array.from(ov.children).filter(
+      (el): el is HTMLElement => el.classList.contains("stFloatLabel"));
+    const heights = labels.map((el) => el.offsetHeight);
+    labels.forEach((el, i) => {
+      const y0 = Number(el.dataset.y0), y1 = Number(el.dataset.y1);
+      const h = heights[i];
+      let top = Math.min(Math.max(y0 + 2, 4), y1 - h);
+      if (top < y0 + 2) top = y0 + 2; // span shorter than the label
+      el.style.top = `${top}px`;
+      if (top + h > y1) { el.style.height = `${Math.max(0, y1 - top)}px`; el.style.overflow = "hidden"; }
+    });
   }, []);
   useEffect(() => { syncStretchLabels(); });
   // a window resize re-wraps rows (offsets shift) without a re-render or scroll;
@@ -967,11 +1008,10 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, stretchW, onEdit
   return (
     // --spk-c is what the transcript's timecode chip tints itself from; pointing it
     // at the event colour gives this row the SAME chip, in its own hue, for free.
-    // One line, in the transcript's own column rhythm — timecode, then words. With
-    // no gutter the chip shares the line rows' left edge exactly (4px colour bar +
-    // 16px padding = their rail + padding); with a gutter the content starts at the
-    // lanes' width (no +8px flex gap like the line rows carry, so the chip sits 8px
-    // shy of theirs — clear of the lanes is the requirement, not pixel lockstep).
+    // One line, in the transcript's own column rhythm — timecode, then words.
+    // The chip shares the line rows' left edge in BOTH cases: gutterless via the
+    // matching 4px bar + 16px padding, guttered via lanes' width + the same 8px
+    // the line rows' flex gap adds after their cell.
     // The lid spacer matches theirs when line numbers are on.
     // The type only shows when there's no note to show:
     // colour carries the type the rest of the time. The row is real selectable text
@@ -984,7 +1024,7 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, stretchW, onEdit
       // row's own edge; the gutter's lead-in keeps labels clear of it, and a
       // pill floating over the card's tint reads fine (it is solid)
       style={{ "--mk-c": color, "--spk-c": color,
-        ...(stretchW ? { paddingLeft: stretchW } : {}) } as CSSProperties}
+        ...(stretchW ? { paddingLeft: `calc(${stretchW} + 8px)` } : {}) } as CSSProperties}
       onContextMenu={(e) => {
         if ((e.target as HTMLElement).closest(".mkedit")) return;
         e.preventDefault(); e.stopPropagation();
@@ -1086,27 +1126,13 @@ type StretchCtx = {
   pillW: number; leadIn: number; colW: number; width: string; widthPx: number;
 };
 
-// The stretch gutter cell: one column per dimension — a vertical-label lane
-// and its band. The cell draws only the bands; the labels are STICKY, drawn by
-// the overlay in the parent so they ride the scroll and hand off at the next
-// stretch (a virtualized row cannot know it is the first one on screen).
-function StretchCell({ ctx, start, end }: { ctx: StretchCtx; start: number; end: number }) {
-  // ctx.list is already this transcript's stretches — a plain overlap test
-  const covering = ctx.list.filter((st) => stretchOverlaps(st, start, end));
-  const starting = covering.filter((st) => st.start >= start && st.start <= end);
-  return (
-    <span className="stretchCell" style={{ width: ctx.width }} aria-hidden="true">
-      {covering.map((st, i) => {
-        const col = ctx.dims.indexOf(st.dim);
-        return (
-          <span key={i} className={"stBand" + (starting.includes(st) ? " stStart" : "")} style={{
-            left: `${ctx.leadIn + col * ctx.colW + ctx.pillW}px`,
-            width: `${ctx.bandPx}px`, background: stretchColor(st.value),
-          }} title={`${st.dim}: ${st.value} · lines ${st.start}–${st.end}`} />
-        );
-      })}
-    </span>
-  );
+// The stretch gutter cell: pure reserved SPACE. Bands and labels both live on
+// the parent's overlay — a band drawn per row broke at event rows (a marker
+// card's tint ran through it) and seamed at fractional DPI; ONE continuous
+// strip per stretch has neither problem, and rides the same scroll sync as
+// the sticky labels.
+function StretchCell({ ctx }: { ctx: StretchCtx }) {
+  return <span className="stretchCell" style={{ width: ctx.width }} aria-hidden="true" />;
 }
 
 function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowContext, stretchCtx, onLaneClick, onLaneMenu, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
@@ -1248,7 +1274,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
         e.preventDefault(); onRowContext(e);
       }}
       style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
-      {stretchCtx && <StretchCell ctx={stretchCtx} start={group.startId} end={group.endId} />}
+      {stretchCtx && <StretchCell ctx={stretchCtx} />}
       {showLid && <span className="lid">{lidLabel(group)}</span>}
       {/* out of the Tab order: tabbing walked every rendered timecode. Mouse users
           click it; keyboard users press Enter on the selected line (see the list). */}

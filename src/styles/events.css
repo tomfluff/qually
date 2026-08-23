@@ -13,7 +13,7 @@
    selection rail + 16px padding, this row a 4px colour bar + 16px padding — the
    colour bar occupies the rail's slot, so the chips line up exactly. (When the
    stretch gutter exists, an inline padding-left widens this to the gutter's
-   width instead — content clears the lanes; see MarkerRow.) The lid
+   width + the line rows' 8px flex gap, so they still line up; see MarkerRow.) The lid
    spacer matches theirs when line numbers are on. Padding is symmetric (the same
    band above and below the text). The note sizes with the transcript (the row
    inherits the list's font-size); user-select:text makes it real, copyable text —

@@ -315,11 +315,10 @@
   /* absorb the row's 16px left padding: the gutter starts at the row edge,
      its own 6px lead-in is the clearance (the user's "too wide" gap) */
   margin-left:-16px; }
-/* OPAQUE, and bled 1px into the next row: translucent per-row segments left
-   bright fractional-DPI seams where rows meet (the code lanes' old disease),
-   and the .85 wash also made the band a different shade than its solid pill */
-.stretchCell .stBand { position:absolute; top:-1px; bottom:-1px; border-radius:0; }
-.stretchCell .stBand.stStart { border-top-left-radius:3px; border-top-right-radius:3px; top:2px; }
+/* the bands: ONE continuous strip per stretch on the overlay — over event
+   cards (a section contains its moments), immune to per-row DPI seams */
+.stretchLabels .stFloatBand { position:absolute; pointer-events:auto; }
+.stretchLabels .stFloatBand.stStart { border-top-left-radius:3px; border-top-right-radius:3px; }
 /* the sticky labels: vertical, riding their band's column, pinned to the top
    of the viewport while inside the stretch (see syncStretchLabels) */
 .stretchLabels { position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden; }
