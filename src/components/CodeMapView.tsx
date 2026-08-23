@@ -89,9 +89,7 @@ const captionBox = (fs: number, zoom: number, cap: number, text: string, extraEm
   return { w: Math.round(measurer.measureText(text).width + size * extraEm), h: Math.round(size * 1.5) };
 };
 
-type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction;
-  /** by-definition view only: the definition, drawn on the chip's second line */
-  def?: string };
+type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction };
 type ChipNodeT = Node<ChipData, "chip">;
 // lens islands are synthetic (gi indexes the LENS grouping, not codeGroups),
 // so they carry their member list — the context menu must never reach into
@@ -120,7 +118,11 @@ type SimilarData = {
   take: TakeSpec | null;
 };
 type SimilarNodeT = Node<SimilarData, "similar">;
-type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT;
+// the by-definition view's branch: the definition hangs under its chip on a
+// stem, always open — text you can select, not a line the chip clips
+type DefCardData = { def: string; color: string };
+type DefCardNodeT = Node<DefCardData, "defcard">;
+type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT | DefCardNodeT;
 
 // THE VIEWS. One value — not a stage crossed with a lens. The old pair could
 // express eight situations for a product that has five, and every feature had
@@ -228,11 +230,10 @@ onProjectSwap(function forgetMapSession() {
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
   const fs = MAP_FS;
   return (
-    <div className={"mapChip" + (selected ? " sel" : "") + (data.def ? " hasDef" : "")}
+    <div className={"mapChip" + (selected ? " sel" : "")}
       style={{ "--chip-c": data.color } as React.CSSProperties}
-      title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}${data.def ? `\n\n${data.def}` : ""}`}>
+      title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}`}>
       <span className="mapName">{data.code}</span>
-      {data.def && <span className="mapChipDef">{data.def}</span>}
       {data.act && data.act.action !== "merge" && (
         <span className={"mapActBadge " + data.act.action}
           title={`${data.act.action}: ${data.act.rationale}`}>
@@ -657,7 +658,15 @@ const SimilarNode = memo(function SimilarNode({ data }: NodeProps<SimilarNodeT>)
     </div>
   );
 });
-const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode, card: CardNode, similar: SimilarNode };
+const DefCardNode = memo(function DefCardNode({ data }: NodeProps<DefCardNodeT>) {
+  return (
+    <div className="mapDefCard nodrag nowheel" style={{ "--chip-c": data.color } as React.CSSProperties}>
+      {data.def}
+    </div>
+  );
+});
+
+const nodeTypes = { chip: ChipNode, island: IslandNode, halo: HaloNode, card: CardNode, similar: SimilarNode, defcard: DefCardNode };
 
 // A capsule is a proposal, and where it came from changes how much of your
 // attention it has earned. Icon first (colour is never the only carrier here,
@@ -977,18 +986,19 @@ function MapInner() {
     const ch = chipH(fs);
     const family = getComputedStyle(document.body).fontFamily; // read once per rebuild
     const widths = new Map(codes.map((c) => [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0)]));
-    const pack = (list: string[], targetW: number, dims?: { w: number; h: number }) => {
-      let x = 0, y = 0, maxW = 0;
-      const rh = dims?.h ?? ch;
+    const pack = (list: string[], targetW: number, dimsOf?: (c: string) => { w: number; h: number }) => {
+      let x = 0, y = 0, maxW = 0, rowH = 0;
       const pos: Record<string, { x: number; y: number }> = {};
       for (const c of list) {
-        const w = dims?.w ?? widths.get(c)!;
-        if (x > 0 && x + w > targetW) { x = 0; y += rh + GY; }
+        const { w, h } = dimsOf ? dimsOf(c) : { w: widths.get(c)!, h: ch };
+        // rows are as tall as their tallest member — definitions vary in length
+        if (x > 0 && x + w > targetW) { x = 0; y += rowH + GY; rowH = 0; }
         pos[c] = { x, y };
         x += w + GX;
+        rowH = Math.max(rowH, h);
         maxW = Math.max(maxW, x - GX);
       }
-      return { pos, w: maxW, h: list.length ? y + rh : 0 };
+      return { pos, w: maxW, h: list.length ? y + rowH : 0 };
     };
     const near = (list: string[]) => {
       const area = list.reduce((a, c) => a + (widths.get(c)! + GX) * (ch + GY), 0);
@@ -1029,17 +1039,15 @@ function MapInner() {
     // is the opposite — its position is the only thing carrying intent, so the
     // stored one wins over the packer's.
     const hand = slot ? mapPositions[slot] : {};
-    const chipNode = (c: string, position: { x: number; y: number }, parentId?: string,
-      dims?: { w: number; h: number; def?: string }): ChipNodeT => ({
+    const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
       id: c,
       type: "chip" as const,
       position: parentId ? position : hand[c] ?? position,
       ...(parentId ? { parentId } : {}),
-      width: dims?.w ?? widths.get(c)!, height: dims?.h ?? ch,
+      width: widths.get(c)!, height: ch,
       selected: remembered.selected.has(c),
       draggable: slot !== null,
-      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c),
-        ...(dims?.def ? { def: dims.def } : {}) },
+      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c) },
     });
     // Codes in no container: the ones you placed by hand stay exactly there and
     // are NOT packed; the rest fall to the catch-all pile. That is what makes
@@ -1057,9 +1065,9 @@ function MapInner() {
       // `key` separates a pile's IDENTITY from its drawn name, for the groupings
       // whose labels a participant could collide with (a speaker named "Mixed")
       piles: { name: string; key?: string; list: string[]; ai?: number;
-        /** fixed chip size for this pile (the by-definition view's wide chips),
-            with the text each chip carries on its second line */
-        chip?: { w: number; h: number; def: (c: string) => string } }[],
+        /** the by-definition view: each chip in this pile grows a definition
+            branch under it, so its cell is as tall as its definition */
+        def?: (c: string) => string }[],
       opts: {
         islandId: (p: { name: string; key?: string }) => string; movable: boolean; freeChips?: string[];
         /** positions for piles moved by hand when the view has no store slot
@@ -1067,10 +1075,43 @@ function MapInner() {
         stored?: Record<string, { x: number; y: number }>;
       },
     ) => {
+      // a defined chip's cell: as wide as chip or branch, as tall as both
+      const DEF_W = 300, DEF_STEM = 12;
+      // Measured by the DOM itself, not re-derived: every estimate of the
+      // card's wrap (chars, then canvas greedy-wrap) disagreed with CSS by a
+      // line whenever fonts, spacing, or shaping differed — and the row below
+      // sat on the card's last line. So render each definition off-screen in
+      // the REAL .mapDefCard class at the real width and read offsetHeight:
+      // the reserved cell is the drawn card, by construction. One hidden
+      // holder, one layout flush for all of them.
+      const defHs = new Map<string, number>();
+      {
+        const withDefs = piles.filter((g) => g.def);
+        if (withDefs.length) {
+          const holder = document.createElement("div");
+          holder.style.cssText = `position:absolute;left:-99999px;top:0;width:${DEF_W}px;font-size:${fs}px;`;
+          const order: string[] = [];
+          for (const g of withDefs) for (const c of g.list) {
+            const d = document.createElement("div");
+            d.className = "mapDefCard";
+            d.textContent = g.def!(c);
+            holder.appendChild(d);
+            order.push(c);
+          }
+          document.body.appendChild(holder);
+          [...holder.children].forEach((el, i) => defHs.set(order[i], (el as HTMLElement).offsetHeight));
+          holder.remove();
+        }
+      }
+      const defH = (c: string) => defHs.get(c) ?? Math.round(chipH(fs) * 1.6);
+      const defDims = () => (c: string) => ({
+        w: Math.max(widths.get(c)!, DEF_W),
+        h: ch + DEF_STEM + defH(c),
+      });
       const blocks = piles.map((g, gi) => ({
-        name: g.name, key: g.key, gi, list: g.list, ai: g.ai, chip: g.chip,
-        ...(g.chip
-          ? pack(g.list, Math.max(700, Math.ceil(Math.sqrt(g.list.length)) * (g.chip.w + GX)), g.chip)
+        name: g.name, key: g.key, gi, list: g.list, ai: g.ai, def: g.def,
+        ...(g.def
+          ? pack(g.list, Math.max(700, Math.ceil(Math.sqrt(g.list.length)) * (DEF_W + GX)), defDims())
           : pack(g.list, near(g.list))),
         // the caption reads "name · count" and carries no buttons
         cap: captionBox(fs, 1, 7, `${g.name} · ${g.list.length}`, 1, family),
@@ -1078,7 +1119,7 @@ function MapInner() {
       const rowW = Math.max(900, Math.sqrt(blocks.reduce((a, b) => a + (Math.max(b.w + 2 * PAD, b.cap.w) + ISLAND_GAP) * (b.h + 2 * PAD + ISLAND_GAP), 0)) * 1.4,
         ...blocks.map((b) => b.cap.w));
       const islands: IslandNodeT[] = [];
-      const children: ChipNodeT[] = [];
+      const children: (ChipNodeT | DefCardNodeT)[] = [];
       const stored = opts.stored ?? (opts.movable && slot ? mapIslandPos[slot] : {});
       let ix = 0, iy = blocks[0]?.cap.h ?? 0, rowH = 0;
       for (const b of blocks) {
@@ -1098,9 +1139,20 @@ function MapInner() {
           data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, pile: true, list: b.list, gkey: b.name,
             ...(b.ai !== undefined ? { ai: b.ai } : {}) },
         });
-        for (const c of b.list)
-          children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key,
-            b.chip ? { ...b.chip, def: b.chip.def(c) } : undefined));
+        for (const c of b.list) {
+          children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
+          if (b.def) {
+            // the branch: not selectable, not draggable — a reading surface
+            // tethered under its chip, wearing the chip's colour
+            children.push({
+              id: `def:${c}`, type: "defcard" as const, parentId: key,
+              position: { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y + ch + DEF_STEM },
+              width: DEF_W, height: defH(c),
+              selectable: false, draggable: false, focusable: false,
+              data: { def: b.def(c), color: codebook[c]?.color || "#999" },
+            } as DefCardNodeT);
+          }
+        }
         ix += stepW + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
       }
@@ -1131,8 +1183,7 @@ function MapInner() {
       // defined codes carry their definition on the chip — the view's point is
       // reading the book, not just counting the gap
       const piles = [
-        { name: "Defined", list: codes.filter(has),
-          chip: { w: 340, h: Math.round(chipH(MAP_FS) * 2.05), def: defOf } },
+        { name: "Defined", list: codes.filter(has), def: defOf },
         { name: "Undefined", list: codes.filter((c) => !has(c)) },
       ];
       return { nodes: withSimilar(pileNodes(piles.filter((g) => g.list.length > 0), {
@@ -2133,7 +2184,7 @@ function MapInner() {
   const onNodeClick = useCallback((_: unknown, n: Node) => {
     if (n.type !== "island" && n.type !== "halo") return;
     rfSetNodes((ns) => {
-      const mine = new Set(ns.filter((x) => x.parentId === n.id).map((x) => x.id));
+      const mine = new Set(ns.filter((x) => x.parentId === n.id && x.type === "chip").map((x) => x.id));
       if (!mine.size) return ns;
       if ([...mine].every((id) => ns.find((x) => x.id === id)?.selected)) return ns;
       return ns.map((x) => (mine.has(x.id) && !x.selected ? { ...x, selected: true } : x));
@@ -2146,6 +2197,9 @@ function MapInner() {
   const selectionAt = useCallback((): string[] =>
     getNodes().filter((n) => n.selected && n.type === "chip").map((n) => n.id), [getNodes]);
   const onNodeContextMenu = useCallback((e: React.MouseEvent, n: Node) => {
+    // the definition branch is a reading surface: its id is no code, so the
+    // chip menu would act on garbage — and right-click there means "Copy"
+    if (n.type === "defcard") return;
     e.preventDefault();
     if (n.type === "island") {
       const d = n.data as IslandData;
