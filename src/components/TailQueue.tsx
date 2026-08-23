@@ -370,11 +370,6 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
           <button className="nBtn" onClick={() => setFolding(false)}>Cancel <kbd>Esc</kbd></button>
         </div>
       )}
-      <p className="tqKeys">
-        Keep is the default and the fastest key; <kbd>←</kbd> and <kbd>→</kbd> walk the pile
-        in either direction and <kbd>⌫</kbd> takes a verdict back. Nothing here deletes
-        anything: folding merges, setting aside leaves every excerpt where it is.
-      </p>
     </div>
   );
 }
