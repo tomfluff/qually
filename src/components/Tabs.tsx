@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import { useStore, liveCodes } from "../state/store";
 import { SCROLL_BASE, wheelPixels } from "../scrollSpeed";
 import { useClampToViewport, useDismiss } from "../usePopover";
+import { MAP_VIEW_ITEMS, currentMapView, openMapView, type MapView } from "./CodeMapView";
 import { Icon } from "./Icon";
 import { codeStats } from "../codeStats";
 import { tailQueue, type TailLimit } from "./TailQueue";
@@ -20,6 +21,7 @@ export function Tabs() {
   const setActive = useStore((s) => s.setActive);
   const [menu, setMenu] = useState<{ pid: string; x: number; y: number } | null>(null);
   const [assistMenu, setAssistMenu] = useState<{ x: number; y: number } | null>(null);
+  const [mapMenu, setMapMenu] = useState<{ x: number; y: number } | null>(null);
   const [reopenMenu, setReopenMenu] = useState<{ x: number; y: number } | null>(null);
   // the × asks first — see CloseConfirm
   const [closing, setClosing] = useState<{ pid: string; x: number; y: number } | null>(null);
@@ -78,8 +80,13 @@ export function Tabs() {
     // a moment before this click would, and the click reopens it). The sibling
     // closes explicitly: keyboard activation fires click with no mousedown, so
     // the dismiss handler never saw it.
-    setReopenMenu(null);
+    setReopenMenu(null); setMapMenu(null);
     setAssistMenu((m) => (m ? null : { x: r.left, y: r.bottom + 4 }));
+  };
+  const openMapMenu = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    setReopenMenu(null); setAssistMenu(null);
+    setMapMenu((m) => (m ? null : { x: r.left, y: r.bottom + 4 }));
   };
 
   return (
@@ -133,7 +140,7 @@ export function Tabs() {
           aria-label={`Reopen a closed transcript (${closed.length} available)`}
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setAssistMenu(null); // keyboard activation fires no mousedown for the dismiss handler
+            setAssistMenu(null); setMapMenu(null); // keyboard activation fires no mousedown for the dismiss handler
             setReopenMenu((m) => m ? null : { x: r.left, y: r.bottom + 4 });
           }}>
           <Icon name="plus" size={14} />
@@ -142,11 +149,6 @@ export function Tabs() {
       <button className={"tab browsetab" + (active === "browse" ? " active" : "")}
         role="tab" aria-selected={active === "browse"} onClick={() => setActive("browse")}>
         <Icon name="list" size={14} /> Codebook
-      </button>
-      <button className={"tab browsetab" + (active === "map" ? " active" : "")}
-        role="tab" aria-selected={active === "map"} onClick={() => setActive("map")}
-        title="Code map: see the whole codebook spatially — select, inspect, merge">
-        <Icon name="layout-grid" size={14} /> Map
       </button>
       <button className={"tab browsetab" + (active === "summary" ? " active" : "")}
         role="tab" aria-selected={active === "summary"} onClick={() => setActive("summary")}
@@ -174,8 +176,25 @@ export function Tabs() {
           <Icon name={assistMenu ? "chevron-up" : "chevron-down"} size={12} />
         </button>
       </div>
+      {/* Map tab: same shape as Assist — click opens the map, the caret picks
+          which view. Last on the row: it and Assist are the analysis pair. */}
+      <div className={"tab assisttab maptab" + (active === "map" ? " active" : "")}
+        role="presentation"
+        onContextMenu={(e) => { e.preventDefault(); setMapMenu({ x: e.clientX, y: e.clientY }); }}>
+        <button className="assistname" role="tab" aria-selected={active === "map"}
+          onClick={() => setActive("map")}
+          title="Code map: see the whole codebook spatially — select, inspect, merge">
+          <Icon name="layout-grid" size={14} /> Map
+        </button>
+        <button className="mapcaret" aria-haspopup="menu" aria-expanded={!!mapMenu}
+          aria-label="Choose map view" title="Choose view"
+          onClick={(e) => { e.stopPropagation(); openMapMenu(e.currentTarget); }}>
+          <Icon name={mapMenu ? "chevron-up" : "chevron-down"} size={12} />
+        </button>
+      </div>
       {menu && <TabMenu pid={menu.pid} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
       {assistMenu && <AssistMenu x={assistMenu.x} y={assistMenu.y} onClose={() => setAssistMenu(null)} />}
+      {mapMenu && <MapViewsMenu x={mapMenu.x} y={mapMenu.y} onClose={() => setMapMenu(null)} />}
       {reopenMenu && <ReopenMenu pids={closed} x={reopenMenu.x} y={reopenMenu.y}
         onClose={() => setReopenMenu(null)} />}
       {closing && <CloseConfirm pid={closing.pid} x={closing.x} y={closing.y}
@@ -415,6 +434,62 @@ function useAssistCounts(): Partial<Record<AssistPanelId, string>> {
     if (ledger.length) out.decisions = `${ledger.length} recorded`;
     return out;
   }, [segments, transcripts, codebook, aiFlags, ledger, answers, summaries, tailLimit]);
+}
+
+// The Map tab's menu: the seven views, the working three flat and the derived
+// groupings under one head — the AssistMenu's shape, because the two tabs are
+// the same kind of door.
+function MapViewsMenu({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const clusters = useStore((s) => s.codeClusters);
+  const plan = useStore((s) => s.codePlan);
+  const areas = useStore((s) => s.codeAreas);
+  const groups = useStore((s) => s.codeGroups);
+  // live codes only: set-aside codes are off the map, so they are off its count
+  const codeCount = liveCodes(useStore((s) => s.codebook)).length;
+  const pending = clusters.length + plan.length;
+  const current = currentMapView(pending);
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(ref, onClose, { ignore: (e) => !!(e.target as Element | null)?.closest?.(".mapcaret") });
+  useClampToViewport(ref, [fs]);
+  const counts: Partial<Record<MapView, string>> = {
+    reconcile: pending ? `${pending} pending` : "",
+    themes: groups.length ? `${groups.length}` : "",
+    areas: areas.length ? `${areas.length}` : "",
+  };
+  const pick = (id: MapView) => { openMapView(id); onClose(); };
+  const onArrows = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const items = Array.from(ref.current?.querySelectorAll("button") ?? []);
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length].focus();
+  };
+  const row = (v: typeof MAP_VIEW_ITEMS[number]) => (
+    <button key={v.id} role="menuitemradio" aria-checked={current === v.id}
+      className={current === v.id ? "on" : ""} onClick={() => pick(v.id)}>
+      <span className="assistmenu-check"><Icon name="check" size={fs} /></span>
+      <span className="assistmenu-label">
+        <span className="amTop">{v.label}{counts[v.id] && <span className="amCount">{counts[v.id]}</span>}</span>
+        <em>{v.hint}</em>
+      </span>
+    </button>
+  );
+  return (
+    <div className="ctxmenu assistmenu mapviewsmenu" ref={ref} role="menu" aria-label="Map view"
+      onKeyDown={onArrows}
+      style={{ left: Math.max(8, Math.min(x, window.innerWidth - 260)), top: y, fontSize: fs }}>
+      <div className="amGroup" role="group" aria-label={`Views · ${codeCount} codes`}>
+        <div className="amGroupHead" aria-hidden="true">Views · {codeCount} code{codeCount === 1 ? "" : "s"}</div>
+        {MAP_VIEW_ITEMS.filter((v) => !v.grouping).map(row)}
+      </div>
+      <div className="amGroup" role="group" aria-label="Grouping">
+        <div className="amGroupHead" aria-hidden="true">Grouping</div>
+        {MAP_VIEW_ITEMS.filter((v) => v.grouping).map(row)}
+      </div>
+    </div>
+  );
 }
 
 function AssistMenu({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {

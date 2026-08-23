@@ -142,6 +142,8 @@ type TakeSpec = {
 };
 type ViewSpec = {
   label: string;
+  /** the one-liner under the label in the Map tab's menu */
+  hint: string;
   /** said out loud beside the view name, and announced on every switch */
   drag: string;
   /** the layout slot this view owns, or null when nothing here can move */
@@ -159,42 +161,61 @@ const VIEWS: Record<MapView, ViewSpec> = {
     // coders, which is a different thing QuAlly may yet want the word for.
     // The KEY stays `reconcile`: it names a layout slot saved in every
     // project file, and renaming it would cost a migration for nothing.
-    label: "Consolidate", layout: "reconcile",
+    label: "Consolidate", hint: "near-duplicate codes fold into one", layout: "reconcile",
     drag: "Dragging a code in or out of a capsule changes what gets merged",
     take: { mode: "merge", label: "Propose a merge", what: "A merge makes them ONE code — it lands as a proposal you can still edit" },
   },
   themes: {
-    label: "Themes", layout: "themes",
+    label: "Themes", hint: "codes filed together as islands", layout: "themes",
     drag: "Dragging a code between islands changes its theme",
     take: { mode: "group", label: "Group as theme", what: "They stay separate codes, filed together as a theme" },
   },
   areas: {
-    label: "Areas", layout: "areas",
+    label: "Areas", hint: "shelves for finding your way around", layout: "areas",
     drag: "Dragging a code files it into an area",
     take: { mode: "area", label: "Group as area", what: "They stay separate codes, filed together in an area" },
   },
   pids: {
-    label: "By document count", layout: null,
+    label: "By document count", hint: "which codes span transcripts", layout: null,
     drag: "Drag a group to rearrange; the codes inside stay put",
     take: null,
   },
   segs: {
-    label: "By segment count", layout: null,
+    label: "By segment count", hint: "where the thin tail is", layout: null,
     drag: "Drag a group to rearrange; the codes inside stay put",
     take: null,
   },
   defs: {
-    label: "By definition", layout: null,
+    label: "By definition", hint: "which codes have one, read in place", layout: null,
     drag: "Drag a group to rearrange; the codes inside stay put",
     take: null,
   },
   speaker: {
-    label: "By speaker", layout: null,
+    label: "By speaker", hint: "whose voice a code lives in", layout: null,
     drag: "Drag a group to rearrange; the codes inside stay put",
     take: null,
   },
 };
 const VIEW_ORDER: MapView[] = ["reconcile", "themes", "areas", "pids", "segs", "defs", "speaker"];
+
+// The Map tab's menu (Tabs.tsx) is the way into a view now — same shape as the
+// Assist menu. It needs the views' names and the current choice without
+// mounting the map, so both are exported here where the views live.
+export const MAP_VIEW_ITEMS = VIEW_ORDER.map((id) => ({
+  id, label: VIEWS[id].label, hint: VIEWS[id].hint, grouping: VIEWS[id].layout === null,
+}));
+/** what the map would show right now (the session override, else the default
+    that follows the work) — for the tab menu's checkmark */
+export function currentMapView(pending: number): MapView {
+  return remembered.view ?? (pending > 0 ? "reconcile" : "themes");
+}
+/** pick a view from outside the map: remembered for the next mount, an event
+    for a map already on screen (it switches with the camera settle) */
+export function openMapView(v: MapView) {
+  remembered.view = v;
+  window.dispatchEvent(new CustomEvent("qually:mapview", { detail: v }));
+  useStore.getState().setActive("map");
+}
 
 // session view state that outlives the unmounting view; positions ride the
 // store's undo history and the camera persists in ui (across reloads)
@@ -783,13 +804,15 @@ function MapInner() {
   const [aiOpen, setAiOpen] = useState<
     false | { scope: number | "all" | { focus: string[] }; selected?: string[] }>(false);
   const [themeAiOpen, setThemeAiOpen] = useState(false);
-  const [confirmRelayout, setConfirmRelayout] = useState<{ right: number; y: number } | null>(null);
-  const [layoutMenu, setLayoutMenu] = useState<{ right: number; y: number } | null>(null);
+  const [confirmRelayout, setConfirmRelayout] = useState<{ left: number; y: number } | null>(null);
+  const [layoutMenu, setLayoutMenu] = useState<{ left: number; y: number } | null>(null);
   // the map's own settings: they live HERE rather than in the Settings modal
   // because both are judged by eye against the codes on screen, and a modal
   // covers the thing you are judging
-  const [mapSetMenu, setMapSetMenu] = useState<{ right: number; y: number } | null>(null);
+  const [mapSetMenu, setMapSetMenu] = useState<{ left: number; y: number } | null>(null);
   const mapSetRef = useKeepOnScreen<HTMLDivElement>([mapSetMenu]);
+  const layoutRef = useKeepOnScreen<HTMLDivElement>([layoutMenu]);
+  const relayoutRef = useKeepOnScreen<HTMLDivElement>([confirmRelayout]);
   // the gestures used to sit in the bar as a paragraph; they are reference,
   // not something to read every session, so they live behind a button
   const [helpOpen, setHelpOpen] = useState(false);
@@ -819,8 +842,6 @@ function MapInner() {
   const codebookFp = useMemo(() => Object.keys(codebook).sort().join("\n"), [codebook]);
   const topicsStale = topicFp !== codebookFp;
   const [topicAiOpen, setTopicAiOpen] = useState(false);
-  const [viewMenu, setViewMenu] = useState<{ left: number; y: number } | null>(null);
-  const viewMenuRef = useKeepOnScreen<HTMLDivElement>([viewMenu]);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
   useEffect(() => { remembered.openCards = openCards; }, [openCards]);
   const [genCi, setGenCi] = useState<number | null>(null);
@@ -951,25 +972,6 @@ function MapInner() {
   }, []);
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
-  // The shape of the book, for the view menu's status slot: the one number
-  // each grouping is actually about. Description, never a verdict — there is
-  // no such thing as too many one-excerpt codes, and a tool that implies
-  // otherwise pushes every researcher toward the same tidy answer.
-  const shape = useMemo<Partial<Record<MapView, string>>>(() => {
-    const names = liveCodes(codebook);
-    if (!names.length) return {};
-    const ones = names.filter((c) => (stats[c]?.segs ?? 0) <= 1).length;
-    // the bucket this points at is "1 excerpt" and it holds the never-coded
-    // too, so the line says so rather than claiming an excerpt that isn't there
-    const none = names.filter((c) => (stats[c]?.segs ?? 0) === 0).length;
-    const onePid = names.filter((c) => (stats[c]?.pids ?? 0) <= 1).length;
-    const undef = names.filter((c) => !(codebook[c]?.def ?? "").trim()).length;
-    return {
-      segs: `${ones} of ${names.length} on one excerpt${none ? " or none" : ""}`,
-      pids: `${onePid} of ${names.length} in one transcript`,
-      defs: undef ? `${undef} with no definition yet` : "every code has a definition",
-    };
-  }, [codebook, stats]);
   // biggest first: the codes doing the most work anchor the top of the map
   // codes you set aside are off the map too — the map IS the working codebook
   const codes = useMemo(() =>
@@ -1855,9 +1857,8 @@ function MapInner() {
   // and then it pans (same zoom) to the content rather than zooming out to it.
   const canvasRef = useRef<HTMLDivElement>(null);
   const switchView = useCallback((next: MapView) => {
-    if (next === view) { setViewMenu(null); return; }
+    if (next === view) return;
     setViewOverride(next);
-    setViewMenu(null);
     let frame = 0, tries = 0;
     const settle = () => {
       const el = canvasRef.current;
@@ -1896,6 +1897,12 @@ function MapInner() {
     frame = requestAnimationFrame(settle);
     return () => cancelAnimationFrame(frame);
   }, [view, topicGroups.length, getNodes, getViewport, setViewport, codes.length]);
+  // the Map tab's menu picked a view while the map is on screen
+  useEffect(() => {
+    const onPick = (e: Event) => switchView((e as CustomEvent<MapView>).detail);
+    window.addEventListener("qually:mapview", onPick);
+    return () => window.removeEventListener("qually:mapview", onPick);
+  }, [switchView]);
 
   // The similar panel is glued to the map, so nothing guarantees the screen
   // shows it: opened under a chip in the lower half of the canvas, its action
@@ -2331,8 +2338,8 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !confirmArea && !layoutMenu && !viewMenu && !mapSetMenu) return;
-    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setConfirmArea(null); setLayoutMenu(null); setViewMenu(null); setMapSetMenu(null); };
+    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !confirmArea && !layoutMenu && !mapSetMenu) return;
+    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setConfirmArea(null); setLayoutMenu(null); setMapSetMenu(null); };
     const down = (e: MouseEvent) => {
       const t = e.target as Element;
       if (t.closest(".mapMenu")) return;
@@ -2354,107 +2361,92 @@ function MapInner() {
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, confirmArea, layoutMenu, viewMenu, mapSetMenu]);
+  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, confirmArea, layoutMenu, mapSetMenu]);
 
   return (
     <div id="codemap" className={"view-" + view} style={{ fontSize: MAP_FS }}>
-      {/* One floating pill, not a full-width bar: the map's chrome sits ON
-          the map, the way the selection pill does, and the canvas keeps the
-          whole pane. Actions are icons — their names live in the tooltip and
-          the accessible name — except the view's own name, which is the only
-          thing on screen saying which of the seven maps this is. */}
+      {/* One floating pill: chrome first (help, settings, layout — the same in
+          every view), then THIS view's actions, icon+name so they read without
+          a hover. Which view this is lives on the Map tab's menu now. */}
       <div className="mapBar" role="toolbar" aria-label="Map controls">
         <button className="btn iconbtn mapHelpBtn" aria-expanded={helpOpen}
           aria-label={helpOpen ? "Hide how to use the map" : "How to use the map"}
-          onClick={() => { setViewMenu(null); setLayoutMenu(null); setMapSetMenu(null); setHelpOpen((v) => !v); }}
+          onClick={() => { setLayoutMenu(null); setMapSetMenu(null); setHelpOpen((v) => !v); }}
           title="How to use the map">
           <Icon name="help" size={16} />
         </button>
-        <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
+        <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!mapSetMenu}
+          aria-label="Map settings"
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setLayoutMenu(null); setHelpOpen(false);
+            setMapSetMenu(mapSetMenu ? null : { left: r.left, y: r.bottom + 8 });
+          }}
+          title="Map settings: selection ring, minimap">
+          <Icon name="settings" size={16} />
+        </button>
+        <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!layoutMenu}
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setMapSetMenu(null); setHelpOpen(false);
+            setLayoutMenu(layoutMenu ? null : { left: r.left, y: r.bottom + 8 });
+          }}
+          title="Reset or clean up the arrangement you are looking at">
+          <Icon name="refresh" size={16} /> <span className="blabel">Layout</span>
+          <Icon name={layoutMenu ? "chevron-up" : "chevron-down"} size={13} />
+        </button>
         {/* the current view's own actions; the derived views have none */}
+        {(view === "reconcile" || view === "themes" || view === "segs" || view === "areas") && (
+          <span className="mapBarDivider" role="separator" aria-orientation="vertical" />
+        )}
         {view === "reconcile" && (
-          <button className="btn iconbtn" onClick={runSweep} aria-label="Match on wording"
-            title="Match on wording — find codes whose names share wording, on this machine, free, no key. Proposals only.">
+          <button className="btn iconlabel" onClick={runSweep}
+            title="Find codes whose names share wording — on this machine, free, no key. Proposals only.">
             {/* two sheets, not a magnifier: this is about finding the code you
                 wrote twice, and the search icon reads as "filter the map" */}
-            <Icon name="copy" size={16} />
+            <Icon name="copy" size={16} /> <span className="blabel">Match on wording</span>
           </button>
         )}
         {view === "reconcile" && (
-          <button className="btn iconbtn" aria-label="Match with AI"
+          <button className="btn iconlabel"
             onClick={() => {
               // the selection IS the scope when there is one: you picked those
               // codes for a reason, and the modal still offers the whole book
               const sel = [...remembered.selected].filter((c) => c in codebook);
               setAiOpen({ scope: sel.length ? { focus: sel } : "all", selected: sel });
             }}
-            title="Match with AI — the same question asked of a model: merge groups and per-code revisions, for your review">
-            <Icon name="sparkle" size={16} />
+            title="The same question asked of a model: merge groups and per-code revisions, for your review">
+            <Icon name="sparkle" size={16} /> <span className="blabel">Match with AI</span>
           </button>
         )}
         {view === "themes" && (
-          <button className="btn iconbtn" onClick={() => setThemeAiOpen(true)} aria-label="Group with AI"
-            title="Group with AI — theme islands for you to reshape (nothing is applied until you accept)">
-            <Icon name="sparkle" size={16} />
+          <button className="btn iconlabel" onClick={() => setThemeAiOpen(true)}
+            title="AI theme islands for you to reshape (nothing is applied until you accept)">
+            <Icon name="sparkle" size={16} /> <span className="blabel">Group with AI</span>
           </button>
         )}
         {/* the count view is where you SEE the tail; this is the way into
             reading it, with the size you are looking at carried across */}
         {view === "segs" && (
-          <button className="btn iconbtn" onClick={() => openTailQueue(1)} aria-label="Work the thin tail"
-            title="Work the thin tail — read the codes resting on one excerpt, one at a time, in Assist">
-            <Icon name="list" size={16} />
+          <button className="btn iconlabel" onClick={() => openTailQueue(1)}
+            title="Read the codes resting on one excerpt, one at a time, in Assist">
+            <Icon name="list" size={16} /> <span className="blabel">Work the thin tail</span>
           </button>
         )}
         {view === "areas" && (
-          // stale is a colour on the icon now, not a longer label — the
-          // tooltip says why it is orange
-          <button className={"btn iconbtn" + (topicsStale && topicGroups.length > 0 ? " stale" : "")}
+          // stale is a colour on the button, explained by its tooltip
+          <button className={"btn iconlabel" + (topicsStale && topicGroups.length > 0 ? " stale" : "")}
             onClick={() => setTopicAiOpen(true)}
-            aria-label={topicGroups.length === 0 ? "Sort into areas with AI"
-              : topicsStale ? "Areas are stale — re-run" : "Re-run areas"}
             title={topicGroups.length === 0
               ? "Ask the AI to sort the whole map into broad areas — or make areas yourself: select codes and right-click"
               : topicsStale
                 ? "The codebook changed since these areas were worked out — re-run to refresh them"
                 : "Ask the AI to work the areas out again"}>
             <Icon name="sparkle" size={16} />
+            <span className="blabel">{topicGroups.length === 0 ? "Sort into areas"
+              : topicsStale ? "Re-run areas (stale)" : "Re-run areas"}</span>
           </button>
         )}
-        {/* everything right of this line applies to EVERY view */}
-        <span className="mapBarDivider" role="separator" aria-orientation="vertical" />
-        <button className="btn iconlabel mapViewBtn" aria-haspopup="menu" aria-expanded={!!viewMenu}
-          onClick={(e) => {
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setLayoutMenu(null); setMapSetMenu(null); setHelpOpen(false);
-            setViewMenu(viewMenu ? null : { left: r.left, y: r.bottom + 8 });
-          }}
-          aria-label={`View: ${spec.label}. Choose what the map shows`}
-          title="Choose what the map shows">
-          <Icon name="eye" size={16} />
-          <span className="blabel mapViewName">{spec.label}</span>
-          <Icon name={viewMenu ? "chevron-up" : "chevron-down"} size={13} />
-        </button>
-        <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!layoutMenu}
-          aria-label="Layout"
-          onClick={(e) => {
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setViewMenu(null); setMapSetMenu(null); setHelpOpen(false);
-            setLayoutMenu(layoutMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
-          }}
-          title="Layout — reset or clean up the arrangement you are looking at">
-          <Icon name="refresh" size={16} />
-        </button>
-        <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!mapSetMenu}
-          aria-label="Map settings"
-          onClick={(e) => {
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setViewMenu(null); setLayoutMenu(null); setHelpOpen(false);
-            setMapSetMenu(mapSetMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
-          }}
-          title="Map settings: selection ring, minimap">
-          <Icon name="settings" size={16} />
-        </button>
       </div>
       <div className="mapCanvas" ref={canvasRef} tabIndex={-1}
         aria-label={`${spec.label} view. ${spec.drag}.`}>
@@ -2675,63 +2667,12 @@ function MapInner() {
           </dl>
         </div>
       )}
-      {viewMenu && (
-        <div ref={viewMenuRef} className="ctxmenu mapMenu mapViewMenu" role="menu" aria-label="Map view"
-          style={{ left: viewMenu.left, top: viewMenu.y, fontSize: sidebarFontSize }}>
-          {/* one flat list: every view is a peer, each with its own actions in
-              the pill — the status line under each name says what lives there.
-              The two derived count views sit under one "Grouping" divider. */}
-          {(() => {
-            const row = (v: MapView) => {
-              const s = VIEWS[v];
-              const status = v === "reconcile" && clusters.length + plan.length > 0
-                ? `${clusters.length + plan.length} pending`
-                : v === "areas"
-                  ? (topicGroups.length === 0 ? "none yet — sort by hand or with AI"
-                    : `${topicGroups.length} areas${topicsStale ? " · stale" : ""}`)
-                  : v === "themes" && codeGroups.length ? `${codeGroups.length} islands` : "";
-              return (
-                <button key={v} role="menuitemradio" aria-checked={view === v}
-                  className={view === v ? "on" : ""}
-                  onClick={() => switchView(v)}>
-                  {view === v ? "✓ " : ""}{s.label}
-                  {/* the grouping views explain themselves under their head;
-                      the help popover's drag line covers them once inside */}
-                  {s.layout ? (
-                    <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
-                  ) : shape[v] ? (
-                    // What the grouping would SHOW, said before you switch to
-                    // it. Counted, never graded: "84 on one excerpt" is the
-                    // shape of a first-cycle codebook, not a fault in it.
-                    <span className="mapMenuNote">{shape[v]}</span>
-                  ) : null}
-                </button>
-              );
-            };
-            // The labelled rule is a PICTURE of the split. role="group" is what
-            // carries the same split into the accessibility tree — a bare div
-            // between menuitems is never announced, so a screen-reader user
-            // would hear four unexplained labels with nothing tying them
-            // together. The visible caption is hidden from that tree and the
-            // group's own aria-label says it instead, so it is said once.
-            return (
-              <>
-                {VIEW_ORDER.filter((v) => VIEWS[v].layout).map(row)}
-                <div role="group" aria-label="Grouping" className="mapViewGroup">
-                  <div className="mapMenuHead mapViewDivide" aria-hidden="true">Grouping</div>
-                  {VIEW_ORDER.filter((v) => !VIEWS[v].layout).map(row)}
-                </div>
-              </>
-            );
-          })()}
-        </div>
-      )}
       {mapSetMenu && (
         /* the Settings modal's own furniture — .set-h, .srow, .settings-note —
            so the map's settings read like settings, not like a context menu
            that grew form controls */
         <div ref={mapSetRef} className="ctxmenu mapMenu mapSetMenu" role="dialog" aria-label="Map settings"
-          style={{ right: mapSetMenu.right, top: mapSetMenu.y, fontSize: sidebarFontSize }}>
+          style={{ left: mapSetMenu.left, top: mapSetMenu.y, fontSize: sidebarFontSize }}>
           <div className="set-h">Map</div>
           <div className="srow">
             <span id="mapring-h">Selection ring</span>
@@ -2763,8 +2704,8 @@ function MapInner() {
         </div>
       )}
       {layoutMenu && (
-        <div className="ctxmenu mapMenu mapLayoutMenu" role="menu" aria-label="Layout"
-          style={{ right: layoutMenu.right, top: layoutMenu.y, fontSize: sidebarFontSize }}>
+        <div ref={layoutRef} className="ctxmenu mapMenu mapLayoutMenu" role="menu" aria-label="Layout"
+          style={{ left: layoutMenu.left, top: layoutMenu.y, fontSize: sidebarFontSize }}>
           <button role="menuitem" onClick={() => {
             const at = layoutMenu;
             setLayoutMenu(null);
@@ -2780,9 +2721,9 @@ function MapInner() {
         </div>
       )}
       {confirmRelayout && (
-        <div className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm re-layout"
+        <div ref={relayoutRef} className="ctxmenu mapMenu mapAiConfirm" role="alertdialog" aria-label="Confirm re-layout"
           aria-describedby="relayout-confirm-text"
-          style={{ right: confirmRelayout.right, top: confirmRelayout.y, fontSize: sidebarFontSize }}>
+          style={{ left: confirmRelayout.left, top: confirmRelayout.y, fontSize: sidebarFontSize }}>
           {/* the promise has to match the route: a grouping view's pile
               positions live in the session, outside the undo history, so
               "undo brings it back" there would send Ctrl+Z at a real edit */}

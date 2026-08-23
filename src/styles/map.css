@@ -16,10 +16,12 @@
   background:var(--panel); box-shadow:0 4px 14px rgba(0,0,0,.22); }
 .mapBar > .btn { flex:0 0 auto; }
 
-/* icon-to-ink alignment is app-wide now: base.css nudges every .icn */
+/* one height for every control, and labels get room to breathe — the pill
+   reads as one instrument, not a pile of differently-sized buttons */
+.mapBar .btn { height:var(--ctl-h); display:inline-flex; align-items:center; gap:7px; }
 .mapBar .btn.iconbtn { justify-content:center; aspect-ratio:1; padding-inline:0; }
-.mapBar .mapCount { color:var(--muted); white-space:nowrap; }
-/* stale areas: the warning is a colour on the icon, explained by its tooltip */
+.mapBar .btn.iconlabel { padding-inline:12px; white-space:nowrap; }
+/* stale areas: the warning is a colour on the button, explained by its tooltip */
 .mapBar .btn.stale { color:var(--warn, #b45309); }
 /* the gestures, behind the ? button */
 .mapHelp { position:absolute; left:12px; top:56px; z-index:6; max-width:48ch;
@@ -168,15 +170,10 @@
 .mapActBadge.rename, .mapActBadge.merge { color:var(--accent); }
 /* the chip's pending-proposal marker */
 .mapActBadge { flex:none; }
-/* the bar splits at the divider: view-specific actions left of it, the
-   controls that apply to every view (View, minimap, Layout) right of it */
+/* the bar splits at the divider: chrome that applies to every view left of
+   it, THIS view's actions right of it */
 .mapBarDivider { flex:none; align-self:stretch; width:1px; margin-block:4px;
   background:var(--line); }
-/* the View button holds one width no matter which view is on, so the divider
-   and everything around it never shifts as you switch */
-.mapViewBtn { width:24ch; flex:none; justify-content:flex-start; text-align:left; }
-.mapViewBtn .mapViewName { flex:1 1 0; min-width:0; overflow:hidden;
-  text-overflow:ellipsis; white-space:nowrap; }
 /* the halo: a capsule field hugging its packed member chips — containment IS
    membership. The body is click-through; the caption (drag handle + menu
    target) is the live part. While a chip is held over it, .will outlines it
@@ -240,18 +237,6 @@
 .mapPlanHead:active { cursor:grabbing; }
 /* the minimap must not sit ON the zoom controls when both share bottom-left */
 .mapCanvas .react-flow__minimap.bottom.left { margin-left:56px; }
-/* the view menu: one flat list, each row carrying its status and drag meaning */
-.mapViewMenu { max-width:46ch; }
-.mapViewMenu button { display:block; text-align:left; width:100%; }
-.mapViewMenu .mapMenuNote { display:block; color:var(--muted); font-size:.85em;
-  line-height:1.35; margin-top:1px; }
-.mapViewMenu button.on { font-weight:600; }
-/* the derived count views sit under one labelled divider — the word rides ON
-   the line, a rule on either side */
-.mapViewMenu .mapViewDivide { display:flex; align-items:center; gap:8px;
-  margin-top:6px; }
-.mapViewMenu .mapViewDivide::before, .mapViewMenu .mapViewDivide::after {
-  content:""; flex:1; height:1px; background:var(--line); }
 /* the canvas takes focus after a view switch, but never draws a focus ring for
    a pointer user — the announcement is what carries the change */
 .mapCanvas:focus { outline:none; }
@@ -332,10 +317,6 @@
 .mapMenu .btn.primary:disabled,
 .mapMenu .btn.primary:disabled:hover { background:var(--accent); border-color:var(--accent); }
 
-/* the bar's text sits in the same box as its controls, so nothing reads as
-   half a line off */
-.mapBar .mapCount { display:inline-flex; align-items:center;
-  height:var(--ctl-h); line-height:1; }
 
 /* the gestures panel scrolls instead of running off a short screen */
 .mapHelp { max-height:calc(100% - 64px); overflow-y:auto; }

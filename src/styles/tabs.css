@@ -70,11 +70,11 @@
   color:var(--accent); border-color:var(--accent); font-size:inherit; }
 .tab.assisttab.active { background:var(--accent); color:#fff; }
 [data-theme=dark] .tab.assisttab.active { color:#12161a; }
-.assistname, .assistcaret { background:none; border:0; color:inherit; font:inherit;
+.assistname, .assistcaret, .mapcaret { background:none; border:0; color:inherit; font:inherit;
   cursor:pointer; display:inline-flex; align-items:center; }
 .assistname { gap:5px; padding:6px 4px 6px 10px; }
-.assistcaret { padding:6px 8px; opacity:.85; }
-.assistcaret:hover { opacity:1; }
+.assistcaret, .mapcaret { padding:6px 8px; opacity:.85; }
+.assistcaret:hover, .mapcaret:hover { opacity:1; }
 
 /* Assist panel picker: a radio menu of the three panels */
 /* Eight panels in three groups. The columns are a grid that fits as many
