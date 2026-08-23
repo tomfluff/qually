@@ -50,6 +50,18 @@
 /* researcher's note on the segment (SegmentPopover's notes field) */
 .bNote { font-size:.9em; color:var(--fg-dim); margin-top:5px; padding-left:8px;
   border-left:2px solid var(--line); white-space:pre-wrap; font-family:var(--read-font); }
+/* the excerpt's context row: section marks first (what span of the study
+   these lines belong to), then the other codes that overlap them. Chips, not
+   prose — they're navigation (a code chip opens that code) and orientation,
+   not part of the excerpt's text. */
+.bCtx { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+.bCtxChip { display:inline-flex; align-items:center; gap:5px; font:inherit;
+  font-size:.8em; color:var(--fg-dim); background:var(--panel);
+  border:1px solid var(--line); border-radius:999px; padding:1px 9px; }
+.bCtxChip .swatch, .bCtxChip .stDot { width:.75em; height:.75em; border-radius:.25em; flex-shrink:0; }
+button.bCtxChip { cursor:pointer; }
+button.bCtxChip:hover { color:var(--fg); border-color:var(--muted); }
+.bCtxStretch { border-style:dashed; } /* a span of the STUDY, not another code */
 .bExcerpt .ref { font-size:.8em; color:var(--muted); margin-top:4px; }
 /* The excerpt's dominant speaker, shown as a field rather than baked in as
    "[R:]" — one rule for every surface that prints an excerpt ref, so the

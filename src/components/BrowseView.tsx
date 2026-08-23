@@ -4,6 +4,7 @@
 // right. The AI's observations moved out to the Assist tab; this view is yours.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, liveCodes, parkedCodes, type Segment } from "../state/store";
+import { stretchesAt, stretchColorOf } from "../stretches";
 import { norm } from "../contract/segments";
 import { segExcerpt } from "../contract/excerpt";
 import { Resizer } from "./Resizer";
@@ -45,6 +46,8 @@ let codeListScroll = 0;
 export function BrowseView() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
+  const stretches = useStore((s) => s.stretches);
+  const stretchColors = useStore((s) => s.ui.stretchColors);
   const transcripts = useStore((s) => s.transcripts);
   const paneRef = useCallback((el: HTMLDivElement | null) => { if (el) el.scrollTop = excerptScroll; }, []);
   const listRef = useCallback((el: HTMLDivElement | null) => { if (el) el.scrollTop = codeListScroll; }, []);
@@ -263,6 +266,37 @@ export function BrowseView() {
                           : "(excerpt in coded-segments.csv)"
                       }</div>
                       {s.notes && <div className="bNote">{s.notes}</div>}
+                      {(() => {
+                        // what ELSE is true of these lines: every other code
+                        // whose accepted coding overlaps this excerpt, and the
+                        // section marks (condition/task spans) covering it —
+                        // an excerpt read without them is read out of context
+                        const others = [...new Set(segments
+                          .filter((o) => o.pid === s.pid && o.status === "accepted"
+                            && o.start <= s.end && o.end >= s.start && norm(o.code) !== norm(code))
+                          .map((o) => o.code))].sort((a, b) => a.localeCompare(b));
+                        const marks = stretchesAt(stretches, s.pid, s.start, s.end);
+                        if (!others.length && !marks.length) return null;
+                        return (
+                          <div className="bCtx">
+                            {marks.map((st, i) => (
+                              <span key={`st${i}`} className="bCtxChip bCtxStretch"
+                                title={`${st.dim}: ${st.value} · lines ${st.start}–${st.end}`}>
+                                <span className="stDot" style={{ background: stretchColorOf(st.value, stretchColors) }} />
+                                {st.dim}: {st.value}
+                              </span>
+                            ))}
+                            {others.map((c) => (
+                              <button key={c} className="bCtxChip"
+                                title={`Also coded here — show “${c}”`}
+                                onClick={() => { setSelected(new Set([c])); setAnchor(c); }}>
+                                <span className="swatch" style={{ background: codebook[c]?.color ?? "var(--line)" }} />
+                                {c}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                       <div className={"ref" + (loaded ? " open" : "")}
                         tabIndex={loaded ? 0 : undefined} role={loaded ? "button" : undefined}
                         aria-label={loaded ? `Open in transcript: ${s.pid} line${s.end !== s.start ? "s" : ""} ${range}` : undefined}
