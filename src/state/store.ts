@@ -502,6 +502,8 @@ export interface State {
   noteVerdict: (code: string, why?: string) => void;
   /** take one of those back — they changed nothing, so the history stack has nothing to give */
   retractVerdict: (at: number) => void;
+  /** the distinguishing sentence: it defines BOTH codes, in one step */
+  defineBoth: (a: string, b: string, def: string) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
   // returns the codes it actually wrote — a draft that echoes what is already
   // stored changes nothing, and the receipt must not claim it did
@@ -2218,6 +2220,21 @@ export const useStore = create<State>()(
         get().logDecision({ kind: "keep", codes: [code], source: "you",
           why: why || "Read its excerpts; the code stands as it is" });
         announce(`${code} kept`);
+      },
+      // The sentence that separates two codes is the definition of each, so it
+      // lands as ONE act: two setDefs would be two undo steps with a state in
+      // between where one code is defined and the other is not, which is not a
+      // state the researcher ever chose.
+      defineBoth: (a, b, def) => {
+        const s = get();
+        const text = def.trim();
+        if (!text || !s.codebook[a] || !s.codebook[b] || a === b) return;
+        get().pushUndo();
+        set({ codebook: { ...s.codebook,
+          [a]: { ...s.codebook[a], def: text, defAi: false },
+          [b]: { ...s.codebook[b], def: text, defAi: false } } });
+        get().logDecision({ kind: "keep", codes: [a, b], source: "you", why: text });
+        announce(`${a} and ${b} kept apart, and that sentence is now the definition of both`);
       },
       // The counterpart to noteVerdict. These rows are invisible to undo by
       // design, so taking one back is its own act: the row stays, marked, and

@@ -402,8 +402,13 @@ const IslandNode = memo(function IslandNode({ id, data }: NodeProps<IslandNodeT>
 // handle and right-click target.
 const toggleCard = (ci: number) => window.dispatchEvent(new CustomEvent("qually:togglecard", { detail: ci }));
 // the card is a React Flow node; the dialog belongs to the view around it
-const tellApart = (ci: number, codes: [string, string]) =>
-  window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { ci, codes } }));
+// It carries the cluster's cid, never its index: the merge answer prunes the
+// capsule itself (mergeInto drops a two-member cluster with a dead member),
+// and an index captured when the dialog opened would then name whatever
+// proposal slid into its place. The survivor rides along so the answer merges
+// in the direction the capsule was already showing.
+const tellApart = (cid: number | undefined, codes: [string, string], survivor: string, newName?: string) =>
+  window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { cid, codes, survivor, newName } }));
 const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = useStore((s) => s.ui.sidebarFontSize);
@@ -503,7 +508,7 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
         {c.codes.length === 2 && (
           // only for a pair: the question is "what separates THESE two", and
           // three codes at once is a different, worse question
-          <button className="btn" onClick={() => tellApart(data.ci, c.codes as [string, string])}
+          <button className="btn" onClick={() => tellApart(c.cid, c.codes as [string, string], c.survivor, c.newName)}
             title="Read both sides and write the line between them — or find that you cannot">
             Tell them apart…
           </button>
@@ -796,9 +801,11 @@ function MapInner() {
     return () => window.removeEventListener("qually:togglecard", onToggle);
   }, []);
   // "tell them apart" opens over the map, from a capsule's own card
-  const [apart, setApart] = useState<{ ci: number; codes: [string, string] } | null>(null);
+  const [apart, setApart] = useState<
+    { cid?: number; codes: [string, string]; survivor: string; newName?: string } | null>(null);
   useEffect(() => {
-    const onApart = (e: Event) => setApart((e as CustomEvent<{ ci: number; codes: [string, string] }>).detail);
+    const onApart = (e: Event) => setApart(
+      (e as CustomEvent<{ cid?: number; codes: [string, string]; survivor: string; newName?: string }>).detail);
     window.addEventListener("qually:tellapart", onApart);
     return () => window.removeEventListener("qually:tellapart", onApart);
   }, []);
@@ -2354,14 +2361,19 @@ function MapInner() {
           onGroups={(groups) => { useStore.getState().applyThemeGroups(groups); }} />
       )}
       {apart && (
-        <TellApartModal codes={apart.codes} onClose={() => setApart(null)}
+        <TellApartModal codes={apart.codes} survivor={apart.survivor} newName={apart.newName}
+          onClose={() => setApart(null)}
           onDecided={() => {
             // either answer settles the proposal, so the capsule goes. Not
             // through dismissCluster: the ledger already carries the decision
             // that was actually made, and a "turned down" row beside it would
-            // describe a refusal nobody performed.
+            // describe a refusal nobody performed. By id, never by index: the
+            // merge answer already pruned the capsule itself (mergeInto), and
+            // a stale index would name whatever proposal slid into its place —
+            // so only a capsule still standing under its own id is dropped.
             const st = useStore.getState();
-            st.setCodeClusters(st.codeClusters.filter((_, i) => i !== apart.ci));
+            if (apart.cid !== undefined && st.codeClusters.some((c) => c.cid === apart.cid))
+              st.setCodeClusters(st.codeClusters.filter((c) => c.cid !== apart.cid));
           }} />
       )}
       {aiOpen && (

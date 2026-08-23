@@ -37,23 +37,35 @@ beforeEach(() => {
   });
 });
 
-test("keeping both writes the sentence as BOTH definitions", () => {
-  const st = useStore.getState();
+test("keeping both writes the sentence as BOTH definitions, in one step", () => {
   const line = "The first is the whole chart; the second is one boundary.";
-  st.setDef("difficult to see", line);
-  st.setDef("hard to see", line);
-  st.logDecision({ kind: "keep", codes: ["difficult to see", "hard to see"], source: "you", why: line });
+  useStore.getState().defineBoth("difficult to see", "hard to see", line);
   const s = useStore.getState();
   expect(s.codebook["difficult to see"].def).toBe(line);
   expect(s.codebook["hard to see"].def).toBe(line);
   // the sentence IS the reason: a keep with no stated line is not this decision
   expect(s.ledger[0].why).toBe(line);
   expect(s.ledger[0].codes).toEqual(["difficult to see", "hard to see"]);
+  // one act, so one step back — never a state where one code is defined and
+  // the other is not
+  useStore.getState().undo();
+  const back = useStore.getState();
+  expect(back.codebook["difficult to see"].def).toBe("");
+  expect(back.codebook["hard to see"].def).toBe("");
+});
+
+test("refuses to define a pair that is not two live codes", () => {
+  const before = useStore.getState().ledger.length;
+  useStore.getState().defineBoth("difficult to see", "difficult to see", "same code twice");
+  useStore.getState().defineBoth("difficult to see", "not a code", "one of them is gone");
+  useStore.getState().defineBoth("difficult to see", "hard to see", "   ");
+  expect(useStore.getState().ledger).toHaveLength(before);
 });
 
 test("a definition written by hand is not marked as the model's", () => {
-  useStore.getState().setDef("hard to see", "Mine, typed.");
-  expect(useStore.getState().codebook["hard to see"].defAi).toBeFalsy();
+  useStore.getState().defineBoth("difficult to see", "hard to see", "Mine, typed.");
+  expect(useStore.getState().codebook["hard to see"].defAi).toBe(false);
+  expect(useStore.getState().codebook["difficult to see"].defAi).toBe(false);
 });
 
 test("failing to separate them records that as the reason", () => {

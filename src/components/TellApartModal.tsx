@@ -16,14 +16,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../state/store";
 import { segExcerpt } from "../contract/excerpt";
 import { norm } from "../contract/segments";
-import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
-export function TellApartModal({ codes, onClose, onDecided }: {
+export function TellApartModal({ codes, survivor, newName, onClose, onDecided }: {
   /** exactly two codes: the pair under the question */
   codes: [string, string];
+  /** the direction the capsule already proposed — the merge answer honours it,
+      so the researcher is never shown one direction and given another */
+  survivor?: string;
+  /** the name the capsule promised the merged code would take, if it was renamed */
+  newName?: string;
   onClose: () => void;
   /** either answer settles the question the caller was holding open */
   onDecided?: (outcome: "kept" | "merged") => void;
@@ -55,26 +59,29 @@ export function TellApartModal({ codes, onClose, onDecided }: {
   // sentence that ends when a finger slips is not an answer.
   const written = sentence.trim();
   const keepBoth = () => {
-    const st = useStore.getState();
-    // the same sentence defines BOTH codes: it is the line between them, and
-    // it only means anything read from either side
-    st.setDef(a, written);
-    st.setDef(b, written);
-    st.logDecision({ kind: "keep", codes: [a, b], source: "you", why: written });
+    // one act: the sentence is the line between them, and it only means
+    // anything read from either side
+    useStore.getState().defineBoth(a, b, written);
     earcon.accept();
-    announce(`Kept ${a} and ${b} apart, and wrote that sentence as both definitions`);
     onDecided?.("kept");
-    setDone(`Saved as the definition of both codes. The next pass — yours or a model's — now reasons from your sentence instead of guessing from the names.`);
+    setDone("Saved as the definition of both codes. The next pass — yours or a model's — now reasons from your sentence instead of guessing from the names.");
   };
   const merge = () => {
     const st = useStore.getState();
-    // survivor: the one carrying more evidence, which is the same rule the map
-    // uses when it has no instruction
-    const [from, into] = left.length > right.length ? [b, a] : [a, b];
+    // the capsule's own survivor wins when the caller passed one — the card
+    // said "merge into X", and this answer must not quietly flip that to Y.
+    // Without one, the evidence rule: whichever side carries more excerpts.
+    const [from, into] = survivor === a ? [b, a]
+      : survivor === b ? [a, b]
+      : left.length > right.length ? [b, a] : [a, b];
     st.mergeCode(from, into, "Could not write a sentence that separates them", "you");
+    // the capsule may have been renamed on the map, and the card above says
+    // what the merged code will be called — so it is called that
+    const named = newName && newName !== into && !st.codebook[newName] ? newName : null;
+    if (named) useStore.getState().renameCode(into, named, "The name this merge was proposed under", "you");
     earcon.join();
     onDecided?.("merged");
-    setDone(`Merged into “${into}”, with “could not write a sentence that separates them” as the reason — which is a stronger justification than any rationale a model could supply, because it is a fact about your analysis.`);
+    setDone(`Merged into “${named ?? into}”, with “could not write a sentence that separates them” as the reason — which is a stronger justification than any rationale a model could supply, because it is a fact about your analysis.`);
   };
 
   const column = (code: string, rows: { pid: string; excerpt: string; speaker: string }[]) => (
