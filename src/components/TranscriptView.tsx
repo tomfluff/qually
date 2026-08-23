@@ -129,7 +129,7 @@ const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 // font px per size step — the label rides its band, so a dimension costs a
 // band plus one letter-height, not a column of prose
 const STRETCH_BAND_PX = { xs: 3, sm: 5, md: 8, lg: 12 } as const;
-const STRETCH_LABEL_PX = { sm: 9, md: 12, lg: 16 } as const;
+const STRETCH_LABEL_PX = { sm: 10, md: 13, lg: 16 } as const;
 // lazy: this module is imported by node-side tests where document is absent
 let stMeasure: CanvasRenderingContext2D | null = null;
 
@@ -172,14 +172,13 @@ export function TranscriptView() {
     const dims = stretchDims(list);
     const bandPx = STRETCH_BAND_PX[stretchBand];
     const labelPx = STRETCH_LABEL_PX[stretchLabel];
-    // a dimension's column: its vertical label lane, then its band
-    const colW = labelPx + 3 + bandPx + 2;
-    return {
-      list, dims, bandPx, labelPx, colW,
-      // one shared width, so marker rows can reserve the same room (see MarkerRow)
-      width: `${dims.length * colW + 2}px`,
-      widthPx: dims.length * colW + 2,
-    };
+    const pillW = labelPx + 7;  // the tab-pill's thickness across its text
+    const leadIn = 6;           // clearance from the row's own left border
+    // a dimension's column: pill flush against its band (a tab out of the
+    // booklet's spine), then 4px clear of the NEXT lane
+    const colW = pillW + bandPx + 4;
+    const widthPx = leadIn + dims.length * colW;
+    return { list, dims, bandPx, labelPx, pillW, leadIn, colW, width: `${widthPx}px`, widthPx };
   }, [allStretches, active, stretchBand, stretchLabel]);
   const [stretchMenu, setStretchMenu] = useState<{ x: number; y: number; start: number; end: number; addAfter: Group } | null>(null);
   // The sticky labels: a stretch's name rides the top of the viewport while
@@ -216,14 +215,15 @@ export function TranscriptView() {
       // text advance — canvas measure, no layout read (wide glyphs, CJK)
       stMeasure ??= document.createElement("canvas").getContext("2d")!;
       stMeasure.font = `700 ${ctx.labelPx}px ${getComputedStyle(document.body).fontFamily}`;
-      const len = stMeasure.measureText(st.value.toUpperCase()).width + 12;
+      const len = stMeasure.measureText(st.value.toUpperCase()).width + 18; // pill padding rides along
       const top = Math.min(Math.max(y0 + 2, 4), Math.max(y1 - len, y0 + 2));
       const el = document.createElement("span");
       el.className = "stFloatLabel";
       el.textContent = st.value;
       el.title = `${st.dim}: ${st.value} · lines ${st.start}–${st.end}`;
-      el.style.cssText = `left:${baseX + col * ctx.colW + 1}px;top:${top}px;` +
-        `font-size:${ctx.labelPx}px;color:${stretchColor(st.value)};`;
+      const c = stretchColor(st.value);
+      el.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW}px;top:${top}px;` +
+        `font-size:${ctx.labelPx}px;background:${c};color:${inkOn(c)};width:${ctx.pillW}px;`;
       frag.appendChild(el);
     }
     ov.replaceChildren(frag);
@@ -936,8 +936,10 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, stretchW, onEdit
   marker: Marker; offset: number;
   tsSample: string | undefined;          // a real line's timecode, to copy its shape
   colors: Record<string, string>;        // chosen event-type colours (ui.markerColors)
+  /** section-gutter width: the card's CONTENT starts past the lanes while its
+      coloured border stays at the row's own edge */
+  stretchW?: string;
   showLid: boolean;                      // line numbers on: pad so the chips still line up
-  stretchW?: string;                     // stretch gutter width — same reason, same edge
   onEdit: () => void;                    // open the add-event modal on this event
 }) {
   const [editing, setEditing] = useState(false);
@@ -965,21 +967,24 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, stretchW, onEdit
   return (
     // --spk-c is what the transcript's timecode chip tints itself from; pointing it
     // at the event colour gives this row the SAME chip, in its own hue, for free.
-    // One line, in the transcript's own column rhythm — timecode, then words — with
-    // the chip on the SAME left edge as the line rows' (the 4px colour bar plus
-    // padding add up to the line rows' indent, and the lid spacer matches theirs
-    // when line numbers are on). The type only shows when there's no note to show:
+    // One line, in the transcript's own column rhythm — timecode, then words. With
+    // no gutter the chip shares the line rows' left edge exactly (4px colour bar +
+    // 16px padding = their rail + padding); with a gutter the content starts at the
+    // lanes' width (no +8px flex gap like the line rows carry, so the chip sits 8px
+    // shy of theirs — clear of the lanes is the requirement, not pixel lockstep).
+    // The lid spacer matches theirs when line numbers are on.
+    // The type only shows when there's no note to show:
     // colour carries the type the rest of the time. The row is real selectable text
     // (user-select in the CSS), so Ctrl+C copies the note like anything else.
     //
     // Right-click anywhere on the row recolours the TYPE (every event of it) — the
     // gesture the codebook swatches use; the textarea keeps its native menu.
     <div className="markerRow" id={`mrow-${marker.mid}`}
-      // the gutter is section space: the event card (and its coloured border)
-      // begins after it, so section labels never run through an event's edge.
-      // + the 8px flex gap the line rows put after their gutter cell, so the
-      // ts chip stays on the SAME left edge as theirs (border+pad match)
-      style={{ "--mk-c": color, "--spk-c": color, ...(stretchW ? { marginLeft: `calc(${stretchW} + 8px)` } : {}) } as CSSProperties}
+      // full-width on purpose: the event's coloured border belongs at the
+      // row's own edge; the gutter's lead-in keeps labels clear of it, and a
+      // pill floating over the card's tint reads fine (it is solid)
+      style={{ "--mk-c": color, "--spk-c": color,
+        ...(stretchW ? { paddingLeft: stretchW } : {}) } as CSSProperties}
       onContextMenu={(e) => {
         if ((e.target as HTMLElement).closest(".mkedit")) return;
         e.preventDefault(); e.stopPropagation();
@@ -1077,8 +1082,8 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
 }
 
 type StretchCtx = {
-  list: Stretch[]; dims: string[]; bandPx: number; labelPx: number; colW: number;
-  width: string; widthPx: number;
+  list: Stretch[]; dims: string[]; bandPx: number; labelPx: number;
+  pillW: number; leadIn: number; colW: number; width: string; widthPx: number;
 };
 
 // The stretch gutter cell: one column per dimension — a vertical-label lane
@@ -1095,7 +1100,7 @@ function StretchCell({ ctx, start, end }: { ctx: StretchCtx; start: number; end:
         const col = ctx.dims.indexOf(st.dim);
         return (
           <span key={i} className={"stBand" + (starting.includes(st) ? " stStart" : "")} style={{
-            right: `${(ctx.dims.length - 1 - col) * ctx.colW + 2}px`,
+            left: `${ctx.leadIn + col * ctx.colW + ctx.pillW}px`,
             width: `${ctx.bandPx}px`, background: stretchColor(st.value),
           }} title={`${st.dim}: ${st.value} · lines ${st.start}–${st.end}`} />
         );

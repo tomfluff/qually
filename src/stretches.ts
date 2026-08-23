@@ -21,11 +21,21 @@ export interface Stretch {
 }
 
 /** deterministic colour per value: stable across sessions and machines with no
-    stored palette — the value IS the identity */
+    stored palette — the value IS the identity. Hex, not hsl(), so inkOn() can
+    pick a readable text colour for the solid label pill. */
 export function stretchColor(value: string): string {
   let h = 0;
   for (const ch of value.toLowerCase().trim()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return `hsl(${h % 360}, 55%, 45%)`;
+  const [r, g, b] = hslToRgb(h % 360, 0.55, 0.45);
+  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+}
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
 export const stretchOverlaps = (s: Stretch, start: number, end: number): boolean =>
