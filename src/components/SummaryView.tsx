@@ -143,8 +143,13 @@ function DetailPane({ pid }: { pid: string }) {
   const split = useStore((s) => s.ui.summarySplit);
   const layout = useStore((s) => s.ui.summaryLayout);
   const jumpTo = useStore((s) => s.jumpTo);
-  // in a split the first pane takes its fraction; alone it takes everything
-  const style = layout === "one" ? undefined : { flex: `0 0 ${(split * 100).toFixed(1)}%` };
+  // in a split the first pane takes its fraction; alone it takes everything.
+  // Ratio GROW from a zero basis, not a % basis: percentage flex-basis needs a
+  // definite container height and silently fell back to content size in the
+  // stacked column, ignoring the stored split (the text pane's CSS flex:1
+  // makes the pair split split:(1-split) exactly).
+  const style = layout === "one" ? undefined
+    : { flex: `${(split / (1 - split)).toFixed(4)} 1 0px` }; // 0px, NOT 0%: a % basis against an indefinite height degrades to content size
   // restore before paint, so the list never flashes at the top on the way back
   const paneRef = useCallback((el: HTMLDivElement | null) => {
     if (el) el.scrollTop = sumScroll[pid] ?? 0;

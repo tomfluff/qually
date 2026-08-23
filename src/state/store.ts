@@ -196,7 +196,7 @@ export const clampEventHeight = (h: number) =>
   Number.isFinite(h) ? Math.max(72, Math.min(720, h)) : 200;
 // summary split bounds — neither pane may vanish under the drag
 export const clampSummarySplit = (f: number) =>
-  Number.isFinite(f) ? Math.max(0.15, Math.min(0.85, f)) : 0.5;
+  Number.isFinite(f) ? Math.max(0.05, Math.min(0.95, f)) : 0.5;
 export interface Search {
   open: boolean; query: string; scope: "tab" | "all";
   current: { line: number; occ: number } | null; // the emphasized occurrence

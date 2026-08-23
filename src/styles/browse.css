@@ -16,16 +16,14 @@
 .bCode:hover { background:var(--sel); }
 .bCode.sel { background:var(--sel); }
 .bCodeMain { display:flex; align-items:center; gap:8px; line-height:1; }
-/* tight (large panel text / narrow pane): two-line rows, name first — same
-   pattern and same safety argument as the sidebar's .codeList (sidebar.css) */
-.cbList { container-type:inline-size; }
-@container (max-width: 16em) {
-  /* grid, not flex-wrap — see sidebar.css: flex lines break on base size and a
-     long name would jump whole onto its own line before ellipsis could act */
-  .bCodeMain { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; }
-  .bCodeMain .cnt { grid-column:1 / -1; justify-content:flex-end; margin-left:0; }
-}
-.bCodeName { overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+/* narrow pane: ONE line still — the name clips, the counts stay put (the old
+   fallback stacked them on a second line; rows must not grow when the pane
+   narrows) */
+.bCodeMain { flex-wrap:nowrap; }
+.bCodeMain .cnt { flex-shrink:0; }
+/* flex:1 + min-width:0, or the name's min-width:auto refuses to shrink and the
+   row overflows sideways instead of ellipsising */
+.bCodeName { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   line-height:normal; } /* NOT the row's line-height:1 — overflow:hidden at 1em clips descenders (g y p) */
 .bCodeMain .cnt { margin-left:auto; } /* CodeCounts pair styles live in base.css */
 .bGroup { margin-bottom:22px; }

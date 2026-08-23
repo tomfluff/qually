@@ -23,21 +23,11 @@
 #sidebar .codeHead { display:flex; align-items:center; gap:6px; padding:0 4px 5px; }
 #sidebar .codeHead .codeTitle { font-weight:600; }
 #sidebar .codeHead .cnt { margin-right:auto; }
-/* Squeezed (a narrow sidebar, or large panel text): rows go two-line — name on
-   the first, counts on the second — instead of hiding the counts or grinding the
-   name to three letters. The container is the LIST, never #sidebar: container-type
-   implies layout containment, which would make #sidebar the containing block and
-   clip box for the position:fixed code menu and AI modals rendered inside it.
-   The list holds only rows, so it is safe. 16em is of the panel text size. */
-.codeList { container-type:inline-size; }
-@container (max-width: 16em) {
-  /* grid, not flex-wrap: a wrapped flex line breaks on the item's BASE size, so
-     a long name jumps whole onto its own line before ellipsis can save it. The
-     grid keeps line one as keycap · swatch · name(ellipsis) · pin · menu and
-     gives the counts the full second line. */
-  .codeItem { display:grid; grid-template-columns:auto auto minmax(0, 1fr) auto auto; }
-  .codeItem .cnt { grid-column:1 / -1; justify-content:flex-end; margin-left:0; }
-}
+/* narrow pane: ONE line still — the name clips (ellipsis) and everything else
+   keeps its place. The old fallback moved the counts to a second line, which
+   made every row twice as tall the moment the sidebar narrowed. */
+.codeItem { flex-wrap:nowrap; }
+.codeItem .cnt { flex-shrink:0; }
 /* shortcut number: keycap style, leading the row ahead of the colour swatch.
    .ghost keeps the box (so swatches line up) for codes with no hotkey */
 .codeItem .key { flex-shrink:0; font-size:.72em; font-weight:700;
