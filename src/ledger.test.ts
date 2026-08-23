@@ -88,7 +88,7 @@ describe("decision ledger", () => {
     useStore.getState().undo();
     const csv = useStore.getState().exportLedger();
     const [head, row] = csv.trim().split(/\r?\n/);
-    expect(head).toBe("at,kind,codes,why,source,model,undone");
+    expect(head).toBe("at,kind,codes,why,source,model,excerpts_moved,excerpts_after,undone");
     expect(row).toContain("small text | tiny text");
     expect(row).toContain("Terra");
     expect(row.endsWith("yes")).toBe(true);
@@ -108,5 +108,66 @@ describe("decision ledger", () => {
     const old = JSON.parse(useStore.getState().exportProject());
     delete old.ledger;
     expect(parseProject(JSON.stringify(old)).ledger).toEqual([]);
+  });
+});
+
+describe("decisions made through the Code map's proposals", () => {
+  beforeEach(reset);
+
+  it("logs a whole merge capsule as one row, naming whose idea it was", () => {
+    useStore.setState({ codeClusters: [{
+      survivor: "small text", codes: ["small text", "tiny text"],
+      rationale: "One concept under two names.", source: "ai", model: "Terra",
+    }] });
+    useStore.getState().applyCluster(0);
+    const [d] = useStore.getState().ledger;
+    expect(d.kind).toBe("merge");
+    expect(d.codes).toEqual(["small text", "tiny text"]);
+    expect(d.source).toBe("ai");
+    expect(d.model).toBe("Terra");
+    expect(d.why).toBe("One concept under two names.");
+    expect(d.moved).toBe(1);   // tiny text's one coding
+    expect(d.now).toBe(2);     // small text carries both afterwards
+  });
+
+  it("names the merged concept when the capsule renames it", () => {
+    useStore.setState({ codeClusters: [{
+      survivor: "small text", codes: ["small text", "tiny text"],
+      newName: "unreadable labels", rationale: "", source: "you",
+    }] });
+    useStore.getState().applyCluster(0);
+    expect(useStore.getState().ledger[0].codes[0]).toBe("unreadable labels");
+  });
+
+  it("keeps the proposals you turned down", () => {
+    useStore.setState({ codeClusters: [{
+      survivor: "small text", codes: ["small text", "tiny text"],
+      rationale: "Near-duplicates.", source: "ai", model: "Terra",
+    }] });
+    useStore.getState().dismissCluster(0);
+    const [d] = useStore.getState().ledger;
+    expect(d.kind).toBe("dismiss");
+    expect(d.source).toBe("ai");
+    expect(d.why).toBe("Near-duplicates.");
+    expect(useStore.getState().codeClusters).toHaveLength(0);
+  });
+
+  it("stamps a landing run's provenance onto its proposals", () => {
+    useStore.getState().applyReconcilePlan(
+      [{ survivor: "small text", codes: ["small text", "tiny text"], rationale: "r" }],
+      [{ code: "small text", action: "rename", newName: "labels", rationale: "clearer" }],
+      false, "ai", "Terra");
+    const st = useStore.getState();
+    expect(st.codeClusters[0].source).toBe("ai");
+    expect(st.codeClusters[0].model).toBe("Terra");
+    expect(st.codePlan[0].source).toBe("ai");
+  });
+
+  it("counts what a merge moved even after the folded code is gone", () => {
+    useStore.getState().mergeCode("tiny text", "small text");
+    const [d] = useStore.getState().ledger;
+    expect(d.moved).toBe(1);
+    expect(d.now).toBe(2);
+    expect(useStore.getState().codebook["tiny text"]).toBeUndefined();
   });
 });

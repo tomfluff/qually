@@ -25,7 +25,7 @@ import {
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useStore, bestSurvivor, liveCodes, MAP_RING_PX, type MapStage } from "../state/store";
+import { useStore, bestSurvivor, liveCodes, MAP_RING_PX, type DecisionSource, type MapStage } from "../state/store";
 import { codeStats } from "../codeStats";
 import { speakerBuckets } from "../speakerBuckets";
 import { preselectBrowse } from "./BrowseView";
@@ -448,7 +448,7 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
   if (!cluster) return null;
   const c = cluster;
   const st = () => useStore.getState();
-  const skip = () => { st().setCodeClusters(st().codeClusters.filter((_, i) => i !== data.ci)); earcon.skip(); };
+  const skip = () => { st().dismissCluster(data.ci); earcon.skip(); };
   const canAccept = c.codes.length >= 2;
   // the glimpse described a membership; if the group changed since, say so
   // rather than silently presenting an outdated description
@@ -1183,11 +1183,20 @@ function MapInner() {
     // the row leaves the plan FIRST: renameCode rebuilds every entry object,
     // so a filter afterwards would find only stale clones (see dropAction)
     setPlan((ps) => dropAction(ps, a.code));
-    if (a.action === "rename") st.renameCode(a.code, a.newName!);
-    else if (a.action === "remove") st.rejectCode(a.code);
+    if (a.action === "rename") st.renameCode(a.code, a.newName!, a.rationale, a.source, a.model);
+    else if (a.action === "remove") st.rejectCode(a.code, a.rationale, a.source, a.model);
     if (sound) (a.action === "remove" ? earcon.reject : earcon.accept)();
   };
-  const skipAction = (a: CodeAction) => { setPlan((ps) => dropAction(ps, a.code)); earcon.skip(); };
+  const skipAction = (a: CodeAction) => {
+    setPlan((ps) => dropAction(ps, a.code));
+    // the noes are part of the record too (see dismissCluster)
+    useStore.getState().logDecision({
+      kind: "dismiss", codes: [a.code], source: a.source ?? "you",
+      ...(a.model ? { model: a.model } : {}),
+      why: a.rationale || `A proposed ${a.action}, turned down`,
+    });
+    earcon.skip();
+  };
 
   // "describe this group": one-line confirm, default model, result lands on
   // the note node; the note's pulse IS the progress indicator
@@ -1332,6 +1341,9 @@ function MapInner() {
       const next = [...clusters, {
         survivor: bestSurvivor(st, members), codes: members,
         rationale: `Found by searching for codes similar to “${cur.source}”.`,
+        // the offline pass matched on wording; the AI pass that can extend the
+        // list is what makes a row say "AI proposal" instead
+        source: (cur.ai === "done" ? "ai" : "wording") as DecisionSource,
       }];
       st.setCodeClusters(next);
       earcon.join();
@@ -1398,7 +1410,7 @@ function MapInner() {
       const r = await reconcileFocus({ key, model: st.ai.model, focus, context, redaction: red, mode: "consolidate" });
       const s2 = useStore.getState();
       const merged = mergeFocusResults(s2.codeClusters, s2.codePlan, r.plan, new Set(r.reviewed));
-      s2.applyReconcilePlan(merged.clusters, merged.actions, false);
+      s2.applyReconcilePlan(merged.clusters, merged.actions, false, "ai", st.ai.model);
       s2.logAiCall({
         at: new Date().toISOString(), model: st.ai.model, task: "reconcile",
         pid: `(focus: ${focus.length} codes)`, lines: focus.length + context.length,
@@ -1667,7 +1679,7 @@ function MapInner() {
     // (bestSurvivor with no preference) rather than leaning on setCodeClusters
     // to overwrite whatever placeholder we passed
     st.setCodeClusters([...st.codeClusters,
-      { survivor: bestSurvivor(st, sel), codes: sel, rationale: "Grouped by hand on the map." }]);
+      { survivor: bestSurvivor(st, sel), codes: sel, rationale: "Grouped by hand on the map.", source: "you" }]);
     setMenu(null);
   };
   // the camera persists across tab switches AND reloads
@@ -1946,7 +1958,7 @@ function MapInner() {
 
   const mergeSel = (menuSel: string[], into: string) => {
     const mergeCode = useStore.getState().mergeCode;
-    menuSel.filter((c) => c !== into).forEach((c) => mergeCode(c, into));
+    menuSel.filter((c) => c !== into).forEach((c) => mergeCode(c, into, "Merged by hand on the map", "you"));
     setMenu(null);
   };
 
@@ -2143,14 +2155,15 @@ function MapInner() {
       {aiOpen && (
         <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope}
           onClose={() => setAiOpen(false)}
-          onPlan={(p: ReconcilePlan, scope) => {
+          onPlan={(p: ReconcilePlan, scope, meta) => {
             const st = useStore.getState();
+            const model = meta?.model;
             if (scope === "all") {
-              st.applyReconcilePlan(p.clusters, p.actions, true);
+              st.applyReconcilePlan(p.clusters, p.actions, true, "ai", model);
             } else if (typeof scope === "object") {
               // focus run: the modal already merged into the pending state
               // (replace-intersecting incl. fresh context targets)
-              st.applyReconcilePlan(p.clusters, p.actions, false);
+              st.applyReconcilePlan(p.clusters, p.actions, false, "ai", model);
             } else {
               // island-scoped refinement merges into the pending state: pending
               // clusters intersecting the subset are replaced (doc rule)
@@ -2158,7 +2171,7 @@ function MapInner() {
               st.applyReconcilePlan(
                 mergeScopedClusters(st.codeClusters, subset, p.clusters),
                 [...st.codePlan.filter((a) => !subset.has(a.code)), ...p.actions],
-                false);
+                false, "ai", model);
             }
           }} />
       )}

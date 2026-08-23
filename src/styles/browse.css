@@ -443,6 +443,7 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .dvCodes { display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; }
 .dvCode { font-weight:600; }
 .dvCode + .dvCode { font-weight:400; color:var(--muted); }
+.dvCode.first + .dvCode::before, .dvCode + .dvCode::before { content:"←"; margin-right:.4em; color:var(--muted); }
 .dvCode + .dvCode::before { content:"←"; margin-right:.4em; color:var(--muted); }
 .dvWhy { color:var(--fg-dim); line-height:1.45; }
 .dvMeta { display:flex; flex-wrap:wrap; gap:10px; align-items:center; font-size:.85em; color:var(--muted); }
@@ -454,3 +455,16 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .cbParkHead { margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
 .bCode.parked .bCodeName { color:var(--fg-dim); font-style:italic; }
 .bCode.parked .codebar { opacity:.55; }
+.dvKinds { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.dvKindBtn { display:inline-flex; align-items:center; gap:.4em; border:1px solid var(--line);
+  background:var(--bg); color:var(--fg-dim); border-radius:999px; padding:2px 9px; cursor:pointer; font-size:.88em; }
+.dvKindBtn:hover { border-color:var(--muted); color:var(--fg); }
+.dvKindBtn.on { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+.dvKindBtn .cnt { font-variant-numeric:tabular-nums; }
+.dvSize { font-variant-numeric:tabular-nums; }
+/* a code that still exists opens its excerpts; one a merge consumed is plain text */
+button.dvCode { border:0; background:none; padding:0; font:inherit; cursor:pointer;
+  color:inherit; text-align:left; }
+button.dvCode:hover { text-decoration:underline; }
+button.dvCode.first { font-weight:600; }
+button.dvCode:not(.first) { color:var(--muted); }

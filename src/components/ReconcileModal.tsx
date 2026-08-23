@@ -22,7 +22,8 @@ export type ReconcileScope = number | "all" | { focus: string[] };
 export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }: {
   groups: CodeGroup[];
   initialScope?: ReconcileScope;
-  onPlan: (plan: ReconcilePlan, scope: ReconcileScope, meta?: { replaced: number; unreviewed: string[] }) => void;
+  onPlan: (plan: ReconcilePlan, scope: ReconcileScope,
+    meta?: { replaced: number; unreviewed: string[]; model?: string }) => void;
   onClose: () => void;
 }) {
   const segments = useStore((s) => s.segments);
@@ -110,7 +111,7 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
     try {
       let plan: ReconcilePlan; let usage: { inTok: number; outTok: number; costUsd: number };
       let fresh: { clusters: number; actions: number } | undefined;
-      let meta: { replaced: number; unreviewed: string[] } | undefined;
+      let meta: { replaced: number; unreviewed: string[]; model?: string } | undefined;
       if (focusMode) {
         const r = await reconcileFocus({
           key, model: model.id, focus: codes, context: contextCodes,
@@ -123,7 +124,7 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
         // omitted code's pending proposal survives the model's oversight
         const merged = mergeFocusResults(st.codeClusters, st.codePlan, r.plan,
           new Set(r.reviewed));
-        meta = { replaced: merged.replaced, unreviewed: r.unreviewed };
+        meta = { replaced: merged.replaced, unreviewed: r.unreviewed, model: model.id };
         plan = { clusters: merged.clusters, actions: merged.actions };
       } else {
         const r = await reconcileCodes({
@@ -138,7 +139,9 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
         lines: codes.length + contextCodes.length, redactions,
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
-      onPlan(plan, scope, meta);
+      // the model that produced these rides along, so a decision made from
+      // them a week later can still name it
+      onPlan(plan, scope, meta ?? { replaced: 0, unreviewed: [], model: model.id });
       // report what THIS run produced; the merged plan (with pre-existing
       // pending work) still goes to the map via onPlan
       const nC = fresh ? fresh.clusters : plan.clusters.length;

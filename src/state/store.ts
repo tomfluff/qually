@@ -71,6 +71,10 @@ export interface CodeGroup { name: string; codes: string[]; rationale?: string }
 export interface CodePlanAction {
   code: string; action: "rename" | "merge" | "remove";
   newName?: string; into?: string; rationale: string;
+  // where the proposal came from, so the ledger row it eventually writes can
+  // say so. Absent on proposals made before this existed, and on hand-made
+  // ones, which are the researcher's by definition.
+  source?: DecisionSource; model?: string;
 }
 // a pending merge-CLUSTER: 2+ member codes proposed as ONE concept. survivor is
 // one of the members; newName optionally renames the merged concept. Persisted
@@ -88,6 +92,8 @@ const emptyLayout = (): StageLayout => ({ reconcile: {}, themes: {}, areas: {} }
 
 export interface CodeCluster {
   survivor: string; codes: string[]; newName?: string; rationale: string;
+  // same as CodePlanAction: whose idea this merge was (see Decision)
+  source?: DecisionSource; model?: string;
   // an AI-generated glimpse of what this group means (halo menu), persisted,
   // with the membership it described — a drifted membership marks it stale
   desc?: string;
@@ -232,6 +238,12 @@ export interface Decision {
   source: DecisionSource;
   model?: string;          // set when source is "ai"
   undone?: boolean;        // reversed by undo, kept for the record
+  // the SIZE of what happened, counted when it happened. A merge of two
+  // one-excerpt codes and a merge that folds 30 excerpts into a code are the
+  // same row without these, and they are not the same decision — this is also
+  // the only place the number survives, since the codes it counted are gone.
+  moved?: number;          // excerpts that changed code, were rejected, or were deleted
+  now?: number;            // excerpts the surviving code carries afterwards
 }
 
 export interface State {
@@ -403,6 +415,8 @@ export interface State {
   setCodeAreas: (areas: CodeGroup[], fp: string) => void;
   setCodePlan: (plan: CodePlanAction[]) => void;
   setCodeClusters: (clusters: CodeCluster[]) => void;
+  /** turn a merge proposal down — the record wants the noes as much as the yeses */
+  dismissCluster: (ci: number) => void;
   // one undoable entry per completed map gesture
   recordMapPosition: (id: string, pos: { x: number; y: number }, island: boolean, stage: MapStage) => void;
   // a whole-map nudge (Adjust to zoom): every moved thing, ONE entry
@@ -430,7 +444,8 @@ export interface State {
   // Themes-stage drop: position + island membership, ONE entry. gi -1 = no island.
   themesDrop: (code: string, pos: { x: number; y: number }, gi: number) => void;
   // a reconcile run landing: clusters + actions + fresh layout, ONE entry
-  applyReconcilePlan: (clusters: CodeCluster[], actions: CodePlanAction[], resetLayout: boolean) => void;
+  applyReconcilePlan: (clusters: CodeCluster[], actions: CodePlanAction[], resetLayout: boolean,
+    source?: DecisionSource, model?: string) => void;
   // a Themes grouping run landing: islands + fresh layout, ONE entry
   applyThemeGroups: (groups: CodeGroup[]) => void;
   // wipe every hand-placed position: the packer lays the stage out fresh (one entry)
@@ -710,6 +725,10 @@ function placeTab(s: State, pid: string): string[] {
 // is left alone
 const renameRef = (ref: string, from: string, to: string) =>
   ref.startsWith(`${from}:`) || ref.startsWith(`${from}@`) ? to + ref.slice(from.length) : ref;
+
+/** how many codings a code carries right now, any status — the size of a decision */
+const countCode = (s: State, code: string) =>
+  s.segments.filter((x) => norm(x.code) === norm(code)).length;
 
 function hotbarCodes(s: State): string[] {
   // a pinned parked code stays pinned (unparking must not cost you the pin) but
@@ -1362,9 +1381,11 @@ export const useStore = create<State>()(
       exportLedger: () => toCSV(
         get().ledger.map((d) => ({
           at: d.at, kind: d.kind, codes: d.codes.join(" | "), why: d.why,
-          source: d.source, model: d.model ?? "", undone: d.undone ? "yes" : "",
+          source: d.source, model: d.model ?? "",
+          excerpts_moved: d.moved ?? "", excerpts_after: d.now ?? "",
+          undone: d.undone ? "yes" : "",
         })),
-        ["at", "kind", "codes", "why", "source", "model", "undone"]
+        ["at", "kind", "codes", "why", "source", "model", "excerpts_moved", "excerpts_after", "undone"]
       ),
       exportAiLog: () => toCSV(
         get().aiLog as unknown as Record<string, unknown>[],
@@ -1665,7 +1686,8 @@ export const useStore = create<State>()(
           norm(x.code) === norm(code) && x.status === "accepted" ? (n++, { ...x, status: "rejected" }) : x) });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "remove", codes: [code], source: source ?? "you",
-          why: why || `Rejected all ${n} excerpt${n === 1 ? "" : "s"} of this code`, ...(model ? { model } : {}) });
+          why: why || `Rejected all ${n} excerpt${n === 1 ? "" : "s"} of this code`, ...(model ? { model } : {}),
+          moved: n, now: 0 });
         announce(`${n} excerpt${n === 1 ? "" : "s"} of ${code} rejected`);
       },
       setNotes: (sid, notes) => set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, notes } : x), redoStack: [] }),
@@ -1706,14 +1728,19 @@ export const useStore = create<State>()(
           mapIslandPos: { ...get().mapIslandPos, themes: {} },
         });
       },
-      applyReconcilePlan: (clusters, actions, resetLayout) => {
+      applyReconcilePlan: (clusters, actions, resetLayout, source, model) => {
         get().pushUndo();
+        // stamp where these came from ONCE, here, where a run lands — the
+        // ledger row is written much later, when the researcher accepts, and
+        // by then nothing else remembers whose idea it was
+        const from = <T extends { source?: DecisionSource; model?: string }>(x: T): T =>
+          source ? { ...x, source, ...(model ? { model } : {}) } : x;
         set({
           // the sanitizer already enforced a valid member survivor; keep that
           // deliberate direction, fall back to evidence only when it broke
           codeClusters: clusters.filter((c) => c.codes.length >= 2)
-            .map((c) => ({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) })),
-          codePlan: actions,
+            .map((c) => from({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) })),
+          codePlan: actions.map(from),
           ...(resetLayout ? {
             mapPositions: { ...get().mapPositions, reconcile: {} },
             mapIslandPos: { ...get().mapIslandPos, reconcile: {} },
@@ -1847,6 +1874,8 @@ export const useStore = create<State>()(
         // the same integrity path mergeCode/renameCode use — but silently, so
         // the whole cluster is ONE history entry
         set({ codeClusters: s0.codeClusters.filter((_, i) => i !== ci) });
+        // counted before the merges run, or there is nothing left to count
+        const moved = c.codes.filter((m) => m !== c.survivor).reduce((n, m) => n + countCode(s0, m), 0);
         for (const m of c.codes) if (m !== c.survivor) mergeInto(get, set, m, c.survivor);
         if (c.newName && c.newName !== c.survivor) {
           const s1 = get();
@@ -1868,7 +1897,33 @@ export const useStore = create<State>()(
           }
         }
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
+        // one row for the capsule, not one per member merge: what the
+        // researcher decided was "these are one code", once
+        const kept = c.newName ?? c.survivor;
+        get().logDecision({
+          kind: "merge",
+          codes: [kept, ...c.codes.filter((m) => m !== c.survivor)],
+          source: c.source ?? "you",
+          ...(c.model ? { model: c.model } : {}),
+          why: c.rationale || `Merged ${c.codes.length} codes into “${kept}”`,
+          moved, now: countCode(get(), kept),
+        });
         announce(`Merged ${c.codes.length} codes into ${c.newName ?? c.survivor}`);
+      },
+      // A rejected proposal is evidence: "the model suggested 41 merges and the
+      // researcher took 34" is only sayable if the sevens are written down too.
+      dismissCluster: (ci) => {
+        const c = get().codeClusters[ci];
+        if (!c) return;
+        get().pushUndo();
+        set({ codeClusters: get().codeClusters.filter((_, i) => i !== ci) });
+        get().logDecision({
+          kind: "dismiss",
+          codes: [c.newName ?? c.survivor, ...c.codes.filter((m) => m !== c.survivor)],
+          source: c.source ?? "you",
+          ...(c.model ? { model: c.model } : {}),
+          why: c.rationale || "No reason recorded",
+        });
       },
       setCodeClusters: (clusters) => { get().pushUndo(); set({ codeClusters: clusters
         // one policy for every cluster entering the store: a survivor that is
@@ -2012,7 +2067,8 @@ export const useStore = create<State>()(
         });
         set({ hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "rename", codes: [name, code], source: source ?? "you",
-          why: why || `Renamed from “${code}”`, ...(model ? { model } : {}) });
+          why: why || `Renamed from “${code}”`, ...(model ? { model } : {}),
+          now: countCode(get(), name) });
       },
       // One coherent first letter across the whole codebook (AI proposals tend
       // to arrive Capitalized while hand-typed codes are often lowercase).
@@ -2073,11 +2129,12 @@ export const useStore = create<State>()(
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "delete", codes: [code], source: "you",
-          why: why || `Deleted the code and its ${lost} coding${lost === 1 ? "" : "s"}` });
+          why: why || `Deleted the code and its ${lost} coding${lost === 1 ? "" : "s"}`, moved: lost });
       },
       mergeCode: (from, into, why, source, model) => {
         if (norm(from) === norm(into)) return;
         get().pushUndo();
+        const moved = countCode(get(), from);
         // segment dedup inside includes proposedBy + status: two coders at the
         // same span, or an accepted vs a candidate, are distinct data — not
         // duplicates the merge should collapse (matches addSegment's dedup).
@@ -2085,7 +2142,8 @@ export const useStore = create<State>()(
         mergeInto(get, set, from, into);
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "merge", codes: [into, from], source: source ?? "you",
-          why: why || `Merged “${from}” into “${into}”`, ...(model ? { model } : {}) });
+          why: why || `Merged “${from}” into “${into}”`, ...(model ? { model } : {}),
+          moved, now: countCode(get(), into) });
       },
       // Parking never touches segments — that is the whole point of it existing
       // beside rejectCode. hotbarCache is rebuilt because a parked code must
@@ -2098,6 +2156,7 @@ export const useStore = create<State>()(
         set({ codebook: { ...s.codebook, [code]: { ...cur, parked: parked || undefined } } });
         set({ hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: parked ? "park" : "unpark", codes: [code], source: "you",
+          now: countCode(get(), code),
           why: why || (parked
             ? "Set aside from the working codebook; its excerpts are untouched"
             : "Brought back into the working codebook") });

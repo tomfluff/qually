@@ -20,8 +20,16 @@ export interface CodeAction {
   newName?: string;
   into?: string;
   rationale: string;
+  // stamped by the store when a run LANDS, never by the model: whose idea this
+  // was, so the decision ledger can say so when the researcher accepts it (see
+  // Decision in state/store.ts)
+  source?: "you" | "wording" | "ai";
+  model?: string;
 }
-export interface ClusterProposal { survivor: string; codes: string[]; newName?: string; rationale: string }
+export interface ClusterProposal {
+  survivor: string; codes: string[]; newName?: string; rationale: string;
+  source?: "you" | "wording" | "ai"; model?: string; // stamped on landing, as above
+}
 export interface ReconcilePlan { clusters: ClusterProposal[]; actions: CodeAction[] }
 
 const SYSTEM = `You are helping a qualitative researcher consolidate a first-cycle inductive codebook so it is ready for reflexive thematic analysis. Each entry has a code name, an optional definition, and sample excerpts the researcher coded with it. Propose a revision plan in two parts:

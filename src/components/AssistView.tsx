@@ -24,7 +24,7 @@ import { DefLine } from "./CodeDef";
 import { codeStats, sortCodes, SORTS, type CodeStat, type SortBy } from "../codeStats";
 import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
-import { DecisionsList, DecisionsSide } from "./DecisionsPanel";
+import { DecisionsList, DecisionsSide, NO_FILTER, type DecisionFilter } from "./DecisionsPanel";
 
 // One AI observation, resolved against the current text (a stale hash means the line
 // was edited since the scan — those don't appear) and against your segments (an
@@ -92,6 +92,7 @@ export function AssistView() {
   // session-only: a reversed decision is still part of the record, so hiding
   // them is a way of reading the list, not a property of the list
   const [hideUndone, setHideUndone] = useState(false);
+  const [decFilter, setDecFilter] = useState<DecisionFilter>(NO_FILTER);
   const [obsBy, setObsBy] = useState(remembered.obsBy);
   const [obsSel, setObsSel] = useState(remembered.obsSel);
   const [onlyUncoded, setOnlyUncoded] = useState(remembered.onlyUncoded);
@@ -278,10 +279,18 @@ export function AssistView() {
   const accept = (p: MergeProposal) => {
     const swap = flipped.has(pairKey(p));
     const from = swap ? p.into : p.from, into = swap ? p.from : p.into;
-    useStore.getState().mergeCode(from, into); // undoable (pushes its own undo)
+    // undoable (pushes its own undo), and the ledger keeps the model's reason
+    useStore.getState().mergeCode(from, into, p.rationale, "ai", useStore.getState().ai.model);
     setProposals((ps) => ps.filter((x) => x !== p));
   };
-  const skip = (p: MergeProposal) => setProposals((ps) => ps.filter((x) => x !== p));
+  const skip = (p: MergeProposal) => {
+    // a turned-down proposal is part of the record (see dismissCluster)
+    useStore.getState().logDecision({
+      kind: "dismiss", codes: [p.into, p.from], source: "ai", model: useStore.getState().ai.model,
+      why: p.rationale || "A proposed merge, turned down",
+    });
+    setProposals((ps) => ps.filter((x) => x !== p));
+  };
   const toggleFlip = (p: MergeProposal) => setFlipped((f) => {
     const n = new Set(f); const k = pairKey(p); n.has(k) ? n.delete(k) : n.add(k); return n;
   });
@@ -335,7 +344,8 @@ export function AssistView() {
         <div className="cbList nicescroll" ref={listRef}
           onScroll={(e) => { remembered.leftScroll[panel] = e.currentTarget.scrollTop; }}>
         {panel === "decisions" ? (
-          <DecisionsSide hideUndone={hideUndone} setHideUndone={setHideUndone} />
+          <DecisionsSide hideUndone={hideUndone} setHideUndone={setHideUndone}
+            filter={decFilter} setFilter={setDecFilter} />
         ) : panel === "observations" ? (
           <>
             {/* Same two ways in as the Suggest panel: a button that works in every
@@ -618,7 +628,7 @@ export function AssistView() {
       <div className="browse-right nicescroll" ref={paneRef}
         onScroll={(e) => { remembered.scroll[panel] = e.currentTarget.scrollTop; }}>
         {panel === "decisions" ? (
-          <DecisionsList hideUndone={hideUndone} />
+          <DecisionsList hideUndone={hideUndone} filter={decFilter} />
         ) : panel === "observations" ? (
           hasNotices ? (
             <NoticeList
