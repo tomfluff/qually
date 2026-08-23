@@ -793,8 +793,16 @@ export function TranscriptView() {
     // a plain click (open the popover) lands here too — an unconditional pushUndo
     // killed the redo stack and pushed a no-op undo entry for every such click
     let snapped = false;
+    // drag telemetry, like the map's field crossings: one quiet tick per line
+    // the edge actually crosses — pitch says direction (growing vs shrinking).
+    // Tracked here because move fires per PIXEL, not per line.
+    let last = { start: seg.start, end: seg.end };
     const apply = (start: number, end: number) => {
       if (!snapped) { snapped = true; pushUndo(); }
+      if (start !== last.start || end !== last.end) {
+        (end - start > last.end - last.start ? earcon.hoverIn : earcon.hoverOut)();
+        last = { start, end };
+      }
       setSegmentRange(seg.sid, start, end);
     };
     const move = (ev: globalThis.MouseEvent) => {
