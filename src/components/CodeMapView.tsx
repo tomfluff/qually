@@ -45,6 +45,7 @@ import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
 import { findSimilar } from "../similar";
 import { sweepWording, refusedPairs, familyReason } from "../sweep";
+import { openTailQueue } from "./TailQueue";
 import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
 import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
@@ -2174,6 +2175,14 @@ function MapInner() {
           <button className="btn iconlabel" onClick={() => setThemeAiOpen(true)}
             title="AI groups the cleaned codebook into theme islands for you to reshape (nothing is applied until you accept)">
             <Icon name="sparkle" size={16} /> <span className="blabel">Group with AI</span>
+          </button>
+        )}
+        {/* the count view is where you SEE the tail; this is the way into
+            reading it, with the size you are looking at carried across */}
+        {view === "segs" && (
+          <button className="btn iconlabel" onClick={() => openTailQueue(1)}
+            title="Read the codes resting on one excerpt, one at a time, in Assist">
+            <Icon name="list" size={16} /> <span className="blabel">Work the thin tail</span>
           </button>
         )}
         {view === "areas" && (

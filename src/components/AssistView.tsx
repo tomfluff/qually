@@ -25,6 +25,7 @@ import { codeStats, sortCodes, SORTS, type CodeStat, type SortBy } from "../code
 import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
 import { DecisionsList, DecisionsSide, NO_FILTER, type DecisionFilter } from "./DecisionsPanel";
+import { TailQueue, TailSide, type TailLimit } from "./TailQueue";
 
 // One AI observation, resolved against the current text (a stale hash means the line
 // was edited since the scan — those don't appear) and against your segments (an
@@ -93,6 +94,9 @@ export function AssistView() {
   // them is a way of reading the list, not a property of the list
   const [hideUndone, setHideUndone] = useState(false);
   const [decFilter, setDecFilter] = useState<DecisionFilter>(NO_FILTER);
+  // how thin counts as thin lives in ui, so the map's launcher can set it on
+  // the way in and it is still there next session
+  const tailLimit = useStore((s) => s.ui.tailLimit) as TailLimit;
   const [obsBy, setObsBy] = useState(remembered.obsBy);
   const [obsSel, setObsSel] = useState(remembered.obsSel);
   const [onlyUncoded, setOnlyUncoded] = useState(remembered.onlyUncoded);
@@ -339,11 +343,13 @@ export function AssistView() {
         {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
             own menu — this heading just names what's showing. It stays fixed; the
             list below scrolls inside cbList so the scrollbar clears the drag divider. */}
-        <div className="bSideHead">{panel === "decisions" ? "Decisions" : panel === "merge" ? "Merge codes" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
+        <div className="bSideHead">{panel === "tail" ? "The thin tail" : panel === "decisions" ? "Decisions" : panel === "merge" ? "Merge codes" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
 
         <div className="cbList nicescroll" ref={listRef}
           onScroll={(e) => { remembered.leftScroll[panel] = e.currentTarget.scrollTop; }}>
-        {panel === "decisions" ? (
+        {panel === "tail" ? (
+          <TailSide limit={tailLimit} setLimit={(n) => setUi({ tailLimit: n })} />
+        ) : panel === "decisions" ? (
           <DecisionsSide hideUndone={hideUndone} setHideUndone={setHideUndone}
             filter={decFilter} setFilter={setDecFilter} />
         ) : panel === "observations" ? (
@@ -627,7 +633,9 @@ export function AssistView() {
 
       <div className="browse-right nicescroll" ref={paneRef}
         onScroll={(e) => { remembered.scroll[panel] = e.currentTarget.scrollTop; }}>
-        {panel === "decisions" ? (
+        {panel === "tail" ? (
+          <TailQueue limit={tailLimit} />
+        ) : panel === "decisions" ? (
           <DecisionsList hideUndone={hideUndone} filter={decFilter} />
         ) : panel === "observations" ? (
           hasNotices ? (

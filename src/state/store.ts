@@ -143,7 +143,10 @@ export interface Ui {
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
   // which Assist-tab panel is showing — chosen from the tab's own menu
-  assistPanel: "observations" | "merge" | "suggest" | "summary" | "describe" | "ask" | "decisions";
+  assistPanel: "observations" | "merge" | "suggest" | "summary" | "describe" | "ask" | "decisions" | "tail";
+  // what the thin-tail queue counts as thin (1, 2 or 3 excerpts) — the
+  // researcher's call, and the map's launcher can set it on the way in
+  tailLimit: number;
   // the Summary tab's split between the detailed timeline and the summary text:
   // side by side, stacked, or one pane at a time. The split position is a fraction
   // of the container (not px) so it survives both orientations and window resizes.
@@ -236,6 +239,8 @@ export type DecisionKind =
   | "keep" | "park" | "unpark" | "promote" | "dismiss"; // the tail queue's outcomes
 /** where the idea came from — NOT who performed it. Every decision is the researcher's. */
 export type DecisionSource = "you" | "wording" | "ai";
+/** decisions that record a judgement without changing anything (see restore) */
+const INERT_DECISIONS = new Set<DecisionKind>(["keep", "promote"]);
 export interface Decision {
   at: string;              // ISO
   kind: DecisionKind;
@@ -493,6 +498,8 @@ export interface State {
   mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string) => void;
   /** set a code aside (or bring it back) without touching its excerpts */
   setParked: (code: string, parked: boolean, why?: string) => void;
+  /** the tail queue's two verdicts that change nothing: this code stands / this code needs more coding */
+  noteVerdict: (kind: "keep" | "promote", code: string, why?: string) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
   // returns the codes it actually wrote — a draft that echoes what is already
   // stored changes nothing, and the receipt must not claim it did
@@ -699,6 +706,9 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
     // ledger existed carries no length, and leaves it alone.
     ledger: typeof o.ledgerLen === "number"
       ? cur.ledger.map((d, i) => {
+          // "kept" and "to code more" changed no state — they are a record of
+          // having LOOKED, and no undo of some other action reverses that
+          if (INERT_DECISIONS.has(d.kind)) return d;
           const undone = i >= o.ledgerLen;
           return !!d.undone === undone ? d : { ...d, undone };
         })
@@ -760,7 +770,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
@@ -2181,6 +2191,18 @@ export const useStore = create<State>()(
             : "Brought back into the working codebook") });
         announce(parked ? `${code} set aside` : `${code} back in the codebook`);
       },
+      // No pushUndo and no state: the ledger row IS the outcome. Reading a
+      // code and deciding it stands is a decision worth recording — it is what
+      // makes a second pass through the tail skip it — but there is nothing to
+      // reverse, so undo leaves these alone (see INERT_DECISIONS).
+      noteVerdict: (kind, code, why) => {
+        if (!get().codebook[code]) return;
+        get().logDecision({ kind, codes: [code], source: "you",
+          why: why || (kind === "keep"
+            ? "Read its excerpts; the code stands as it is"
+            : "Under-applied — worth coding more of this") });
+        announce(kind === "keep" ? `${code} kept` : `${code} marked as worth coding more`);
+      },
       togglePin: (code) => {
         const p = get().hotbar.pinned;
         const pinned = p.includes(code) ? p.filter((c) => c !== code) : [...p, code];
@@ -2342,6 +2364,7 @@ export const useStore = create<State>()(
         s.ledger ??= [];
         s.codeClusters = stampCids(s.codeClusters ?? []);
         s.ui.assistPanel ??= "observations";
+        s.ui.tailLimit ??= 1;
         s.ui.eventSort ??= "type";
         // normalize, not just default: a corrupt persisted value would make the
         // sidebar chip index SORTS with -1 and crash the whole sidebar

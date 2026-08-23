@@ -468,3 +468,34 @@ button.dvCode { border:0; background:none; padding:0; font:inherit; cursor:point
 button.dvCode:hover { text-decoration:underline; }
 button.dvCode.first { font-weight:600; }
 button.dvCode:not(.first) { color:var(--muted); }
+
+/* ── The thin tail (Assist) ────────────────────────────────────────────────
+   One code, one screen, the excerpt at reading size. Deliberately narrow: a
+   card you can read in one go is the whole point, and a wide one invites the
+   eye to skim. */
+.tqProgress { margin-top:14px; }
+.tqBar { height:.5em; background:var(--panel); border:1px solid var(--line);
+  border-radius:4px; overflow:hidden; }
+.tqBar > span { display:block; height:100%; background:var(--accent); }
+.tqCard { max-width:58ch; display:flex; flex-direction:column; gap:2px; }
+.tqHead { display:flex; align-items:baseline; gap:12px; }
+.tqName { margin:0; font-size:1.5em; line-height:1.2; }
+.tqHead .nBtn { margin-left:auto; flex:none; }
+.tqDef { margin:6px 0 0; color:var(--fg-dim); }
+.tqEx { margin:12px 0 0; padding:2px 0 2px 14px; border-left:3px solid var(--accent);
+  font-size:1.08em; line-height:1.6; }
+.tqWho { display:block; font-size:.78em; color:var(--muted); margin-bottom:3px; }
+.tqActs { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+.tqActs kbd { font:inherit; font-size:.82em; color:var(--muted); border:1px solid var(--line);
+  border-bottom-width:2px; border-radius:4px; padding:0 .3em; margin-left:.45em; }
+.tqActs .nBtn.pri kbd { color:inherit; border-color:currentColor; opacity:.8; }
+.tqFold { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px;
+  display:flex; flex-direction:column; gap:10px; align-items:flex-start; }
+.fldRow { display:flex; flex-direction:column; gap:4px; width:100%; }
+.fldRow input { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--muted);
+  border-radius:8px; padding:.3em .5em; }
+.tqTargets { display:flex; flex-wrap:wrap; gap:6px; }
+.tqTargets .nBtn { display:inline-flex; align-items:baseline; gap:.5em; }
+.tqTargets .cnt { color:var(--muted); font-variant-numeric:tabular-nums; }
+.tqKeys { display:flex; align-items:center; gap:.5em; margin:22px 0 0; color:var(--muted);
+  font-size:.86em; max-width:60ch; }
