@@ -442,7 +442,10 @@ const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
             onDoubleClick={(e) => { e.stopPropagation(); setDraft(data.name); setEditing(true); }}>{data.name}</span>
         )}
         {data.renamed && !editing && <span className="mapOrbitTag">{data.joins ? "joins existing" : "new name"}</span>}
-        {data.source && (
+        {/* a hand-edited project file can carry a source this build has never
+            heard of; an unknown one says nothing rather than reaching Icon
+            with a name that is not in PATHS */}
+        {data.source && SOURCE_MARK[data.source] && (
           <span className={"mapHaloSrc " + data.source} title={SOURCE_MARK[data.source].label}
             aria-label={SOURCE_MARK[data.source].label}>
             <Icon name={SOURCE_MARK[data.source].icon} size={Math.round(fontSize * 0.8)} />
@@ -2167,11 +2170,15 @@ function MapInner() {
           </button>
         )}
         {view === "areas" && (
-          <button className="btn" onClick={() => setTopicAiOpen(true)}
+          // icon + .blabel like its siblings, so this one can shed too: it was
+          // the only bar control whose text the fit loop could not shrink, and
+          // it is the longest of them when the areas have gone stale
+          <button className="btn iconlabel" onClick={() => setTopicAiOpen(true)}
             title={topicsStale
               ? "The codebook changed since these areas were worked out — re-run to refresh them"
               : "Ask the AI to work the areas out again"}>
-            {topicsStale ? "Areas are stale — re-run…" : "Re-run areas…"}
+            <Icon name="sparkle" size={16} />
+            <span className="blabel">{topicsStale ? "Areas are stale — re-run…" : "Re-run areas…"}</span>
           </button>
         )}
         {/* everything right of this line applies to EVERY view */}
