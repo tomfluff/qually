@@ -3,46 +3,26 @@
 /* Code map: the codebook on a React Flow canvas. The chips are ours; React
    Flow owns the viewport (pan/zoom/box-select) and the minimap. Its stylesheet
    is imported by the component; here we theme what shows and style the chips. */
-/* position:relative: the help panel sizes against THIS pane, not the viewport
-   — a viewport guess breaks as soon as large text makes the chrome taller */
+/* position:relative: the pill and the help panel size against THIS pane */
 #codemap { display:flex; flex-direction:column; height:100%; min-width:0; position:relative; }
-/* The bar is one row of controls, so they share ONE height — set in em, so it
-   rides the app's text-size ramp instead of pinning a pixel value that clips
-   at large accessible sizes. Every control opts in through the same rule
-   rather than each carrying its own vertical padding. */
+/* One floating pill over the canvas, the shape the selection pill already
+   taught: the map's chrome is a thing ON the map, and the canvas keeps the
+   whole pane. Fixed size (the map does not ride the text-size ramp), so
+   nothing here ever needs to shed or wrap. */
 .mapBar { --ctl-h:2.2em;
-  /* ONE row, always. Wrapping put the Layout menu and the settings gear on a
-     second line the moment the text size went up, which moved every control
-     the researcher had just learned the position of. Nothing wraps now: the
-     bar measures itself and sheds, in order, until it fits (see fitBar). */
-  display:flex; align-items:center; gap:10px; flex-wrap:nowrap;
-  padding:9px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
-/* controls keep their size; the hint and the gap are what give ground */
-.mapBar > .btn, .mapBar > .segmented, .mapBar > .mapTitle, .mapBar > .mapCount { flex:0 0 auto; }
-
-/* The shedding order, least missed first. Container queries cannot do this:
-   their em resolves against the ROOT font size, not the bar's, so every
-   threshold would be blind to the one setting that matters most here — the
-   researcher's text size. The classes come from a ResizeObserver instead.
-   Everything that loses its label keeps its title and accessible name, and
-   the view NAME never sheds: it is the only thing on screen saying which of
-   the seven maps you are looking at. */
-.mapBar.shedHint .mapDragHint { display:none; }
-.mapBar.shedLabels .btn .blabel:not(.mapViewName) { display:none; }
-.mapBar.shedLabels .btn.iconlabel:not(.mapViewBtn) { justify-content:center;
-  aspect-ratio:1; padding-inline:0; }
-.mapBar.shedCount .mapCount { display:none; }
-.mapBar.shedTitle .mapTitle, .mapBar.shedTitle .mapHelpBtn { display:none; }
+  position:absolute; top:10px; left:12px; z-index:6;
+  display:flex; align-items:center; gap:6px;
+  padding:5px 8px; border:1px solid var(--line); border-radius:10px;
+  background:var(--panel); box-shadow:0 4px 14px rgba(0,0,0,.22); }
+.mapBar > .btn { flex:0 0 auto; }
 
 /* icon-to-ink alignment is app-wide now: base.css nudges every .icn */
-.mapBar .segmented { padding:0; }
 .mapBar .btn.iconbtn { justify-content:center; aspect-ratio:1; padding-inline:0; }
-.mapBar .mapTitle { font-weight:600; }
-.mapBar .mapCount { color:var(--muted); }
-/* the one flexible cell: it takes the slack so the controls sit right */
-.mapBar .mapBarGap { flex:1 1 0; min-width:0; }
+.mapBar .mapCount { color:var(--muted); white-space:nowrap; }
+/* stale areas: the warning is a colour on the icon, explained by its tooltip */
+.mapBar .btn.stale { color:var(--warn, #b45309); }
 /* the gestures, behind the ? button */
-.mapHelp { position:absolute; left:16px; top:52px; z-index:6; max-width:48ch;
+.mapHelp { position:absolute; left:12px; top:56px; z-index:6; max-width:48ch;
   background:var(--panel); border:1px solid var(--line); border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.28); padding:10px 13px 11px; font-size:.94em; }
 .mapHelpHead { margin-bottom:7px; }
@@ -155,7 +135,9 @@
 /* the revision plan: proposals waiting for verdicts. A floating strip so the
    canvas keeps its size; each accept runs an undoable store action. */
 .mapPlan { background:var(--panel); border:1px solid var(--line); border-radius:10px;
-  box-shadow:0 4px 14px rgba(0,0,0,.18); max-width:min(56ch, 46vw); }
+  box-shadow:0 4px 14px rgba(0,0,0,.18); max-width:min(56ch, 46vw);
+  /* below the floating pill, which shares this corner and sits above it */
+  margin-top:58px; }
 .mapPlanHead { display:flex; align-items:center; gap:8px; padding:8px 10px;
   border-bottom:1px solid var(--line); flex-wrap:wrap; }
 .mapPlanKey { flex-basis:100%; order:9; color:var(--muted); font-size:.85em; }
@@ -244,15 +226,6 @@
 .mapPlanHead:active { cursor:grabbing; }
 /* the minimap must not sit ON the zoom controls when both share bottom-left */
 .mapCanvas .react-flow__minimap.bottom.left { margin-left:56px; }
-/* what a drag does in THIS view: permanently visible, because the same motion
-   means three different things across the views and nothing else says which */
-.mapDragHint { color:var(--muted); font-size:.9em; white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; max-width:44ch;
-  /* the bar's shock absorber: it gives up width a character at a time so the
-     controls never wrap onto a second row. Thresholds alone could not do this
-     — the room depends on the text size, the tab row and the label lengths at
-     once, and this just measures what is left. */
-  flex:0 1 auto; min-width:0; }
 /* the view menu: one flat list, each row carrying its status and drag meaning */
 .mapViewMenu { max-width:46ch; }
 .mapViewMenu button { display:block; text-align:left; width:100%; }
@@ -273,8 +246,8 @@
 .mapPlanHead .mapPlanMin { padding:2px 7px; }
 /* the rename input types like an input, not a drag handle */
 .mapIslandEdit { cursor:text; user-select:text; -webkit-user-select:text; }
-/* top-left minimap ducks under the plan panel's header line */
-.mapCanvas .react-flow__minimap.top.left { margin-top:64px; }
+/* top-left minimap ducks under the pill AND the plan panel's header line */
+.mapCanvas .react-flow__minimap.top.left { margin-top:108px; }
 /* "Find similar codes": a ranked panel at the cursor. Rows are labels so the
    whole row is a hit target (the chips are small; the list should not be). */
 /* the results node: tethered under the chip you asked about, on a stem like
@@ -347,7 +320,7 @@
 
 /* the bar's text sits in the same box as its controls, so nothing reads as
    half a line off */
-.mapBar .mapTitle, .mapBar .mapCount { display:inline-flex; align-items:center;
+.mapBar .mapCount { display:inline-flex; align-items:center;
   height:var(--ctl-h); line-height:1; }
 
 /* the gestures panel scrolls instead of running off a short screen */

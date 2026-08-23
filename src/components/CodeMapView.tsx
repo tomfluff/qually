@@ -223,7 +223,7 @@ onProjectSwap(function forgetMapSession() {
 });
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
-  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const fs = MAP_FS;
   return (
     <div className={"mapChip" + (selected ? " sel" : "")}
       style={{ "--chip-c": data.color } as React.CSSProperties}
@@ -315,6 +315,11 @@ function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onS
 // against the viewport so it holds a readable on-screen size zoomed out (far
 // away the map reads as GROUP NAMES), clamping at a base deliberately above
 // the code text size — titles outrank chips.
+// The map does not ride the app's text-size ramp: it has its own zoom, and a
+// setting meant for reading surfaces was scaling half the canvas (chips,
+// captions) while the controls stayed put. One fixed size; zoom is the scale.
+const MAP_FS = 13;
+
 const zoomSel = (s: { transform: [number, number, number] }) => s.transform[2];
 // Moving a group by hand is pointer-only otherwise, and precision dragging is
 // exactly what magnification makes expensive. Same window-event idiom the card
@@ -335,7 +340,7 @@ const islandArrowKeys = (id: string) => (e: React.KeyboardEvent) => {
 };
 const IslandNode = memo(function IslandNode({ id, data }: NodeProps<IslandNodeT>) {
   const zoom = useFlowStore(zoomSel);
-  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const fs = MAP_FS;
   const base = fs * 1.3;
   const fontSize = Math.min(base * 7, Math.max(base, base / zoom));
   const [editing, setEditing] = useState(false);
@@ -412,7 +417,7 @@ const tellApart = (cid: number | undefined, codes: [string, string], survivor: s
   window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { cid, codes, survivor, newName } }));
 const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const zoom = useFlowStore(zoomSel);
-  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const fs = MAP_FS;
   const base = fs * 1.3;
   // the caption tracks the zoom (constant on-screen size while zooming out)
   // up to a generous ceiling — far out, the map must read as group names
@@ -783,11 +788,6 @@ function MapInner() {
   const codebookFp = useMemo(() => Object.keys(codebook).sort().join("\n"), [codebook]);
   const topicsStale = topicFp !== codebookFp;
   const [topicAiOpen, setTopicAiOpen] = useState(false);
-  // The bar fits in one row or it sheds, in this order, until it does. A CSS
-  // container query cannot do this job: its `em` resolves against the ROOT
-  // font size, so every threshold would be blind to the text-size setting —
-  // and this app is FOR the reader who turns that up.
-  const barRef = useRef<HTMLDivElement>(null);
   const [viewMenu, setViewMenu] = useState<{ left: number; y: number } | null>(null);
   const viewMenuRef = useKeepOnScreen<HTMLDivElement>([viewMenu]);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
@@ -941,42 +941,12 @@ function MapInner() {
       (stats[b]?.segs ?? 0) - (stats[a]?.segs ?? 0) || a.localeCompare(b)),
     [codebook, stats]);
 
-  // Layout effect, not effect: fit() strips the shed classes and measures
-  // before re-adding them, and doing that after paint would flash the un-shed
-  // bar for a frame on every pass. And it runs on what actually changes the
-  // bar's content — not on every render, because the map re-renders per
-  // pointer event during a drag (see the marquee note above nodeTypes), and
-  // each fit is up to five forced layout flushes plus a ResizeObserver
-  // teardown. The observer covers the other axis: the container changing
-  // size under unchanged content.
-  useLayoutEffect(() => {
-    const el = barRef.current;
-    if (!el) return;
-    const STEPS = ["shedHint", "shedLabels", "shedCount", "shedTitle"];
-    const fit = () => {
-      el.classList.remove(...STEPS);
-      for (const step of STEPS) {
-        // reading scrollWidth flushes layout, so each step is measured against
-        // the previous one's result rather than the state we started in
-        if (el.scrollWidth <= el.clientWidth + 1) return;
-        el.classList.add(step);
-      }
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    return () => ro.disconnect();
-    // everything the bar renders that changes width: the view picks the
-    // buttons and the drag hint, the count is its own text, the text-size
-    // setting scales all of it, and the areas button reads stale differently
-  }, [view, codes.length, sidebarFontSize, topicsStale]);
-
   // Two stages, one canvas. Themes: islands (groups) as before. Reconcile:
   // constellations — each pending cluster is a circular parent node with the
   // survivor at the center and members on the orbit; codes in no cluster pack
   // as a flat field below. Parents precede children (RF sub-flow rule).
   const layout = useMemo(() => {
-    const fs = sidebarFontSize;
+    const fs = MAP_FS;
     const ch = chipH(fs);
     const family = getComputedStyle(document.body).fontFamily; // read once per rebuild
     const widths = new Map(codes.map((c) => [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0)]));
@@ -1305,7 +1275,7 @@ function MapInner() {
     for (const c of looseFree) children.push(chipNode(c, { x: 0, y: 0 }));
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, sidebarFontSize, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev]);
+  }, [codes, codebook, stats, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -2232,9 +2202,13 @@ function MapInner() {
   }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, layoutMenu, viewMenu, mapSetMenu]);
 
   return (
-    <div id="codemap" className={"view-" + view} style={{ fontSize: sidebarFontSize }}>
-      <div className="mapBar" ref={barRef}>
-        <span className="mapTitle">Code map</span>
+    <div id="codemap" className={"view-" + view} style={{ fontSize: MAP_FS }}>
+      {/* One floating pill, not a full-width bar: the map's chrome sits ON
+          the map, the way the selection pill does, and the canvas keeps the
+          whole pane. Actions are icons — their names live in the tooltip and
+          the accessible name — except the view's own name, which is the only
+          thing on screen saying which of the seven maps this is. */}
+      <div className="mapBar" role="toolbar" aria-label="Map controls">
         <button className="btn iconbtn mapHelpBtn" aria-expanded={helpOpen}
           aria-label={helpOpen ? "Hide how to use the map" : "How to use the map"}
           onClick={() => setHelpOpen((v) => !v)}
@@ -2242,55 +2216,51 @@ function MapInner() {
           <Icon name="help" size={16} />
         </button>
         <span className="mapCount">{codes.length} code{codes.length === 1 ? "" : "s"}</span>
-        {/* what a drag does HERE — the same motion means three different things
-            across the views, and this is the only thing that says which */}
-        <span className="mapDragHint" aria-live="off">{spec.drag}</span>
-        <span className="mapBarGap" />
         {/* the current view's own actions; the derived views have none */}
         {view === "reconcile" && (
-          <button className="btn iconlabel" onClick={runSweep}
-            title="Find codes whose names share wording — on this machine, free, no key. Proposals only.">
+          <button className="btn iconbtn" onClick={runSweep} aria-label="Match on wording"
+            title="Match on wording — find codes whose names share wording, on this machine, free, no key. Proposals only.">
             {/* two sheets, not a magnifier: this is about finding the code you
                 wrote twice, and the search icon reads as "filter the map" */}
-            <Icon name="copy" size={16} /> <span className="blabel">Match on wording</span>
+            <Icon name="copy" size={16} />
           </button>
         )}
         {view === "reconcile" && (
-          <button className="btn iconlabel"
+          <button className="btn iconbtn" aria-label="Match with AI"
             onClick={() => {
               // the selection IS the scope when there is one: you picked those
               // codes for a reason, and the modal still offers the whole book
               const sel = [...remembered.selected].filter((c) => c in codebook);
               setAiOpen({ scope: sel.length ? { focus: sel } : "all", selected: sel });
             }}
-            title="The same question as Match on wording, asked of a model: merge groups and per-code revisions, for your review">
-            <Icon name="sparkle" size={16} /> <span className="blabel">Match with AI</span>
+            title="Match with AI — the same question asked of a model: merge groups and per-code revisions, for your review">
+            <Icon name="sparkle" size={16} />
           </button>
         )}
         {view === "themes" && (
-          <button className="btn iconlabel" onClick={() => setThemeAiOpen(true)}
-            title="AI groups the cleaned codebook into theme islands for you to reshape (nothing is applied until you accept)">
-            <Icon name="sparkle" size={16} /> <span className="blabel">Group with AI</span>
+          <button className="btn iconbtn" onClick={() => setThemeAiOpen(true)} aria-label="Group with AI"
+            title="Group with AI — theme islands for you to reshape (nothing is applied until you accept)">
+            <Icon name="sparkle" size={16} />
           </button>
         )}
         {/* the count view is where you SEE the tail; this is the way into
             reading it, with the size you are looking at carried across */}
         {view === "segs" && (
-          <button className="btn iconlabel" onClick={() => openTailQueue(1)}
-            title="Read the codes resting on one excerpt, one at a time, in Assist">
-            <Icon name="list" size={16} /> <span className="blabel">Work the thin tail</span>
+          <button className="btn iconbtn" onClick={() => openTailQueue(1)} aria-label="Work the thin tail"
+            title="Work the thin tail — read the codes resting on one excerpt, one at a time, in Assist">
+            <Icon name="list" size={16} />
           </button>
         )}
         {view === "areas" && (
-          // icon + .blabel like its siblings, so this one can shed too: it was
-          // the only bar control whose text the fit loop could not shrink, and
-          // it is the longest of them when the areas have gone stale
-          <button className="btn iconlabel" onClick={() => setTopicAiOpen(true)}
+          // stale is a colour on the icon now, not a longer label — the
+          // tooltip says why it is orange
+          <button className={"btn iconbtn" + (topicsStale ? " stale" : "")}
+            onClick={() => setTopicAiOpen(true)}
+            aria-label={topicsStale ? "Areas are stale — re-run" : "Re-run areas"}
             title={topicsStale
               ? "The codebook changed since these areas were worked out — re-run to refresh them"
               : "Ask the AI to work the areas out again"}>
             <Icon name="sparkle" size={16} />
-            <span className="blabel">{topicsStale ? "Areas are stale — re-run…" : "Re-run areas…"}</span>
           </button>
         )}
         {/* everything right of this line applies to EVERY view */}
@@ -2306,16 +2276,14 @@ function MapInner() {
           <span className="blabel mapViewName">{spec.label}</span>
           <Icon name={viewMenu ? "chevron-up" : "chevron-down"} size={13} />
         </button>
-        <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!layoutMenu}
+        <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!layoutMenu}
+          aria-label="Layout"
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setLayoutMenu(layoutMenu ? null : { right: window.innerWidth - r.right, y: r.bottom + 8 });
           }}
-          title="Reset or clean up the arrangement you are looking at">
-          {/* the caret is how every other menu button in the app says it is a
-              menu (Export, Assist) — without it this read as a plain action */}
-          <Icon name="refresh" size={16} /> <span className="blabel">Layout</span>
-          <Icon name={layoutMenu ? "chevron-up" : "chevron-down"} size={13} />
+          title="Layout — reset or clean up the arrangement you are looking at">
+          <Icon name="refresh" size={16} />
         </button>
         <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!mapSetMenu}
           aria-label="Map settings"
@@ -2503,9 +2471,10 @@ function MapInner() {
           <div className="mapHelpHead"><b>The whole codebook at once</b></div>
           {/* the minimum to operate: gestures that have no on-screen hint, and
               the one concept the map cannot show — merge vs group. Everything
-              else is said where it happens (the drag line in the bar, the
+              else is said where it happens (the drag line above, the
               Layout menu's own notes). */}
           <dl className="mapHelpList">
+            <dt>Drag here</dt><dd>{spec.drag}</dd>
             <dt>Select</dt><dd>Drag a box. Ctrl adds to it.</dd>
             <dt>Move</dt><dd>Space, middle or right-drag pans; wheel zooms.</dd>
             <dt>Act</dt><dd>Right-click a selection. Double-click reads a code.</dd>
