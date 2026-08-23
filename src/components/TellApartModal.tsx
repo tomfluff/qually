@@ -112,32 +112,36 @@ export function TellApartModal({ codes, survivor, newName, onClose, onDecided }:
           Read both sides, then write the line between them. If you cannot, that is
           an answer too — and a better reason to merge than any rationale.
         </p>
-        <div className="taCols">{column(a, left)}{column(b, right)}</div>
-        {done ? (
-          <>
+        {/* the reading and the writing scroll together; the verdict buttons
+            stay put below, so a raised text size scrolls the excerpts rather
+            than clipping the answer (the modal itself is capped at 84vh) */}
+        <div className="about-body taBody">
+          <div className="taCols">{column(a, left)}{column(b, right)}</div>
+          {done ? (
             <p className="taDone">{done}</p>
-            <div className="taActs"><button className="btn primary" onClick={onClose}>Close</button></div>
-          </>
-        ) : (
-          <>
+          ) : (
             <label className="taField">
               <span>In one sentence: when does an excerpt belong to “{a}” rather than “{b}”?</span>
               <textarea rows={3} value={sentence} onChange={(e) => setSentence(e.target.value)}
                 placeholder={`An excerpt belongs to “${a}” when…`} />
             </label>
-            <div className="taActs">
-              <button className="btn primary" disabled={written.length < 8} onClick={keepBoth}
-                title={written.length < 8
-                  ? "Write the sentence first — it becomes both definitions"
-                  : "Keep both codes, and save this as the definition of each"}>
-                That is the difference — keep both
-              </button>
-              <button className="btn" onClick={merge}
-                title="Fold them together, recording that no sentence separated them">
-                I cannot separate them — merge
-              </button>
-            </div>
-          </>
+          )}
+        </div>
+        {done ? (
+          <div className="taActs"><button className="btn primary" onClick={onClose}>Close</button></div>
+        ) : (
+          <div className="taActs">
+            <button className="btn primary" disabled={written.length < 8} onClick={keepBoth}
+              title={written.length < 8
+                ? "Write the sentence first — it becomes both definitions"
+                : "Keep both codes, and save this as the definition of each"}>
+              That is the difference — keep both
+            </button>
+            <button className="btn" onClick={merge}
+              title="Fold them together, recording that no sentence separated them">
+              I cannot separate them — merge
+            </button>
+          </div>
         )}
       </div>
     </div>

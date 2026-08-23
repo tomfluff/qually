@@ -519,7 +519,9 @@ button.dvCode:not(.first) { color:var(--muted); }
 .about.taModal { max-width:min(64em, 94vw); width:min(64em, 94vw); }
 .taCols { display:grid; gap:14px; grid-template-columns:repeat(auto-fit, minmax(16em, 1fr)); margin:6px 0 14px; }
 .taCol { min-width:0; border:1px solid var(--line); border-radius:11px; padding:10px 12px; background:var(--panel); }
-.taCol h3 { margin:0; font-size:1.08em; }
+/* the columns now live inside .about-body, whose h3 rule dresses section
+   headers (uppercase, spaced, muted) — these h3s are code names, i.e. data */
+.taCol h3 { margin:0; font-size:1.08em; text-transform:none; letter-spacing:normal; color:inherit; }
 .taEx { max-height:15em; overflow-y:auto; margin-top:8px; }
 .taEx blockquote { margin:0 0 10px; padding:2px 0 2px 12px; border-left:3px solid var(--accent);
   line-height:1.55; }
@@ -527,5 +529,8 @@ button.dvCode:not(.first) { color:var(--muted); }
 .taField > span { color:var(--fg-dim); }
 .taField textarea { font:inherit; font-size:1.02em; color:var(--fg); background:var(--bg);
   border:1px solid var(--muted); border-radius:9px; padding:.5em .6em; width:100%; resize:vertical; }
-.taActs { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+.taActs { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; flex:none; }
+/* the scrolling middle: excerpts and the sentence give ground before the
+   verdict buttons ever leave the screen */
+.taBody { overflow-y:auto; min-height:0; padding-right:6px; }
 .taDone { color:var(--mine, var(--accent)); line-height:1.55; max-width:66ch; }

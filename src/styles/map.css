@@ -187,7 +187,8 @@
 #codemap:not(.view-reconcile) .mapActBadge { display:none; }
 /* the cluster card: verdicts on the selected constellation */
 .mapCardRat { color:var(--muted); font-size:.85em; padding:0 12px 6px; line-height:1.35; }
-.mapCardActions { display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--line); }
+.mapCardActions { display:flex; gap:8px; padding:9px 12px 10px; flex-wrap:wrap;
+  border-top:1px solid var(--line); }
 /* the halo's fold arrow: the door to reasoning, members and the verdict */
 .mapHaloArrow { pointer-events:auto; border:1px solid var(--line); border-radius:6px;
   background:var(--panel); color:var(--muted); font:inherit; font-size:.6em;
@@ -198,7 +199,8 @@
    packing and simply draws over whatever is under it. */
 .react-flow__node-card { pointer-events:auto !important; }
 .mapCardNode { background:var(--panel); border:1px solid var(--line); border-radius:10px;
-  box-shadow:0 6px 18px rgba(0,0,0,.28); width:100%; box-sizing:border-box; position:relative; }
+  box-shadow:0 6px 18px rgba(0,0,0,.28); width:100%; min-width:400px;
+  box-sizing:border-box; position:relative; }
 .mapCardNode::before { content:""; position:absolute; left:36px; top:-22px; width:2px; height:22px;
   background:var(--line); }
 .mapCardNode .mapCardRat { padding-top:8px; }
@@ -217,9 +219,9 @@
 .mapAiConfirm { max-width:40ch; padding:8px 4px 2px; }
 .mapAiConfirmText { padding:0 10px 4px; line-height:1.4; }
 .mapAiConfirmText b { font-variant-numeric:tabular-nums; }
-/* research text is quotable: the card's reasoning and the glimpse select like
-   text (RF disables selection on nodes by default) */
-.mapCardNode .mapCardRat, .mapCardGlimpse {
+/* research text is quotable: the card's reasoning, the glimpse and the case
+   against select like text (RF disables selection on nodes by default) */
+.mapCardNode .mapCardRat, .mapCardGlimpse, .mapCardAgainst {
   user-select:text; -webkit-user-select:text; cursor:text; }
 /* the plan panel is furniture you can move: drag by the header */
 .mapPlanHead { cursor:grab; user-select:none; }
@@ -413,10 +415,11 @@
    proposals that all look like agreement. A shrug ("no real case") drops to
    the quiet treatment — an objection and an absence of one must not read
    alike, or the reader learns to skip both. */
-.mapCardAgainst { margin-top:8px; padding:7px 9px; border-radius:8px;
-  border:1px solid color-mix(in srgb, var(--warn, #b45309) 45%, var(--line));
-  background:color-mix(in srgb, var(--warn, #b45309) 7%, transparent); line-height:1.45; }
-.mapCardAgainst.weak { border-color:var(--line); background:transparent; color:var(--muted); }
+.mapCardAgainst { margin:6px 10px 8px; padding:6px 9px; line-height:1.45;
+  border-left:3px solid var(--warn, #b45309); border-radius:0 7px 7px 0;
+  background:color-mix(in srgb, var(--warn, #b45309) 7%, transparent); }
+.mapCardAgainst .mapNoteWho { color:var(--warn, #b45309); }
+.mapCardAgainst.weak { border-left-color:var(--line); background:transparent; color:var(--muted); }
 /* the header colour is the loudest part of the block, so the shrug drops it
    too — otherwise "no real case against" reads as an objection at a glance */
 .mapCardAgainst.weak .mapNoteWho { color:var(--muted); }

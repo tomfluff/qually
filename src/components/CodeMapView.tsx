@@ -1217,7 +1217,9 @@ function MapInner() {
             position: { x: 12, y: b.h + 22 }, parentId: key,
             draggable: false, selectable: false, focusable: false,
             zIndex: 15, // it floats over the field below instead of pushing it
-            width: Math.max(280, Math.min(420, b.w - 24)),
+            // floor matches .mapCardNode's min-width:400px, so RF's box for
+            // the node is the box the card actually paints
+            width: Math.max(400, Math.min(420, b.w - 24)),
             data: { ci: b.c.ci, gen: genCi === b.c.ci },
           });
         }
