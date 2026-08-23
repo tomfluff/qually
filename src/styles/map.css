@@ -391,6 +391,10 @@
   justify-content:center; padding-block:5px; }
 /* one icon, flipped: box-align-bottom-left is symmetric on both axes, so a
    mirrored copy IS each of the other three corners */
+/* the menu greys every icon inside it (.ctxmenu button svg) — right for a menu
+   row's leading glyph, wrong here, where the icon IS the label and has to take
+   the selected segment's accent ink like any other .seg does. */
+.mapCornerPick .seg .icn { color:inherit; }
 .mapCornerPick [data-corner="bottom-right"] .icn { transform:scaleX(-1); }
 .mapCornerPick [data-corner="top-left"] .icn { transform:scaleY(-1); }
 .mapCornerPick [data-corner="top-right"] .icn { transform:scale(-1); }

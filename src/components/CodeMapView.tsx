@@ -1970,6 +1970,18 @@ function MapInner() {
   }, [getNodes, getInternalNode, view, slot]);
   // a drag can end by unmount too; never leave a frame pointed at dead nodes
   useEffect(() => () => { if (dragFrame.current) cancelAnimationFrame(dragFrame.current); }, []);
+  // Clicking a group takes its codes with it — the one gesture that says
+  // "this group" and nothing else. Doing it here rather than in the selection
+  // sync keeps a marquee that merely grazes a capsule from adopting anything.
+  const onNodeClick = useCallback((_: unknown, n: Node) => {
+    if (n.type !== "island" && n.type !== "halo") return;
+    rfSetNodes((ns) => {
+      const mine = new Set(ns.filter((x) => x.parentId === n.id).map((x) => x.id));
+      if (!mine.size) return ns;
+      if ([...mine].every((id) => ns.find((x) => x.id === id)?.selected)) return ns;
+      return ns.map((x) => (mine.has(x.id) && !x.selected ? { ...x, selected: true } : x));
+    });
+  }, [rfSetNodes]);
   const onNodeDoubleClick = useCallback((_: unknown, n: Node) => {
     if (n.type === "chip") openInCodebook([n.id]);
     if (n.type === "halo") toggleCard((n.data as HaloData).ci);
@@ -2070,9 +2082,13 @@ function MapInner() {
   //                         group's body or caption is asking for
   //   some codes picked   → the container is NOT picked; a marquee that clips
   //                         two of five chips must still take only those two
-  // Chips win when the two disagree, EXCEPT when the container was picked with
-  // none of its codes — that is the click-the-group gesture, and it is the
-  // only way a container arrives selected on its own.
+  // Chips win, always. Taking a group's codes BECAUSE you picked the group is
+  // not decided here but in onNodeClick, where the gesture is unambiguous — a
+  // marquee also lands a container with none of its codes the moment its rect
+  // grazes the capsule's padding, and inferring "you meant the whole group"
+  // from that would balloon a sweep past an edge into five codes you never
+  // touched. So: a container the marquee caught chip-less is let go of, and
+  // only a click adopts.
   const syncGroupSelection = useCallback(() => {
     rfSetNodes((ns) => {
       const members = new Map<string, string[]>();
@@ -2082,23 +2098,9 @@ function MapInner() {
         members.set(n.parentId, list);
       }
       const picked = new Set(ns.filter((n) => n.type === "chip" && n.selected).map((n) => n.id));
-      // containers picked with none of their codes: the gesture was aimed at
-      // the group, so its codes join the selection
-      const adopt = new Set<string>();
-      for (const n of ns) {
-        if (n.type === "chip" || !n.selected) continue;
-        const mine = members.get(n.id);
-        if (mine?.length && !mine.some((c) => picked.has(c))) mine.forEach((c) => adopt.add(c));
-      }
-      adopt.forEach((c) => picked.add(c));
       let changed = false;
       const next = ns.map((n) => {
-        if (n.type === "chip") {
-          const want = n.selected || adopt.has(n.id);
-          if (!!n.selected === want) return n;
-          changed = true;
-          return { ...n, selected: want };
-        }
+        if (n.type === "chip") return n;
         const mine = members.get(n.id);
         const whole = !!mine?.length && mine.every((c) => picked.has(c));
         if (!!n.selected === whole) return n;
@@ -2235,6 +2237,7 @@ function MapInner() {
             multiSelectionKeyCode={["Control", "Meta"]}
             onNodeDragStart={onNodeDragStart} onNodeDragStop={onNodeDragStop} onNodeDrag={onNodeDrag}
             zoomOnDoubleClick={false} deleteKeyCode={null} nodesConnectable={false}
+            onNodeClick={onNodeClick}
             onNodeDoubleClick={onNodeDoubleClick}
             onNodeContextMenu={onNodeContextMenu}
             onPaneContextMenu={onPaneContextMenu}>
