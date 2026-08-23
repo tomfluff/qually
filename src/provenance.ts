@@ -94,7 +94,10 @@ export function methodsParagraph(ledger: Decision[], codes: string[], coder = "T
   if (n("remove")) acts.push(`${n("remove")} code${n("remove") === 1 ? "" : "s"} withdrawn from the analysis`);
   if (n("delete")) acts.push(`${n("delete")} deletion${n("delete") === 1 ? "" : "s"}`);
   if (n("park")) acts.push(`${n("park")} code${n("park") === 1 ? "" : "s"} set aside`);
-  if (acts.length) bits.push(`${acts.join(", ")} were applied.`);
+  // "1 merge were applied" — the verb follows how many decisions there were,
+  // not how many kinds of them
+  const applied = n("merge") + n("rename") + n("remove") + n("delete") + n("park");
+  if (acts.length) bits.push(`${acts.join(", ")} ${applied === 1 ? "was" : "were"} applied.`);
   if (fromWording) {
     bits.push(`${fromWording} of these began as an offline wording match computed on the researcher's machine.`);
   }

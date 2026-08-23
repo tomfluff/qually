@@ -105,3 +105,14 @@ describe("the agreement rate", () => {
       .not.toContain("before seeing");
   });
 });
+
+describe("the paragraph reads as English", () => {
+  it("agrees the verb with how many decisions there were", () => {
+    expect(methodsParagraph([d("merge", ["a", "b"])], ["a"])).toContain("1 merge was applied");
+    expect(methodsParagraph([d("merge", ["a", "b"]), d("merge", ["c", "e"])], ["a", "c"]))
+      .toContain("2 merges were applied");
+    // one of each is still two decisions
+    expect(methodsParagraph([d("merge", ["a", "b"]), d("rename", ["c", "d"])], ["a", "c"]))
+      .toContain("1 merge, 1 rename were applied");
+  });
+});
