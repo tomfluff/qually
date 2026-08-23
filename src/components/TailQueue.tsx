@@ -49,13 +49,15 @@ export function triaged(ledger: Decision[]): Set<string> {
     // the book with none, which is exactly the shape the queue is looking for,
     // and asking about the code you just withdrew is the definition of nagging.
     if (d.kind === "unpark") { d.codes.forEach((c) => seen.delete(c)); continue; }
-    if (["keep", "park", "remove"].includes(d.kind)) d.codes.forEach((c) => seen.add(c));
+    if (["keep", "define", "park", "remove"].includes(d.kind)) d.codes.forEach((c) => seen.add(c));
     // A merge marks NOBODY as read. The name folded away is out of the book,
     // and the survivor just had someone else's excerpts poured into it — if it
     // is still thin after that, it is thin with evidence nobody has read, which
     // is exactly what this queue is for. Deleted names go unmarked for the
     // other reason: they are gone, and a code someone types later with the same
-    // name is a new code that deserves its turn. A name is not an identity.
+    // name is a new code that deserves its turn. A name is not an identity —
+    // so a folded-away name also sheds any verdict it carried.
+    if (d.kind === "merge") d.codes.slice(1).forEach((c) => seen.delete(c));
   }
   return seen;
 }
@@ -67,12 +69,13 @@ export function lastVerdicts(ledger: Decision[]): Map<string, { kind: Decision["
     if (d.undone) return;
     // bringing a code back is the un-verdict: it leaves the card open again
     if (d.kind === "unpark") { d.codes.forEach((c) => out.delete(c)); return; }
-    if (["keep", "park", "remove"].includes(d.kind)) {
+    if (["keep", "define", "park", "remove"].includes(d.kind)) {
       d.codes.forEach((c) => out.set(c, { kind: d.kind, at }));
     } else if (d.kind === "merge" && d.codes.length) {
-      // the survivor has been decided about; the folded-away name is gone
-      out.set(d.codes[0], { kind: "merge", at });
-      d.codes.slice(1).forEach((c) => out.delete(c));
+      // ONE merge policy, shared with triaged() above: a merge decides
+      // nothing about the survivor — it is thin with evidence nobody has
+      // read — and the folded-away names shed any verdict they carried
+      d.codes.forEach((c) => out.delete(c));
     }
   });
   return out;
@@ -208,7 +211,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
     // changing your mind: the verdict this card already carries is taken back
     // first, so a code never holds two
     const cur = lastVerdicts(st.ledger).get(code);
-    if (cur?.kind === "keep") st.retractVerdict(cur.at);
+    if (cur?.kind === "keep" && what !== "fold") st.retractVerdict(cur.at);
     if (cur?.kind === "park" && what !== "park") st.setParked(code, false);
 
     if (what === "fold") {
@@ -236,7 +239,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
     const st = useStore.getState();
     if (verdict.kind === "keep") st.retractVerdict(verdict.at);
     else if (verdict.kind === "park") st.setParked(code, false);
-    else { announce("That one was a merge — use Undo in the toolbar to take it back", { assertive: true }); return; }
+    else { announce("That one changed data — use Undo in the toolbar to take it back", { assertive: true }); return; }
     earcon.undo();
   }, [code, verdict]);
 
@@ -308,7 +311,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
     keep: "You kept this one.",
     park: "You set this aside — its excerpts are untouched, and the Codebook keeps it under Set aside.",
     remove: "You withdrew this code's excerpts.",
-    merge: "This one absorbed another code.",
+    define: "You kept this apart from its twin — the sentence became both definitions.",
   };
   return (
     <div className="tqCard">

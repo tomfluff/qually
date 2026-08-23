@@ -88,7 +88,7 @@ describe("decision ledger", () => {
     useStore.getState().undo();
     const csv = useStore.getState().exportLedger();
     const [head, row] = csv.trim().split(/\r?\n/);
-    expect(head).toBe("at,kind,codes,why,source,model,excerpts_moved,excerpts_after,undone");
+    expect(head).toBe("at,kind,codes,why,source,model,excerpts_moved,excerpts_after,blind,undone");
     expect(row).toContain("small text | tiny text");
     expect(row).toContain("Terra");
     expect(row.endsWith("yes")).toBe(true);

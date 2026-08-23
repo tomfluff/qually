@@ -37,10 +37,15 @@ export function codeOrigins(ledger: Decision[], codes: string[]): Map<string, Or
       if (before) state.delete(before);
       mark(now, o);
     } else if (d.kind === "merge") {
-      const [survivor, from] = d.codes;
+      // survivor first, then EVERY folded member — a multi-member capsule
+      // (applyCluster) writes [kept, ...members], and skipping members 3..n
+      // would drop their AI provenance on the floor
+      const [survivor, ...from] = d.codes;
       if (!survivor) continue;
-      if (from && state.get(from) === "ai") state.set(survivor, "ai");
-      if (from) state.delete(from);
+      for (const f of from) {
+        if (state.get(f) === "ai") state.set(survivor, "ai");
+        state.delete(f);
+      }
       mark(survivor, o);
     }
   }
@@ -68,8 +73,9 @@ export function historyOf(ledger: Decision[], code: string): Decision[] {
     const d = ledger[i];
     if (!d.codes.some((c) => names.has(c))) continue;
     rows.unshift(d);
-    if ((d.kind === "rename" || d.kind === "merge") && names.has(d.codes[0]) && d.codes[1]) {
-      names.add(d.codes[1]);
+    if ((d.kind === "rename" || d.kind === "merge") && names.has(d.codes[0])) {
+      // a merge may have folded SEVERAL names in — follow all of them
+      for (const c of d.codes.slice(1)) names.add(c);
     }
   }
   return rows;

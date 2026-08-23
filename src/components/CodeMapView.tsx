@@ -319,20 +319,26 @@ function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onS
   // so eviction would have no visible effect.
   const inMerge = sel.filter((c) => clusters.some((x) => x.codes.includes(c)));
   const evictSelected = () => {
-    const st = useStore.getState();
-    for (const code of inMerge) {
+    if (!inMerge.length) return;
+    // ONE undo entry for the gesture (store rule), fresh state each pass —
+    // the first eviction can thin a two-member capsule away and shift every
+    // index — and a staggered landing spot per code: dropping them all on one
+    // point left only the top chip hittable
+    useStore.getState().pushUndo();
+    inMerge.forEach((code, k) => {
+      const st = useStore.getState();
       const ci = st.codeClusters.findIndex((x) => x.codes.includes(code));
-      if (ci < 0) continue;
+      if (ci < 0) return;
       // the capsule is addressed by the cluster's id, like everywhere else
       const cid = st.codeClusters[ci].cid;
       const halo = getNodes().find((x) => x.id === `halo:${cid ?? `i${ci}`}`);
-      const pos = halo ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y } : { x: 0, y: 0 };
-      st.reconcileDrop(code, pos, null);
-    }
-    if (inMerge.length) {
-      earcon.evict();
-      announce(`Removed ${inMerge.length} code${inMerge.length === 1 ? "" : "s"} from their merge groups`);
-    }
+      const pos = halo
+        ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y + k * 40 }
+        : { x: 0, y: k * 40 };
+      st.reconcileDrop(code, pos, null, false);
+    });
+    earcon.evict();
+    announce(`Removed ${inMerge.length} code${inMerge.length === 1 ? "" : "s"} from their merge groups`);
   };
   return (
     <Panel position="top-right" className="mapSelPanel"
@@ -473,8 +479,8 @@ const toggleCard = (ci: number) => window.dispatchEvent(new CustomEvent("qually:
 // proposal slid into its place. The survivor rides along so the answer merges
 // in the direction the capsule was already showing.
 const tellApart = (cid: number | undefined, codes: [string, string], survivor: string,
-  newName?: string) =>
-  window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { cid, codes, survivor, newName } }));
+  newName?: string, source?: DecisionSource, model?: string) =>
+  window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { cid, codes, survivor, newName, source, model } }));
 const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = MAP_FS;
@@ -595,7 +601,7 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
         {c.codes.length === 2 && (
           // only for a pair: the question is "what separates THESE two", and
           // three codes at once is a different, worse question
-          <button className="btn" onClick={() => tellApart(c.cid, c.codes as [string, string], c.survivor, c.newName)}
+          <button className="btn" onClick={() => tellApart(c.cid, c.codes as [string, string], c.survivor, c.newName, c.source, c.model)}
             title="Read both sides and write the line between them — or find that you cannot">
             Tell them apart…
           </button>
@@ -933,7 +939,8 @@ function MapInner() {
     return () => window.removeEventListener("qually:togglecard", onToggle);
   }, []);
   // "tell them apart" opens over the map, from a capsule's own card
-  type ApartAsk = { cid?: number; codes: [string, string]; survivor: string; newName?: string };
+  type ApartAsk = { cid?: number; codes: [string, string]; survivor: string; newName?: string;
+    source?: DecisionSource; model?: string };
   const [apart, setApart] = useState<ApartAsk | null>(null);
   useEffect(() => {
     const onApart = (e: Event) => setApart((e as CustomEvent<ApartAsk>).detail);
@@ -1494,11 +1501,17 @@ function MapInner() {
   // single confirmation, else N simultaneous envelopes stack into clipping.
   const applyAction = (a: CodeAction, sound = true) => {
     const st = useStore.getState();
-    // the row leaves the plan FIRST: renameCode rebuilds every entry object,
-    // so a filter afterwards would find only stale clones (see dropAction)
-    setPlan((ps) => dropAction(ps, a.code));
+    // the change FIRST — renameCode/rejectCode push the gesture's ONE undo
+    // entry, with the plan row still in the snapshot, so Ctrl+Z brings the
+    // rename back AND puts its row back on the plan. Then the row leaves
+    // silently (setState, not setCodePlan — no second undo entry). A rename
+    // rewrote the remaining entries to the new name, so drop both spellings;
+    // dropAction keys by code, which survives the object churn.
     if (a.action === "rename") st.renameCode(a.code, a.newName!, a.rationale, a.source, a.model);
     else if (a.action === "remove") st.rejectCode(a.code, a.rationale, a.source, a.model);
+    useStore.setState({
+      codePlan: dropAction(dropAction(useStore.getState().codePlan, a.code), a.newName ?? a.code),
+    });
     if (sound) (a.action === "remove" ? earcon.reject : earcon.accept)();
   };
   const skipAction = (a: CodeAction) => {
@@ -2680,6 +2693,7 @@ function MapInner() {
       {describeFor && <DescribeModal initial={describeFor} onClose={() => setDescribeFor(null)} />}
       {apart && (
         <TellApartModal codes={apart.codes} survivor={apart.survivor} newName={apart.newName}
+          source={apart.source} model={apart.model}
           onClose={() => setApart(null)}
           onDecided={() => {
             // either answer settles the proposal, so the capsule goes. Not

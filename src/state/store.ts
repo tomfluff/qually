@@ -246,7 +246,8 @@ export interface AiCall {
 // would make the ledger a story about a researcher who never changed their mind.
 export type DecisionKind =
   | "merge" | "rename" | "remove" | "delete"   // wired today
-  | "keep" | "park" | "unpark" | "dismiss"; // the tail queue's outcomes
+  | "keep" | "park" | "unpark" | "dismiss" // the tail queue's outcomes
+  | "define"; // tell-apart's "that is the difference" — it WRITES definitions
 /** where the idea came from — NOT who performed it. Every decision is the researcher's. */
 export type DecisionSource = "you" | "wording" | "ai";
 /** decisions that record a judgement without changing anything (see restore) */
@@ -470,7 +471,9 @@ export interface State {
     // the AI areas view: ai = index into codeAreas, -1 = unassigned
     areas?: { code: string; ai: number }[];
   }) => void;
-  reconcileDrop: (code: string, pos: { x: number; y: number }, targetCi: number | null) => void;
+  reconcileDrop: (code: string, pos: { x: number; y: number }, targetCi: number | null,
+    /** false when a caller batches several drops under its own ONE pushUndo */
+    undoable?: boolean) => void;
   // Themes-stage drop: position + island membership, ONE entry. gi -1 = no island.
   themesDrop: (code: string, pos: { x: number; y: number }, gi: number) => void;
   // a reconcile run landing: clusters + actions + fresh layout, ONE entry
@@ -667,6 +670,9 @@ const mapLayouts = (l: StageLayout, f: (rec: Record<string, { x: number; y: numb
 const renameKey = <T,>(rec: Record<string, T>, from: string, to: string): Record<string, T> =>
   from in rec ? Object.fromEntries(Object.entries(rec).map(([k, v]) => [k === from ? to : k, v])) : rec;
 
+const dropKey = <T,>(rec: Record<string, T>, k: string): Record<string, T> =>
+  k in rec ? Object.fromEntries(Object.entries(rec).filter(([x]) => x !== k)) : rec;
+
 // The merge itself, silent: no pushUndo, no announce — mergeCode wraps it for
 // the single-pair path, applyCluster composes several under ONE history entry.
 function mergeInto(get: () => State, set: (p: Partial<State>) => void, from: string, into: string) {
@@ -696,6 +702,41 @@ function mergeInto(get: () => State, set: (p: Partial<State>) => void, from: str
     codeClusters: s.codeClusters
       .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== from) }))
       .filter((c) => c.survivor !== from && c.codes.length >= 2),
+    // the dead name's hand-placed spot goes too, or a future code that happens
+    // to reuse the name inherits a position nobody gave it
+    mapPositions: mapLayouts(s.mapPositions, (rec) => dropKey(rec, from)),
+  });
+}
+
+// The rename itself, silent: no pushUndo, no ledger row — renameCode wraps it,
+// applyCluster composes it under the capsule's ONE history entry. EVERY slice
+// that speaks code names moves together; a partial copy of this list is how a
+// renamed survivor fell off its area shelf and lost its hand position.
+function renameInto(get: () => State, set: (p: Partial<State>) => void, code: string, name: string) {
+  const s = get();
+  const cb: State["codebook"] = {};
+  for (const k of Object.keys(s.codebook)) cb[k === code ? name : k] = s.codebook[k];
+  set({
+    codebook: cb,
+    segments: s.segments.map((x) => norm(x.code) === norm(code) ? { ...x, code: name } : x),
+    hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.map((c) => c === code ? name : c) },
+    codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.map((c) => c === code ? name : c) })),
+    codeAreas: s.codeAreas.map((g) => ({ ...g, codes: g.codes.map((c) => c === code ? name : c) })),
+    codePlan: s.codePlan.map((a) => ({ ...a,
+      code: a.code === code ? name : a.code,
+      ...(a.into === code ? { into: name } : {}) })),
+    codeClusters: s.codeClusters.map((c) => ({ ...c,
+      survivor: c.survivor === code ? name : c.survivor,
+      codes: c.codes.map((x) => x === code ? name : x),
+      // the glimpse still describes the same members under a new name
+      ...(c.descCodes ? { descCodes: c.descCodes.map((x) => x === code ? name : x) } : {}),
+      ...(c.againstCodes ? { againstCodes: c.againstCodes.map((x) => x === code ? name : x) } : {}) })),
+    // the map's hand-placed spots are keyed by code name: miss this and
+    // a rename silently throws the researcher's layout away
+    // map over the slots, never list them: a new view's layout would
+    // otherwise be thrown away on the next rename, exactly as this
+    // comment's older twin warned
+    mapPositions: mapLayouts(s.mapPositions, (rec) => renameKey(rec, code, name)),
   });
 }
 
@@ -981,6 +1022,7 @@ export const useStore = create<State>()(
           // stretches point at the same line ids the segments do, so they ride
           // the same remap: "update" carries the survivors, "replace" drops them
           let keptStretches: typeof s.stretches = [];
+          let lineMap: Map<number, number> | null = null;
           if (choice === "update") {
             const { map } = previewImport(segs, s.transcripts[p.pid].lines, p.lines);
             kept = segs.flatMap((seg) => {
@@ -993,12 +1035,28 @@ export const useStore = create<State>()(
                 const r = remapSegment(st, map);
                 return r ? [{ ...st, start: r.start, end: r.end }] : [];
               });
+            lineMap = map;
           }
           const saved = { ...s.savedSelections };
           delete saved[p.pid]; // a stashed selection points at the old line ids
+          // saved answers cite "<pid>:a-b" line refs; those follow the same
+          // remap ("update") or go ("replace") — a citation button must never
+          // open unrelated text that merely reuses the line number. "@time"
+          // refs point at the video clock and survive either way.
+          const remapRef = (r: string): string[] => {
+            if (!r.startsWith(`${p.pid}:`)) return [r];
+            const m = /^(\d+)(?:-(\d+))?$/.exec(r.slice(p.pid.length + 1));
+            if (!m || !lineMap) return [];
+            const to = remapSegment({ start: +m[1], end: +(m[2] ?? m[1]) }, lineMap);
+            return to ? [`${p.pid}:${to.start === to.end ? to.start : `${to.start}-${to.end}`}`] : [];
+          };
           set({
             segments: [...s.segments.filter((x) => x.pid !== p.pid), ...kept],
             stretches: [...s.stretches.filter((x) => x.pid !== p.pid), ...keptStretches],
+            answers: s.answers.map((a) => ({
+              ...a,
+              points: a.points.map((pt) => ({ ...pt, refs: pt.refs.flatMap(remapRef) })),
+            })),
             // The undo stack snapshots segments but not transcripts, so replaying it
             // after a re-import would restore segments pointing at the old line ids.
             // The modal's preview is the safety net instead.
@@ -1184,6 +1242,16 @@ export const useStore = create<State>()(
           segments: s.segments.filter((x) => x.pid !== pid),
           markers: s.markers.filter((m) => m.pid !== pid),
           stretches: s.stretches.filter((x) => x.pid !== pid),
+          lastPid: s.lastPid === pid ? "" : s.lastPid, // Escape must not walk into a deleted transcript
+          // answers keep their prose, but citations into the deleted
+          // transcript go: a claim button that opens nothing is a lie in the
+          // record, and the pid leaves the answer's stated scope with it
+          answers: s.answers.map((a) => ({
+            ...a,
+            points: a.points.map((pt) => ({ ...pt,
+              refs: pt.refs.filter((r) => !r.startsWith(`${pid}:`) && !r.startsWith(`${pid}@`)) })),
+            scope: { ...a.scope, pids: a.scope.pids.filter((x) => x !== pid) },
+          })),
           extSegRows: s.extSegRows.filter((r) => r.pid !== pid),
           aiFlags: Object.fromEntries(Object.entries(s.aiFlags).filter(([k]) => !k.startsWith(`${pid}:`))),
           aiGrounds: Object.fromEntries(Object.entries(s.aiGrounds).filter(([sid]) => !dead.has(sid))),
@@ -1337,6 +1405,7 @@ export const useStore = create<State>()(
           segments: s.segments.map((x) => x.pid === from ? { ...x, pid: to } : x),
           markers: s.markers.map((x) => x.pid === from ? { ...x, pid: to } : x),
           stretches: s.stretches.map((x) => x.pid === from ? { ...x, pid: to } : x),
+          lastPid: s.lastPid === from ? to : s.lastPid,
           summaries,
           extSegRows: s.extSegRows.map((r) => r.pid === from
             ? { ...r, pid: to, segment_ref: r.segment_ref.startsWith(`${from}:`) ? to + r.segment_ref.slice(from.length) : r.segment_ref }
@@ -1460,9 +1529,9 @@ export const useStore = create<State>()(
           at: d.at, kind: d.kind, codes: d.codes.join(" | "), why: d.why,
           source: d.source, model: d.model ?? "",
           excerpts_moved: d.moved ?? "", excerpts_after: d.now ?? "",
-          undone: d.undone ? "yes" : "",
+          blind: d.blind ?? "", undone: d.undone ? "yes" : "",
         })),
-        ["at", "kind", "codes", "why", "source", "model", "excerpts_moved", "excerpts_after", "undone"]
+        ["at", "kind", "codes", "why", "source", "model", "excerpts_moved", "excerpts_after", "blind", "undone"]
       ),
       exportAiLog: () => toCSV(
         get().aiLog as unknown as Record<string, unknown>[],
@@ -1907,8 +1976,8 @@ export const useStore = create<State>()(
           mapIslandPos: { ...s.mapIslandPos, [stage]: { ...s.mapIslandPos[stage], ...(d.islands ?? {}) } },
         });
       },
-      reconcileDrop: (code, pos, targetCi) => {
-        get().pushUndo();
+      reconcileDrop: (code, pos, targetCi, undoable = true) => {
+        if (undoable) get().pushUndo();
         const s = get();
         const cur = s.codeClusters.findIndex((c) => c.codes.includes(code));
         let clusters = s.codeClusters;
@@ -1978,29 +2047,19 @@ export const useStore = create<State>()(
         // counted before the merges run, or there is nothing left to count
         const moved = c.codes.filter((m) => m !== c.survivor).reduce((n, m) => n + countCode(s0, m), 0);
         for (const m of c.codes) if (m !== c.survivor) mergeInto(get, set, m, c.survivor);
+        // the ledger row names the code that actually survived: a typed name
+        // that norm-collides with an existing code MERGES into it, and the row
+        // must not name an alias nobody can open
+        let kept = c.survivor;
         if (c.newName && c.newName !== c.survivor) {
           const s1 = get();
           const existing = Object.keys(s1.codebook).find((k) => norm(k) === norm(c.newName!) && k !== c.survivor);
-          if (existing) mergeInto(get, set, c.survivor, existing);
-          else {
-            const cb: State["codebook"] = {};
-            for (const k of Object.keys(s1.codebook)) cb[k === c.survivor ? c.newName! : k] = s1.codebook[k];
-            set({
-              codebook: cb,
-              segments: s1.segments.map((x) => norm(x.code) === norm(c.survivor) ? { ...x, code: c.newName! } : x),
-              hotbar: { ...s1.hotbar, pinned: s1.hotbar.pinned.map((k) => k === c.survivor ? c.newName! : k) },
-              codeGroups: s1.codeGroups.map((g) => ({ ...g, codes: g.codes.map((x) => x === c.survivor ? c.newName! : x) })),
-              codePlan: s1.codePlan.map((a) => ({ ...a, code: a.code === c.survivor ? c.newName! : a.code })),
-              codeClusters: s1.codeClusters.map((x) => ({ ...x,
-                survivor: x.survivor === c.survivor ? c.newName! : x.survivor,
-                codes: x.codes.map((y) => y === c.survivor ? c.newName! : y) })),
-            });
-          }
+          if (existing) { mergeInto(get, set, c.survivor, existing); kept = existing; }
+          else { renameInto(get, set, c.survivor, c.newName!); kept = c.newName!; }
         }
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
         // one row for the capsule, not one per member merge: what the
         // researcher decided was "these are one code", once
-        const kept = c.newName ?? c.survivor;
         get().logDecision({
           kind: "merge",
           codes: [kept, ...c.codes.filter((m) => m !== c.survivor)],
@@ -2010,7 +2069,7 @@ export const useStore = create<State>()(
           moved, now: countCode(get(), kept),
           ...(blind ? { blind } : {}),
         });
-        announce(`Merged ${c.codes.length} codes into ${c.newName ?? c.survivor}`);
+        announce(`Merged ${c.codes.length} codes into ${kept}`);
       },
       // A rejected proposal is evidence: "the model suggested 41 merges and the
       // researcher took 34" is only sayable if the sevens are written down too.
@@ -2149,30 +2208,7 @@ export const useStore = create<State>()(
         // that is what happened to the data
         if (existing) { get().mergeCode(code, existing, why, source, model); return; }
         get().pushUndo();
-        const cb: State["codebook"] = {};
-        for (const k of Object.keys(s.codebook)) cb[k === code ? name : k] = s.codebook[k];
-        set({
-          codebook: cb,
-          segments: s.segments.map((x) => norm(x.code) === norm(code) ? { ...x, code: name } : x),
-          hotbar: { ...s.hotbar, pinned: s.hotbar.pinned.map((c) => c === code ? name : c) },
-          codeGroups: s.codeGroups.map((g) => ({ ...g, codes: g.codes.map((c) => c === code ? name : c) })),
-          codeAreas: s.codeAreas.map((g) => ({ ...g, codes: g.codes.map((c) => c === code ? name : c) })),
-          codePlan: s.codePlan.map((a) => ({ ...a,
-            code: a.code === code ? name : a.code,
-            ...(a.into === code ? { into: name } : {}) })),
-          codeClusters: s.codeClusters.map((c) => ({ ...c,
-            survivor: c.survivor === code ? name : c.survivor,
-            codes: c.codes.map((x) => x === code ? name : x),
-            // the glimpse still describes the same members under a new name
-            ...(c.descCodes ? { descCodes: c.descCodes.map((x) => x === code ? name : x) } : {}),
-            ...(c.againstCodes ? { againstCodes: c.againstCodes.map((x) => x === code ? name : x) } : {}) })),
-          // the map's hand-placed spots are keyed by code name: miss this and
-          // a rename silently throws the researcher's layout away
-          // map over the slots, never list them: a new view's layout would
-          // otherwise be thrown away on the next rename, exactly as this
-          // comment's older twin warned
-          mapPositions: mapLayouts(s.mapPositions, (rec) => renameKey(rec, code, name)),
-        });
+        renameInto(get, set, code, name);
         set({ hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "rename", codes: [name, code], source: source ?? "you",
           why: why || `Renamed from “${code}”`, ...(model ? { model } : {}),
@@ -2235,6 +2271,7 @@ export const useStore = create<State>()(
           codeClusters: s.codeClusters
             .map((c) => ({ ...c, codes: c.codes.filter((x) => x !== code) }))
             .filter((c) => c.survivor !== code && c.codes.length >= 2),
+          mapPositions: mapLayouts(s.mapPositions, (rec) => dropKey(rec, code)),
         });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "delete", codes: [code], source: "you",
@@ -2293,7 +2330,9 @@ export const useStore = create<State>()(
         set({ codebook: { ...s.codebook,
           [a]: { ...s.codebook[a], def: text, defAi: false },
           [b]: { ...s.codebook[b], def: text, defAi: false } } });
-        get().logDecision({ kind: "keep", codes: [a, b], source: "you", why: text,
+        // NOT "keep": this row changed state (two definitions), so undo must
+        // be able to strike it — keep is inert and restore() would skip it
+        get().logDecision({ kind: "define", codes: [a, b], source: "you", why: text,
           ...(blind ? { blind } : {}) });
         announce(`${a} and ${b} kept apart, and that sentence is now the definition of both`);
       },

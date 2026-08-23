@@ -10,14 +10,14 @@
 // nothing can be edited away: a reversed decision stays, marked. The panel's
 // whole job is to be readable and exportable.
 import { useMemo, useState } from "react";
-import { useStore, type Decision } from "../state/store";
+import { useStore, liveCodes, type Decision } from "../state/store";
 import { originCounts, methodsParagraph, type OriginCounts } from "../provenance";
 import { preselectBrowse } from "./BrowseView";
 import { Icon } from "./Icon";
 
 const KIND_LABEL: Record<Decision["kind"], string> = {
   merge: "merged", rename: "renamed", remove: "withdrew", delete: "deleted",
-  keep: "kept", park: "set aside", unpark: "brought back", dismiss: "turned down",
+  keep: "kept", define: "kept apart", park: "set aside", unpark: "brought back", dismiss: "turned down",
 };
 // where the idea came from — never who performed it. Every row is your decision.
 const SOURCE_LABEL: Record<Decision["source"], string> = {
@@ -72,7 +72,9 @@ export function DecisionsList() {
   const codebook = useStore((s) => s.codebook);
   const setActive = useStore((s) => s.setActive);
   const [copied, setCopied] = useState(false);
-  const para = useMemo(() => methodsParagraph(ledger, Object.keys(codebook)), [ledger, codebook]);
+  // liveCodes, not Object.keys: the paragraph says "consolidated to N codes …
+  // M set aside" — counting the set-aside ones in N contradicts its own sentence
+  const para = useMemo(() => methodsParagraph(ledger, liveCodes(codebook)), [ledger, codebook]);
   const rows = useMemo(() => ledger.map((d, i) => ({ d, i })).reverse(), [ledger]);
   // a decision names codes; the excerpts behind them are one click away, and
   // for a code that still exists that is where the reasoning can be checked

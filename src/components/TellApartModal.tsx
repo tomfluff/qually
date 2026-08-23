@@ -13,14 +13,14 @@
 // work of deciding leaves the artefact the codebook was missing rather than
 // evaporating into a merge you cannot explain later.
 import { useEffect, useMemo, useState } from "react";
-import { useStore } from "../state/store";
+import { useStore, type DecisionSource } from "../state/store";
 import { segExcerpt } from "../contract/excerpt";
 import { norm } from "../contract/segments";
 import { earcon } from "../earcons";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
-export function TellApartModal({ codes, survivor, newName, onClose, onDecided }: {
+export function TellApartModal({ codes, survivor, newName, source, model, onClose, onDecided }: {
   /** exactly two codes: the pair under the question */
   codes: [string, string];
   /** the direction the capsule already proposed — the merge answer honours it,
@@ -28,6 +28,10 @@ export function TellApartModal({ codes, survivor, newName, onClose, onDecided }:
   survivor?: string;
   /** the name the capsule promised the merged code would take, if it was renamed */
   newName?: string;
+  /** whose idea the capsule was — the merge answer carries the SAME provenance
+      accepting it on the map would, not a hard-coded "you" */
+  source?: DecisionSource;
+  model?: string;
   onClose: () => void;
   /** either answer settles the question the caller was holding open */
   onDecided?: (outcome: "kept" | "merged") => void;
@@ -74,11 +78,11 @@ export function TellApartModal({ codes, survivor, newName, onClose, onDecided }:
     const [from, into] = survivor === a ? [b, a]
       : survivor === b ? [a, b]
       : left.length > right.length ? [b, a] : [a, b];
-    st.mergeCode(from, into, "Could not write a sentence that separates them", "you");
+    st.mergeCode(from, into, "Could not write a sentence that separates them", source ?? "you", model);
     // the capsule may have been renamed on the map, and the card above says
     // what the merged code will be called — so it is called that
     const named = newName && newName !== into && !st.codebook[newName] ? newName : null;
-    if (named) useStore.getState().renameCode(into, named, "The name this merge was proposed under", "you");
+    if (named) useStore.getState().renameCode(into, named, "The name this merge was proposed under", source ?? "you", model);
     earcon.join();
     onDecided?.("merged");
     setDone(`Merged into “${named ?? into}”, with “could not write a sentence that separates them” as the reason.`);
