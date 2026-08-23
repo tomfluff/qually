@@ -47,6 +47,7 @@ import { findSimilar } from "../similar";
 import { sweepWording, refusedPairs, familyReason } from "../sweep";
 import { openTailQueue } from "./TailQueue";
 import { TellApartModal } from "./TellApartModal";
+import { DescribeModal } from "./DescribeModal";
 import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
 import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, argueAgainst, estimateAgainstTokens, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, nameArea, estimateNameAreaTokens, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
@@ -88,7 +89,9 @@ const captionBox = (fs: number, zoom: number, cap: number, text: string, extraEm
   return { w: Math.round(measurer.measureText(text).width + size * extraEm), h: Math.round(size * 1.5) };
 };
 
-type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction };
+type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction;
+  /** by-definition view only: the definition, drawn on the chip's second line */
+  def?: string };
 type ChipNodeT = Node<ChipData, "chip">;
 // lens islands are synthetic (gi indexes the LENS grouping, not codeGroups),
 // so they carry their member list — the context menu must never reach into
@@ -225,10 +228,11 @@ onProjectSwap(function forgetMapSession() {
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
   const fs = MAP_FS;
   return (
-    <div className={"mapChip" + (selected ? " sel" : "")}
+    <div className={"mapChip" + (selected ? " sel" : "") + (data.def ? " hasDef" : "")}
       style={{ "--chip-c": data.color } as React.CSSProperties}
-      title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}`}>
+      title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}${data.def ? `\n\n${data.def}` : ""}`}>
       <span className="mapName">{data.code}</span>
+      {data.def && <span className="mapChipDef">{data.def}</span>}
       {data.act && data.act.action !== "merge" && (
         <span className={"mapActBadge " + data.act.action}
           title={`${data.act.action}: ${data.act.rationale}`}>
@@ -820,6 +824,8 @@ function MapInner() {
   // uses. The full modal was the wrong weight for a question you ask often.
   const [confirmFocus, setConfirmFocus] = useState<{ codes: string[]; x: number; y: number } | null>(null);
   const [confirmArea, setConfirmArea] = useState<{ codes: string[]; x: number; y: number } | null>(null);
+  // the by-definition view's way into the Definitions assist, preselected
+  const [describeFor, setDescribeFor] = useState<string[] | null>(null);
   const areaConfirmRef = useKeepOnScreen<HTMLDivElement>([confirmArea]);
   const [areaBusy, setAreaBusy] = useState(false);
   const focusConfirmRef = useKeepOnScreen<HTMLDivElement>([confirmFocus]);
@@ -971,17 +977,18 @@ function MapInner() {
     const ch = chipH(fs);
     const family = getComputedStyle(document.body).fontFamily; // read once per rebuild
     const widths = new Map(codes.map((c) => [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0)]));
-    const pack = (list: string[], targetW: number) => {
+    const pack = (list: string[], targetW: number, dims?: { w: number; h: number }) => {
       let x = 0, y = 0, maxW = 0;
+      const rh = dims?.h ?? ch;
       const pos: Record<string, { x: number; y: number }> = {};
       for (const c of list) {
-        const w = widths.get(c)!;
-        if (x > 0 && x + w > targetW) { x = 0; y += ch + GY; }
+        const w = dims?.w ?? widths.get(c)!;
+        if (x > 0 && x + w > targetW) { x = 0; y += rh + GY; }
         pos[c] = { x, y };
         x += w + GX;
         maxW = Math.max(maxW, x - GX);
       }
-      return { pos, w: maxW, h: list.length ? y + ch : 0 };
+      return { pos, w: maxW, h: list.length ? y + rh : 0 };
     };
     const near = (list: string[]) => {
       const area = list.reduce((a, c) => a + (widths.get(c)! + GX) * (ch + GY), 0);
@@ -1022,15 +1029,17 @@ function MapInner() {
     // is the opposite — its position is the only thing carrying intent, so the
     // stored one wins over the packer's.
     const hand = slot ? mapPositions[slot] : {};
-    const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
+    const chipNode = (c: string, position: { x: number; y: number }, parentId?: string,
+      dims?: { w: number; h: number; def?: string }): ChipNodeT => ({
       id: c,
       type: "chip" as const,
       position: parentId ? position : hand[c] ?? position,
       ...(parentId ? { parentId } : {}),
-      width: widths.get(c)!, height: ch,
+      width: dims?.w ?? widths.get(c)!, height: dims?.h ?? ch,
       selected: remembered.selected.has(c),
       draggable: slot !== null,
-      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c) },
+      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c),
+        ...(dims?.def ? { def: dims.def } : {}) },
     });
     // Codes in no container: the ones you placed by hand stay exactly there and
     // are NOT packed; the rest fall to the catch-all pile. That is what makes
@@ -1047,7 +1056,10 @@ function MapInner() {
     const pileNodes = (
       // `key` separates a pile's IDENTITY from its drawn name, for the groupings
       // whose labels a participant could collide with (a speaker named "Mixed")
-      piles: { name: string; key?: string; list: string[]; ai?: number }[],
+      piles: { name: string; key?: string; list: string[]; ai?: number;
+        /** fixed chip size for this pile (the by-definition view's wide chips),
+            with the text each chip carries on its second line */
+        chip?: { w: number; h: number; def: (c: string) => string } }[],
       opts: {
         islandId: (p: { name: string; key?: string }) => string; movable: boolean; freeChips?: string[];
         /** positions for piles moved by hand when the view has no store slot
@@ -1056,7 +1068,10 @@ function MapInner() {
       },
     ) => {
       const blocks = piles.map((g, gi) => ({
-        name: g.name, key: g.key, gi, list: g.list, ai: g.ai, ...pack(g.list, near(g.list)),
+        name: g.name, key: g.key, gi, list: g.list, ai: g.ai, chip: g.chip,
+        ...(g.chip
+          ? pack(g.list, Math.max(700, Math.ceil(Math.sqrt(g.list.length)) * (g.chip.w + GX)), g.chip)
+          : pack(g.list, near(g.list))),
         // the caption reads "name · count" and carries no buttons
         cap: captionBox(fs, 1, 7, `${g.name} · ${g.list.length}`, 1, family),
       }));
@@ -1084,7 +1099,8 @@ function MapInner() {
             ...(b.ai !== undefined ? { ai: b.ai } : {}) },
         });
         for (const c of b.list)
-          children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
+          children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key,
+            b.chip ? { ...b.chip, def: b.chip.def(c) } : undefined));
         ix += stepW + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
       }
@@ -1110,9 +1126,13 @@ function MapInner() {
 
     // BY DEFINITION: the map as a worklist for Draft definitions
     if (view === "defs") {
-      const has = (c: string) => (codebook[c]?.def ?? "").trim().length > 0;
+      const defOf = (c: string) => (codebook[c]?.def ?? "").trim();
+      const has = (c: string) => defOf(c).length > 0;
+      // defined codes carry their definition on the chip — the view's point is
+      // reading the book, not just counting the gap
       const piles = [
-        { name: "Defined", list: codes.filter(has) },
+        { name: "Defined", list: codes.filter(has),
+          chip: { w: 340, h: Math.round(chipH(MAP_FS) * 2.05), def: defOf } },
         { name: "Undefined", list: codes.filter((c) => !has(c)) },
       ];
       return { nodes: withSimilar(pileNodes(piles.filter((g) => g.list.length > 0), {
@@ -2473,6 +2493,7 @@ function MapInner() {
           onReconcileInstead={() => { setThemeAiOpen(false); switchView("reconcile"); }}
           onGroups={(groups) => { useStore.getState().applyThemeGroups(groups); }} />
       )}
+      {describeFor && <DescribeModal initial={describeFor} onClose={() => setDescribeFor(null)} />}
       {apart && (
         <TellApartModal codes={apart.codes} survivor={apart.survivor} newName={apart.newName}
           onClose={() => setApart(null)}
@@ -2833,6 +2854,13 @@ function MapInner() {
             </button>
           )}
           {/* each view offers only the structural edit it can show */}
+          {view === "defs" && (
+            <button role="menuitem"
+              onClick={() => { const sel = menu.sel; setMenu(null); setDescribeFor(sel); }}
+              title="Draft definitions for the selected codes from how you used them — reviewed before anything is sent">
+              <Icon name="sparkle" size={16} /> Define {menu.sel.length === 1 ? "this code" : `these ${menu.sel.length} codes`} with AI…
+            </button>
+          )}
           {view === "areas" && (
             <button role="menuitem" onClick={() => { const sel = menu.sel; setMenu(null); makeArea(sel); }}>
               {menu.sel.length === 1 ? "New area with this code" : `New area from these ${menu.sel.length} codes`}

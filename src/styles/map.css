@@ -72,6 +72,14 @@
   background:color-mix(in srgb, var(--accent) 14%, var(--panel));
   box-shadow:0 0 0 var(--map-ring, 4px) var(--accent); }
 .mapChip .mapName { font-weight:600; white-space:nowrap; }
+/* the by-definition view's wide chips: name and counts on the first line, the
+   definition clamped to two under them — reading the book, not just counting it */
+.mapChip.hasDef { flex-wrap:wrap; align-content:center; row-gap:1px;
+  padding-top:5px; padding-bottom:6px; }
+.mapChip.hasDef .mapName { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.mapChip.hasDef .mapChipDef { order:5; flex:1 1 100%; min-width:0;
+  color:var(--fg-dim); font-size:.82em; line-height:1.32; font-weight:400;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 /* the counts are the map's other axis — how much work a code does — so they
    read at full strength, bold, sized with the name; only the glyphs recede */
 .mapChip .cnt { display:inline-flex; gap:10px; margin-left:auto; color:var(--fg);
