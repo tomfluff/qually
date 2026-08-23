@@ -2613,7 +2613,7 @@ function MapInner() {
         <div ref={viewMenuRef} className="ctxmenu mapMenu mapViewMenu" role="menu" aria-label="Map view"
           style={{ left: viewMenu.left, top: viewMenu.y, fontSize: sidebarFontSize }}>
           {/* one flat list: every view is a peer, each with its own actions in
-              the bar — the status line under each name says what lives there.
+              the pill — the status line under each name says what lives there.
               The two derived count views sit under one "Grouping" divider. */}
           {(() => {
             const row = (v: MapView) => {
@@ -2630,7 +2630,7 @@ function MapInner() {
                   onClick={() => switchView(v)}>
                   {view === v ? "✓ " : ""}{s.label}
                   {/* the grouping views explain themselves under their head;
-                      the bar's drag line covers them once inside */}
+                      the help popover's drag line covers them once inside */}
                   {s.layout ? (
                     <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
                   ) : shape[v] ? (
@@ -2679,8 +2679,7 @@ function MapInner() {
             </div>
           </div>
           <div className="settings-note">
-            {MAP_RING_PX[mapRing]}px around a selected code, and it holds that thickness at
-            every zoom — so a selection stays findable with the whole codebook on screen.
+            {MAP_RING_PX[mapRing]}px at every zoom — a selection stays findable zoomed out.
           </div>
           <div className="srow">
             <span id="mapmini-h">Minimap</span>

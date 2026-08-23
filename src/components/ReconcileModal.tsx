@@ -199,8 +199,7 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
               <p className="about-lede">
                 Second-cycle consolidation: the AI reads each code's definition and excerpts and
                 proposes only what you tick below. On a well-coded book most codes come back
-                untouched; whatever it does propose lands on the map as a constellation or a badge
-                for your verdict, and coding stays yours.
+                untouched; every proposal waits on the map for your verdict.
               </p>
               {enough && (
                 <div className="ai-warn">

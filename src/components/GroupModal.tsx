@@ -126,15 +126,11 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
           <>
             <div className="ai-body nicescroll">
               <p className="about-lede">
-                The AI reads your whole codebook — each code's definition and a few excerpts you
-                coded with it — and proposes {transient
-                  ? <>a handful of BROAD areas — the shelves you would use to find your way around a
-                    long codebook (strategies, opinions, difficulties, and so on). It is a way of
-                    looking: nothing is renamed, merged, or saved, and your free-form layout is
-                    untouched.</>
-                  : <>THEME groups: codes that belong together analytically.
-                    The grouping lands on the map as islands for you to reshape; no code is renamed,
-                    merged, or removed.</>}
+                The AI reads your codebook — definitions and a few excerpts per code — and proposes {transient
+                  ? <>a handful of broad areas: shelves for finding your way around a long
+                    codebook. A way of looking — nothing is renamed, merged, or saved.</>
+                  : <>THEME groups: codes that belong together analytically. They land on the
+                    map as islands for you to reshape; no code is renamed, merged, or removed.</>}
                 {!transient && hasGroups && <> <b>Your current groups are replaced.</b></>}
               </p>
               {pending > 0 && !transient && (

@@ -81,7 +81,7 @@ export function TellApartModal({ codes, survivor, newName, onClose, onDecided }:
     if (named) useStore.getState().renameCode(into, named, "The name this merge was proposed under", "you");
     earcon.join();
     onDecided?.("merged");
-    setDone(`Merged into “${named ?? into}”, with “could not write a sentence that separates them” as the reason — which is a stronger justification than any rationale a model could supply, because it is a fact about your analysis.`);
+    setDone(`Merged into “${named ?? into}”, with “could not write a sentence that separates them” as the reason.`);
   };
 
   const column = (code: string, rows: { pid: string; excerpt: string; speaker: string }[]) => (
@@ -109,8 +109,7 @@ export function TellApartModal({ codes, survivor, newName, onClose, onDecided }:
           <button className="btn iconbtn" onClick={onClose} title="Close (Esc)"><Icon name="x" size={16} /></button>
         </div>
         <p className="about-lede">
-          Read both sides, then write the line between them. If you cannot, that is
-          an answer too — and a better reason to merge than any rationale.
+          Read both sides, then write the line between them. If you cannot, that is an answer too.
         </p>
         {/* the reading and the writing scroll together; the verdict buttons
             stay put below, so a raised text size scrolls the excerpts rather

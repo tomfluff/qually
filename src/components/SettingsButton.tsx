@@ -253,7 +253,7 @@ export function SettingsButton() {
                   <input type="checkbox" checked={mapSounds}
                     onChange={(e) => setUi({ mapSounds: e.target.checked })} />
                 </label>
-                <div className="settings-note">Quiet sound-marks confirm what happened — coding a line, undo and redo, joining or leaving a group, AI requests, accepts. Multimodal feedback that doesn't depend on catching a visual change.</div>
+                <div className="settings-note">Quiet sound-marks confirm what happened — coding a line, undo, AI requests, accepts — without depending on catching a visual change.</div>
 
                 <div className="srow">
                   <span>Code name style</span>

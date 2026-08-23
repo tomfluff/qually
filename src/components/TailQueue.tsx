@@ -134,8 +134,7 @@ export function TailSide({ limit, setLimit }: { limit: TailLimit; setLimit: (n: 
         </p>
       </div>
       <p className="dvNote">
-        A code resting on one excerpt is not a fault. This is a way to make sure
-        you have seen each one, and the fastest key is the one that keeps it.
+        A code resting on one excerpt is not a fault — this just makes sure you have seen each one.
       </p>
     </>
   );

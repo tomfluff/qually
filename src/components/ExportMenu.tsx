@@ -223,8 +223,8 @@ it round-trips everything, including corrections and AI observations.
               </button>
             </div>
             <p className="about-lede">
-              Codes you made without a name are signed <code>(default)</code>. Sign them as yourself
-              before exporting, or ship them as <code>(default)</code>.
+              Codes you made without a name are signed <code>(default)</code> — set your name to
+              sign them, or export as is.
             </p>
             <label className="signfield"><span>Your name</span>
               <input className="signinput" autoFocus value={gateName} placeholder="Your name"
