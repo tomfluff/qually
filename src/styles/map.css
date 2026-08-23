@@ -21,6 +21,7 @@
 .mapBar .btn { height:var(--ctl-h); display:inline-flex; align-items:center; gap:7px; }
 .mapBar .btn.iconbtn { justify-content:center; aspect-ratio:1; padding-inline:0; }
 .mapBar .btn.iconlabel { padding-inline:12px; white-space:nowrap; }
+.mapBar .mapCompareDims .seg { flex:0 0 auto; padding:3px 12px; white-space:nowrap; }
 /* stale areas: the warning is a colour on the button, explained by its tooltip */
 .mapBar .btn.stale { color:var(--warn, #b45309); }
 /* the gestures, behind the ? button */

@@ -44,6 +44,7 @@ import { relaxBoxes } from "../mapRelax";
 import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
 import { cooccurrence, pairOf, companionsOf, type Companion } from "../cooccur";
+import { coverageOf, stretchDims } from "../stretches";
 import { findSimilar } from "../similar";
 import { sweepWording, refusedPairs, familyReason } from "../sweep";
 import { openTailQueue } from "./TailQueue";
@@ -90,7 +91,9 @@ const captionBox = (fs: number, zoom: number, cap: number, text: string, extraEm
   return { w: Math.round(measurer.measureText(text).width + size * extraEm), h: Math.round(size * 1.5) };
 };
 
-type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction };
+type ChipData = { code: string; color: string; segs: number; pids: number; act?: CodeAction;
+  /** compare view: the code's evidence split, appended to the tooltip */
+  cover?: string };
 type ChipNodeT = Node<ChipData, "chip">;
 // lens islands are synthetic (gi indexes the LENS grouping, not codeGroups),
 // so they carry their member list — the context menu must never reach into
@@ -137,7 +140,7 @@ type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT | 
 // rather than from anything you filed. There is no membership to edit there,
 // so a CHIP never moves — but the piles themselves rearrange, in the session
 // only, because a derived pile drifts as the coding grows.
-export type MapView = "reconcile" | "themes" | "areas" | "pids" | "segs" | "defs" | "speaker";
+export type MapView = "reconcile" | "themes" | "areas" | "pids" | "segs" | "defs" | "speaker" | "compare";
 type TakeSpec = {
   mode: "merge" | "group" | "area";
   /** the button, e.g. "Group as theme" */
@@ -200,8 +203,13 @@ const VIEWS: Record<MapView, ViewSpec> = {
     drag: "Drag a group to rearrange; the codes inside stay put",
     take: null,
   },
+  compare: {
+    label: "By comparison", hint: "where each code's evidence comes from", layout: null,
+    drag: "Drag a group to rearrange; the codes inside stay put",
+    take: null,
+  },
 };
-const VIEW_ORDER: MapView[] = ["reconcile", "themes", "areas", "pids", "segs", "defs", "speaker"];
+const VIEW_ORDER: MapView[] = ["reconcile", "themes", "areas", "pids", "segs", "defs", "speaker", "compare"];
 
 // The Map tab's menu (Tabs.tsx) is the way into a view now — same shape as the
 // Assist menu. It needs the views' names and the current choice without
@@ -234,6 +242,8 @@ const remembered = {
   // where the researcher parked the Revision plan panel (screen offset)
   planPos: { x: 0, y: 0 },
   planMin: false,
+  // which comparison dimension the compare view groups by (session)
+  compareDim: null as string | null,
   // hand-moved PILES in the derived grouping views (session only: the piles
   // themselves drift as coding continues, so remembering them across sessions
   // would pin stale geography). Chips inside never move — only the groups do.
@@ -251,6 +261,7 @@ onProjectSwap(function forgetMapSession() {
   remembered.planPos = { x: 0, y: 0 };
   remembered.planMin = false;
   remembered.bucketPos = {};
+  remembered.compareDim = null;
 });
 
 const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>) {
@@ -258,7 +269,7 @@ const ChipNode = memo(function ChipNode({ data, selected }: NodeProps<ChipNodeT>
   return (
     <div className={"mapChip" + (selected ? " sel" : "")}
       style={{ "--chip-c": data.color } as React.CSSProperties}
-      title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}`}>
+      title={`${data.code} — ${data.segs} excerpt${data.segs === 1 ? "" : "s"} in ${data.pids} transcript${data.pids === 1 ? "" : "s"}${data.cover ? `\n${data.cover}` : ""}`}>
       <span className="mapName">{data.code}</span>
       {data.act && data.act.action !== "merge" && (
         <span className={"mapActBadge " + data.act.action}
@@ -812,6 +823,15 @@ function useKeepOnScreen<T extends HTMLElement>(deps: unknown[]) {
 function MapInner() {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
+  const stretches = useStore((s) => s.stretches);
+  // the comparison axis the compare view groups by; a bump re-derives layout
+  const [compareDim, setCompareDimState] = useState(remembered.compareDim);
+  const setCompareDim = (d: string) => {
+    remembered.compareDim = d; setCompareDimState(d);
+    // the regrouped piles land elsewhere; bring them on screen
+    requestAnimationFrame(() => requestAnimationFrame(() => fitView({ duration: 200 })));
+  };
+  const compareDims = useMemo(() => stretchDims(stretches), [stretches]);
   const transcripts = useStore((s) => s.transcripts);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const dark = useStore((s) => s.ui.dark);
@@ -1070,7 +1090,7 @@ function MapInner() {
     // is the opposite — its position is the only thing carrying intent, so the
     // stored one wins over the packer's.
     const hand = slot ? mapPositions[slot] : {};
-    const chipNode = (c: string, position: { x: number; y: number }, parentId?: string): ChipNodeT => ({
+    const chipNode = (c: string, position: { x: number; y: number }, parentId?: string, cover?: string): ChipNodeT => ({
       id: c,
       type: "chip" as const,
       position: parentId ? position : hand[c] ?? position,
@@ -1078,7 +1098,8 @@ function MapInner() {
       width: widths.get(c)!, height: ch,
       selected: remembered.selected.has(c),
       draggable: slot !== null,
-      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c) },
+      data: { code: c, color: codebook[c]?.color || "#999", segs: stats[c]?.segs ?? 0, pids: stats[c]?.pids ?? 0, act: actOf.get(c),
+        ...(cover ? { cover } : {}) },
     });
     // Codes in no container: the ones you placed by hand stay exactly there and
     // are NOT packed; the rest fall to the catch-all pile. That is what makes
@@ -1098,7 +1119,9 @@ function MapInner() {
       piles: { name: string; key?: string; list: string[]; ai?: number;
         /** the by-definition view: each chip in this pile grows a definition
             branch under it, so its cell is as tall as its definition */
-        def?: (c: string) => string }[],
+        def?: (c: string) => string;
+        /** compare view: the code's evidence split, for the chip tooltip */
+        cover?: (c: string) => string }[],
       opts: {
         islandId: (p: { name: string; key?: string }) => string; movable: boolean; freeChips?: string[];
         /** positions for piles moved by hand when the view has no store slot
@@ -1140,7 +1163,7 @@ function MapInner() {
         h: ch + DEF_STEM + defH(c),
       });
       const blocks = piles.map((g, gi) => ({
-        name: g.name, key: g.key, gi, list: g.list, ai: g.ai, def: g.def,
+        name: g.name, key: g.key, gi, list: g.list, ai: g.ai, def: g.def, cover: g.cover,
         ...(g.def
           ? pack(g.list, Math.max(700, Math.ceil(Math.sqrt(g.list.length)) * (DEF_W + GX)), defDims())
           : pack(g.list, near(g.list))),
@@ -1171,7 +1194,7 @@ function MapInner() {
             ...(b.ai !== undefined ? { ai: b.ai } : {}) },
         });
         for (const c of b.list) {
-          children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
+          children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key, b.cover?.(c)));
           if (b.def) {
             // the branch: not selectable, not draggable — a reading surface
             // tethered under its chip, wearing the chip's colour
@@ -1225,6 +1248,46 @@ function MapInner() {
 
     // BY SPEAKER: whose voice a code lives in. The rule lives in
     // speakerBuckets.ts so the majority boundary is testable without a canvas.
+    // BY COMPARISON: where a code's evidence comes from, across one declared
+    // dimension's stretches. A code files under the value carrying MOST of its
+    // accepted segments (the tooltip shows the full split); evidence outside
+    // every stretch is "unmarked". No stretches yet → everything unmarked, and
+    // the pile's name says how to change that.
+    if (view === "compare") {
+      const dim = compareDim && compareDims.includes(compareDim) ? compareDim : compareDims[0];
+      const cov = coverageOf(segments, stretches, dim ?? "");
+      const valueOf = (c: string) => {
+        const m = cov.get(c);
+        if (!m) return "";
+        let best = "", n = -1;
+        for (const [v, k] of m) if (k > n || (k === n && v < best)) { best = v; n = k; }
+        return best;
+      };
+      const tipOf = (c: string) => {
+        const m = cov.get(c);
+        if (!m) return "no accepted evidence";
+        return [...m.entries()].sort((a, b) => b[1] - a[1])
+          .map(([v, k]) => `${v || "unmarked"} ${k}`).join(" · ");
+      };
+      const byValue = new Map<string, string[]>();
+      for (const c of codes) {
+        const v = valueOf(c);
+        const arr = byValue.get(v) ?? [];
+        arr.push(c);
+        byValue.set(v, arr);
+      }
+      const piles = [...byValue.entries()]
+        .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)))
+        .map(([v, list]) => ({
+          name: v || (stretches.length ? "unmarked" : "unmarked — select lines in a transcript and right-click to mark stretches"),
+          key: v || "\u0000unmarked", list, cover: tipOf,
+        }));
+      return { nodes: withSimilar(pileNodes(piles, {
+        islandId: (p) => `bucket:${p.key ?? p.name}`, movable: true,
+        stored: remembered.bucketPos[view] ?? {},
+      })) };
+    }
+
     if (view === "speaker") {
       const piles = speakerBuckets(codes, segments, transcripts);
       return { nodes: withSimilar(pileNodes(
@@ -1402,7 +1465,7 @@ function MapInner() {
     for (const c of looseFree) children.push(chipNode(c, { x: 0, y: 0 }));
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev]);
+  }, [codes, codebook, stats, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev, stretches, compareDim, compareDims]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the
@@ -2431,7 +2494,8 @@ function MapInner() {
           <Icon name={layoutMenu ? "chevron-up" : "chevron-down"} size={13} />
         </button>
         {/* the current view's own actions; the derived views have none */}
-        {(view === "reconcile" || view === "themes" || view === "segs" || view === "areas") && (
+        {(view === "reconcile" || view === "themes" || view === "segs" || view === "areas"
+          || (view === "compare" && compareDims.length > 1)) && (
           <span className="mapBarDivider" role="separator" aria-orientation="vertical" />
         )}
         {view === "reconcile" && (
@@ -2467,6 +2531,17 @@ function MapInner() {
             title="Read the codes resting on one excerpt, one at a time, in Assist">
             <Icon name="list" size={16} /> <span className="blabel">Work the thin tail</span>
           </button>
+        )}
+        {view === "compare" && compareDims.length > 1 && (
+          <div className="segmented mapCompareDims" role="group" aria-label="Comparison dimension">
+            {compareDims.map((d) => {
+              const on = (compareDim && compareDims.includes(compareDim) ? compareDim : compareDims[0]) === d;
+              return (
+                <button key={d} className={"seg" + (on ? " on" : "")} aria-pressed={on}
+                  onClick={() => setCompareDim(d)}>{d}</button>
+              );
+            })}
+          </div>
         )}
         {view === "areas" && (
           // stale is a colour on the button, explained by its tooltip
