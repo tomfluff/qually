@@ -129,7 +129,12 @@
 /* islands are RF parent nodes rendered behind their chip children. The node
    body is click-through so box-select sweeps across it; only the caption is
    live, and the caption is the RF drag handle for the whole family. */
-.react-flow__node-island { pointer-events:none !important; }
+/* the whole group is grabbable: clicking its body picks it (and its codes
+   with it), dragging its body moves it. A marquee still sweeps across a group
+   once started — it just has to start on open canvas rather than inside one. */
+.react-flow__node-island { pointer-events:auto; }
+.mapIsland, .mapHalo { cursor:grab; }
+.react-flow__node.dragging .mapIsland, .react-flow__node.dragging .mapHalo { cursor:grabbing; }
 .mapIsland { width:100%; height:100%; box-sizing:border-box;
   border:1px solid var(--line); border-radius:16px;
   background:color-mix(in srgb, var(--accent) 4%, transparent); }
@@ -186,7 +191,7 @@
   border:1.5px solid var(--line);
   background:color-mix(in srgb, var(--accent) 6%, transparent); }
 .mapHalo.will { border-color:var(--accent); }
-.react-flow__node-halo { pointer-events:none !important; }
+.react-flow__node-halo { pointer-events:auto; }
 .react-flow__node-halo .mapHaloLabel { pointer-events:auto; }
 .mapHaloLabel { left:50%; transform:translateX(-50%);
   max-width:max(200%, 30ch); cursor:grab; }
@@ -394,8 +399,8 @@
    The same zoom-priced ring the chips wear: a 1px accent frame is just as
    gone at 0.1 zoom as a chip's border */
 .react-flow__node.selected > .mapHalo,
-.react-flow__node.selected > .mapIsland { border-color:var(--accent);
-  box-shadow:0 0 0 var(--map-ring, 4px) var(--accent); }
+.react-flow__node.selected > .mapIsland, .react-flow__node.selected > .mapHalo {
+  border-color:var(--accent); box-shadow:0 0 0 var(--map-ring, 4px) var(--accent); }
 .react-flow__node.selected > .mapIsland { background:color-mix(in srgb, var(--accent) 9%, transparent); }
 /* the one line that separates the two actions people confuse */
 .mapSimChoice { padding:6px 12px 0; }

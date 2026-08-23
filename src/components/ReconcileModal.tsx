@@ -161,7 +161,7 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
   };
 
   return (
-    <AiModal title="Reconcile codes" busy={busy} onClose={onClose}>
+    <AiModal title="Consolidate the codebook" busy={busy} onClose={onClose}>
         {done ? (
           <>
             <div className="ai-body">

@@ -146,7 +146,13 @@ type ViewSpec = {
 };
 const VIEWS: Record<MapView, ViewSpec> = {
   reconcile: {
-    label: "Reconcile", layout: "reconcile",
+    // "Consolidate" is the word the methods literature uses for this step and
+    // the one this app's own prompts use ("consolidate a first-cycle inductive
+    // codebook"). "Reconcile" reads as settling a disagreement between two
+    // coders, which is a different thing QuAlly may yet want the word for.
+    // The KEY stays `reconcile`: it names a layout slot saved in every
+    // project file, and renaming it would cost a migration for nothing.
+    label: "Consolidate", layout: "reconcile",
     drag: "Dragging a code in or out of a capsule changes what gets merged",
     take: { mode: "merge", label: "Propose a merge", what: "A merge makes them ONE code — it lands as a proposal you can still edit" },
   },
@@ -251,10 +257,13 @@ const openInCodebook = (list: string[]) => {
 // equality check, so this re-renders exactly when membership changes —
 // and nothing else in the tree does.
 const selectedIdsSel = (s: { nodes: Node[] }) =>
-  s.nodes.filter((n) => n.selected && n.type === "chip").map((n) => n.id).join("\n");
+  // containers ride along so that picking a group wakes the sync that adopts
+  // its codes; the HUD counts codes only (see `sel` below)
+  s.nodes.filter((n) => n.selected).map((n) => n.type + ":" + n.id).join("\n");
 function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onSelectionChanged: () => void }) {
   const joined = useFlowStore(selectedIdsSel);
-  const sel = useMemo(() => (joined ? joined.split("\n") : []), [joined]);
+  const sel = useMemo(() => (joined ? joined.split("\n")
+    .filter((x) => x.startsWith("chip:")).map((x) => x.slice(5)) : []), [joined]);
   useEffect(() => { remembered.selected = new Set(sel); }, [sel]);
   // the one place that already re-renders exactly when chip selection changes
   useEffect(() => { onSelectionChanged(); }, [joined, onSelectionChanged]);
@@ -740,24 +749,6 @@ function MapInner() {
   // font size, so every threshold would be blind to the text-size setting —
   // and this app is FOR the reader who turns that up.
   const barRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = barRef.current;
-    if (!el) return;
-    const STEPS = ["shedHint", "shedLabels", "shedCount", "shedTitle"];
-    const fit = () => {
-      el.classList.remove(...STEPS);
-      for (const step of STEPS) {
-        // reading scrollWidth flushes layout, so each step is measured against
-        // the previous one's result rather than the state we started in
-        if (el.scrollWidth <= el.clientWidth + 1) return;
-        el.classList.add(step);
-      }
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    return () => ro.disconnect();
-  });
   const [viewMenu, setViewMenu] = useState<{ left: number; y: number } | null>(null);
   const viewMenuRef = useKeepOnScreen<HTMLDivElement>([viewMenu]);
   const [openCards, setOpenCards] = useState<Set<number>>(remembered.openCards);
@@ -900,6 +891,36 @@ function MapInner() {
       (stats[b]?.segs ?? 0) - (stats[a]?.segs ?? 0) || a.localeCompare(b)),
     [codebook, stats]);
 
+  // Layout effect, not effect: fit() strips the shed classes and measures
+  // before re-adding them, and doing that after paint would flash the un-shed
+  // bar for a frame on every pass. And it runs on what actually changes the
+  // bar's content — not on every render, because the map re-renders per
+  // pointer event during a drag (see the marquee note above nodeTypes), and
+  // each fit is up to five forced layout flushes plus a ResizeObserver
+  // teardown. The observer covers the other axis: the container changing
+  // size under unchanged content.
+  useLayoutEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const STEPS = ["shedHint", "shedLabels", "shedCount", "shedTitle"];
+    const fit = () => {
+      el.classList.remove(...STEPS);
+      for (const step of STEPS) {
+        // reading scrollWidth flushes layout, so each step is measured against
+        // the previous one's result rather than the state we started in
+        if (el.scrollWidth <= el.clientWidth + 1) return;
+        el.classList.add(step);
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // everything the bar renders that changes width: the view picks the
+    // buttons and the drag hint, the count is its own text, the text-size
+    // setting scales all of it, and the areas button reads stale differently
+  }, [view, codes.length, sidebarFontSize, topicsStale]);
+
   // Two stages, one canvas. Themes: islands (groups) as before. Reconcile:
   // constellations — each pending cluster is a circular parent node with the
   // survivor at the center and members on the orbit; codes in no cluster pack
@@ -1013,8 +1034,11 @@ function MapInner() {
         islands.push({
           id: key, type: "island" as const,
           position: stored[key] ?? { x: ix, y: iy }, width: bw, height: bh,
-          draggable: opts.movable, selectable: false, focusable: false,
-          dragHandle: ".mapIslandLabel",
+          // selectable AND draggable by its whole body: a group is a thing you
+          // can grab, not a caption with a decoration under it. Its selected
+          // state stays derived from its members (see syncGroupSelection), so
+          // a marquee that clips two of five chips never carries the group off.
+          draggable: opts.movable, selectable: opts.movable, focusable: false,
           data: { name: `${b.name} · ${b.list.length}`, gi: b.gi, pile: true, list: b.list, gkey: b.name,
             ...(b.ai !== undefined ? { ai: b.ai } : {}) },
         });
@@ -1147,8 +1171,7 @@ function MapInner() {
           // NOT pointer-selectable: a group counts as selected when every one
           // of its codes is (see the derivation effect), so brushing a capsule
           // with the marquee picks the codes you touched, not the whole group
-          draggable: true, selectable: false, focusable: false,
-          dragHandle: ".mapHaloLabel",
+          draggable: true, selectable: true, focusable: false,
           data: {
             name: b.c.newName ?? b.c.survivor, renamed: !!b.c.newName,
             // norm(), not exact equality: acceptance resolves the target with
@@ -1220,8 +1243,7 @@ function MapInner() {
         type: "island" as const,
         position: mapIslandPos.themes[key] ?? { x: ix, y: iy },
         width: bw, height: bh,
-        draggable: true, selectable: false, focusable: false,
-        dragHandle: ".mapIslandLabel",
+        draggable: true, selectable: true, focusable: false,
         data: { name: b.name, gi: b.gi },
       });
       for (const c of b.list) children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key));
@@ -2036,18 +2058,43 @@ function MapInner() {
   // React Flow's selectionMode is global, so this rule is derived here rather
   // than configured: it also means the rule holds for Ctrl-click, not just
   // the marquee.
+  // A container and its codes are ONE selection, in both directions:
+  //   every code picked   → the container is picked too, so React Flow drags
+  //                         the whole capsule and nothing is filed as having
+  //                         left it (see onNodeDragStop's `carried`)
+  //   the container picked→ its codes come with it, which is what clicking a
+  //                         group's body or caption is asking for
+  //   some codes picked   → the container is NOT picked; a marquee that clips
+  //                         two of five chips must still take only those two
+  // Chips win when the two disagree, EXCEPT when the container was picked with
+  // none of its codes — that is the click-the-group gesture, and it is the
+  // only way a container arrives selected on its own.
   const syncGroupSelection = useCallback(() => {
     rfSetNodes((ns) => {
-      const picked = new Set(ns.filter((n) => n.type === "chip" && n.selected).map((n) => n.id));
       const members = new Map<string, string[]>();
       for (const n of ns) if (n.type === "chip" && n.parentId) {
         const list = members.get(n.parentId) ?? [];
         list.push(n.id);
         members.set(n.parentId, list);
       }
+      const picked = new Set(ns.filter((n) => n.type === "chip" && n.selected).map((n) => n.id));
+      // containers picked with none of their codes: the gesture was aimed at
+      // the group, so its codes join the selection
+      const adopt = new Set<string>();
+      for (const n of ns) {
+        if (n.type === "chip" || !n.selected) continue;
+        const mine = members.get(n.id);
+        if (mine?.length && !mine.some((c) => picked.has(c))) mine.forEach((c) => adopt.add(c));
+      }
+      adopt.forEach((c) => picked.add(c));
       let changed = false;
       const next = ns.map((n) => {
-        if (n.type === "chip") return n;
+        if (n.type === "chip") {
+          const want = n.selected || adopt.has(n.id);
+          if (!!n.selected === want) return n;
+          changed = true;
+          return { ...n, selected: want };
+        }
         const mine = members.get(n.id);
         const whole = !!mine?.length && mine.every((c) => picked.has(c));
         if (!!n.selected === whole) return n;
@@ -2327,6 +2374,7 @@ function MapInner() {
             <dt>Move</dt><dd>Space, middle or right-drag pans; wheel zooms.</dd>
             <dt>Act</dt><dd>Right-click a selection. Double-click reads a code.</dd>
             <dt>Capsules</dt><dd>A proposed merge — drag chips in or out.</dd>
+            <dt>Whole groups</dt><dd>Click one anywhere to take it and its codes; drag from inside it to move all you have picked.</dd>
             <dt>Whose idea</dt><dd>Solid and tinted came from the AI, dashed from the wording pass, plain from you.</dd>
             <dt>Merge vs group</dt><dd>A merge folds codes into one; a group keeps separate codes together.</dd>
           </dl>

@@ -139,10 +139,10 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
               </p>
               {pending > 0 && !transient && (
                 <div className="ai-warn">
-                  <b>{pending} reconciliation proposal{pending === 1 ? " is" : "s are"} still pending.</b>{" "}
+                  <b>{pending} consolidation proposal{pending === 1 ? " is" : "s are"} still pending.</b>{" "}
                   Theming an uncleaned codebook bakes redundancy into the themes — consider finishing
                   the merges first.{" "}
-                  <button className="btn" onClick={onReconcileInstead}>Go to Reconcile</button>
+                  <button className="btn" onClick={onReconcileInstead}>Go to Consolidate</button>
                 </div>
               )}
               {enough && (
