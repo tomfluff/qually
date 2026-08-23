@@ -398,6 +398,7 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 /* the cleanup control under the Suggest run button — same full-width shape as
    the run button above it (.groundBtn does the layout), muted because it is
    the undo of a run rather than one of its actions */
+.clearSugWrap { width:100%; }
 .clearSug { color:var(--muted); }
 .clearSug:hover { color:var(--fg); }
 .ctxmenu .ctxcount { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; }

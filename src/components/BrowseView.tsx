@@ -284,7 +284,7 @@ export function BrowseView() {
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
       {recolor && <RecolorConfirm x={recolor.x} y={recolor.y} onClose={() => setRecolor(null)} />}
       {groundOpen && <GroundModal onClose={() => setGroundOpen(false)} />}
-      {describeOpen && <DescribeModal onClose={() => setDescribeOpen(false)} />}
+      {describeOpen && <DescribeModal initial={chosen.length ? chosen : undefined} onClose={() => setDescribeOpen(false)} />}
     </div>
   );
 }

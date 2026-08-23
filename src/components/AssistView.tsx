@@ -56,8 +56,6 @@ const remembered = {
   // which is the wrong default for a question about the whole study.
   askPids: null as string[] | null,
   askCodes: null as string[] | null,
-  askEvents: true,
-  askExcerpts: true,
   askQ: "",
   // Where each panel's list was parked. Module scope for the same reason the rest
   // of this cache is: the view unmounts on a tab change, so following a citation
@@ -120,8 +118,6 @@ export function AssistView() {
   const [defOpen, setDefOpen] = useState(remembered.defOpen);
   const [askPids, setAskPids] = useState(remembered.askPids);
   const [askCodes, setAskCodes] = useState(remembered.askCodes);
-  const [askEvents, setAskEvents] = useState(remembered.askEvents);
-  const [askExcerpts, setAskExcerpts] = useState(remembered.askExcerpts);
   const [askQ, setAskQ] = useState(remembered.askQ);
   const [askOpen, setAskOpen] = useState(false);
   // restore before paint, so the list never flashes at the top on the way back
@@ -134,8 +130,8 @@ export function AssistView() {
   // which code's definition is open in an editor right now (deliberately NOT
   // remembered across tab changes — the editor unmounts with the view)
   const [editingDef, setEditingDef] = useState<string | null>(null);
-  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askEvents, askExcerpts, askQ }); },
-    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askEvents, askExcerpts, askQ]);
+  useEffect(() => { Object.assign(remembered, { obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askQ }); },
+    [obsBy, obsSel, onlyUncoded, proposals, flipped, suggestBy, suggestSel, defScope, defSel, defAnchor, defOpen, askPids, askCodes, askQ]);
 
   // Definitions panel: every code, split by whether it has a definition yet —
   // the split IS the worklist, so it's the sidebar's grouping. Both groups (and
@@ -239,12 +235,12 @@ export function AssistView() {
   // covered, which is exactly the claim the stored scope is there to make
   const askScope = useMemo(() => ({
     pids: [...onPids], codes: [...onCodes],
-    events: askEvents, excerpts: askExcerpts,
-  }), [onPids, onCodes, askEvents, askExcerpts]);
+    // both materials, always: the answer cites excerpts and events alike, and
+    // "which half of my analysis counts" was never a real question
+    events: true, excerpts: true,
+  }), [onPids, onCodes]);
   const askWhy = !askQ.trim() ? "Type a question first"
     : !onPids.size ? "Pick at least one transcript on the left"
-    : !askEvents && !askExcerpts ? "Turn on excerpts or events on the left"
-    : askExcerpts && !onCodes.size && !askEvents ? "Pick at least one code on the left"
     : "";
 
   // codes with at least one accepted segment — merge needs two to compare
@@ -436,13 +432,6 @@ export function AssistView() {
             <div className="bSideNote">
               Everything is in scope by default. Narrow it when you mean to.
             </div>
-            <div className="aByLabel" id="askMatLabel">Material</div>
-            <div className="segmented aSuggestBy" role="group" aria-labelledby="askMatLabel">
-              <button className={"seg" + (askExcerpts ? " on" : "")} aria-pressed={askExcerpts}
-                onClick={() => setAskExcerpts((v) => !v)}>Excerpts</button>
-              <button className={"seg" + (askEvents ? " on" : "")} aria-pressed={askEvents}
-                onClick={() => setAskEvents((v) => !v)}>Events</button>
-            </div>
             <ScopeGroup title="Transcripts" items={askPidList.map((p) => ({ id: p, label: p }))}
               on={onPids}
               onToggle={(id) => setAskPids((prev) => {
@@ -451,7 +440,7 @@ export function AssistView() {
                 return askPidList.filter((p) => cur.has(p));
               })}
               onAll={(all) => setAskPids(all ? null : [])} />
-            <ScopeGroup title="Codes" disabled={!askExcerpts} unit="excerpts in the transcripts in scope"
+            <ScopeGroup title="Codes" unit="excerpts in the transcripts in scope"
               items={askCodeList.map((c) => ({ id: c.id, label: c.id, n: c.n, color: codebook[c.id]?.color }))}
               on={onCodes}
               onToggle={(id) => setAskCodes((prev) => {
@@ -850,7 +839,8 @@ function ClearSuggestions({ pid }: { pid: string | null }) {
     </button>
   );
   return (
-    <div className="settings-wrap" ref={ref}>
+    // full-width, or the groundBtn inside resolves its 100% against a shrink-wrapped anchor
+    <div className="settings-wrap clearSugWrap" ref={ref}>
       <button className="btn groundBtn clearSug" aria-haspopup="menu" aria-expanded={open}
         onClick={() => { setOpen((v) => !v); setArmed(false); }}>
         <Icon name="trash" size={14} /> Clear codings
