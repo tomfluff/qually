@@ -530,6 +530,8 @@ function AiSettings() {
       <div className="settings-note">
         Comma-separated. Participant names, employers, and places are replaced with
         <code> [REDACTED_n]</code> on the way out and restored on the way back.
+        Code <em>names</em> are the one exception — they travel as written, so a
+        proposal can name the code it means. Keep identifying details out of them.
       </div>
     </>
   );

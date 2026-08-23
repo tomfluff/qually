@@ -51,9 +51,12 @@ export function AskModal({ question, scope, onAsked, onClose }: {
   // measured off the preview, not built a second time: the corpus can run to tens
   // of thousands of tokens and rendering it twice per change is real work
   const inTok = useMemo(() => estimateAskTokens(preview), [preview]);
+  // every field the renderer redacts is counted — ref, speaker and time
+  // included, or the facts row under-reports what actually got replaced
   const redactions = useMemo(() =>
-    corpus.excerpts.reduce((n, x) => n + red.count(x.text), 0)
-    + corpus.events.reduce((n, x) => n + red.count(x.text) + red.count(x.type), 0)
+    corpus.excerpts.reduce((n, x) => n + red.count(x.text) + red.count(x.ref)
+      + red.count(x.speaker ?? "") + red.count(x.time ?? ""), 0)
+    + corpus.events.reduce((n, x) => n + red.count(x.text) + red.count(x.type) + red.count(x.ref), 0)
     + corpus.codes.reduce((n, c) => n + red.count(c.def), 0)
     + red.count(question), [corpus, red, question]);
   // an answer runs a handful of points with refs; reasoning bills at the output

@@ -275,14 +275,16 @@ export function AssistView() {
   const accept = (p: MergeProposal) => {
     const swap = flipped.has(pairKey(p));
     const from = swap ? p.into : p.from, into = swap ? p.from : p.into;
-    // undoable (pushes its own undo), and the ledger keeps the model's reason
-    useStore.getState().mergeCode(from, into, p.rationale, "ai", useStore.getState().ai.model);
+    // undoable (pushes its own undo), and the ledger keeps the model's reason.
+    // p.model, not the CURRENT default: the proposal may have been made under
+    // another model, and it outlives a settings change in this very cache
+    useStore.getState().mergeCode(from, into, p.rationale, "ai", p.model ?? useStore.getState().ai.model);
     setProposals((ps) => ps.filter((x) => x !== p));
   };
   const skip = (p: MergeProposal) => {
     // a turned-down proposal is part of the record (see dismissCluster)
     useStore.getState().logDecision({
-      kind: "dismiss", codes: [p.into, p.from], source: "ai", model: useStore.getState().ai.model,
+      kind: "dismiss", codes: [p.into, p.from], source: "ai", model: p.model ?? useStore.getState().ai.model,
       why: p.rationale || "A proposed merge, turned down",
     });
     setProposals((ps) => ps.filter((x) => x !== p));

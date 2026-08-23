@@ -54,7 +54,9 @@ export function MergeModal({ onProposals, onClose }: {
   const inTok = useMemo(() => estimateMergeTokens(codes, red), [codes, red]);
   const redactions = useMemo(() => codes.reduce((n, c) =>
     n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [codes, red]);
-  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 20)));
+  // pairs + rationales, plus low-effort reasoning billed at the OUTPUT rate
+  // (see DescribeModal). Overshoot: this sits next to the Send button.
+  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 60)) + 400);
   const preview = renderMergePayload(codes, red);
   const enough = codes.length >= 2;
 
@@ -77,7 +79,7 @@ export function MergeModal({ onProposals, onClose }: {
         lines: codes.length, redactions,
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
-      onProposals(proposals);
+      onProposals(proposals.map((x) => ({ ...x, model: model.id })));
       setDone({ found: proposals.length, cost: usage.costUsd });
       earcon.aiDone();
       announce(proposals.length

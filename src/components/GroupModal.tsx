@@ -46,6 +46,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
     const byCode = new Map<string, string[]>();
     for (const s of segments) {
       if (s.status !== "accepted" || !transcripts[s.pid]) continue;
+      if (codebook[s.code]?.parked) continue; // set-aside codes are outside the working book here too
       const arr = byCode.get(s.code) ?? [];
       if (arr.length >= MERGE_EXEMPLARS) continue;
       const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
@@ -60,7 +61,9 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
   const inTok = useMemo(() => estimateClusterTokens(codes, red, transient ? "areas" : "usage"), [codes, red, transient]);
   const redactions = useMemo(() => codes.reduce((n, c) =>
     n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [codes, red]);
-  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 24)));
+  // group names + memberships + rationales, plus low-effort reasoning billed
+  // at the OUTPUT rate (see DescribeModal). Overshoot: this sits next to Send.
+  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 60)) + 400);
   const preview = renderMergePayload(codes, red);
   const enough = codes.length >= 4;
 

@@ -112,7 +112,21 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     });
   }, [choose, tabs, transcripts, aiLog, segments]);
 
-  const chunks = useMemo(() => chunksOf(lines), [lines]);
+  const chunks = useMemo(() => {
+    if (!scoped) return chunksOf(lines);
+    // a discontiguous ctrl-click selection is SEPARATE windows: packed into
+    // one, the model reads the gap as adjacency and can answer with a span
+    // bridging lines it never saw — which addSegment would then code
+    const pos = new Map(allLines.map((l, i) => [l.id, i]));
+    const runs: (typeof lines)[] = [];
+    let run: typeof lines = [];
+    for (const l of lines) {
+      if (run.length && pos.get(l.id) !== pos.get(run[run.length - 1].id)! + 1) { runs.push(run); run = []; }
+      run.push(l);
+    }
+    if (run.length) runs.push(run);
+    return runs.flatMap(chunksOf);
+  }, [lines, scoped, allLines]);
   const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, codes, red, context), 0), [chunks, codes, red, context]);
   const redactions = useMemo(() => {
     const book = codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0);

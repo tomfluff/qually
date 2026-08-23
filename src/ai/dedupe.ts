@@ -15,7 +15,10 @@ export const MERGE_EXEMPLARS = 6; // sample coded excerpts sent per code
 export interface MergeCodeInput { name: string; def: string; excerpts: string[] }
 // tier: "duplicate" = merge clearly cleans the codebook; "overlap" = substantial
 // overlap in use, offered for the researcher to consider (labelled in the UI)
-export interface MergeProposal { from: string; into: string; rationale: string; tier: "duplicate" | "overlap" }
+export interface MergeProposal { from: string; into: string; rationale: string; tier: "duplicate" | "overlap";
+  /** the model that actually proposed it — stamped at run time, so an accept
+      minutes later (after the default model changed) still attributes right */
+  model?: string }
 
 const SYSTEM = `You are reviewing a qualitative-analysis codebook. Each entry has a code name, an optional definition, and sample excerpts the researcher coded with it. Find pairs of codes that could be merged into one.
 

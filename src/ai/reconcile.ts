@@ -70,8 +70,9 @@ export function asksSuffix(asks: ReconcileAsks): string {
     + (not.length ? ` Do NOT propose ${not.join(" or ")} — that is not what the researcher asked for, and anything of that kind is discarded unread.` : "");
 }
 
-export const estimateReconcileTokens = (codes: MergeCodeInput[], r: Redaction) =>
-  estimateTokens(SYSTEM + styleSuffix(codes.map((c) => c.name))) + estimateTokens(renderMergePayload(codes, r));
+export const estimateReconcileTokens = (codes: MergeCodeInput[], r: Redaction, asks: ReconcileAsks = DEFAULT_ASKS) =>
+  estimateTokens(SYSTEM + asksSuffix(asks) + styleSuffix(codes.map((c) => c.name)))
+  + estimateTokens(renderMergePayload(codes, r));
 
 const SCHEMA = {
   type: "object",

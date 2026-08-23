@@ -478,6 +478,9 @@ const toggleCard = (ci: number) => window.dispatchEvent(new CustomEvent("qually:
 // and an index captured when the dialog opened would then name whatever
 // proposal slid into its place. The survivor rides along so the answer merges
 // in the direction the capsule was already showing.
+const countRed = (inputs: MergeCodeInput[], red: ReturnType<typeof redactor>) =>
+  inputs.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0);
+
 const tellApart = (cid: number | undefined, codes: [string, string], survivor: string,
   newName?: string, source?: DecisionSource, model?: string) =>
   window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { cid, codes, survivor, newName, source, model } }));
@@ -1581,7 +1584,7 @@ function MapInner() {
           (c.cid === cid ? { ...c, desc: glimpse, descCodes: [...c.codes] } : c)));
       s2.logAiCall({
         at: new Date().toISOString(), model: st.ai.model, task: "glimpse", pid: "(codebook)",
-        lines: inputs.length, redactions: 0,
+        lines: inputs.length, redactions: countRed(inputs, red),
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
       announce("Group description ready.");
@@ -1621,7 +1624,7 @@ function MapInner() {
           (c.cid === cid ? { ...c, against, againstWeak: weak, againstCodes: [...c.codes] } : c)));
       s2.logAiCall({
         at: new Date().toISOString(), model: st.ai.model, task: "against", pid: "(codebook)",
-        lines: inputs.length, redactions: 0,
+        lines: inputs.length, redactions: countRed(inputs, red),
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
       announce(weak ? "No real case against this merge." : "The case against this merge is on the card.");
@@ -2963,8 +2966,9 @@ function MapInner() {
             style={{ left: confirmAi.x, top: confirmAi.y, fontSize: sidebarFontSize }}>
             <div className="mapAiConfirmText" id="ai-confirm-text">
               {confirmAi.ask === "against" ? "Argue against this merge" : "Describe with AI"} — sends
-              {" "}<b>{inputs.length} codes · ≈{inTok.toLocaleString()} tokens
+              {" "}<b>{inputs.length} codes with their excerpts · ≈{inTok.toLocaleString()} tokens
               · ≈${cost.toFixed(4)}</b> to OpenAI ({model.id}).
+              Excerpts are participant data.
             </div>
             <div className="mapCardActions">
               <button className="btn primary" autoFocus

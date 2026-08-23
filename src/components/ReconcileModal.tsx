@@ -99,10 +99,13 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
     + contextCodes.reduce((n, c) => n + c.excerpts.length, 0);
   const inTok = useMemo(() => focusMode
     ? estimateFocusTokens(codes, contextCodes, red)
-    : estimateReconcileTokens(codes, red), [focusMode, codes, contextCodes, red]);
+    : estimateReconcileTokens(codes, red, asks), [focusMode, codes, contextCodes, red, asks]);
   const redactions = useMemo(() => [...codes, ...contextCodes].reduce((n, c) =>
     n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [codes, contextCodes, red]);
-  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 30)));
+  // clusters + rationales run long, and every call bills low-effort reasoning
+  // at the OUTPUT rate on top (see DescribeModal). Overshoot: this number sits
+  // next to the Send button.
+  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(codes.length * 80)) + 500);
   // the preview IS the payload — same renderer the request uses
   const preview = focusMode
     ? renderFocusPayload(codes, contextCodes, red)
