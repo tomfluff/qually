@@ -144,9 +144,16 @@ export function parseProject(text: string): Project {
     ledger: (Array.isArray(p.ledger) ? p.ledger : []).filter((d): d is Decision =>
       !!d && typeof d.at === "string" && typeof d.kind === "string"
       && Array.isArray(d.codes) && d.codes.every((c: unknown) => typeof c === "string")),
-    markers: p.markers ?? [],
+    // hand-editable file: a malformed marker or a non-string summary would
+    // throw INSIDE render, and persist would then rehydrate the same value —
+    // a permanent white screen. Filter here, once, instead.
+    markers: (Array.isArray(p.markers) ? p.markers : []).filter((m): m is Marker =>
+      !!m && typeof m.mid === "number" && typeof m.pid === "string"
+      && typeof m.event === "string" && typeof m.code === "string"
+      && typeof m.label === "string" && typeof m.t === "number"),
     markerColors: p.markerColors ?? {},
-    summaries: p.summaries ?? {},
+    summaries: Object.fromEntries(Object.entries(p.summaries ?? {})
+      .filter(([, v]) => typeof v === "string")) as Project["summaries"],
     projectNotes: typeof p.projectNotes === "string" ? p.projectNotes : "",
     projectName: typeof p.projectName === "string" ? p.projectName : "",
     codeGroups: Array.isArray(p.codeGroups)
@@ -158,11 +165,27 @@ export function parseProject(text: string): Project {
           !!g && typeof g.name === "string" && Array.isArray(g.codes) && g.codes.every((c: unknown) => typeof c === "string"))
       : [],
     codeAreasFp: typeof p.codeAreasFp === "string" ? p.codeAreasFp : "",
+    // a stretch must land on lines that exist: an unknown pid is dropped, and
+    // an endpoint outside (or between) the transcript's line ids snaps to the
+    // nearest real line inside the range — otherwise the gutter and minimap
+    // silently skip the stretch while coverage still counts it
     stretches: Array.isArray(p.stretches)
       ? p.stretches.filter((s): s is NonNullable<Project["stretches"]>[number] =>
           !!s && typeof s.pid === "string" && Number.isSafeInteger(s.start)
           && Number.isSafeInteger(s.end) && s.start <= s.end
           && typeof s.dim === "string" && typeof s.value === "string")
+        .flatMap((s) => {
+          const lines = p.transcripts?.[s.pid]?.lines;
+          if (!lines?.length) return [];
+          let start: number | undefined, end: number | undefined;
+          for (const l of lines) {
+            if (l.id >= s.start && l.id <= s.end) {
+              if (start === undefined || l.id < start) start = l.id;
+              if (end === undefined || l.id > end) end = l.id;
+            }
+          }
+          return start === undefined || end === undefined ? [] : [{ ...s, start, end }];
+        })
       : [],
     codePlan: Array.isArray(p.codePlan)
       ? p.codePlan.filter((a): a is NonNullable<Project["codePlan"]>[number] =>

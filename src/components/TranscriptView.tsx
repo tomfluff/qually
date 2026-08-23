@@ -12,7 +12,7 @@ import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
-import { useDismiss } from "../usePopover";
+import { useDismiss, useClampToViewport } from "../usePopover";
 import { stretchColor, stretchDims, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
@@ -196,23 +196,31 @@ export function TranscriptView() {
     const listEl = ov.parentElement?.querySelector(".tviewlist");
     const ovRect = ov.getBoundingClientRect();
     // anchor to a rendered gutter cell: the rows carry left padding the list
-    // edge knows nothing about, and the labels must sit IN their columns
+    // edge knows nothing about, and the labels must sit IN their columns.
+    // No cell in the viewport (all event rows, or the first frame after a
+    // restore) — the cell absorbs exactly the row padding, so the list's own
+    // left edge is the same x: fall back to it rather than blanking the gutter
     const cellEl = listEl?.querySelector(".stretchCell");
-    if (!cellEl) { ov.replaceChildren(); return; }
-    const baseX = cellEl.getBoundingClientRect().left - ovRect.left;
+    const baseX = (cellEl ?? listEl ?? ov).getBoundingClientRect().left - ovRect.left;
     const frag = document.createDocumentFragment();
     const vp = v.viewportSize;
     // the bands first: ONE continuous strip per stretch, clamped to a margin
     // around the viewport (a stretch can span thousands of rows). Rounded cap
     // only when its real start is on screen.
-    for (const st of ctx.list) {
+    // start-order per column, and each band starts no higher than the last
+    // one ended: with merged lines two adjacent stretches share the boundary
+    // row's item, and unclamped both would paint it — the earlier one keeps it
+    const lastBottom = new Map<number, number>();
+    for (const st of [...ctx.list].sort((a, b) => a.start - b.start || a.end - b.end)) {
       const gi0 = idx?.get(st.start), gi1 = idx?.get(st.end);
       if (gi0 === undefined || gi1 === undefined) continue;
-      const y0 = v.getItemOffset(gi0 + 1) - v.scrollOffset;
-      const y1 = v.getItemOffset(gi1 + 2) - v.scrollOffset;
-      if (y1 <= 0 || y0 >= vp) continue;
       const col = ctx.dims.indexOf(st.dim);
       if (col < 0) continue;
+      const y0 = Math.max(v.getItemOffset(gi0 + 1) - v.scrollOffset, lastBottom.get(col) ?? -Infinity);
+      const y1 = v.getItemOffset(gi1 + 2) - v.scrollOffset;
+      if (y1 <= y0) continue;
+      lastBottom.set(col, y1);
+      if (y1 <= 0 || y0 >= vp) continue;
       const top = Math.max(y0, -20), bottom = Math.min(y1, vp + 20);
       const band = document.createElement("span");
       band.className = "stFloatBand" + (y0 >= -20 ? " stStart" : "");
@@ -277,6 +285,16 @@ export function TranscriptView() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [syncStretchLabels]);
+  // a row growing in place (typing into an event note, the line editor) shifts
+  // every offset below it with no re-render here and no scroll event; virtua's
+  // inner spacer changes height with the total, so watch that
+  useEffect(() => {
+    const inner = stretchOvRef.current?.parentElement?.querySelector(".tviewlist > div");
+    if (!inner) return;
+    const ro = new ResizeObserver(() => requestAnimationFrame(syncStretchLabels));
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [syncStretchLabels, active]);
   // a primitive, not an object — a fresh-object selector re-renders forever (see CodeMenu)
   const headId = useStore((s) => (s.selection.pid === s.active ? s.selection.head : null));
   const fontSize = useStore((s) => s.ui.fontSize);
@@ -1077,11 +1095,15 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
 }) {
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const stretches = useStore((s) => s.stretches);
-  const dims = stretchDims(stretches);
-  const [dim, setDim] = useState(dims[0] ?? "condition");
+  // suggestions come from THIS transcript's dimensions first — the gutter the
+  // menu is standing in — never pre-filling another participant's axis
+  const dims = stretchDims(stretches.filter((s2) => s2.pid === pid));
+  const allDims = stretchDims(stretches);
+  const [dim, setDim] = useState(dims[0] ?? allDims[0] ?? "condition");
   const [value, setValue] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose);
+  useClampToViewport(ref, [x, y]);
   const values = [...new Set(stretches.filter((s2) => s2.dim === dim.trim()).map((s2) => s2.value))];
   const here = stretches.map((st, i) => ({ st, i }))
     .filter(({ st }) => st.pid === pid && st.start <= end && st.end >= start);
@@ -1094,14 +1116,14 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
   };
   return (
     <div ref={ref} className="ctxmenu stretchMenu" role="dialog" aria-label="Mark these lines"
-      style={{ left: Math.min(x, window.innerWidth - 280), top: Math.min(y, window.innerHeight - 300), fontSize: fs }}>
+      style={{ left: x, top: y, fontSize: fs }}>
       <button role="menuitem" onClick={() => { onAddEvent(); onClose(); }}>Add event after this line</button>
       <div className="ctxdiv" />
       <div className="ctxhead">Mark lines {start}–{end} as</div>
       <div className="stForm">
         <input value={dim} onChange={(e) => setDim(e.target.value)} list="stretch-dims"
           aria-label="Dimension" placeholder="condition" />
-        <datalist id="stretch-dims">{dims.map((d) => <option key={d} value={d} />)}</datalist>
+        <datalist id="stretch-dims">{(dims.length ? dims : allDims).map((d) => <option key={d} value={d} />)}</datalist>
         <input value={value} onChange={(e) => setValue(e.target.value)} list="stretch-values"
           aria-label="Value" placeholder="baseline" autoFocus
           onKeyDown={(e) => { if (e.key === "Enter") mark(); }} />

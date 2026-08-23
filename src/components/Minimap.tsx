@@ -169,9 +169,12 @@ export const Minimap = forwardRef<MinimapHandle, {
       const mh = h - HDR;
       const yOf = (i: number) => HDR + (i / N) * mh;
 
-      // stretch strips: the span's colour down its dimension's column
+      // stretch strips: the span's colour down its dimension's column.
+      // Pitch comes FROM the capped band width — a fixed pitch painted the
+      // third dimension past the cap and into the warnings gutter
       if (stColW) {
-        const sw = simple ? 4 : 3;
+        const stPitch = (stColW - 1) / stretchDimList.length;
+        const sw = Math.max(0.8, stPitch - 1);
         for (const st of stretches) {
           const col = stretchDimList.indexOf(st.dim);
           if (col < 0) continue;
@@ -181,7 +184,7 @@ export const Minimap = forwardRef<MinimapHandle, {
           const y0 = yOf(gi0), y1 = yOf(gi1 + 1);
           ctx.fillStyle = stretchColor(st.value);
           ctx.globalAlpha = 0.9;
-          ctx.fillRect(col * (sw + 1), y0, sw, Math.max(2, y1 - y0));
+          ctx.fillRect(col * stPitch, y0, sw, Math.max(2, y1 - y0));
           ctx.globalAlpha = 1;
         }
       }

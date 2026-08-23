@@ -316,8 +316,11 @@
      its own 6px lead-in is the clearance (the user's "too wide" gap) */
   margin-left:-16px; }
 /* the bands: ONE continuous strip per stretch on the overlay — over event
-   cards (a section contains its moments), immune to per-row DPI seams */
-.stretchLabels .stFloatBand { position:absolute; pointer-events:auto; }
+   cards (a section contains its moments), immune to per-row DPI seams.
+   pointer-events:none — the strip rides ABOVE the rows down the whole left
+   edge, and catching the mouse there swallowed mousedown/drag selection;
+   the sticky label pill keeps the hover tooltip */
+.stretchLabels .stFloatBand { position:absolute; pointer-events:none; }
 .stretchLabels .stFloatBand.stStart { border-top-left-radius:3px; border-top-right-radius:3px; }
 /* the sticky labels: vertical, riding their band's column, pinned to the top
    of the viewport while inside the stretch (see syncStretchLabels) */
