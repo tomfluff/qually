@@ -48,12 +48,26 @@ NAMING CONVENTION: any name you propose ("newName", or a rename's new name) must
 
 Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
 
-// the phased pass: consolidation first (merge clusters and renames only, no
-// removals), the full revision when the researcher asks for it
-export type ReconcileMode = "consolidate" | "full";
-const CONSOLIDATE_SUFFIX = `
+// What the researcher will let this run propose. Not a phase: "consolidate vs
+// full revision" named a pair of bundles and said nothing about what was in
+// them, so the one control that decides whether a model may suggest throwing
+// work away read as a difficulty setting. Three plain permissions instead,
+// ticked like the observation scan's lenses.
+export interface ReconcileAsks { merge: boolean; rename: boolean; remove: boolean }
+export const DEFAULT_ASKS: ReconcileAsks = { merge: true, rename: true, remove: false };
 
-PHASE: consolidation only. Propose ONLY clusters and "rename" actions — no "remove". Removal decisions come in a later pass.`;
+// The prompt says what is permitted rather than trimming the answer
+// afterwards: a model told it may not remove spends its attention on the
+// merges instead of proposing removals that get silently dropped.
+export function asksSuffix(asks: ReconcileAsks): string {
+  const may: string[] = [];
+  const not: string[] = [];
+  (asks.merge ? may : not).push("merge clusters");
+  (asks.rename ? may : not).push('"rename" actions');
+  (asks.remove ? may : not).push('"remove" actions');
+  return `\n\nPERMITTED THIS RUN: propose ${may.length ? may.join(" and ") : "nothing"}.`
+    + (not.length ? ` Do NOT propose ${not.join(" or ")} — that is not what the researcher asked for, and anything of that kind is discarded unread.` : "");
+}
 
 export const estimateReconcileTokens = (codes: MergeCodeInput[], r: Redaction) =>
   estimateTokens(SYSTEM) + estimateTokens(renderMergePayload(codes, r));
@@ -96,25 +110,26 @@ const SCHEMA = {
 
 export async function reconcileCodes(opts: {
   key: string; model: string; codes: MergeCodeInput[]; redaction: Redaction;
-  mode?: ReconcileMode; signal?: AbortSignal;
+  asks?: ReconcileAsks; signal?: AbortSignal;
 }): Promise<{ plan: ReconcilePlan; usage: Usage }> {
-  const consolidate = (opts.mode ?? "consolidate") === "consolidate";
+  const asks = opts.asks ?? DEFAULT_ASKS;
   const { data, usage } = await callJson<{ clusters: ClusterProposal[]; actions: CodeAction[] }>({
     key: opts.key,
     model: opts.model,
-    system: consolidate ? SYSTEM + CONSOLIDATE_SUFFIX : SYSTEM,
+    system: SYSTEM + asksSuffix(asks),
     user: renderMergePayload(opts.codes, opts.redaction),
     schemaName: "reconcile_codes",
     schema: SCHEMA,
     signal: opts.signal,
   });
-  const clusters = sanitizeClusters(opts.codes, data.clusters ?? [], opts.redaction);
+  // the permission is enforced here too: a prompt is a request, and this is
+  // the boundary
+  const clusters = asks.merge ? sanitizeClusters(opts.codes, data.clusters ?? [], opts.redaction) : [];
   const clustered = new Set(clusters.flatMap((c) => c.codes));
   const clusterNames = new Set(clusters.flatMap((c) => (c.newName ? [norm(c.newName)] : [])));
   const actions = sanitizeActions(opts.codes, data.actions ?? [], opts.redaction, clusterNames)
-    // a clustered code gets no separate action; consolidation never removes
-    .filter((a) => !clustered.has(a.code))
-    .filter((a) => !consolidate || a.action !== "remove");
+    .filter((a) => !clustered.has(a.code)) // a clustered code gets no separate action
+    .filter((a) => (a.action === "remove" ? asks.remove : asks.rename));
   return { plan: { clusters, actions }, usage };
 }
 
@@ -350,13 +365,13 @@ const FOCUS_SCHEMA = {
 export async function reconcileFocus(opts: {
   key: string; model: string;
   focus: MergeCodeInput[]; context: MergeCodeInput[];
-  redaction: Redaction; mode?: ReconcileMode; signal?: AbortSignal;
+  redaction: Redaction; asks?: ReconcileAsks; signal?: AbortSignal;
 }): Promise<{ plan: ReconcilePlan; reviewed: string[]; unreviewed: string[]; usage: Usage }> {
-  const consolidate = (opts.mode ?? "consolidate") === "consolidate";
+  const asks = opts.asks ?? DEFAULT_ASKS;
   const { data, usage } = await callJson<{ reviewedFocus: string[]; clusters: ClusterProposal[]; actions: CodeAction[] }>({
     key: opts.key,
     model: opts.model,
-    system: consolidate ? FOCUS_SYSTEM + CONSOLIDATE_SUFFIX : FOCUS_SYSTEM,
+    system: FOCUS_SYSTEM + asksSuffix(asks),
     user: renderFocusPayload(opts.focus, opts.context, opts.redaction),
     schemaName: "reconcile_focus",
     schema: FOCUS_SCHEMA,
@@ -364,7 +379,7 @@ export async function reconcileFocus(opts: {
   });
   const focusNames = new Set(opts.focus.map((c) => c.name));
   const all = [...opts.focus, ...opts.context];
-  const clusters = sanitizeFocusClusters(all, focusNames, data.clusters ?? [], opts.redaction);
+  const clusters = asks.merge ? sanitizeFocusClusters(all, focusNames, data.clusters ?? [], opts.redaction) : [];
   const clustered = new Set(clusters.flatMap((c) => c.codes));
   // a rename landing on ANY other code in the book (or a name a fresh cluster
   // claims) would apply as a silent merge — reject at the boundary
@@ -374,7 +389,7 @@ export async function reconcileFocus(opts: {
   ]);
   const actions = sanitizeActions(opts.focus, data.actions ?? [], opts.redaction, avoid)
     .filter((a) => focusNames.has(a.code) && !clustered.has(a.code))
-    .filter((a) => !consolidate || a.action !== "remove");
+    .filter((a) => (a.action === "remove" ? asks.remove : asks.rename));
   // "exactly once" is the invariant: an omitted OR duplicated echo marks the
   // code unreviewed, and only the exactly-once set may replace pending work
   const echoCounts = new Map<string, number>();

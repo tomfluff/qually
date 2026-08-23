@@ -13,7 +13,7 @@ import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
-import { reconcileCodes, reconcileFocus, estimateReconcileTokens, estimateFocusTokens, renderFocusPayload, mergeFocusResults, type ReconcilePlan, type ReconcileMode } from "../ai/reconcile";
+import { reconcileCodes, reconcileFocus, estimateReconcileTokens, estimateFocusTokens, renderFocusPayload, mergeFocusResults, DEFAULT_ASKS, type ReconcilePlan, type ReconcileAsks } from "../ai/reconcile";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
@@ -44,7 +44,9 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
   const [scope, setScope] = useState<ReconcileScope>(initialScope);
   // only codes that still exist can be asked about
   const picked = useMemo(() => selected.filter((c) => c in codebook), [selected, codebook]);
-  const [mode, setMode] = useState<ReconcileMode>("consolidate");
+  // what this run may propose — ticked like the observation scan's lenses
+  const [asks, setAsks] = useState<ReconcileAsks>(DEFAULT_ASKS);
+  const askable = asks.merge || asks.rename || asks.remove;
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -124,7 +126,7 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
       if (focusMode) {
         const r = await reconcileFocus({
           key, model: model.id, focus: codes, context: contextCodes,
-          redaction: red, mode, signal: abort.current.signal,
+          redaction: red, asks, signal: abort.current.signal,
         });
         usage = r.usage;
         fresh = { clusters: r.plan.clusters.length, actions: r.plan.actions.length };
@@ -137,7 +139,7 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
         plan = { clusters: merged.clusters, actions: merged.actions };
       } else {
         const r = await reconcileCodes({
-          key, model: model.id, codes, redaction: red, mode, signal: abort.current.signal,
+          key, model: model.id, codes, redaction: red, asks, signal: abort.current.signal,
         });
         plan = r.plan; usage = r.usage;
       }
@@ -196,9 +198,8 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
             <div className="ai-body nicescroll">
               <p className="about-lede">
                 Second-cycle consolidation: the AI reads each code's definition and excerpts and
-                proposes merge CLUSTERS — sets of codes that are the same concept, with a survivor —
-                plus clearer names and (in Full revision) rejections of codes with no analytic value.
-                On a well-coded book most codes come back untouched; clusters land as constellations
+                proposes only what you tick below. On a well-coded book most codes come back
+                untouched; whatever it does propose lands on the map as a constellation or a badge
                 for your verdict, and coding stays yours.
               </p>
               {enough && (
@@ -217,28 +218,30 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
               <div className="recDials">
-                <div className="srow" role="radiogroup" aria-label="Phase">
-                  <span>Phase</span>
-                  <div className="segmented">
-                    <button className={"seg" + (mode === "consolidate" ? " on" : "")}
-                      role="radio" aria-checked={mode === "consolidate"}
-                      onClick={() => setMode("consolidate")}
-                      title="Low-level cleanup first: merge near-duplicates, sharpen names. No removals.">
-                      Consolidate
-                    </button>
-                    <button className={"seg" + (mode === "full" ? " on" : "")}
-                      role="radio" aria-checked={mode === "full"}
-                      onClick={() => setMode("full")}
-                      title="Everything: merges, renames, and rejecting codes with no analytic value.">
-                      Full revision
-                    </button>
-                  </div>
+                {/* What this run may propose. Three permissions, ticked like
+                    the observation scan's lenses — the pair of bundles they
+                    replace ("Consolidate" / "Full revision") named difficulty
+                    settings and said nothing about the one thing that
+                    mattered: whether a model may suggest throwing work away. */}
+                <div className="ai-sec">May propose <span className="ai-sec-hint">every proposal still waits for your verdict</span></div>
+                <div className="ai-lenses">
+                  {([
+                    ["merge", "Merges", "sets of codes that are one concept, with a survivor"],
+                    ["rename", "Renames", "a name that misdescribes what its excerpts show"],
+                    ["remove", "Withdrawals", "codes it judges to carry nothing of their own — accepting rejects that code's excerpts, and the data stays in the file"],
+                  ] as const).map(([id, label, hint]) => (
+                    <label key={id} className="ai-lens">
+                      <input type="checkbox" checked={asks[id]}
+                        onChange={() => setAsks((a) => ({ ...a, [id]: !a[id] }))} />
+                      <span>{label} <em>{hint}</em></span>
+                    </label>
+                  ))}
                 </div>
                 {/* The scope follows what you had selected when you opened this.
                     Nothing selected is the plain case and gets no control at
                     all; a selection gets the choice, defaulting to itself —
                     you selected those codes for a reason. */}
-                {picked.length > 0 ? (
+                {picked.length > 0 && (
                   <div className="srow" role="radiogroup" aria-label="Scope">
                     <span>Scope</span>
                     <div className="segmented">
@@ -255,13 +258,6 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
                         Whole codebook
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <div className="srow">
-                    <span>Scope</span>
-                    <span className="settings-note" style={{ margin: 0 }}>
-                      The whole codebook. Select codes on the map first to ask about just those.
-                    </span>
                   </div>
                 )}
               </div>
@@ -295,8 +291,9 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
               <div className="imp-actions"><button className="btn" onClick={onClose}>Close</button></div>
             ) : (
               <div className="imp-actions">
-                <button className="btn primary" onClick={run} disabled={busy}>
-                  {busy ? "Reconciling…" : "Send 1 request to OpenAI"}
+                <button className="btn primary" onClick={run} disabled={busy || !askable}
+                  title={askable ? undefined : "Tick at least one thing the AI may propose"}>
+                  {busy ? "Reconciling…" : askable ? "Send 1 request to OpenAI" : "Nothing to ask for"}
                 </button>
                 <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
                   {busy ? "Stop" : "Cancel — send nothing"}

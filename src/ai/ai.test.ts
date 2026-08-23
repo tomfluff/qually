@@ -472,3 +472,56 @@ describe("arguing against a merge", () => {
     } finally { globalThis.fetch = orig; }
   });
 });
+
+describe("what a consolidation run is allowed to propose", () => {
+  it("tells the model what is permitted, in its own words", async () => {
+    const { asksSuffix, DEFAULT_ASKS } = await import("./reconcile");
+    const dflt = asksSuffix(DEFAULT_ASKS);
+    expect(dflt).toMatch(/propose merge clusters and "rename" actions/);
+    expect(dflt).toMatch(/Do NOT propose "remove" actions/);
+    // everything ticked leaves nothing to forbid
+    expect(asksSuffix({ merge: true, rename: true, remove: true })).not.toMatch(/Do NOT/);
+    // and one alone forbids the other two
+    expect(asksSuffix({ merge: false, rename: false, remove: true }))
+      .toMatch(/propose "remove" actions\. Do NOT propose merge clusters or "rename" actions/);
+  });
+
+  it("drops anything the researcher did not ask for, whatever the model returns", async () => {
+    const { reconcileCodes } = await import("./reconcile");
+    const { redactor } = await import("./redact");
+    const codes = [
+      { name: "a", def: "", excerpts: ["one"] },
+      { name: "b", def: "", excerpts: ["two"] },
+      { name: "c", def: "", excerpts: ["three"] },
+    ];
+    const reply = {
+      clusters: [{ survivor: "a", codes: ["a", "b"], newName: "", rationale: "same" }],
+      actions: [
+        { code: "c", action: "rename", newName: "c sharper", rationale: "clearer" },
+        { code: "a", action: "remove", newName: "", rationale: "nothing of its own" },
+      ],
+    };
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      output: [
+        { type: "reasoning", id: "rs_1", summary: [] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: JSON.stringify(reply) }] },
+      ],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }), { status: 200 })) as typeof fetch;
+    try {
+      const red = redactor([]);
+      // renames only: the cluster and the removal are discarded at the boundary
+      const only = await reconcileCodes({ key: "k", model: "m", codes, redaction: red,
+        asks: { merge: false, rename: true, remove: false } });
+      expect(only.plan.clusters).toHaveLength(0);
+      expect(only.plan.actions.map((a) => a.action)).toEqual(["rename"]);
+
+      // and with removals permitted, the removal survives
+      const all = await reconcileCodes({ key: "k", model: "m", codes, redaction: red,
+        asks: { merge: true, rename: true, remove: true } });
+      expect(all.plan.clusters).toHaveLength(1);
+      expect(all.plan.actions.map((a) => a.action).sort()).toEqual(["rename"]); // "a" is clustered, so no separate action
+    } finally { globalThis.fetch = orig; }
+  });
+});

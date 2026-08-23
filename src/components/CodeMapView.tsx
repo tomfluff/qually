@@ -1685,7 +1685,7 @@ function MapInner() {
     earcon.aiStart();
     announce(`Asking where ${focus.length} code${focus.length === 1 ? "" : "s"} belong…`);
     try {
-      const r = await reconcileFocus({ key, model: st.ai.model, focus, context, redaction: red, mode: "consolidate" });
+      const r = await reconcileFocus({ key, model: st.ai.model, focus, context, redaction: red });
       const s2 = useStore.getState();
       const merged = mergeFocusResults(s2.codeClusters, s2.codePlan, r.plan, new Set(r.reviewed));
       s2.applyReconcilePlan(merged.clusters, merged.actions, false, "ai", st.ai.model);
