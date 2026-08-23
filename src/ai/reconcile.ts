@@ -380,15 +380,18 @@ export function sanitizeFocusClusters(
   return out;
 }
 
-// After a run lands, which halos does it correspond to? The map addresses
-// halos by their INDEX in the live cluster list, so a run's fresh proposals
-// have to be located by their membership rather than remembered by position —
-// merging reorders the list. Used by the result note's "Show the group".
-export function haloIdsFor(live: ClusterProposal[], fresh: ClusterProposal[]): string[] {
+// After a run lands, which halos does it correspond to? The fresh proposals
+// arrive without ids (the store stamps those as they land), so they are
+// located by their MEMBERSHIP and answered with the live cluster's own id —
+// the same key the map draws them under. Used by the result note's "Show the
+// group".
+export function haloIdsFor(
+  live: (ClusterProposal & { cid?: number })[], fresh: ClusterProposal[],
+): string[] {
   const sig = (codes: string[]) => [...codes].sort().join("\u0000");
   const wanted = new Set(fresh.map((c) => sig(c.codes)));
   return live
-    .map((c, i) => (wanted.has(sig(c.codes)) ? `halo:${i}` : null))
+    .map((c, i) => (wanted.has(sig(c.codes)) ? `halo:${c.cid ?? `i${i}`}` : null))
     .filter((x): x is string => x !== null);
 }
 

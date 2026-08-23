@@ -377,3 +377,29 @@ test("a rename carries positions in EVERY view's layout, including new ones", ()
   useStore.getState().renameCode(to, code);
   (["reconcile", "themes", "areas"] as const).forEach((v) => useStore.getState().resetMapLayout(v));
 });
+
+// A capsule's remembered spot hangs off the cluster's id, so accepting or
+// dismissing one proposal must not hand the next capsule its parking space.
+test("clusters carry stable ids, never reused", () => {
+  useStore.setState({ codeClusters: [], codebook: {
+    a: { color: "#111111", def: "", status: "" }, b: { color: "#222222", def: "", status: "" },
+    c: { color: "#333333", def: "", status: "" }, d: { color: "#444444", def: "", status: "" },
+  }, segments: [] });
+  useStore.getState().setCodeClusters([
+    { survivor: "a", codes: ["a", "b"], rationale: "" },
+    { survivor: "c", codes: ["c", "d"], rationale: "" },
+  ]);
+  const [first, second] = useStore.getState().codeClusters;
+  expect(typeof first.cid).toBe("number");
+  expect(second.cid).not.toBe(first.cid);
+
+  useStore.getState().dismissCluster(0);
+  const left = useStore.getState().codeClusters;
+  expect(left).toHaveLength(1);
+  expect(left[0].cid).toBe(second.cid); // the survivor keeps its own id, not index 0's
+
+  useStore.getState().setCodeClusters([...left, { survivor: "a", codes: ["a", "b"], rationale: "" }]);
+  const ids = useStore.getState().codeClusters.map((x) => x.cid);
+  expect(new Set(ids).size).toBe(2);
+  expect(ids).not.toContain(first.cid); // a dead id is never handed out again
+});

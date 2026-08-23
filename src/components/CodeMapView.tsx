@@ -279,7 +279,9 @@ function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onS
     for (const code of inMerge) {
       const ci = st.codeClusters.findIndex((x) => x.codes.includes(code));
       if (ci < 0) continue;
-      const halo = getNodes().find((x) => x.id === `halo:${ci}`);
+      // the capsule is addressed by the cluster's id, like everywhere else
+      const cid = st.codeClusters[ci].cid;
+      const halo = getNodes().find((x) => x.id === `halo:${cid ?? `i${ci}`}`);
       const pos = halo ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y } : { x: 0, y: 0 };
       st.reconcileDrop(code, pos, null);
     }
@@ -1163,7 +1165,9 @@ function MapInner() {
         // sides — space by whichever is wider
         const stepW = Math.max(b.w, b.cap.w);
         if (x > 0 && x + stepW > rowW) { x = 0; y += rowH + HALO_GAP + b.cap.h; rowH = 0; }
-        const key = `halo:${b.c.ci}`;
+        // keyed by the cluster's own id, never its index: accepting the third
+        // proposal must not hand the fourth capsule the third's parking spot
+        const key = `halo:${b.c.cid ?? `i${b.c.ci}`}`;
         haloNodes.push({
           id: key, type: "halo" as const,
           // the halo caption is CENTERED on the capsule (unlike an island's,

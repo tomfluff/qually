@@ -91,6 +91,12 @@ export type StageLayout = Record<MapStage, Record<string, { x: number; y: number
 const emptyLayout = (): StageLayout => ({ reconcile: {}, themes: {}, areas: {} });
 
 export interface CodeCluster {
+  // A capsule's IDENTITY, and the only stable thing about it. The map keys a
+  // hand-placed capsule's position by this, because the list index is not
+  // identity: accept or dismiss one proposal and every later capsule would
+  // inherit its neighbour's remembered spot. Optional so a project written
+  // before it existed still loads — stampCids fills those in on the way in.
+  cid?: number;
   survivor: string; codes: string[]; newName?: string; rationale: string;
   // same as CodePlanAction: whose idea this merge was (see Decision)
   source?: DecisionSource; model?: string;
@@ -591,6 +597,15 @@ export function bestSurvivor(s: State, codes: string[], preferred?: string): str
 // open, persisted-session rehydration, migration) passes through here: dead
 // members drop, thin clusters drop, and the survivor policy applies with the
 // persisted choice preserved when still valid.
+// Session-scoped and monotonic: ids only have to be unique among the clusters
+// alive at one time, and they are never exported as a promise to anything else.
+// Seeded past whatever a loaded project already carries.
+let nextCid = 1;
+export function stampCids(clusters: CodeCluster[]): CodeCluster[] {
+  for (const c of clusters) if (c.cid !== undefined && c.cid >= nextCid) nextCid = c.cid + 1;
+  return clusters.map((c) => (c.cid === undefined ? { ...c, cid: nextCid++ } : c));
+}
+
 export function normalizeClusters(s: State, clusters: CodeCluster[]): CodeCluster[] {
   return clusters
     .map((c) => ({ ...c, codes: c.codes.filter((k) => !!s.codebook[k]) }))
@@ -1613,13 +1628,13 @@ export const useStore = create<State>()(
           codePlan: (p.codePlan ?? []).filter((a) => a.action !== "merge"),
           // emit-never, load-always: pairwise merges from older files become
           // 2-member clusters, so saved plans keep working
-          codeClusters: [
+          codeClusters: stampCids([
             ...(p.codeClusters ?? []),
             ...(p.codePlan ?? []).filter((a) => a.action === "merge" && a.into).map((a) => ({
               survivor: a.into!, codes: [a.code, a.into!],
               ...(a.newName ? { newName: a.newName } : {}), rationale: a.rationale,
             })),
-          ],
+          ]),
           answers: p.answers ?? [],
           // transient state belongs to the old workspace, not the loaded one
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
@@ -1631,7 +1646,7 @@ export const useStore = create<State>()(
         });
         set({
           hotbarCache: hotbarCodes(get()),
-          codeClusters: normalizeClusters(get(), get().codeClusters),
+          codeClusters: stampCids(normalizeClusters(get(), get().codeClusters)),
         });
         forgetScroll(); // every pid in the new project is a different transcript
         projectSwapped(); // ...and view session state keyed by code names goes too
@@ -1738,8 +1753,8 @@ export const useStore = create<State>()(
         set({
           // the sanitizer already enforced a valid member survivor; keep that
           // deliberate direction, fall back to evidence only when it broke
-          codeClusters: clusters.filter((c) => c.codes.length >= 2)
-            .map((c) => from({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) })),
+          codeClusters: stampCids(clusters.filter((c) => c.codes.length >= 2)
+            .map((c) => from({ ...c, survivor: bestSurvivor(get(), c.codes, c.survivor) }))),
           codePlan: actions.map(from),
           ...(resetLayout ? {
             mapPositions: { ...get().mapPositions, reconcile: {} },
@@ -1929,7 +1944,7 @@ export const useStore = create<State>()(
           why: c.rationale || "No reason recorded",
         });
       },
-      setCodeClusters: (clusters) => { get().pushUndo(); set({ codeClusters: clusters
+      setCodeClusters: (clusters) => { get().pushUndo(); set({ codeClusters: stampCids(clusters)
         // one policy for every cluster entering the store: a survivor that is
         // still a member holds (renaming a halo or storing a glimpse must not
         // silently flip a merge's direction), and anything else falls back to
@@ -2325,6 +2340,7 @@ export const useStore = create<State>()(
         s.pinnedTabs ??= [];
         s.aiGrounds ??= {};
         s.ledger ??= [];
+        s.codeClusters = stampCids(s.codeClusters ?? []);
         s.ui.assistPanel ??= "observations";
         s.ui.eventSort ??= "type";
         // normalize, not just default: a corrupt persisted value would make the

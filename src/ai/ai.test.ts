@@ -414,19 +414,23 @@ describe("find similar (semantic pass)", () => {
 describe("locating a run's proposals on the map", () => {
   it("finds the fresh clusters by membership, not by position", async () => {
     const { haloIdsFor } = await import("./reconcile");
+    // live clusters carry the ids the store stamped on them; the answer is
+    // those ids, not positions in this list
     const live = [
-      { survivor: "x", codes: ["x", "y"], rationale: "" },        // pre-existing
-      { survivor: "a", codes: ["b", "a"], rationale: "" },        // fresh, members reordered
-      { survivor: "p", codes: ["p", "q"], rationale: "" },        // pre-existing
-      { survivor: "c", codes: ["c", "d", "e"], rationale: "" },   // fresh
+      { cid: 7, survivor: "x", codes: ["x", "y"], rationale: "" },        // pre-existing
+      { cid: 8, survivor: "a", codes: ["b", "a"], rationale: "" },        // fresh, members reordered
+      { cid: 9, survivor: "p", codes: ["p", "q"], rationale: "" },        // pre-existing
+      { cid: 10, survivor: "c", codes: ["c", "d", "e"], rationale: "" },  // fresh
     ];
     const fresh = [
       { survivor: "a", codes: ["a", "b"], rationale: "" },
       { survivor: "c", codes: ["e", "d", "c"], rationale: "" },
     ];
-    expect(haloIdsFor(live, fresh)).toEqual(["halo:1", "halo:3"]);
+    expect(haloIdsFor(live, fresh)).toEqual(["halo:8", "halo:10"]);
     expect(haloIdsFor(live, [])).toEqual([]);
     // a proposal that did not survive the landing has no halo to show
     expect(haloIdsFor(live, [{ survivor: "z", codes: ["z", "w"], rationale: "" }])).toEqual([]);
+    // a cluster from a project written before ids falls back to its position
+    expect(haloIdsFor([{ survivor: "a", codes: ["a", "b"], rationale: "" }], fresh)).toEqual(["halo:i0"]);
   });
 });
