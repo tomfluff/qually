@@ -24,6 +24,7 @@ import { DefLine } from "./CodeDef";
 import { codeStats, sortCodes, SORTS, type CodeStat, type SortBy } from "../codeStats";
 import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
+import { DecisionsList, DecisionsSide } from "./DecisionsPanel";
 
 // One AI observation, resolved against the current text (a stale hash means the line
 // was edited since the scan — those don't appear) and against your segments (an
@@ -88,6 +89,9 @@ export function AssistView() {
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
   const setUi = useStore((s) => s.setUi);
   const panel = useStore((s) => s.ui.assistPanel);
+  // session-only: a reversed decision is still part of the record, so hiding
+  // them is a way of reading the list, not a property of the list
+  const [hideUndone, setHideUndone] = useState(false);
   const [obsBy, setObsBy] = useState(remembered.obsBy);
   const [obsSel, setObsSel] = useState(remembered.obsSel);
   const [onlyUncoded, setOnlyUncoded] = useState(remembered.onlyUncoded);
@@ -326,11 +330,13 @@ export function AssistView() {
         {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
             own menu — this heading just names what's showing. It stays fixed; the
             list below scrolls inside cbList so the scrollbar clears the drag divider. */}
-        <div className="bSideHead">{panel === "merge" ? "Merge codes" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
+        <div className="bSideHead">{panel === "decisions" ? "Decisions" : panel === "merge" ? "Merge codes" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
 
         <div className="cbList nicescroll" ref={listRef}
           onScroll={(e) => { remembered.leftScroll[panel] = e.currentTarget.scrollTop; }}>
-        {panel === "observations" ? (
+        {panel === "decisions" ? (
+          <DecisionsSide hideUndone={hideUndone} setHideUndone={setHideUndone} />
+        ) : panel === "observations" ? (
           <>
             {/* Same two ways in as the Suggest panel: a button that works in every
                 state, and a sparkle on each transcript row (grouped by transcript). */}
@@ -611,7 +617,9 @@ export function AssistView() {
 
       <div className="browse-right nicescroll" ref={paneRef}
         onScroll={(e) => { remembered.scroll[panel] = e.currentTarget.scrollTop; }}>
-        {panel === "observations" ? (
+        {panel === "decisions" ? (
+          <DecisionsList hideUndone={hideUndone} />
+        ) : panel === "observations" ? (
           hasNotices ? (
             <NoticeList
               notices={shownNotices}
