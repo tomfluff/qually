@@ -500,6 +500,8 @@ export interface State {
   openProject: (p: Project) => void;
   setPendingProject: (p: Project | null) => void;
   setSegmentRange: (sid: number, start: number, end: number) => void;
+  /** per drag-move like setSegmentRange: the caller owns the one pushUndo */
+  setStretchRange: (i: number, start: number, end: number) => void;
   deleteSegment: (sid: number) => void;
   // Bulk cleanup of a status across one transcript or all of them. Returns how
   // many went, so the caller can say it out loud.
@@ -1823,6 +1825,8 @@ export const useStore = create<State>()(
       // These three mutate snapshotted state without an undo entry (notes are per-
       // keystroke; colors/defs are minor), but they MUST invalidate redo: a stale
       // redo snapshot would otherwise overwrite the edit and resurrect undone coding.
+      setStretchRange: (i, start, end) =>
+        set({ stretches: get().stretches.map((x, k) => k === i ? { ...x, start, end } : x), redoStack: [] }),
       setSegmentRange: (sid, start, end) =>
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x), redoStack: [] }),
       deleteSegment: (sid) => {

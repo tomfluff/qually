@@ -322,6 +322,13 @@
    the sticky label pill keeps the hover tooltip */
 .stretchLabels .stFloatBand { position:absolute; pointer-events:none; }
 .stretchLabels .stFloatBand.stStart { border-top-left-radius:3px; border-top-right-radius:3px; }
+/* the endpoint grips: invisible grab zones at the band's real ends — the one
+   part of the overlay that DOES take the pointer, so it must stay small.
+   Hover shows a thin handle bar in the section's own ink. */
+.stretchLabels .stGrip { position:absolute; height:8px; pointer-events:auto; cursor:ns-resize; z-index:1; }
+.stretchLabels .stGrip::after { content:""; position:absolute; inset:2px 0 2px 0;
+  border-radius:2px; background:transparent; }
+.stretchLabels .stGrip:hover::after { background:color-mix(in srgb, var(--fg) 55%, transparent); }
 /* the sticky labels: vertical, riding their band's column, pinned to the top
    of the viewport while inside the stretch (see syncStretchLabels) */
 .stretchLabels { position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden; }
@@ -337,7 +344,7 @@
    scroll cap so the comboboxes' anchored lists can overlay it instead of
    being clipped into a scrollbar; the form is small, the clamp keeps it on
    screen. */
-.stretchMenu { min-width:280px; overflow:visible; }
+.stretchMenu { min-width:320px; overflow:visible; }
 .stForm { display:flex; gap:6px; padding:6px 10px 8px; }
 .stForm .stComboWrap { flex:1; min-width:0; margin-bottom:0; }
 .stForm .stComboWrap .signinput { width:100%; }

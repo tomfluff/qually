@@ -192,14 +192,49 @@ export function TranscriptView() {
     const ov = stretchOvRef.current;
     if (!ov) return;
     const onCtx = (e: Event) => {
-      const pill = (e.target as HTMLElement).closest?.(".stFloatLabel") as HTMLElement | null;
+      const pill = (e.target as HTMLElement).closest?.(".stFloatLabel, .stGrip") as HTMLElement | null;
       if (!pill?.dataset.si) return;
       e.preventDefault();
       const me = e as globalThis.MouseEvent;
       setPillMenu({ x: me.clientX, y: me.clientY, si: +pill.dataset.si });
     };
+    // dragging a grip moves that end of the stretch, line by line — the same
+    // shape as a segment-edge drag (lazy pushUndo, per-crossing ticks, one
+    // settle at release), reading the row under the pointer via data-lid
+    const onDown = (e: Event) => {
+      const grip = (e.target as HTMLElement).closest?.(".stGrip") as HTMLElement | null;
+      if (!grip?.dataset.si || (e as globalThis.MouseEvent).button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const si = +grip.dataset.si;
+      const edge = grip.dataset.edge as "start" | "end";
+      const st0 = useStore.getState().stretches[si];
+      if (!st0) return;
+      let snapped = false;
+      let last = { start: st0.start, end: st0.end };
+      const apply = (start: number, end: number) => {
+        if (start === last.start && end === last.end) return;
+        if (!snapped) { snapped = true; useStore.getState().pushUndo(); }
+        (end - start > last.end - last.start ? earcon.hoverIn : earcon.hoverOut)();
+        last = { start, end };
+        useStore.getState().setStretchRange(si, start, end);
+      };
+      const move = (ev: globalThis.MouseEvent) => {
+        const row = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest(".lineRow") as HTMLElement | null;
+        if (!row?.dataset.lid) return;
+        const gs = +row.dataset.lid, ge = +(row.dataset.end ?? row.dataset.lid);
+        if (edge === "start" && gs <= last.end) apply(gs, last.end);
+        if (edge === "end" && ge >= last.start) apply(last.start, ge);
+      };
+      const up = () => {
+        document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
+        if (snapped) earcon.settle();
+      };
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    };
     ov.addEventListener("contextmenu", onCtx);
-    return () => ov.removeEventListener("contextmenu", onCtx);
+    ov.addEventListener("mousedown", onDown);
+    return () => { ov.removeEventListener("contextmenu", onCtx); ov.removeEventListener("mousedown", onDown); };
   }, [active]);
   // The sticky labels: a stretch's name rides the top of the viewport while
   // you are inside it and hands off where the next stretch begins — computed
@@ -256,6 +291,28 @@ export function TranscriptView() {
       band.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW + ctx.pillW}px;` +
         `top:${top}px;height:${bottom - top}px;width:${ctx.bandPx}px;background:${stretchColorOf(st.value, ctx.colors)};`;
       frag.appendChild(band);
+      // drag grips at the band's REAL ends (only when that end is on screen):
+      // the stretch's start/end move like a segment's edges. The grip spans
+      // the whole column so it can actually be grabbed at thin band widths.
+      const gripX = baseX + ctx.leadIn + col * ctx.colW;
+      const gripW = ctx.pillW + ctx.bandPx;
+      const si = String(useStore.getState().stretches.indexOf(st));
+      if (rawY0 >= -20 && rawY0 < vp) {
+        const g = document.createElement("span");
+        g.className = "stGrip";
+        g.title = "Drag to move this section's start";
+        g.dataset.si = si; g.dataset.edge = "start";
+        g.style.cssText = `left:${gripX}px;top:${rawY0}px;width:${gripW}px;`;
+        frag.appendChild(g);
+      }
+      if (y1 > 0 && y1 <= vp + 20) {
+        const g = document.createElement("span");
+        g.className = "stGrip";
+        g.title = "Drag to move this section's end";
+        g.dataset.si = si; g.dataset.edge = "end";
+        g.style.cssText = `left:${gripX}px;top:${y1 - 8}px;width:${gripW}px;`;
+        frag.appendChild(g);
+      }
     }
     for (const st of ctx.list) {
       const gi0 = idx?.get(st.start), gi1 = idx?.get(st.end);
