@@ -78,3 +78,20 @@ test("failing to separate them records that as the reason", () => {
   expect(s.ledger[0].why).toContain("Could not write a sentence");
   expect(s.ledger[0].moved).toBe(1); // the excerpt that came across
 });
+
+// The blind order records a verdict before the model's reasoning is shown; the
+// agreement is only countable if it survives whichever way the capsule is then
+// settled — including through this dialog.
+test("a verdict formed before the reveal rides onto either answer", () => {
+  useStore.getState().defineBoth("difficult to see", "hard to see", "A line between them.", "differed");
+  expect(useStore.getState().ledger[0].blind).toBe("differed");
+
+  useStore.getState().mergeCode("hard to see", "difficult to see", "no sentence", "you", undefined, "agreed");
+  const rows = useStore.getState().ledger;
+  expect(rows[rows.length - 1].blind).toBe("agreed");
+});
+
+test("a decision with no blind call carries no agreement", () => {
+  useStore.getState().defineBoth("difficult to see", "hard to see", "A line between them.");
+  expect(useStore.getState().ledger[0].blind).toBeUndefined();
+});

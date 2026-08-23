@@ -412,8 +412,9 @@ const toggleCard = (ci: number) => window.dispatchEvent(new CustomEvent("qually:
 // and an index captured when the dialog opened would then name whatever
 // proposal slid into its place. The survivor rides along so the answer merges
 // in the direction the capsule was already showing.
-const tellApart = (cid: number | undefined, codes: [string, string], survivor: string, newName?: string) =>
-  window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { cid, codes, survivor, newName } }));
+const tellApart = (cid: number | undefined, codes: [string, string], survivor: string,
+  newName?: string, blind?: "agreed" | "differed") =>
+  window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { cid, codes, survivor, newName, blind } }));
 const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = useStore((s) => s.ui.sidebarFontSize);
@@ -573,7 +574,7 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
         {c.codes.length === 2 && (
           // only for a pair: the question is "what separates THESE two", and
           // three codes at once is a different, worse question
-          <button className="btn" onClick={() => tellApart(c.cid, c.codes as [string, string], c.survivor, c.newName)}
+          <button className="btn" onClick={() => tellApart(c.cid, c.codes as [string, string], c.survivor, c.newName, agreement)}
             title="Read both sides and write the line between them — or find that you cannot">
             Tell them apart…
           </button>
@@ -870,11 +871,11 @@ function MapInner() {
     return () => window.removeEventListener("qually:togglecard", onToggle);
   }, []);
   // "tell them apart" opens over the map, from a capsule's own card
-  const [apart, setApart] = useState<
-    { cid?: number; codes: [string, string]; survivor: string; newName?: string } | null>(null);
+  type ApartAsk = { cid?: number; codes: [string, string]; survivor: string;
+    newName?: string; blind?: "agreed" | "differed" };
+  const [apart, setApart] = useState<ApartAsk | null>(null);
   useEffect(() => {
-    const onApart = (e: Event) => setApart(
-      (e as CustomEvent<{ cid?: number; codes: [string, string]; survivor: string; newName?: string }>).detail);
+    const onApart = (e: Event) => setApart((e as CustomEvent<ApartAsk>).detail);
     window.addEventListener("qually:tellapart", onApart);
     return () => window.removeEventListener("qually:tellapart", onApart);
   }, []);
@@ -2478,7 +2479,7 @@ function MapInner() {
       )}
       {apart && (
         <TellApartModal codes={apart.codes} survivor={apart.survivor} newName={apart.newName}
-          onClose={() => setApart(null)}
+          blind={apart.blind} onClose={() => setApart(null)}
           onDecided={() => {
             // either answer settles the proposal, so the capsule goes. Not
             // through dismissCluster: the ledger already carries the decision

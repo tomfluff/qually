@@ -510,7 +510,8 @@ export interface State {
   renameCode: (code: string, newName: string, why?: string, source?: DecisionSource, model?: string) => void;
   normalizeCodeCase: (style: "lower" | "capital") => void;
   deleteCode: (code: string, why?: string) => void;
-  mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string) => void;
+  mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string,
+    blind?: "agreed" | "differed") => void;
   /** set a code aside (or bring it back) without touching its excerpts */
   setParked: (code: string, parked: boolean, why?: string) => void;
   /** the tail queue's verdict that changes nothing: I read this code and it stands */
@@ -518,7 +519,7 @@ export interface State {
   /** take one of those back — they changed nothing, so the history stack has nothing to give */
   retractVerdict: (at: number) => void;
   /** the distinguishing sentence: it defines BOTH codes, in one step */
-  defineBoth: (a: string, b: string, def: string) => void;
+  defineBoth: (a: string, b: string, def: string, blind?: "agreed" | "differed") => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
   // returns the codes it actually wrote — a draft that echoes what is already
   // stored changes nothing, and the receipt must not claim it did
@@ -2199,7 +2200,7 @@ export const useStore = create<State>()(
         get().logDecision({ kind: "delete", codes: [code], source: "you",
           why: why || `Deleted the code and its ${lost} coding${lost === 1 ? "" : "s"}`, moved: lost });
       },
-      mergeCode: (from, into, why, source, model) => {
+      mergeCode: (from, into, why, source, model, blind) => {
         if (norm(from) === norm(into)) return;
         get().pushUndo();
         const moved = countCode(get(), from);
@@ -2211,7 +2212,7 @@ export const useStore = create<State>()(
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "merge", codes: [into, from], source: source ?? "you",
           why: why || `Merged “${from}” into “${into}”`, ...(model ? { model } : {}),
-          moved, now: countCode(get(), into) });
+          moved, now: countCode(get(), into), ...(blind ? { blind } : {}) });
       },
       // Parking never touches segments — that is the whole point of it existing
       // beside rejectCode. hotbarCache is rebuilt because a parked code must
@@ -2244,7 +2245,7 @@ export const useStore = create<State>()(
       // lands as ONE act: two setDefs would be two undo steps with a state in
       // between where one code is defined and the other is not, which is not a
       // state the researcher ever chose.
-      defineBoth: (a, b, def) => {
+      defineBoth: (a, b, def, blind) => {
         const s = get();
         const text = def.trim();
         if (!text || !s.codebook[a] || !s.codebook[b] || a === b) return;
@@ -2252,7 +2253,8 @@ export const useStore = create<State>()(
         set({ codebook: { ...s.codebook,
           [a]: { ...s.codebook[a], def: text, defAi: false },
           [b]: { ...s.codebook[b], def: text, defAi: false } } });
-        get().logDecision({ kind: "keep", codes: [a, b], source: "you", why: text });
+        get().logDecision({ kind: "keep", codes: [a, b], source: "you", why: text,
+          ...(blind ? { blind } : {}) });
         announce(`${a} and ${b} kept apart, and that sentence is now the definition of both`);
       },
       // The counterpart to noteVerdict. These rows are invisible to undo by

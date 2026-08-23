@@ -19,7 +19,7 @@
 // what colour each one is, is a fact about the STUDY, not a display preference — a
 // colleague opening the file should see the same people marked the same way. Optional,
 // so a v1 file written before this existed still loads (openProject re-guesses).
-import type { Ai, AiCall, Answer, Decision, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
+import type { Ai, AiCall, Answer, Decision, DecisionSource, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
 import type { GroundRec } from "./ai/ground";
 import type { Marker } from "./markers";
 
@@ -71,8 +71,14 @@ export interface Project {
   codeAreas?: { name: string; codes: string[]; rationale?: string }[];
   codeAreasFp?: string;
   codePlan?: { code: string; action: "rename" | "merge" | "remove"; newName?: string; into?: string; rationale: string }[];
-  codeClusters?: { cid?: number; survivor: string; codes: string[]; newName?: string; rationale: string;
-    desc?: string; against?: string }[];
+  // the full cluster shape, declared: it round-trips verbatim, and a type that
+  // lists half the fields tells the next reader the other half is not saved
+  codeClusters?: {
+    cid?: number; survivor: string; codes: string[]; newName?: string; rationale: string;
+    source?: DecisionSource; model?: string;
+    desc?: string; descCodes?: string[];
+    against?: string; againstWeak?: boolean; againstCodes?: string[];
+  }[];
   // answers to questions asked of the coded material, each with the scope and
   // model it came from — optional: absent in files written before Ask existed
   answers?: Answer[];
