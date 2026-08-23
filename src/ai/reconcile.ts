@@ -300,6 +300,43 @@ export async function argueAgainst(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// NAME AN AREA: the researcher grouped codes by hand and asks the model to
+// label the shelf. The grouping is theirs — the model names what it is shown
+// and nothing else, which is the inverse of the whole-map areas run (there the
+// model groups, here it only captions).
+const NAME_AREA_SYSTEM = `A qualitative researcher grouped the codes below into one AREA of their codebook — a shelf for finding related codes, not an analytic claim. Give the shelf a label: SHORT (2–4 words), matching the capitalization style of the code names shown, saying what these codes are about. Add one plain sentence saying what belongs on this shelf. Label only what is here — do not stretch the name to cover codes you have not seen. Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
+const NAME_AREA_SCHEMA = {
+  type: "object",
+  properties: {
+    name: { type: "string", description: "the area's label, 2-4 words" },
+    about: { type: "string", description: "one sentence: what belongs in this area" },
+  },
+  required: ["name", "about"], additionalProperties: false,
+} as const;
+
+export const estimateNameAreaTokens = (codes: MergeCodeInput[], r: Redaction) =>
+  estimateTokens(NAME_AREA_SYSTEM) + estimateTokens(renderMergePayload(codes, r));
+
+export async function nameArea(opts: {
+  key: string; model: string; codes: MergeCodeInput[]; redaction: Redaction; signal?: AbortSignal;
+}): Promise<{ name: string; about: string; usage: Usage }> {
+  const { data, usage } = await callJson<{ name: string; about: string }>({
+    key: opts.key,
+    model: opts.model,
+    system: NAME_AREA_SYSTEM,
+    user: renderMergePayload(opts.codes, opts.redaction),
+    schemaName: "name_area",
+    schema: NAME_AREA_SCHEMA,
+    signal: opts.signal,
+  });
+  return {
+    name: restore(opts.redaction, (data.name ?? "").trim()),
+    about: restore(opts.redaction, (data.about ?? "").trim()),
+    usage,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // FOCUS reconcile: the researcher selects a handful of codes and asks where
 // they belong — against the WHOLE codebook. Asymmetric evidence keeps the
 // payload honest per token: focus codes carry up to 8 excerpts, every other

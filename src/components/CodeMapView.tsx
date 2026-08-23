@@ -48,7 +48,7 @@ import { sweepWording, refusedPairs, familyReason } from "../sweep";
 import { openTailQueue } from "./TailQueue";
 import { TellApartModal } from "./TellApartModal";
 import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
-import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, argueAgainst, estimateAgainstTokens, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
+import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, argueAgainst, estimateAgainstTokens, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, nameArea, estimateNameAreaTokens, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -352,21 +352,38 @@ const IslandNode = memo(function IslandNode({ id, data }: NodeProps<IslandNodeT>
   // chips is a bad place to lose your spot); a BLUR must not — the click that
   // caused it is going somewhere else on purpose
   const refocus = () => requestAnimationFrame(() => spanRef.current?.focus());
+  // an areas-view pile is the researcher's own shelf, not a derived bucket —
+  // it renames and dissolves like a theme island, writing to codeAreas
+  const isArea = !!data.pile && data.ai !== undefined && data.ai >= 0;
+  const bare = data.gkey ?? data.name; // the name without the "· count" suffix
   const rename = () => {
     setEditing(false);
     const st = useStore.getState();
     const name = draft.trim();
+    if (isArea) {
+      if (!name || st.codeAreas[data.ai!]?.name === name) return;
+      if (st.codeAreas.some((g, i) => i !== data.ai && g.name === name)) {
+        announce("An area with that name already exists.", { assertive: true }); return;
+      }
+      st.setCodeAreas(st.codeAreas.map((g, i) => (i === data.ai ? { ...g, name } : g)), st.codeAreasFp);
+      return;
+    }
     if (!name || st.codeGroups[data.gi]?.name === name) return; // no change, no history entry
     st.setCodeGroups(st.codeGroups.map((g, i) => (i === data.gi ? { ...g, name } : g)));
   };
   const dissolve = () => {
     const st = useStore.getState();
+    if (isArea) {
+      // the shelf goes; its codes fall back to Unassigned
+      st.setCodeAreas(st.codeAreas.filter((_, i) => i !== data.ai), st.codeAreasFp);
+      return;
+    }
     st.setCodeGroups(st.codeGroups.filter((_, i) => i !== data.gi));
   };
   return (
     <div className={"mapIsland" + (data.gi === -1 ? " loose" : "")}>
       <div className="mapIslandLabel" style={{ fontSize }}>
-        {data.pile || data.gi === -1 ? (
+        {(data.pile && !isArea) || data.gi === -1 ? (
           // a derived pile has no name to edit, but it still moves — so the
           // caption is focusable for the arrow keys and says so
           <span className={"mapIslandName" + (data.gi === -1 ? " loose" : "")}
@@ -389,11 +406,12 @@ const IslandNode = memo(function IslandNode({ id, data }: NodeProps<IslandNodeT>
               tabIndex={0} role="button" ref={spanRef}
               aria-label={`${data.name}. Enter renames; arrow keys move this group`}
               onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === "F2" || e.key === " ") { e.preventDefault(); setDraft(data.name); setEditing(true); return; }
+                if (e.key === "Enter" || e.key === "F2" || e.key === " ") { e.preventDefault(); setDraft(bare); setEditing(true); return; }
                 islandArrowKeys(id)(e);
               }}
-              onDoubleClick={() => { setDraft(data.name); setEditing(true); }}>{data.name}</span>
-            <button className="mapIslandX nodrag" title="Dissolve this group (codes stay)"
+              onDoubleClick={() => { setDraft(bare); setEditing(true); }}>{data.name}</span>
+            <button className="mapIslandX nodrag"
+              title={isArea ? "Dissolve this area (codes go back to Unassigned)" : "Dissolve this group (codes stay)"}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={dissolve}>×</button>
           </>
@@ -801,6 +819,9 @@ function MapInner() {
   // "where do these belong": the same one-line consent the group description
   // uses. The full modal was the wrong weight for a question you ask often.
   const [confirmFocus, setConfirmFocus] = useState<{ codes: string[]; x: number; y: number } | null>(null);
+  const [confirmArea, setConfirmArea] = useState<{ codes: string[]; x: number; y: number } | null>(null);
+  const areaConfirmRef = useKeepOnScreen<HTMLDivElement>([confirmArea]);
+  const [areaBusy, setAreaBusy] = useState(false);
   const focusConfirmRef = useKeepOnScreen<HTMLDivElement>([confirmFocus]);
   const [focusBusy, setFocusBusy] = useState(false);
   // what the run actually said, shown on the map until dismissed
@@ -1592,6 +1613,57 @@ function MapInner() {
       showNodes(haloIdsFor(useStore.getState().codeClusters, fresh), "reconcile", null));
   }, []);
 
+  // A hand-made area: same shape as the AI's, same rule as the similar panel's
+  // "file as an area" — other areas give the codes up, the fingerprint stays
+  // (this makes the AI's areas no more or less current than they were).
+  const makeArea = useCallback((sel: string[], name?: string, about?: string) => {
+    const st = useStore.getState();
+    const others = st.codeAreas
+      .map((g) => ({ ...g, codes: g.codes.filter((c) => !sel.includes(c)) }))
+      .filter((g) => g.codes.length > 0);
+    let label = (name ?? "").trim() || "New area";
+    let n = 2;
+    while (others.some((g) => g.name === label)) label = `${(name ?? "").trim() || "New area"} ${n++}`;
+    // the FIRST area on a blank wall stamps the current codebook: nothing
+    // existed to be stale, and "" would read as stale forever. Later hand
+    // edits keep the stored fp — they make the AI's areas no more or less
+    // current than they were.
+    const fp = st.codeAreas.length === 0
+      ? Object.keys(st.codebook).sort().join("\n") : st.codeAreasFp;
+    st.setCodeAreas([...others, { name: label, codes: sel, ...(about ? { rationale: about } : {}) }], fp);
+    earcon.join();
+    announce(`Filed ${sel.length} code${sel.length === 1 ? "" : "s"} in “${label}”${name ? "" : " — double-click the caption to name it"}`);
+    showNodes([`area:${label}`], "areas", null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showNodes is declared below (stable enough; same idiom as runSweep)
+  }, []);
+  const runNameArea = useCallback(async (sel: string[]) => {
+    const st = useStore.getState();
+    const key = getKey();
+    if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
+    const codes = focusInputs(sel).focus;
+    if (!codes.length) return;
+    const red = redactor(st.ai.redactTerms);
+    setAreaBusy(true);
+    earcon.aiStart();
+    announce("Asking for a name for this area…");
+    try {
+      const r = await nameArea({ key, model: st.ai.model, codes, redaction: red });
+      st.logAiCall({
+        at: new Date().toISOString(), model: st.ai.model, task: "areas",
+        pid: `(name area: ${codes.length} codes)`, lines: codes.length,
+        redactions: codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
+        inTok: r.usage.inTok, outTok: r.usage.outTok, costUsd: +r.usage.costUsd.toFixed(5),
+      });
+      earcon.aiDone();
+      makeArea(sel, r.name, r.about);
+    } catch (e) {
+      earcon.error();
+      announce(`Could not name the area: ${e instanceof Error ? e.message : String(e)}`, { assertive: true });
+    } finally {
+      setAreaBusy(false);
+    }
+  }, [focusInputs, makeArea]);
+
   const runFocus = useCallback(async (codes: string[]) => {
     const st = useStore.getState();
     const key = getKey();
@@ -1713,8 +1785,6 @@ function MapInner() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const switchView = useCallback((next: MapView) => {
     if (next === view) { setViewMenu(null); return; }
-    // the areas view cannot exist before the AI has worked them out
-    if (next === "areas" && topicGroups.length === 0) { setViewMenu(null); setTopicAiOpen(true); return; }
     setViewOverride(next);
     setViewMenu(null);
     let frame = 0, tries = 0;
@@ -2187,8 +2257,8 @@ function MapInner() {
 
   // menu dismissal: any outside press or Escape
   useEffect(() => {
-    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !layoutMenu && !viewMenu && !mapSetMenu) return;
-    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setLayoutMenu(null); setViewMenu(null); setMapSetMenu(null); };
+    if (!menu && !confirmAi && !confirmRelayout && !helpOpen && !similar && !confirmFocus && !confirmArea && !layoutMenu && !viewMenu && !mapSetMenu) return;
+    const close = () => { setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setHelpOpen(false); setConfirmFocus(null); setConfirmArea(null); setLayoutMenu(null); setViewMenu(null); setMapSetMenu(null); };
     const down = (e: MouseEvent) => {
       const t = e.target as Element;
       // the help button toggles itself; let its own handler run
@@ -2201,7 +2271,7 @@ function MapInner() {
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
-  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, layoutMenu, viewMenu, mapSetMenu]);
+  }, [menu, confirmAi, confirmRelayout, helpOpen, similar, confirmFocus, confirmArea, layoutMenu, viewMenu, mapSetMenu]);
 
   return (
     <div id="codemap" className={"view-" + view} style={{ fontSize: MAP_FS }}>
@@ -2256,12 +2326,15 @@ function MapInner() {
         {view === "areas" && (
           // stale is a colour on the icon now, not a longer label — the
           // tooltip says why it is orange
-          <button className={"btn iconbtn" + (topicsStale ? " stale" : "")}
+          <button className={"btn iconbtn" + (topicsStale && topicGroups.length > 0 ? " stale" : "")}
             onClick={() => setTopicAiOpen(true)}
-            aria-label={topicsStale ? "Areas are stale — re-run" : "Re-run areas"}
-            title={topicsStale
-              ? "The codebook changed since these areas were worked out — re-run to refresh them"
-              : "Ask the AI to work the areas out again"}>
+            aria-label={topicGroups.length === 0 ? "Sort into areas with AI"
+              : topicsStale ? "Areas are stale — re-run" : "Re-run areas"}
+            title={topicGroups.length === 0
+              ? "Ask the AI to sort the whole map into broad areas — or make areas yourself: select codes and right-click"
+              : topicsStale
+                ? "The codebook changed since these areas were worked out — re-run to refresh them"
+                : "Ask the AI to work the areas out again"}>
             <Icon name="sparkle" size={16} />
           </button>
         )}
@@ -2453,7 +2526,7 @@ function MapInner() {
             style={{ left: confirmFocus.x, top: confirmFocus.y, fontSize: sidebarFontSize }}>
             <div className="mapAiConfirmText" id="focus-confirm-text">
               Where {n === 1 ? "does this code" : "do these codes"} belong? Sends {n} code{n === 1 ? "" : "s"} with
-              their excerpts <b>plus your other {context.length} codes</b> as possible homes —
+              {n === 1 ? " its" : " their"} excerpts <b>plus your other {context.length} codes</b> as possible homes —
               <b> ≈{inTok.toLocaleString()} tokens · ≈${cost.toFixed(4)}</b> to OpenAI ({model.id}).
               Excerpts are participant data.
             </div>
@@ -2463,6 +2536,34 @@ function MapInner() {
                 {focusBusy ? "Asking…" : "Send"}
               </button>
               <button className="btn" onClick={() => setConfirmFocus(null)}>Cancel</button>
+            </div>
+          </div>
+        );
+      })()}
+      {confirmArea && (() => {
+        const st = useStore.getState();
+        const codes = focusInputs(confirmArea.codes).focus;
+        const red = redactor(st.ai.redactTerms);
+        const inTok = estimateNameAreaTokens(codes, red);
+        const model = modelOf(st.ai.model);
+        const cost = costOf(model, inTok, estimateTokens(" ".repeat(80)));
+        const n = codes.length;
+        return (
+          <div ref={areaConfirmRef} className="ctxmenu mapMenu mapAiConfirm" role="alertdialog"
+            aria-label="Confirm AI request" aria-describedby="area-confirm-text"
+            style={{ left: confirmArea.x, top: confirmArea.y, fontSize: sidebarFontSize }}>
+            <div className="mapAiConfirmText" id="area-confirm-text">
+              Name this area? The grouping stays yours — the AI writes only the label.
+              Sends {n} code{n === 1 ? "" : "s"} with {n === 1 ? "its" : "their"} excerpts —
+              <b> ≈{inTok.toLocaleString()} tokens · ≈${cost.toFixed(4)}</b> to OpenAI ({model.id}).
+              Excerpts are participant data.
+            </div>
+            <div className="mapCardActions">
+              <button className="btn primary" autoFocus disabled={areaBusy}
+                onClick={() => { const c = confirmArea.codes; setConfirmArea(null); void runNameArea(c); }}>
+                {areaBusy ? "Asking…" : "Send"}
+              </button>
+              <button className="btn" onClick={() => setConfirmArea(null)}>Cancel</button>
             </div>
           </div>
         );
@@ -2499,7 +2600,7 @@ function MapInner() {
               const status = v === "reconcile" && clusters.length + plan.length > 0
                 ? `${clusters.length + plan.length} pending`
                 : v === "areas"
-                  ? (topicGroups.length === 0 ? "not worked out yet"
+                  ? (topicGroups.length === 0 ? "none yet — sort by hand or with AI"
                     : `${topicGroups.length} areas${topicsStale ? " · stale" : ""}`)
                   : v === "themes" && codeGroups.length ? `${codeGroups.length} islands` : "";
               return (
@@ -2732,6 +2833,18 @@ function MapInner() {
             </button>
           )}
           {/* each view offers only the structural edit it can show */}
+          {view === "areas" && (
+            <button role="menuitem" onClick={() => { const sel = menu.sel; setMenu(null); makeArea(sel); }}>
+              {menu.sel.length === 1 ? "New area with this code" : `New area from these ${menu.sel.length} codes`}
+            </button>
+          )}
+          {view === "areas" && (
+            <button role="menuitem"
+              onClick={() => { setConfirmArea({ codes: menu.sel, x: menu.x, y: menu.y }); setMenu(null); }}
+              title="The grouping is yours — the AI only writes the label">
+              <Icon name="sparkle" size={16} /> New area, named by AI…
+            </button>
+          )}
           {menu.sel.length > 1 && view === "reconcile" && (
             <button role="menuitem" onClick={() => clusterSelection(menu.sel)}>
               Propose merging these {menu.sel.length} codes
