@@ -46,6 +46,7 @@ import { norm } from "../contract/segments";
 import { findSimilar } from "../similar";
 import { sweepWording, refusedPairs, familyReason } from "../sweep";
 import { openTailQueue } from "./TailQueue";
+import { TellApartModal } from "./TellApartModal";
 import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
 import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
@@ -400,6 +401,9 @@ const IslandNode = memo(function IslandNode({ id, data }: NodeProps<IslandNodeT>
 // membership; the caption above names the merged code and is the halo's drag
 // handle and right-click target.
 const toggleCard = (ci: number) => window.dispatchEvent(new CustomEvent("qually:togglecard", { detail: ci }));
+// the card is a React Flow node; the dialog belongs to the view around it
+const tellApart = (ci: number, codes: [string, string]) =>
+  window.dispatchEvent(new CustomEvent("qually:tellapart", { detail: { ci, codes } }));
 const HaloNode = memo(function HaloNode({ data }: NodeProps<HaloNodeT>) {
   const zoom = useFlowStore(zoomSel);
   const fs = useStore((s) => s.ui.sidebarFontSize);
@@ -496,6 +500,14 @@ const CardNode = memo(function CardNode({ data }: NodeProps<CardNodeT>) {
           title={canAccept ? `Merge ${c.codes.length} codes into ${c.newName ?? c.survivor} — one undo step` : "A merge needs at least 2 members"}>
           Accept merge
         </button>
+        {c.codes.length === 2 && (
+          // only for a pair: the question is "what separates THESE two", and
+          // three codes at once is a different, worse question
+          <button className="btn" onClick={() => tellApart(data.ci, c.codes as [string, string])}
+            title="Read both sides and write the line between them — or find that you cannot">
+            Tell them apart…
+          </button>
+        )}
         <button className="btn" onClick={skip} title="Discard this proposal (codes stay as they are)">Skip</button>
       </div>
     </div>
@@ -782,6 +794,13 @@ function MapInner() {
     });
     window.addEventListener("qually:togglecard", onToggle);
     return () => window.removeEventListener("qually:togglecard", onToggle);
+  }, []);
+  // "tell them apart" opens over the map, from a capsule's own card
+  const [apart, setApart] = useState<{ ci: number; codes: [string, string] } | null>(null);
+  useEffect(() => {
+    const onApart = (e: Event) => setApart((e as CustomEvent<{ ci: number; codes: [string, string] }>).detail);
+    window.addEventListener("qually:tellapart", onApart);
+    return () => window.removeEventListener("qually:tellapart", onApart);
   }, []);
   // the similar node talks back through events, so it stays a cheap memo'd
   // component and every decision lives here
@@ -2333,6 +2352,17 @@ function MapInner() {
           onClose={() => setThemeAiOpen(false)}
           onReconcileInstead={() => { setThemeAiOpen(false); switchView("reconcile"); }}
           onGroups={(groups) => { useStore.getState().applyThemeGroups(groups); }} />
+      )}
+      {apart && (
+        <TellApartModal codes={apart.codes} onClose={() => setApart(null)}
+          onDecided={() => {
+            // either answer settles the proposal, so the capsule goes. Not
+            // through dismissCluster: the ledger already carries the decision
+            // that was actually made, and a "turned down" row beside it would
+            // describe a refusal nobody performed.
+            const st = useStore.getState();
+            st.setCodeClusters(st.codeClusters.filter((_, i) => i !== apart.ci));
+          }} />
       )}
       {aiOpen && (
         <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope}

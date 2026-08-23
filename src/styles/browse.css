@@ -509,3 +509,23 @@ button.dvCode:not(.first) { color:var(--muted); }
 .tqNav { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
 .tqNav .tqPos { color:var(--muted); font-size:.88em; font-variant-numeric:tabular-nums; }
 .tqNav .nBtn:last-child { margin-left:auto; }
+
+/* ── Tell them apart ───────────────────────────────────────────────────────
+   Two columns of evidence and the line between them. The columns scroll
+   independently: one code with nine excerpts must not push the question you
+   are here to answer off the bottom of the dialog. */
+/* .about.imp sets the dialog's own width; matching its specificity is what
+   lets the two columns of evidence sit side by side */
+.about.taModal { max-width:min(64em, 94vw); width:min(64em, 94vw); }
+.taCols { display:grid; gap:14px; grid-template-columns:repeat(auto-fit, minmax(16em, 1fr)); margin:6px 0 14px; }
+.taCol { min-width:0; border:1px solid var(--line); border-radius:11px; padding:10px 12px; background:var(--panel); }
+.taCol h3 { margin:0; font-size:1.08em; }
+.taEx { max-height:15em; overflow-y:auto; margin-top:8px; }
+.taEx blockquote { margin:0 0 10px; padding:2px 0 2px 12px; border-left:3px solid var(--accent);
+  line-height:1.55; }
+.taField { display:flex; flex-direction:column; gap:6px; }
+.taField > span { color:var(--fg-dim); }
+.taField textarea { font:inherit; font-size:1.02em; color:var(--fg); background:var(--bg);
+  border:1px solid var(--muted); border-radius:9px; padding:.5em .6em; width:100%; resize:vertical; }
+.taActs { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+.taDone { color:var(--mine, var(--accent)); line-height:1.55; max-width:66ch; }

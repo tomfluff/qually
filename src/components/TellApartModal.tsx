@@ -1,0 +1,138 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Yotam Sechayk
+// "Can you say what separates them?" — the oldest test in the methods
+// literature, made into a surface: if you cannot write the sentence that tells
+// two codes apart, they are one code.
+//
+// It runs in this order on purpose. Shown a model's answer first, you evaluate
+// it; made to write your own first, you analyse. That ordering is the entire
+// design, and it costs one textarea.
+//
+// It is also where definitions come from. Most codes never get one — the
+// sentence you write to keep two codes apart IS the definition of both, so the
+// work of deciding leaves the artefact the codebook was missing rather than
+// evaporating into a merge you cannot explain later.
+import { useEffect, useMemo, useState } from "react";
+import { useStore } from "../state/store";
+import { segExcerpt } from "../contract/excerpt";
+import { norm } from "../contract/segments";
+import { announce } from "../announce";
+import { earcon } from "../earcons";
+import { useDialogFocus } from "../useDialogFocus";
+import { Icon } from "./Icon";
+
+export function TellApartModal({ codes, onClose, onDecided }: {
+  /** exactly two codes: the pair under the question */
+  codes: [string, string];
+  onClose: () => void;
+  /** either answer settles the question the caller was holding open */
+  onDecided?: (outcome: "kept" | "merged") => void;
+}) {
+  const codebook = useStore((s) => s.codebook);
+  const segments = useStore((s) => s.segments);
+  const transcripts = useStore((s) => s.transcripts);
+  const fontSize = useStore((s) => s.ui.sidebarFontSize);
+  const [a, b] = codes;
+  const [sentence, setSentence] = useState("");
+  const [done, setDone] = useState<string | null>(null);
+  const dialogRef = useDialogFocus();
+  // every dialog in the app carries its own Escape: App's global handler bails
+  // out on .about-backdrop (see AiModal)
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
+  }, [onClose]);
+
+  const readOf = useMemo(() => (code: string) => segments
+    .filter((s) => norm(s.code) === norm(code) && s.status === "accepted" && transcripts[s.pid])
+    .map((s) => ({ pid: s.pid, ...segExcerpt(s, transcripts[s.pid].lines) }))
+    .filter((x) => x.excerpt), [segments, transcripts]);
+  const left = useMemo(() => readOf(a), [readOf, a]);
+  const right = useMemo(() => readOf(b), [readOf, b]);
+
+  // Enter is deliberately not a submit here: the answer is a sentence, and a
+  // sentence that ends when a finger slips is not an answer.
+  const written = sentence.trim();
+  const keepBoth = () => {
+    const st = useStore.getState();
+    // the same sentence defines BOTH codes: it is the line between them, and
+    // it only means anything read from either side
+    st.setDef(a, written);
+    st.setDef(b, written);
+    st.logDecision({ kind: "keep", codes: [a, b], source: "you", why: written });
+    earcon.accept();
+    announce(`Kept ${a} and ${b} apart, and wrote that sentence as both definitions`);
+    onDecided?.("kept");
+    setDone(`Saved as the definition of both codes. The next pass — yours or a model's — now reasons from your sentence instead of guessing from the names.`);
+  };
+  const merge = () => {
+    const st = useStore.getState();
+    // survivor: the one carrying more evidence, which is the same rule the map
+    // uses when it has no instruction
+    const [from, into] = left.length > right.length ? [b, a] : [a, b];
+    st.mergeCode(from, into, "Could not write a sentence that separates them", "you");
+    earcon.join();
+    onDecided?.("merged");
+    setDone(`Merged into “${into}”, with “could not write a sentence that separates them” as the reason — which is a stronger justification than any rationale a model could supply, because it is a fact about your analysis.`);
+  };
+
+  const column = (code: string, rows: { pid: string; excerpt: string; speaker: string }[]) => (
+    <div className="taCol">
+      <h3>{code}</h3>
+      <p className="dvNote">
+        {rows.length} excerpt{rows.length === 1 ? "" : "s"}
+        {(codebook[code]?.def ?? "").trim() ? " · has a definition" : " · no definition"}
+      </p>
+      <div className="taEx nicescroll">
+        {rows.length === 0 && <p className="dvNote">Nothing accepted under this code yet.</p>}
+        {rows.map((r, i) => (
+          <blockquote key={i}><span className="tqWho">{r.pid} · {r.speaker}</span>{r.excerpt}</blockquote>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="about-backdrop" onMouseDown={onClose}>
+      <div className="about imp taModal" role="dialog" aria-modal="true" aria-labelledby="ta-title"
+        ref={dialogRef} style={{ fontSize }} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="about-head">
+          <h2 id="ta-title">What separates these two?</h2>
+          <button className="btn iconbtn" onClick={onClose} title="Close (Esc)"><Icon name="x" size={16} /></button>
+        </div>
+        <p className="about-lede">
+          Read both sides, then write the line between them. If you cannot, that is
+          an answer too — and a better reason to merge than any rationale.
+        </p>
+        <div className="taCols">{column(a, left)}{column(b, right)}</div>
+        {done ? (
+          <>
+            <p className="taDone">{done}</p>
+            <div className="taActs"><button className="btn primary" onClick={onClose}>Close</button></div>
+          </>
+        ) : (
+          <>
+            <label className="taField">
+              <span>In one sentence: when does an excerpt belong to “{a}” rather than “{b}”?</span>
+              <textarea rows={3} value={sentence} onChange={(e) => setSentence(e.target.value)}
+                placeholder={`An excerpt belongs to “${a}” when…`} />
+            </label>
+            <div className="taActs">
+              <button className="btn primary" disabled={written.length < 8} onClick={keepBoth}
+                title={written.length < 8
+                  ? "Write the sentence first — it becomes both definitions"
+                  : "Keep both codes, and save this as the definition of each"}>
+                That is the difference — keep both
+              </button>
+              <button className="btn" onClick={merge}
+                title="Fold them together, recording that no sentence separated them">
+                I cannot separate them — merge
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
