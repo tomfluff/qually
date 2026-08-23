@@ -1140,7 +1140,7 @@ function MapInner() {
         /** compare view: the code's evidence split, for the chip tooltip */
         cover?: (c: string) => string }[],
       opts: {
-        islandId: (p: { name: string; key?: string }) => string; movable: boolean; freeChips?: string[];
+        islandId: (p: { name: string; key?: string; ai?: number }) => string; movable: boolean; freeChips?: string[];
         /** positions for piles moved by hand when the view has no store slot
             (the grouping views park them in the session) */
         stored?: Record<string, { x: number; y: number }>;
@@ -1275,10 +1275,14 @@ function MapInner() {
       // values ("baseline · phase 1"), skipping dims it has no marked evidence
       // in — so a code with only a condition still files under its condition
       const covs = activeDims.map((d) => ({ d, cov: coverageOf(segments, stretches, d) }));
+      // argmax over LABELLED values only: a code with 10 unmarked segments and
+      // 3 baseline ones has condition evidence, and must not file identically
+      // to a code with none — unmarked bulk never outvotes a label (the
+      // tooltip still shows the full split, unmarked included)
       const argmax = (m: Map<string, number> | undefined) => {
         if (!m) return "";
         let best = "", n = -1;
-        for (const [v, k] of m) if (k > n || (k === n && v < best)) { best = v; n = k; }
+        for (const [v, k] of m) { if (!v) continue; if (k > n || (k === n && v < best)) { best = v; n = k; } }
         return best;
       };
       const partsOf = (c: string) => covs.map(({ cov }) => argmax(cov.get(c))).filter(Boolean);
@@ -1332,7 +1336,11 @@ function MapInner() {
       const { free, packed } = splitLoose(codes.filter((c) => !grouped.has(c)));
       if (packed.length) piles.push({ name: "Unassigned", list: packed, ai: -1 });
       return { nodes: withSimilar(pileNodes(piles, {
-        islandId: (p) => `area:${p.name}`, movable: true, freeChips: free,
+        // the derived catch-all gets a RESERVED id: a stored area the
+        // researcher happens to name "Unassigned" must not collide with it —
+        // two nodes sharing an id file drops against the wrong `ai`
+        islandId: (p) => (p.ai === -1 ? "area:__unassigned" : `area:${p.name}`),
+        movable: true, freeChips: free,
       })) };
     }
 
@@ -1494,7 +1502,12 @@ function MapInner() {
   // codebook changes under the map (a merge, a rename, new codes), rebuild —
   // dragged chips keep their place via remembered.positions.
   const [initialNodes] = useState(build);
-  useEffect(() => { rfSetNodes(build()); }, [build, rfSetNodes]);
+  // which view's nodes React Flow actually holds RIGHT NOW. getNodes() after a
+  // view switch returns the PREVIOUS layout until this effect lands, and a
+  // stale-but-non-empty node set sailed straight through every settle loop —
+  // wrong pile counts announced, cameras framing a layout that no longer exists
+  const committedView = useRef(view);
+  useEffect(() => { rfSetNodes(build()); committedView.current = view; }, [build, rfSetNodes, view]);
 
   // plan strip verdicts (renames and rejects only — merges are halos). One
   // earcon per GESTURE: "Accept all" silences the per-item marks and plays a
@@ -1735,10 +1748,14 @@ function MapInner() {
       const areas = st.codeAreas
         .map((g) => ({ ...g, codes: g.codes.filter((x) => !members.includes(x)) }))
         .filter((g) => g.codes.length > 0);
-      st.setCodeAreas([...areas, { name: cur.source, codes: members }], st.codeAreasFp);
+      // unique like makeArea: two areas sharing a name would share a node id
+      let label = cur.source;
+      let n = 2;
+      while (areas.some((g) => g.name === label)) label = `${cur.source} ${n++}`;
+      st.setCodeAreas([...areas, { name: label, codes: members }], st.codeAreasFp);
       earcon.join();
-      announce(`Filed ${members.length} codes in a new area “${cur.source}” — showing it on the map`);
-      showNodes([`area:${cur.source}`], "areas", null);
+      announce(`Filed ${members.length} codes in a new area “${label}” — showing it on the map`);
+      showNodes([`area:${label}`], "areas", null);
     } else {
       const groups = st.codeGroups
         .map((g) => ({ ...g, codes: g.codes.filter((x) => !members.includes(x)) }))
@@ -1959,7 +1976,9 @@ function MapInner() {
     setViewOverride(wanted);
     let tries = 0, frame = 0;
     const tick = () => {
-      const live = getNodes().filter((n) => ids.includes(n.id));
+      // getNodes() must be showing the wanted VIEW, not merely something:
+      // the previous layout is non-empty too (see committedView)
+      const live = committedView.current === wanted ? getNodes().filter((n) => ids.includes(n.id)) : [];
       if (!live.length) {
         if (tries++ < 12) frame = requestAnimationFrame(tick);
         return;
@@ -1967,9 +1986,9 @@ function MapInner() {
       void fitView({ nodes: live.map((n) => ({ id: n.id })), padding: 0.35, duration: 420, maxZoom: 1.1 });
       // the chips inside also carry the selection, so the answer is legible
       // the moment the camera lands
-      const wanted = new Set(live.flatMap((n) =>
+      const pick = new Set(live.flatMap((n) =>
         n.type === "halo" ? getNodes().filter((x) => x.parentId === n.id).map((x) => x.id) : [n.id]));
-      rfSetNodes((ns) => ns.map((n) => ({ ...n, selected: n.type === "chip" && wanted.has(n.id) })));
+      rfSetNodes((ns) => ns.map((n) => ({ ...n, selected: n.type === "chip" && pick.has(n.id) })));
       if (say === "auto") announce(`Showing ${live.length === 1 ? "the proposal" : `${live.length} proposals`} on the map`);
       else if (say) announce(say);
     };
@@ -1988,7 +2007,7 @@ function MapInner() {
     let frame = 0, tries = 0;
     const settle = () => {
       const el = canvasRef.current;
-      const ns = getNodes().filter((n) => !n.parentId);
+      const ns = committedView.current === next ? getNodes().filter((n) => !n.parentId) : [];
       if (!el || !ns.length) { if (tries++ < 12) frame = requestAnimationFrame(settle); return; }
       const vp = getViewport();
       const view0 = {
@@ -2595,7 +2614,7 @@ function MapInner() {
           <ReactFlow<MapNode>
             defaultNodes={initialNodes} nodeTypes={nodeTypes}
             colorMode={dark ? "dark" : "light"}
-            fitView={!initialViewport}
+            fitView={!initialViewport} fitViewOptions={{ padding: 0.15 }}
             defaultViewport={initialViewport ?? undefined}
             onMoveEnd={onMoveEnd}
             minZoom={0.1} maxZoom={3}
@@ -2681,7 +2700,14 @@ function MapInner() {
           onGroups={(groups) => {
             useStore.getState().setCodeAreas(groups.map((g) => ({ name: g.name, codes: g.codes })), codebookFp);
             setViewOverride("areas");
-            requestAnimationFrame(() => fitView({ duration: 200 }));
+            // wait for the AREAS layout to land in React Flow — one frame
+            // framed whatever view was on screen before
+            let tries = 0;
+            const frameIt = () => {
+              if (committedView.current !== "areas") { if (tries++ < 12) requestAnimationFrame(frameIt); return; }
+              void fitView({ duration: 200 });
+            };
+            requestAnimationFrame(frameIt);
           }} />
       )}
       {themeAiOpen && (
