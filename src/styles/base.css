@@ -8,6 +8,7 @@
      colour is underneath, and .6 dropped --muted to ~2.6:1. 8.86:1 here. */
   --bg:#ffffff; --fg:#1a1a1a; --fg-dim:#4a4a4a; --muted:#6b6b6b; --line:#e4e4e4;
   --panel:#f6f6f6; --accent:#6d28d9; /* brand purple; App.tsx overwrites from palettes.ts */
+  --warn:#b45309; /* objections and reversals; dark theme lifts it below */
   --row-hover:#ebebeb; --mm-w:66px;
   /* reading font for transcript text + excerpts; App.tsx sets it from ui.fontFamily */
   --read-font:system-ui, Segoe UI, Roboto, sans-serif;
@@ -24,6 +25,7 @@
 [data-theme=dark] {
   --bg:#161a1e; --fg:#e6e6e6; --fg-dim:#a8b0b8; --muted:#97a3ad; --line:#2c333a;
   --panel:#1e242a; --accent:#a78bfa;
+  --warn:#e8964f;
   --row-hover:#23282e;
 }
 /* Honour the OS "increase contrast" setting rather than making users hunt for it. */

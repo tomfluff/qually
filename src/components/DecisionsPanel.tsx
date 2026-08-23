@@ -10,7 +10,7 @@
 // nothing can be edited away: a reversed decision stays, marked. The panel's
 // whole job is to be readable and exportable.
 import { useMemo, useState } from "react";
-import { useStore, type Decision, type DecisionKind } from "../state/store";
+import { useStore, type Decision } from "../state/store";
 import { originCounts, methodsParagraph, type OriginCounts } from "../provenance";
 import { preselectBrowse } from "./BrowseView";
 import { Icon } from "./Icon";
@@ -30,23 +30,10 @@ const when = (iso: string) => {
     { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 };
 
-export type DecisionFilter = { kinds: Set<DecisionKind>; source: "all" | "you" | "ai" };
-export const NO_FILTER: DecisionFilter = { kinds: new Set(), source: "all" };
-// grouped the way a reader reads them, not the way the store writes them
-const KIND_GROUPS: { label: string; kinds: DecisionKind[] }[] = [
-  { label: "Merges", kinds: ["merge"] },
-  { label: "Renames", kinds: ["rename"] },
-  { label: "Withdrawn", kinds: ["remove", "delete"] },
-  { label: "Set aside", kinds: ["park", "unpark"] },
-  { label: "Turned down", kinds: ["dismiss"] },
-  { label: "Tail queue", kinds: ["keep"] },
-];
-
-/** the left rail: how the book got to be the way it is, in three numbers */
-export function DecisionsSide({ hideUndone, setHideUndone, filter, setFilter }: {
-  hideUndone: boolean; setHideUndone: (v: boolean) => void;
-  filter: DecisionFilter; setFilter: (f: DecisionFilter) => void;
-}) {
+/** the left rail: how the book got to be the way it is, in three numbers.
+    No filters: the ledger is a record, and a record shows every row — what a
+    reversed decision needs is a LOOK, not a hiding place (see .dvRow.undone). */
+export function DecisionsSide() {
   const ledger = useStore((s) => s.ledger);
   const codebook = useStore((s) => s.codebook);
   const counts = useMemo(() => originCounts(ledger, Object.keys(codebook)), [ledger, codebook]);
@@ -74,58 +61,19 @@ export function DecisionsSide({ hideUndone, setHideUndone, filter, setFilter }: 
         </p>
       </div>
       {undone > 0 && (
-        <label className="dvToggle">
-          <input type="checkbox" checked={hideUndone} onChange={(e) => setHideUndone(e.target.checked)} />
-          Hide the {undone} reversed
-        </label>
-      )}
-      {ledger.length > 0 && (
-        <>
-          <div className="aByLabel" id="dvWhoseLabel">Whose idea</div>
-          <div className="segmented" role="group" aria-labelledby="dvWhoseLabel">
-            {([["all", "All"], ["you", "Mine"], ["ai", "Proposed"]] as const).map(([id, label]) => (
-              <button key={id} className={"seg" + (filter.source === id ? " on" : "")}
-                aria-pressed={filter.source === id}
-                onClick={() => setFilter({ ...filter, source: id })}>{label}</button>
-            ))}
-          </div>
-          <div className="aByLabel" id="dvKindLabel">Kind</div>
-          <div className="dvKinds" role="group" aria-labelledby="dvKindLabel">
-            {KIND_GROUPS.map((g) => {
-              const n = ledger.filter((d) => g.kinds.includes(d.kind)).length;
-              if (!n) return null;
-              const on = g.kinds.some((k) => filter.kinds.has(k));
-              return (
-                <button key={g.label} className={"dvKindBtn" + (on ? " on" : "")} aria-pressed={on}
-                  onClick={() => {
-                    const kinds = new Set(filter.kinds);
-                    g.kinds.forEach((k) => (on ? kinds.delete(k) : kinds.add(k)));
-                    setFilter({ ...filter, kinds });
-                  }}>{g.label}<span className="cnt">{n}</span></button>
-              );
-            })}
-          </div>
-        </>
+        <p className="dvNote">{undone} reversed — struck through below, still counted.</p>
       )}
     </>
   );
 }
 
-export function DecisionsList({ hideUndone, filter }: { hideUndone: boolean; filter: DecisionFilter }) {
+export function DecisionsList() {
   const ledger = useStore((s) => s.ledger);
   const codebook = useStore((s) => s.codebook);
   const setActive = useStore((s) => s.setActive);
   const [copied, setCopied] = useState(false);
   const para = useMemo(() => methodsParagraph(ledger, Object.keys(codebook)), [ledger, codebook]);
-  const rows = useMemo(
-    () => ledger.map((d, i) => ({ d, i }))
-      .filter(({ d }) => !(hideUndone && d.undone))
-      .filter(({ d }) => !filter.kinds.size || filter.kinds.has(d.kind))
-      // "mine" is everything the model did not propose — an offline wording
-      // match is a computation you ran, not a suggestion you were given
-      .filter(({ d }) => filter.source === "all" || (filter.source === "ai" ? d.source === "ai" : d.source !== "ai"))
-      .reverse(),
-    [ledger, hideUndone, filter]);
+  const rows = useMemo(() => ledger.map((d, i) => ({ d, i })).reverse(), [ledger]);
   // a decision names codes; the excerpts behind them are one click away, and
   // for a code that still exists that is where the reasoning can be checked
   const openCode = (c: string) => { preselectBrowse([c]); setActive("browse"); };
@@ -152,9 +100,6 @@ export function DecisionsList({ hideUndone, filter }: { hideUndone: boolean; fil
             about your own conduct, so nothing else may author it */}
         <p>{para}</p>
       </div>
-      {rows.length === 0 && (
-        <div className="empty">Nothing matches that filter.</div>
-      )}
       <ol className="dvList">
         {rows.map(({ d, i }) => (
           <li key={i} className={"dvRow" + (d.undone ? " undone" : "")}>

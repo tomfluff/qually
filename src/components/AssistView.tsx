@@ -24,7 +24,7 @@ import { DefLine } from "./CodeDef";
 import { codeStats, sortCodes, SORTS, type CodeStat, type SortBy } from "../codeStats";
 import { useDismiss } from "../usePopover";
 import { Icon } from "./Icon";
-import { DecisionsList, DecisionsSide, NO_FILTER, type DecisionFilter } from "./DecisionsPanel";
+import { DecisionsList, DecisionsSide } from "./DecisionsPanel";
 import { TailQueue, TailSide, type TailLimit } from "./TailQueue";
 
 // One AI observation, resolved against the current text (a stale hash means the line
@@ -88,10 +88,6 @@ export function AssistView() {
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
   const setUi = useStore((s) => s.setUi);
   const panel = useStore((s) => s.ui.assistPanel);
-  // session-only: a reversed decision is still part of the record, so hiding
-  // them is a way of reading the list, not a property of the list
-  const [hideUndone, setHideUndone] = useState(false);
-  const [decFilter, setDecFilter] = useState<DecisionFilter>(NO_FILTER);
   // how thin counts as thin lives in ui, so the map's launcher can set it on
   // the way in and it is still there next session
   const tailLimit = useStore((s) => s.ui.tailLimit) as TailLimit;
@@ -346,8 +342,7 @@ export function AssistView() {
         {panel === "tail" ? (
           <TailSide limit={tailLimit} setLimit={(n) => setUi({ tailLimit: n })} />
         ) : panel === "decisions" ? (
-          <DecisionsSide hideUndone={hideUndone} setHideUndone={setHideUndone}
-            filter={decFilter} setFilter={setDecFilter} />
+          <DecisionsSide />
         ) : panel === "observations" ? (
           <>
             {/* Same two ways in as the Suggest panel: a button that works in every
@@ -625,7 +620,7 @@ export function AssistView() {
         {panel === "tail" ? (
           <TailQueue limit={tailLimit} />
         ) : panel === "decisions" ? (
-          <DecisionsList hideUndone={hideUndone} filter={decFilter} />
+          <DecisionsList />
         ) : panel === "observations" ? (
           hasNotices ? (
             <NoticeList

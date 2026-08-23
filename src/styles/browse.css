@@ -423,8 +423,6 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .dvDot.you { background:color-mix(in srgb, var(--muted) 62%, var(--bg)); }
 .dvDot.ai { background:var(--accent); }
 .dvNote { color:var(--muted); font-size:.88em; line-height:1.45; margin:10px 0 0; }
-.dvToggle { display:flex; align-items:center; gap:.5em; margin-top:12px; color:var(--fg-dim); font-size:.92em; }
-.dvToggle input { accent-color:var(--accent); }
 
 .dvWrap { display:flex; flex-direction:column; gap:14px; }
 .dvPara { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); }
@@ -435,8 +433,13 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .dvList { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
 .dvRow { display:flex; gap:10px; align-items:flex-start; border:1px solid var(--line);
   border-radius:10px; padding:9px 12px; background:var(--bg); }
-/* reversed rows stay legible — they are part of the record, not a mistake to grey out */
-.dvRow.undone { border-style:dashed; }
+/* reversed rows: part of the record, but visibly dead — muted text, dashed edge,
+   the kind pill struck through. Dim by colour, not row opacity: the code links
+   must stay readable and clickable, and the warn marker must stay warn. */
+.dvRow.undone { border-style:dashed; color:var(--muted); }
+.dvRow.undone .dvKind { text-decoration:line-through; color:var(--muted); }
+.dvRow.undone .dvWhy { color:var(--muted); }
+.dvRow.undone .dvUndone { color:var(--warn, #b45309); }
 .dvKind { flex:none; min-width:5.5em; font-size:.82em; letter-spacing:.02em; color:var(--muted);
   border:1px solid var(--line); border-radius:999px; padding:1px 8px; text-align:center; }
 .dvKind.merge, .dvKind.rename { color:var(--fg-dim); }
@@ -456,12 +459,6 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .cbParkHead { margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
 .bCode.parked .bCodeName { color:var(--fg-dim); font-style:italic; }
 .bCode.parked .codebar { opacity:.55; }
-.dvKinds { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
-.dvKindBtn { display:inline-flex; align-items:center; gap:.4em; border:1px solid var(--line);
-  background:var(--bg); color:var(--fg-dim); border-radius:999px; padding:2px 9px; cursor:pointer; font-size:.88em; }
-.dvKindBtn:hover { border-color:var(--muted); color:var(--fg); }
-.dvKindBtn.on { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--bg)); }
-.dvKindBtn .cnt { font-variant-numeric:tabular-nums; }
 .dvSize { font-variant-numeric:tabular-nums; }
 /* a code that still exists opens its excerpts; one a merge consumed is plain text */
 button.dvCode { border:0; background:none; padding:0; font:inherit; cursor:pointer;
