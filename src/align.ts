@@ -87,7 +87,7 @@ export function alignLines(oldLines: Line[], newLines: Line[]): Alignment {
 
 // A segment survives if any of its lines survives: clamp to the outermost lines
 // of its range that still exist. Returns null when the whole range is gone.
-export function remapSegment(seg: Segment, map: Map<number, number>): { start: number; end: number } | null {
+export function remapSegment(seg: { start: number; end: number }, map: Map<number, number>): { start: number; end: number } | null {
   let start: number | null = null, end = 0;
   for (let id = seg.start; id <= seg.end; id++) {
     const n = map.get(id);

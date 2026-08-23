@@ -261,9 +261,17 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
     if (!code) return;
     const onKey = (e: KeyboardEvent) => {
       // the target is whatever has focus, which is the window itself when
-      // nothing does — instanceof, not a cast, or the guard throws on it
+      // nothing does — instanceof, not a cast, or the guard throws on it.
+      // The keys belong to the card: they act only when nothing has focus
+      // (body) or focus sits on an inert part of the card itself. A focused
+      // control ANYWHERE — a tab button, a field, the card's own buttons —
+      // keeps its native Enter/typing; anything else would let plain
+      // navigation write rows into the decision ledger.
       const t = e.target;
-      if (t instanceof HTMLElement && (t.matches("input, textarea, select") || t.isContentEditable)) return;
+      if (t instanceof HTMLElement) {
+        if (t !== document.body && !t.closest(".tqCard")) return;
+        if (t.closest("button, a, input, textarea, select") || t.isContentEditable) return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // while the fold picker is open, the card's own keys go quiet: Enter
       // must not "keep" the code someone is halfway through folding away

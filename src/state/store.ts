@@ -874,7 +874,10 @@ export const useStore = create<State>()(
               // Re-importing over existing work would silently move every segment onto
               // whatever line now holds that number — and wipe in-app transcription
               // corrections (`orig`), which undo cannot bring back: ask first.
-              if (old && (segs.length || old.lines.some((l) => l.orig !== undefined))) {
+              // Stretches are line-id work too: without this, a re-import over a
+              // stretch-only transcript would leave the labels on the old ids.
+              if (old && (segs.length || s.stretches.some((x) => x.pid === pid)
+                || old.lines.some((l) => l.orig !== undefined))) {
                 const lines = rowsToLines(rows);
                 const { map: _m, ...preview } = previewImport(segs, old.lines, lines);
                 set({ pendingImports: [...get().pendingImports, { pid, lines, rows, preview }] });
@@ -975,17 +978,27 @@ export const useStore = create<State>()(
           const s = get();
           const segs = s.segments.filter((x) => x.pid === p.pid);
           let kept: Segment[] = []; // "replace": the transcript's coding goes with it
+          // stretches point at the same line ids the segments do, so they ride
+          // the same remap: "update" carries the survivors, "replace" drops them
+          let keptStretches: typeof s.stretches = [];
           if (choice === "update") {
             const { map } = previewImport(segs, s.transcripts[p.pid].lines, p.lines);
             kept = segs.flatMap((seg) => {
               const r = remapSegment(seg, map);
               return r ? [{ ...seg, start: r.start, end: r.end }] : [];
             });
+            keptStretches = s.stretches
+              .filter((x) => x.pid === p.pid)
+              .flatMap((st) => {
+                const r = remapSegment(st, map);
+                return r ? [{ ...st, start: r.start, end: r.end }] : [];
+              });
           }
           const saved = { ...s.savedSelections };
           delete saved[p.pid]; // a stashed selection points at the old line ids
           set({
             segments: [...s.segments.filter((x) => x.pid !== p.pid), ...kept],
+            stretches: [...s.stretches.filter((x) => x.pid !== p.pid), ...keptStretches],
             // The undo stack snapshots segments but not transcripts, so replaying it
             // after a re-import would restore segments pointing at the old line ids.
             // The modal's preview is the safety net instead.
@@ -1170,6 +1183,7 @@ export const useStore = create<State>()(
           transcripts,
           segments: s.segments.filter((x) => x.pid !== pid),
           markers: s.markers.filter((m) => m.pid !== pid),
+          stretches: s.stretches.filter((x) => x.pid !== pid),
           extSegRows: s.extSegRows.filter((r) => r.pid !== pid),
           aiFlags: Object.fromEntries(Object.entries(s.aiFlags).filter(([k]) => !k.startsWith(`${pid}:`))),
           aiGrounds: Object.fromEntries(Object.entries(s.aiGrounds).filter(([sid]) => !dead.has(sid))),
@@ -1322,6 +1336,7 @@ export const useStore = create<State>()(
           transcripts,
           segments: s.segments.map((x) => x.pid === from ? { ...x, pid: to } : x),
           markers: s.markers.map((x) => x.pid === from ? { ...x, pid: to } : x),
+          stretches: s.stretches.map((x) => x.pid === from ? { ...x, pid: to } : x),
           summaries,
           extSegRows: s.extSegRows.map((r) => r.pid === from
             ? { ...r, pid: to, segment_ref: r.segment_ref.startsWith(`${from}:`) ? to + r.segment_ref.slice(from.length) : r.segment_ref }
@@ -1814,9 +1829,13 @@ export const useStore = create<State>()(
         get().pushUndo();
         // stamp where these came from ONCE, here, where a run lands — the
         // ledger row is written much later, when the researcher accepts, and
-        // by then nothing else remembers whose idea it was
+        // by then nothing else remembers whose idea it was. Only UNSTAMPED
+        // entries: a scoped rerun carries surviving pending proposals through
+        // (mergeScopedClusters / mergeFocusResults), and those already know
+        // their origin — restamping would credit e.g. a wording-sweep capsule
+        // to a model that never saw it.
         const from = <T extends { source?: DecisionSource; model?: string }>(x: T): T =>
-          source ? { ...x, source, ...(model ? { model } : {}) } : x;
+          source && !x.source ? { ...x, source, ...(model ? { model } : {}) } : x;
         set({
           // the sanitizer already enforced a valid member survivor; keep that
           // deliberate direction, fall back to evidence only when it broke
