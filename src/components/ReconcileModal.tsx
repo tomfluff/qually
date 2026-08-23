@@ -19,9 +19,13 @@ import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
 export type ReconcileScope = number | "all" | { focus: string[] };
-export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }: {
+/** how much evidence each code carries into the request (see exN below) */
+export const EXCERPTS_PER_CODE = 8;
+export function ReconcileModal({ groups, initialScope = "all", selected = [], onPlan, onClose }: {
   groups: CodeGroup[];
   initialScope?: ReconcileScope;
+  /** codes selected on the map when this opened — the scope choice is about these */
+  selected?: string[];
   onPlan: (plan: ReconcilePlan, scope: ReconcileScope,
     meta?: { replaced: number; unreviewed: string[]; model?: string }) => void;
   onClose: () => void;
@@ -33,8 +37,13 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ clusters: number; actions: number; cost: number; replaced?: number; unreviewed?: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [exN, setExN] = useState(8);
+  // Fixed, not a dial. It was a slider with a cost curve attached, which asked
+  // the researcher to trade evidence for pennies on every run — eight excerpts
+  // is enough to judge a code by and cheap enough not to think about.
+  const exN = EXCERPTS_PER_CODE;
   const [scope, setScope] = useState<ReconcileScope>(initialScope);
+  // only codes that still exist can be asked about
+  const picked = useMemo(() => selected.filter((c) => c in codebook), [selected, codebook]);
   const [mode, setMode] = useState<ReconcileMode>("consolidate");
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
@@ -225,31 +234,37 @@ export function ReconcileModal({ groups, initialScope = "all", onPlan, onClose }
                     </button>
                   </div>
                 </div>
-                {focusMode ? (
-                  <div className="srow">
+                {/* The scope follows what you had selected when you opened this.
+                    Nothing selected is the plain case and gets no control at
+                    all; a selection gets the choice, defaulting to itself —
+                    you selected those codes for a reason. */}
+                {picked.length > 0 ? (
+                  <div className="srow" role="radiogroup" aria-label="Scope">
                     <span>Scope</span>
-                    <span className="settings-note" style={{ margin: 0 }}>
-                      Where do these belong: {codes.map((c) => c.name).join(", ")} — reviewed against the whole codebook.
-                    </span>
+                    <div className="segmented">
+                      <button className={"seg" + (focusMode ? " on" : "")}
+                        role="radio" aria-checked={focusMode}
+                        onClick={() => setScope({ focus: picked })}
+                        title="Ask where the selected codes belong — reviewed against the whole codebook">
+                        {picked.length === 1 ? "The selected code" : `The ${picked.length} selected`}
+                      </button>
+                      <button className={"seg" + (focusMode ? "" : " on")}
+                        role="radio" aria-checked={!focusMode}
+                        onClick={() => setScope("all")}
+                        title="Review every code against every other">
+                        Whole codebook
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="srow">
                     <span>Scope</span>
-                    <select className="settext" value={scope === "all" ? "all" : String(scope)}
-                      onChange={(e) => setScope(e.target.value === "all" ? "all" : +e.target.value)}>
-                      <option value="all">Whole codebook</option>
-                      {groups.map((g, i) => <option key={i} value={i}>Island: {g.name}</option>)}
-                    </select>
+                    <span className="settings-note" style={{ margin: 0 }}>
+                      The whole codebook. Select codes on the map first to ask about just those.
+                    </span>
                   </div>
                 )}
-                <label className="srow">
-                  <span>Excerpts per code</span>
-                  <input type="range" min={3} max={12} value={exN}
-                    onChange={(e) => setExN(+e.target.value)} />
-                  <span className="sval">{exN}</span>
-                </label>
               </div>
-              <div className="settings-note">More excerpts give the AI better evidence for each judgment — and cost more tokens. The estimate below updates as you adjust.</div>
               {!enough ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
                   {focusMode

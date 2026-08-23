@@ -797,7 +797,8 @@ function MapInner() {
   const [menu, setMenu] = useState<{ x: number; y: number; sel: string[];
     island?: { gi: number; name: string }; halo?: { ci: number; name: string } } | null>(null);
   // the modal, optionally pre-scoped to one island (island context menu)
-  const [aiOpen, setAiOpen] = useState<false | { scope: number | "all" | { focus: string[] } }>(false);
+  const [aiOpen, setAiOpen] = useState<
+    false | { scope: number | "all" | { focus: string[] }; selected?: string[] }>(false);
   const [themeAiOpen, setThemeAiOpen] = useState(false);
   const [confirmRelayout, setConfirmRelayout] = useState<{ right: number; y: number } | null>(null);
   const [layoutMenu, setLayoutMenu] = useState<{ right: number; y: number } | null>(null);
@@ -2309,7 +2310,13 @@ function MapInner() {
           </button>
         )}
         {view === "reconcile" && (
-          <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
+          <button className="btn iconlabel"
+            onClick={() => {
+              // the selection IS the scope when there is one: you picked those
+              // codes for a reason, and the modal still offers the whole book
+              const sel = [...remembered.selected].filter((c) => c in codebook);
+              setAiOpen({ scope: sel.length ? { focus: sel } : "all", selected: sel });
+            }}
             title="The same question as Match on wording, asked of a model: merge groups and per-code revisions, for your review">
             <Icon name="sparkle" size={16} /> <span className="blabel">Match with AI</span>
           </button>
@@ -2494,7 +2501,7 @@ function MapInner() {
           }} />
       )}
       {aiOpen && (
-        <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope}
+        <ReconcileModal groups={codeGroups} initialScope={aiOpen.scope} selected={aiOpen.selected}
           onClose={() => setAiOpen(false)}
           onPlan={(p: ReconcilePlan, scope, meta) => {
             const st = useStore.getState();
