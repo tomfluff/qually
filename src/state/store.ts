@@ -236,12 +236,11 @@ export interface AiCall {
 // would make the ledger a story about a researcher who never changed their mind.
 export type DecisionKind =
   | "merge" | "rename" | "remove" | "delete"   // wired today
-  | "keep" | "park" | "unpark" | "dismiss"   // the tail queue's outcomes
-  | "promote";                                // legacy: rows written before "code more of this" was dropped
+  | "keep" | "park" | "unpark" | "dismiss"; // the tail queue's outcomes
 /** where the idea came from — NOT who performed it. Every decision is the researcher's. */
 export type DecisionSource = "you" | "wording" | "ai";
 /** decisions that record a judgement without changing anything (see restore) */
-const INERT_DECISIONS = new Set<DecisionKind>(["keep", "promote"]);  // promote: legacy rows
+const INERT_DECISIONS = new Set<DecisionKind>(["keep"]);
 export interface Decision {
   at: string;              // ISO
   kind: DecisionKind;

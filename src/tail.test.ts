@@ -35,9 +35,7 @@ describe("what the tail queue holds", () => {
   });
 
   it("stops asking once you have decided", () => {
-    // promote is a legacy row — the queue no longer writes one, and one
-    // already in a project file still counts as a verdict
-    for (const kind of ["keep", "promote", "park", "remove"] as const) {
+    for (const kind of ["keep", "park", "remove"] as const) {
       expect(tailQueue(book, counts, [d(kind, ["stray"])], 1)).toEqual([]);
     }
     // …but a merge marks nobody: the survivor now holds excerpts nobody read

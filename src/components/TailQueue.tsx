@@ -12,10 +12,10 @@
 // it is often the most interesting thing in the study, and the queue exists to
 // make sure you saw it, not to talk you out of it.
 //
-// There were four ways out for a while: a "code more of this" that recorded an
-// intention and did nothing else. Nobody could say how it differed from Keep,
-// which is the whole test a verdict has to pass in a queue you work at speed.
-// Three outcomes, each of which does something.
+// Three ways out, each of which does something. A fourth — "code more of this"
+// — recorded an intention and changed nothing, and nobody could say how it
+// differed from Keep, which is the test a verdict has to pass in a queue you
+// work at speed.
 //
 // What you decided is remembered in the ledger, which is also what keeps a
 // second pass from asking again.
@@ -49,7 +49,7 @@ export function triaged(ledger: Decision[]): Set<string> {
     // the book with none, which is exactly the shape the queue is looking for,
     // and asking about the code you just withdrew is the definition of nagging.
     if (d.kind === "unpark") { d.codes.forEach((c) => seen.delete(c)); continue; }
-    if (["keep", "promote", "park", "remove"].includes(d.kind)) d.codes.forEach((c) => seen.add(c));
+    if (["keep", "park", "remove"].includes(d.kind)) d.codes.forEach((c) => seen.add(c));
     // A merge marks NOBODY as read. The name folded away is out of the book,
     // and the survivor just had someone else's excerpts poured into it — if it
     // is still thin after that, it is thin with evidence nobody has read, which
@@ -67,7 +67,7 @@ export function lastVerdicts(ledger: Decision[]): Map<string, { kind: Decision["
     if (d.undone) return;
     // bringing a code back is the un-verdict: it leaves the card open again
     if (d.kind === "unpark") { d.codes.forEach((c) => out.delete(c)); return; }
-    if (["keep", "promote", "park", "remove"].includes(d.kind)) {
+    if (["keep", "park", "remove"].includes(d.kind)) {
       d.codes.forEach((c) => out.set(c, { kind: d.kind, at }));
     } else if (d.kind === "merge" && d.codes.length) {
       // the survivor has been decided about; the folded-away name is gone
@@ -209,7 +209,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
     // changing your mind: the verdict this card already carries is taken back
     // first, so a code never holds two
     const cur = lastVerdicts(st.ledger).get(code);
-    if (cur && (cur.kind === "keep" || cur.kind === "promote")) st.retractVerdict(cur.at);
+    if (cur?.kind === "keep") st.retractVerdict(cur.at);
     if (cur?.kind === "park" && what !== "park") st.setParked(code, false);
 
     if (what === "fold") {
@@ -235,7 +235,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
   const clearVerdict = useCallback(() => {
     if (!code || !verdict) return;
     const st = useStore.getState();
-    if (verdict.kind === "keep" || verdict.kind === "promote") st.retractVerdict(verdict.at);
+    if (verdict.kind === "keep") st.retractVerdict(verdict.at);
     else if (verdict.kind === "park") st.setParked(code, false);
     else { announce("That one was a merge — use Undo in the toolbar to take it back", { assertive: true }); return; }
     earcon.undo();
@@ -299,7 +299,6 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
   const where = stats[code]?.pids ?? 0;
   const VERDICT_SAID: Partial<Record<string, string>> = {
     keep: "You kept this one.",
-    promote: "You marked this as worth coding more.",   // legacy rows only
     park: "You set this aside — its excerpts are untouched, and the Codebook keeps it under Set aside.",
     remove: "You withdrew this code's excerpts.",
     merge: "This one absorbed another code.",

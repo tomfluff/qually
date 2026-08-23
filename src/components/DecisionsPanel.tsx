@@ -17,7 +17,7 @@ import { Icon } from "./Icon";
 
 const KIND_LABEL: Record<Decision["kind"], string> = {
   merge: "merged", rename: "renamed", remove: "withdrew", delete: "deleted",
-  keep: "kept", park: "set aside", unpark: "brought back", promote: "to code more", dismiss: "turned down",
+  keep: "kept", park: "set aside", unpark: "brought back", dismiss: "turned down",
 };
 // where the idea came from — never who performed it. Every row is your decision.
 const SOURCE_LABEL: Record<Decision["source"], string> = {
@@ -39,7 +39,7 @@ const KIND_GROUPS: { label: string; kinds: DecisionKind[] }[] = [
   { label: "Withdrawn", kinds: ["remove", "delete"] },
   { label: "Set aside", kinds: ["park", "unpark"] },
   { label: "Turned down", kinds: ["dismiss"] },
-  { label: "Tail queue", kinds: ["keep", "promote"] },
+  { label: "Tail queue", kinds: ["keep"] },
 ];
 
 /** the left rail: how the book got to be the way it is, in three numbers */
