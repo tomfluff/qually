@@ -832,6 +832,22 @@ function MapInner() {
   }, []);
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
+  // The shape of the book, for the view menu's status slot: the one number
+  // each grouping is actually about. Description, never a verdict — there is
+  // no such thing as too many one-excerpt codes, and a tool that implies
+  // otherwise pushes every researcher toward the same tidy answer.
+  const shape = useMemo<Partial<Record<MapView, string>>>(() => {
+    const names = liveCodes(codebook);
+    if (!names.length) return {};
+    const ones = names.filter((c) => (stats[c]?.segs ?? 0) <= 1).length;
+    const onePid = names.filter((c) => (stats[c]?.pids ?? 0) <= 1).length;
+    const undef = names.filter((c) => !(codebook[c]?.def ?? "").trim()).length;
+    return {
+      segs: `${ones} of ${names.length} on one excerpt`,
+      pids: `${onePid} of ${names.length} in one transcript`,
+      defs: undef ? `${undef} with no definition yet` : "every code has a definition",
+    };
+  }, [codebook, stats]);
   // biggest first: the codes doing the most work anchor the top of the map
   // codes you set aside are off the map too — the map IS the working codebook
   const codes = useMemo(() =>
@@ -2038,7 +2054,9 @@ function MapInner() {
         {view === "reconcile" && (
           <button className="btn iconlabel" onClick={runSweep}
             title="Find codes whose names share wording — on this machine, free, no key. Proposals only.">
-            <Icon name="search" size={16} /> <span className="blabel">Match on wording</span>
+            {/* two sheets, not a magnifier: this is about finding the code you
+                wrote twice, and the search icon reads as "filter the map" */}
+            <Icon name="copy" size={16} /> <span className="blabel">Match on wording</span>
           </button>
         )}
         {view === "reconcile" && (
@@ -2287,9 +2305,14 @@ function MapInner() {
                   {view === v ? "✓ " : ""}{s.label}
                   {/* the grouping views explain themselves under their head;
                       the bar's drag line covers them once inside */}
-                  {s.layout && (
+                  {s.layout ? (
                     <span className="mapMenuNote">{status ? `${status} · ` : ""}{s.drag}</span>
-                  )}
+                  ) : shape[v] ? (
+                    // What the grouping would SHOW, said before you switch to
+                    // it. Counted, never graded: "84 on one excerpt" is the
+                    // shape of a first-cycle codebook, not a fault in it.
+                    <span className="mapMenuNote">{shape[v]}</span>
+                  ) : null}
                 </button>
               );
             };
