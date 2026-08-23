@@ -65,7 +65,7 @@ export function TellApartModal({ codes, survivor, newName, source, model, onClos
   const keepBoth = () => {
     // one act: the sentence is the line between them, and it only means
     // anything read from either side
-    useStore.getState().defineBoth(a, b, written);
+    useStore.getState().defineBoth(a, b, written, undefined, source, model);
     earcon.accept();
     onDecided?.("kept");
     setDone("Saved as the definition of both codes. The next pass — yours or a model's — now reasons from your sentence instead of guessing from the names.");
@@ -82,7 +82,9 @@ export function TellApartModal({ codes, survivor, newName, source, model, onClos
     // the capsule may have been renamed on the map, and the card above says
     // what the merged code will be called — so it is called that
     const named = newName && newName !== into && !st.codebook[newName] ? newName : null;
-    if (named) useStore.getState().renameCode(into, named, "The name this merge was proposed under", source ?? "you", model);
+    // part of the SAME gesture as the merge above — mergeCode pushed the one
+    // undo entry, so the rename rides it instead of pushing a second
+    if (named) useStore.getState().renameCode(into, named, "The name this merge was proposed under", source ?? "you", model, false);
     earcon.join();
     onDecided?.("merged");
     setDone(`Merged into “${named ?? into}”, with “could not write a sentence that separates them” as the reason.`);

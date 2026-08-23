@@ -6,6 +6,7 @@
 // no way to reach the export menu. This screen offers the two things that
 // matter in that moment: get the raw state out, and start the app again.
 import { Component, type ReactNode } from "react";
+import { useStore } from "../state/store";
 
 const KEY = "coding-app-state";
 
@@ -14,11 +15,19 @@ export class CrashScreen extends Component<{ children: ReactNode }, { error: Err
   static getDerivedStateFromError(error: Error) { return { error }; }
 
   private saveRaw = () => {
-    let raw = "";
-    try { raw = localStorage.getItem(KEY) ?? ""; } catch { /* nothing to save */ }
+    // a REAL project file first — the render crashed, but the store usually
+    // still stands, and exportProject writes the format the import door
+    // accepts. Only when even that throws, fall back to the raw persistence
+    // envelope (not loadable as-is, but the data is out of the browser).
+    let raw = "", name = "qually-project.json";
+    try { raw = useStore.getState().exportProject(); }
+    catch {
+      try { raw = localStorage.getItem(KEY) ?? ""; } catch { /* nothing to save */ }
+      name = "qually-raw-state.json";
+    }
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
-    a.download = "qually-raw-state.json";
+    a.download = name;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -37,7 +46,7 @@ export class CrashScreen extends Component<{ children: ReactNode }, { error: Err
         <p>Your work is still stored in this browser. Save a copy of it first — then reset,
           and load that file (or your last saved project) back in.</p>
         <p style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-          <button onClick={this.saveRaw}>Save my work (raw state)</button>
+          <button onClick={this.saveRaw}>Save my work (project file)</button>
           <button onClick={this.reset}>Reset the workspace and reload</button>
           <button onClick={() => location.reload()}>Just reload</button>
         </p>

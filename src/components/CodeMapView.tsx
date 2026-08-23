@@ -320,23 +320,25 @@ function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onS
   const inMerge = sel.filter((c) => clusters.some((x) => x.codes.includes(c)));
   const evictSelected = () => {
     if (!inMerge.length) return;
-    // ONE undo entry for the gesture (store rule), fresh state each pass —
-    // the first eviction can thin a two-member capsule away and shift every
-    // index — and a staggered landing spot per code: dropping them all on one
-    // point left only the top chip hittable
-    useStore.getState().pushUndo();
-    inMerge.forEach((code, k) => {
-      const st = useStore.getState();
-      const ci = st.codeClusters.findIndex((x) => x.codes.includes(code));
-      if (ci < 0) return;
+    // ONE undo entry for the gesture (store rule), and a staggered landing
+    // spot per code: dropping them all on one point left only the top chip
+    // hittable. Landing spots are computed from the state BEFORE any
+    // eviction — the first eviction can thin a two-member capsule away, and
+    // its other member still deserves the position it was promised.
+    const st0 = useStore.getState();
+    const drops = inMerge.map((code, k) => {
+      const ci = st0.codeClusters.findIndex((x) => x.codes.includes(code));
       // the capsule is addressed by the cluster's id, like everywhere else
-      const cid = st.codeClusters[ci].cid;
-      const halo = getNodes().find((x) => x.id === `halo:${cid ?? `i${ci}`}`);
+      const cid = ci >= 0 ? st0.codeClusters[ci].cid : undefined;
+      const halo = ci >= 0 ? getNodes().find((x) => x.id === `halo:${cid ?? `i${ci}`}`) : undefined;
       const pos = halo
         ? { x: halo.position.x + (halo.width ?? 0) + 28, y: halo.position.y + k * 40 }
         : { x: 0, y: k * 40 };
-      st.reconcileDrop(code, pos, null, false);
+      return { code, pos };
     });
+    useStore.getState().pushUndo();
+    // fresh state each pass: membership indices shift as capsules thin away
+    for (const d of drops) useStore.getState().reconcileDrop(d.code, d.pos, null, false);
     earcon.evict();
     announce(`Removed ${inMerge.length} code${inMerge.length === 1 ? "" : "s"} from their merge groups`);
   };
@@ -1342,7 +1344,7 @@ function MapInner() {
         // the derived catch-all gets a RESERVED id: a stored area the
         // researcher happens to name "Unassigned" must not collide with it —
         // two nodes sharing an id file drops against the wrong `ai`
-        islandId: (p) => (p.ai === -1 ? "area:__unassigned" : `area:${p.name}`),
+        islandId: (p) => (p.ai === -1 ? "area:\u0000unassigned" : `area:${p.name}`),
         movable: true, freeChips: free,
       })) };
     }
@@ -1973,17 +1975,22 @@ function MapInner() {
   // already say what they DID ("Filed 3 codes in a new area…"), and a second
   // message a beat later just overwrites the first in the live region — so
   // they pass null and keep their own sentence.
+  // one settle loop at a time: switchView and showNodes both wait on the next
+  // layout, and a superseded loop left running would announce (and frame) the
+  // wrong thing when its gate finally opened
+  const settleFrame = useRef(0);
   const showNodes = useCallback((ids: string[], wanted: MapView = "reconcile",
     say: string | null = "auto") => {
     if (!ids.length) return;
     setViewOverride(wanted);
-    let tries = 0, frame = 0;
+    cancelAnimationFrame(settleFrame.current);
+    let tries = 0;
     const tick = () => {
       // getNodes() must be showing the wanted VIEW, not merely something:
       // the previous layout is non-empty too (see committedView)
       const live = committedView.current === wanted ? getNodes().filter((n) => ids.includes(n.id)) : [];
       if (!live.length) {
-        if (tries++ < 12) frame = requestAnimationFrame(tick);
+        if (tries++ < 12) settleFrame.current = requestAnimationFrame(tick);
         return;
       }
       void fitView({ nodes: live.map((n) => ({ id: n.id })), padding: 0.35, duration: 420, maxZoom: 1.1 });
@@ -1995,8 +2002,7 @@ function MapInner() {
       if (say === "auto") announce(`Showing ${live.length === 1 ? "the proposal" : `${live.length} proposals`} on the map`);
       else if (say) announce(say);
     };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    settleFrame.current = requestAnimationFrame(tick);
   }, [getNodes, fitView, rfSetNodes]);
 
   // Switching view: keep the ZOOM. Every switch used to fitView, which on 178
@@ -2007,11 +2013,12 @@ function MapInner() {
   const switchView = useCallback((next: MapView) => {
     if (next === view) return;
     setViewOverride(next);
-    let frame = 0, tries = 0;
+    cancelAnimationFrame(settleFrame.current);
+    let tries = 0;
     const settle = () => {
       const el = canvasRef.current;
       const ns = committedView.current === next ? getNodes().filter((n) => !n.parentId) : [];
-      if (!el || !ns.length) { if (tries++ < 12) frame = requestAnimationFrame(settle); return; }
+      if (!el || !ns.length) { if (tries++ < 12) settleFrame.current = requestAnimationFrame(settle); return; }
       const vp = getViewport();
       const view0 = {
         x: -vp.x / vp.zoom, y: -vp.y / vp.zoom,
@@ -2042,8 +2049,7 @@ function MapInner() {
       // be under the pointer
       el.focus({ preventScroll: true });
     };
-    frame = requestAnimationFrame(settle);
-    return () => cancelAnimationFrame(frame);
+    settleFrame.current = requestAnimationFrame(settle);
   }, [view, topicGroups.length, getNodes, getViewport, setViewport, codes.length]);
   // the Map tab's menu picked a view while the map is on screen
   useEffect(() => {
@@ -2732,9 +2738,13 @@ function MapInner() {
             // merge answer already pruned the capsule itself (mergeInto), and
             // a stale index would name whatever proposal slid into its place —
             // so only a capsule still standing under its own id is dropped.
+            // Silently (setState, not setCodeClusters): the decision that
+            // settled it already pushed the gesture's one undo entry, with
+            // the capsule still in that snapshot — a second entry made one
+            // Ctrl+Z resurrect the capsule while the definitions stood.
             const st = useStore.getState();
             if (apart.cid !== undefined && st.codeClusters.some((c) => c.cid === apart.cid))
-              st.setCodeClusters(st.codeClusters.filter((c) => c.cid !== apart.cid));
+              useStore.setState({ codeClusters: st.codeClusters.filter((c) => c.cid !== apart.cid) });
           }} />
       )}
       {aiOpen && (

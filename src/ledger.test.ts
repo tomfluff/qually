@@ -139,6 +139,28 @@ describe("decisions made through the Code map's proposals", () => {
     expect(useStore.getState().ledger[0].codes[0]).toBe("unreadable labels");
   });
 
+  it("records the survivor as folded away when the typed name lands on an existing code", () => {
+    // "Small Text" norm-collides with nothing here, but the typed name
+    // norm-collides with "Unreadable Labels": the capsule's survivor merges
+    // INTO it, so the row must name the real code and list the survivor's
+    // name among the folded — or its verdicts and history stop following
+    useStore.setState({
+      codebook: { ...useStore.getState().codebook,
+        "Unreadable Labels": { color: "#447744", def: "", status: "candidate" } },
+      codeClusters: [{
+        survivor: "small text", codes: ["small text", "tiny text"],
+        newName: "unreadable labels", rationale: "", source: "you",
+      }],
+    });
+    useStore.getState().applyCluster(0);
+    const st = useStore.getState();
+    expect(st.codebook["small text"]).toBeUndefined();
+    expect(st.codebook["Unreadable Labels"]).toBeDefined();
+    const [d] = st.ledger;
+    expect(d.codes).toEqual(["Unreadable Labels", "tiny text", "small text"]);
+    expect(d.moved).toBe(2); // both original codes' excerpts moved into the existing name
+  });
+
   it("keeps the proposals you turned down", () => {
     useStore.setState({ codeClusters: [{
       survivor: "small text", codes: ["small text", "tiny text"],

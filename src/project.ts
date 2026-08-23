@@ -150,7 +150,13 @@ export function parseProject(text: string): Project {
     markers: (Array.isArray(p.markers) ? p.markers : []).filter((m): m is Marker =>
       !!m && typeof m.mid === "number" && typeof m.pid === "string"
       && typeof m.event === "string" && typeof m.code === "string"
-      && typeof m.label === "string" && typeof m.t === "number"),
+      && typeof m.label === "string" && typeof m.t === "number")
+      // a hand-added row often omits the bookkeeping fields; the events
+      // exporter reads raw's KEYS, so an absent one becomes empty, not a throw
+      .map((m) => ({ ...m,
+        detail: typeof m.detail === "string" ? m.detail : "",
+        raw: m.raw && typeof m.raw === "object" && !Array.isArray(m.raw) ? m.raw : {},
+      })),
     markerColors: p.markerColors ?? {},
     summaries: Object.fromEntries(Object.entries(p.summaries ?? {})
       .filter(([, v]) => typeof v === "string")) as Project["summaries"],

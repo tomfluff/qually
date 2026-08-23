@@ -207,19 +207,27 @@ export function TranscriptView() {
     // the bands first: ONE continuous strip per stretch, clamped to a margin
     // around the viewport (a stretch can span thousands of rows). Rounded cap
     // only when its real start is on screen.
-    // start-order per column, and each band starts no higher than the last
-    // one ended: with merged lines two adjacent stretches share the boundary
-    // row's item, and unclamped both would paint it — the earlier one keeps it
-    const lastBottom = new Map<number, number>();
+    // start-order per column, and a LOGICALLY DISJOINT band starts no higher
+    // than the last one ended: with merged lines two adjacent stretches share
+    // the boundary row's item, and unclamped both would paint it — the
+    // earlier one keeps it. A stretch whose LINES genuinely overlap the
+    // previous ones (allowed on purpose — re-marking, containment) is not
+    // clamped: it paints over them, as marked.
+    const lastBand = new Map<number, { end: number; bottom: number }>();
     for (const st of [...ctx.list].sort((a, b) => a.start - b.start || a.end - b.end)) {
       const gi0 = idx?.get(st.start), gi1 = idx?.get(st.end);
       if (gi0 === undefined || gi1 === undefined) continue;
       const col = ctx.dims.indexOf(st.dim);
       if (col < 0) continue;
-      const y0 = Math.max(v.getItemOffset(gi0 + 1) - v.scrollOffset, lastBottom.get(col) ?? -Infinity);
+      const prev = lastBand.get(col);
+      const rawY0 = v.getItemOffset(gi0 + 1) - v.scrollOffset;
+      const y0 = prev && st.start > prev.end ? Math.max(rawY0, prev.bottom) : rawY0;
       const y1 = v.getItemOffset(gi1 + 2) - v.scrollOffset;
       if (y1 <= y0) continue;
-      lastBottom.set(col, y1);
+      lastBand.set(col, {
+        end: Math.max(st.end, prev?.end ?? -Infinity),
+        bottom: Math.max(y1, prev?.bottom ?? -Infinity),
+      });
       if (y1 <= 0 || y0 >= vp) continue;
       const top = Math.max(y0, -20), bottom = Math.min(y1, vp + 20);
       const band = document.createElement("span");

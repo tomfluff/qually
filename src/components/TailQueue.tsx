@@ -56,8 +56,10 @@ export function triaged(ledger: Decision[]): Set<string> {
     // is exactly what this queue is for. Deleted names go unmarked for the
     // other reason: they are gone, and a code someone types later with the same
     // name is a new code that deserves its turn. A name is not an identity —
-    // so a folded-away name also sheds any verdict it carried.
-    if (d.kind === "merge") d.codes.slice(1).forEach((c) => seen.delete(c));
+    // so a folded-away name also sheds any verdict it carried, and so does
+    // the SURVIVOR: a keep noted before the merge was about a code whose
+    // evidence has since changed under it (same policy as lastVerdicts).
+    if (d.kind === "merge") d.codes.forEach((c) => seen.delete(c));
   }
   return seen;
 }

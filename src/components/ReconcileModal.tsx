@@ -98,7 +98,7 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
   const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0)
     + contextCodes.reduce((n, c) => n + c.excerpts.length, 0);
   const inTok = useMemo(() => focusMode
-    ? estimateFocusTokens(codes, contextCodes, red)
+    ? estimateFocusTokens(codes, contextCodes, red, asks)
     : estimateReconcileTokens(codes, red, asks), [focusMode, codes, contextCodes, red, asks]);
   const redactions = useMemo(() => [...codes, ...contextCodes].reduce((n, c) =>
     n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0), [codes, contextCodes, red]);

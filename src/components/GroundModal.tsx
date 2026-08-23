@@ -53,7 +53,7 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
 
   const chunks = useMemo(() => chunksOfItems(todo), [todo]);
   const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateGroundTokens(c, red), 0), [chunks, red]);
-  const redactions = useMemo(() => todo.reduce((n, it) => n + red.count(it.excerpt), 0), [todo, red]);
+  const redactions = useMemo(() => todo.reduce((n, it) => n + red.count(it.excerpt) + red.count(it.def), 0), [todo, red]);
   // verdicts are short but EVERY chunk bills its own low-effort reasoning at
   // the OUTPUT rate (see DescribeModal). Overshoot: this sits next to Send.
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(todo.length * 30)) + chunks.length * 200);
@@ -81,7 +81,7 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
         st.addGrounds(recs);
         st.logAiCall({
           at: new Date().toISOString(), model: model.id, task: "ground", pid: pids.join("+"),
-          lines: chunks[i].length, redactions: chunks[i].reduce((n, it) => n + red.count(it.excerpt), 0),
+          lines: chunks[i].length, redactions: chunks[i].reduce((n, it) => n + red.count(it.excerpt) + red.count(it.def), 0),
           inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
         });
         for (const r of Object.values(recs)) r.quotes.length ? grounded++ : empty++;

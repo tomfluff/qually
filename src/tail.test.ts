@@ -62,6 +62,15 @@ describe("what the tail queue holds", () => {
     expect(triaged([d("merge", ["solid", "stray"])])).toEqual(new Set());
   });
 
+  it("reopens the survivor's earlier verdict when a merge changes its evidence", () => {
+    // ONE merge policy: a keep noted before the merge was about a code whose
+    // excerpts have since changed — both derived views must agree it is open
+    const after = [d("keep", ["stray"]), d("merge", ["stray", "gone"])];
+    expect(triaged(after).has("stray")).toBe(false);
+    expect(lastVerdicts(after).has("stray")).toBe(false);
+    expect(tailQueue(book, counts, after, 1)).toEqual(["stray"]);
+  });
+
   it("does not treat a turned-down proposal as a verdict on its codes", () => {
     // dismissing a merge says nothing about whether those codes are thin
     expect(tailQueue(book, counts, [d("dismiss", ["stray", "thin"])], 1)).toEqual(["stray"]);

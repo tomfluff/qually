@@ -514,7 +514,9 @@ export interface State {
   endSelGesture: () => void;
   undo: () => void;
   redo: () => void;
-  renameCode: (code: string, newName: string, why?: string, source?: DecisionSource, model?: string) => void;
+  renameCode: (code: string, newName: string, why?: string, source?: DecisionSource, model?: string,
+    /** false when the caller batches this under its own pushUndo (tell-apart's merge-then-rename) */
+    undoable?: boolean) => void;
   normalizeCodeCase: (style: "lower" | "capital") => void;
   deleteCode: (code: string, why?: string) => void;
   mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string,
@@ -526,7 +528,8 @@ export interface State {
   /** take one of those back — they changed nothing, so the history stack has nothing to give */
   retractVerdict: (at: number) => void;
   /** the distinguishing sentence: it defines BOTH codes, in one step */
-  defineBoth: (a: string, b: string, def: string, blind?: "agreed" | "differed") => void;
+  defineBoth: (a: string, b: string, def: string, blind?: "agreed" | "differed",
+    source?: DecisionSource, model?: string) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
   // returns the codes it actually wrote — a draft that echoes what is already
   // stored changes nothing, and the receipt must not claim it did
@@ -918,6 +921,7 @@ export const useStore = create<State>()(
               // Stretches are line-id work too: without this, a re-import over a
               // stretch-only transcript would leave the labels on the old ids.
               if (old && (segs.length || s.stretches.some((x) => x.pid === pid)
+                || s.answers.some((a) => a.points.some((pt) => pt.refs.some((r) => r.startsWith(`${pid}:`))))
                 || old.lines.some((l) => l.orig !== undefined))) {
                 const lines = rowsToLines(rows);
                 const { map: _m, ...preview } = previewImport(segs, old.lines, lines);
@@ -2045,16 +2049,23 @@ export const useStore = create<State>()(
         // the whole cluster is ONE history entry
         set({ codeClusters: s0.codeClusters.filter((_, i) => i !== ci) });
         // counted before the merges run, or there is nothing left to count
-        const moved = c.codes.filter((m) => m !== c.survivor).reduce((n, m) => n + countCode(s0, m), 0);
+        let moved = c.codes.filter((m) => m !== c.survivor).reduce((n, m) => n + countCode(s0, m), 0);
         for (const m of c.codes) if (m !== c.survivor) mergeInto(get, set, m, c.survivor);
         // the ledger row names the code that actually survived: a typed name
         // that norm-collides with an existing code MERGES into it, and the row
         // must not name an alias nobody can open
         let kept = c.survivor;
+        const folded = c.codes.filter((m) => m !== c.survivor);
         if (c.newName && c.newName !== c.survivor) {
           const s1 = get();
           const existing = Object.keys(s1.codebook).find((k) => norm(k) === norm(c.newName!) && k !== c.survivor);
-          if (existing) { mergeInto(get, set, c.survivor, existing); kept = existing; }
+          if (existing) {
+            // the survivor's own name folds away too — the row records it, or
+            // its verdicts, provenance, and history stop following the merge
+            mergeInto(get, set, c.survivor, existing); kept = existing;
+            folded.push(c.survivor);
+            moved += countCode(s0, c.survivor);
+          }
           else { renameInto(get, set, c.survivor, c.newName!); kept = c.newName!; }
         }
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
@@ -2062,7 +2073,7 @@ export const useStore = create<State>()(
         // researcher decided was "these are one code", once
         get().logDecision({
           kind: "merge",
-          codes: [kept, ...c.codes.filter((m) => m !== c.survivor)],
+          codes: [kept, ...folded],
           source: c.source ?? "you",
           ...(c.model ? { model: c.model } : {}),
           why: c.rationale || `Merged ${c.codes.length} codes into “${kept}”`,
@@ -2199,7 +2210,7 @@ export const useStore = create<State>()(
         set({ codebook: next });
         return changed;
       },
-      renameCode: (code, newName, why, source, model) => {
+      renameCode: (code, newName, why, source, model, undoable = true) => {
         const name = newName.trim();
         if (!name || name === code) return;
         const s = get();
@@ -2207,7 +2218,7 @@ export const useStore = create<State>()(
         // rename into existing -> merge, and the ledger row says merge, because
         // that is what happened to the data
         if (existing) { get().mergeCode(code, existing, why, source, model); return; }
-        get().pushUndo();
+        if (undoable) get().pushUndo();
         renameInto(get, set, code, name);
         set({ hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "rename", codes: [name, code], source: source ?? "you",
@@ -2322,7 +2333,7 @@ export const useStore = create<State>()(
       // lands as ONE act: two setDefs would be two undo steps with a state in
       // between where one code is defined and the other is not, which is not a
       // state the researcher ever chose.
-      defineBoth: (a, b, def, blind) => {
+      defineBoth: (a, b, def, blind, source, model) => {
         const s = get();
         const text = def.trim();
         if (!text || !s.codebook[a] || !s.codebook[b] || a === b) return;
@@ -2331,9 +2342,11 @@ export const useStore = create<State>()(
           [a]: { ...s.codebook[a], def: text, defAi: false },
           [b]: { ...s.codebook[b], def: text, defAi: false } } });
         // NOT "keep": this row changed state (two definitions), so undo must
-        // be able to strike it — keep is inert and restore() would skip it
-        get().logDecision({ kind: "define", codes: [a, b], source: "you", why: text,
-          ...(blind ? { blind } : {}) });
+        // be able to strike it — keep is inert and restore() would skip it.
+        // source/model: keeping apart an AI-proposed pair answers the AI's
+        // question, with the same provenance merging it would have carried
+        get().logDecision({ kind: "define", codes: [a, b], source: source ?? "you", why: text,
+          ...(model ? { model } : {}), ...(blind ? { blind } : {}) });
         announce(`${a} and ${b} kept apart, and that sentence is now the definition of both`);
       },
       // The counterpart to noteVerdict. These rows are invisible to undo by

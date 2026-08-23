@@ -130,7 +130,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, codes, red, context), 0), [chunks, codes, red, context]);
   const redactions = useMemo(() => {
     const book = codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0);
-    const win = lines.reduce((n, l) => n + red.count(l.text), 0);
+    const win = lines.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0);
     return book * chunks.length + win; // the codebook rides every chunk
   }, [codes, lines, red, chunks.length]);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(lines.length * 6)));
@@ -166,7 +166,11 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
         }
         useStore.getState().logAiCall({
           at: new Date().toISOString(), model: model.id, task: "suggest", pid,
-          lines: chunks[i].length, redactions: chunks[i].reduce((n, l) => n + red.count(l.text), 0),
+          // text AND speaker, plus the codebook that rides every chunk —
+          // count what the renderer actually replaces
+          lines: chunks[i].length,
+          redactions: chunks[i].reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
+            + codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
           inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
         });
         cost += usage.costUsd;

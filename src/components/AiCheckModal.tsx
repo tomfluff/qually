@@ -110,7 +110,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
     () => chunks.reduce((n, c) => n + estimateChunkTokens(c, red, lenses), 0),
     [chunks, red, lenses]
   );
-  const redactions = useMemo(() => todo.reduce((n, l) => n + red.count(l.text), 0), [todo, red]);
+  const redactions = useMemo(() => todo.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0), [todo, red]);
   // notices produce more output than error flags; scale the guess with the lens count
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(todo.length * 25 * Math.max(1, lenses.length))));
   const preview = chunks.length ? renderChunk(chunks[0].slice(0, 6), red) : "";
@@ -135,7 +135,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
         st.addFlags(pid, flags, chunks[i], lenses);
         st.logAiCall({
           at: new Date().toISOString(), model: model.id, task: `scan:${[...lenses].sort().join("+")}`, pid,
-          lines: chunks[i].length, redactions: chunks[i].reduce((n, l) => n + red.count(l.text), 0),
+          lines: chunks[i].length, redactions: chunks[i].reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0),
           inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
         });
         for (const spans of Object.values(flags))

@@ -361,8 +361,9 @@ export const renderFocusPayload = (
 ): string =>
   `FOCUS CODES (propose dispositions for these only):\n\n${renderMergePayload(focus, r)}\n\nCONTEXT CODEBOOK (merge targets and context only):\n\n${renderMergePayload(context, r)}`;
 
-export const estimateFocusTokens = (focus: MergeCodeInput[], context: MergeCodeInput[], r: Redaction) =>
-  estimateTokens(FOCUS_SYSTEM + styleSuffix([...focus, ...context].map((c) => c.name)))
+export const estimateFocusTokens = (focus: MergeCodeInput[], context: MergeCodeInput[], r: Redaction,
+  asks: ReconcileAsks = DEFAULT_ASKS) =>
+  estimateTokens(FOCUS_SYSTEM + asksSuffix(asks) + styleSuffix([...focus, ...context].map((c) => c.name)))
   + estimateTokens(renderFocusPayload(focus, context, r));
 
 const FOCUS_SCHEMA = {
