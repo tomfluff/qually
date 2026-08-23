@@ -882,10 +882,13 @@ function MapInner() {
     const names = liveCodes(codebook);
     if (!names.length) return {};
     const ones = names.filter((c) => (stats[c]?.segs ?? 0) <= 1).length;
+    // the bucket this points at is "1 excerpt" and it holds the never-coded
+    // too, so the line says so rather than claiming an excerpt that isn't there
+    const none = names.filter((c) => (stats[c]?.segs ?? 0) === 0).length;
     const onePid = names.filter((c) => (stats[c]?.pids ?? 0) <= 1).length;
     const undef = names.filter((c) => !(codebook[c]?.def ?? "").trim()).length;
     return {
-      segs: `${ones} of ${names.length} on one excerpt`,
+      segs: `${ones} of ${names.length} on one excerpt${none ? " or none" : ""}`,
       pids: `${onePid} of ${names.length} in one transcript`,
       defs: undef ? `${undef} with no definition yet` : "every code has a definition",
     };
