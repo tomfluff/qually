@@ -1919,7 +1919,11 @@ export const useStore = create<State>()(
         set({ codeClusters: get().codeClusters.filter((_, i) => i !== ci) });
         get().logDecision({
           kind: "dismiss",
-          codes: [c.newName ?? c.survivor, ...c.codes.filter((m) => m !== c.survivor)],
+          // the survivor's REAL name, not a newName typed into the halo: a
+          // dismiss renamed nothing, and the wording sweep's refusedPairs()
+          // matches this row against actual code names — a typed name here
+          // would let the sweep re-nag a pair the researcher just turned down
+          codes: [c.survivor, ...c.codes.filter((m) => m !== c.survivor)],
           source: c.source ?? "you",
           ...(c.model ? { model: c.model } : {}),
           why: c.rationale || "No reason recorded",

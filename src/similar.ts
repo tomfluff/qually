@@ -66,15 +66,31 @@ const dice = (a: Set<string>, b: Set<string>) => {
   return (2 * inter) / (a.size + b.size);
 };
 
+// The whole-book sweep scores every pair — O(n²) calls on one click — and
+// re-tokenizing each name and definition per pair is what turned a 400-code
+// book into a second of frozen UI. The sets are built once per distinct string
+// instead; they are never mutated, so sharing the instances is safe. Keys are
+// the codebook's own names and definitions, so the cache stays book-sized.
+const memo = <T,>(f: (s: string) => T) => {
+  const m = new Map<string, T>();
+  return (s: string) => {
+    let v = m.get(s);
+    if (v === undefined) { v = f(s); m.set(s, v); }
+    return v;
+  };
+};
+const tokenSet = memo((s: string) => new Set(tokens(s)));
+const bigramSet = memo(bigrams);
+
 export function scoreSimilar(source: SimilarInput, other: SimilarInput): { score: number; why: string } {
-  const sName = new Set(tokens(source.name));
-  const oName = new Set(tokens(other.name));
+  const sName = tokenSet(source.name);
+  const oName = tokenSet(other.name);
   const shared = [...sName].filter((w) => oName.has(w));
   const nameJ = jaccard(sName, oName);
   const defJ = source.def && other.def
-    ? jaccard(new Set(tokens(source.def)), new Set(tokens(other.def)))
+    ? jaccard(tokenSet(source.def), tokenSet(other.def))
     : 0;
-  const spell = dice(bigrams(source.name), bigrams(other.name));
+  const spell = dice(bigramSet(source.name), bigramSet(other.name));
   // one name's words fully inside the other's is a strong split signal:
   // "chart" vs "chart complexity" is one concept splintering
   const contained = sName.size && oName.size

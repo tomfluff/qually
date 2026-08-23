@@ -44,6 +44,7 @@ import { relaxBoxes } from "../mapRelax";
 import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
 import { findSimilar } from "../similar";
+import { sweepWording, refusedPairs, familyReason } from "../sweep";
 import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
 import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 
@@ -1396,6 +1397,44 @@ function MapInner() {
       context: liveCodes(st.codebook).filter((c) => !focusSet.has(c)).map(mk),
     };
   }, []);
+  // The offline pass over the WHOLE book: free, keyless, and every proposal it
+  // makes carries the words it matched on. Offered before the AI button
+  // because it clears the half of the work that needs no judgement, and
+  // because a researcher without a key gets nothing else book-wide.
+  const runSweep = useCallback(() => {
+    const st = useStore.getState();
+    const book = liveCodes(st.codebook).map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
+    const fams = sweepWording(book, {
+      // codes already inside a pending capsule are left alone, and a pair you
+      // turned down before is not put back in front of you
+      skip: new Set(st.codeClusters.flatMap((c) => c.codes)),
+      refused: refusedPairs(st.ledger),
+    });
+    if (!fams.length) {
+      earcon.nothing();
+      announce(st.codeClusters.length
+        ? "No new wording matches beyond what is already proposed."
+        : "No wording matches — nothing in the book is spelled nearly the same.", { assertive: true });
+      return;
+    }
+    const fresh = fams.map((f) => ({
+      survivor: bestSurvivor(st, f.codes),
+      codes: f.codes,
+      rationale: familyReason(f),
+      source: "wording" as DecisionSource,
+    }));
+    st.setCodeClusters([...st.codeClusters, ...fresh]);
+    earcon.accept();
+    const one = fams.length === 1;
+    announce(`${fams.length} wording match${one ? "" : "es"} proposed — `
+      + `${fams.filter((f) => f.tier === "typed-twice").length} where one name's words sit inside the other's. `
+      + `Nothing is merged until you accept it.`, { assertive: true });
+    setViewOverride("reconcile");
+    // take the researcher to what just appeared, or the map looks unchanged
+    requestAnimationFrame(() =>
+      showNodes(haloIdsFor(useStore.getState().codeClusters, fresh), "reconcile", null));
+  }, []);
+
   const runFocus = useCallback(async (codes: string[]) => {
     const st = useStore.getState();
     const key = getKey();
@@ -1996,6 +2035,12 @@ function MapInner() {
         <span className="mapDragHint" aria-live="off">{spec.drag}</span>
         <span className="mapBarGap" />
         {/* the current view's own actions; the derived views have none */}
+        {view === "reconcile" && (
+          <button className="btn iconlabel" onClick={runSweep}
+            title="Find codes whose names share wording — on this machine, free, no key. Proposals only.">
+            <Icon name="search" size={16} /> <span className="blabel">Match on wording</span>
+          </button>
+        )}
         {view === "reconcile" && (
           <button className="btn iconlabel" onClick={() => setAiOpen({ scope: "all" })}
             title="AI proposes merge groups and per-code revisions for your review">
