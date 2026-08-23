@@ -53,6 +53,26 @@ export function SummaryView() {
   return (
     <div id="browse" style={{ fontSize }}>
       <div className="browse-left cbSide" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
+        {/* which panes and how they share the space — a property of the tab,
+            so it sits with the picker, not floating over the content */}
+        <div className="segmented sumSideLayout" role="group" aria-label="Layout">
+          {(["side", "stack", "one"] as const).map((l) => (
+            <button key={l} className={"seg" + (layout === l ? " on" : "")}
+              aria-pressed={layout === l} onClick={() => setUi({ summaryLayout: l })}
+              title={l === "side" ? "Detailed and summary side by side"
+                : l === "stack" ? "Detailed above, summary below" : "One pane at a time"}>
+              {l === "side" ? "Side" : l === "stack" ? "Stacked" : "One"}
+            </button>
+          ))}
+        </div>
+        {layout === "one" && (
+          <div className="segmented sumSideLayout" role="group" aria-label="Pane">
+            <button className={"seg" + (pane === "detail" ? " on" : "")}
+              aria-pressed={pane === "detail"} onClick={() => setPane("detail")}>Detailed</button>
+            <button className={"seg" + (pane === "text" ? " on" : "")}
+              aria-pressed={pane === "text"} onClick={() => setPane("text")}>Summary</button>
+          </div>
+        )}
         <div className="bSideHead">Summary</div>
         <div className="cbList nicescroll">
           {allPids.length === 0 ? (
@@ -79,32 +99,14 @@ export function SummaryView() {
 
       {pid ? (
         <div className="sumRight">
-          <div className="sumHead" style={{ fontSize: sidebarFontSize }}>
-            <span className="sumTitle">{pid}</span>
-            {/* which panes, and how they share the space */}
-            <div className="segmented sumLayout" role="group" aria-label="Layout">
-              {(["side", "stack", "one"] as const).map((l) => (
-                <button key={l} className={"seg" + (layout === l ? " on" : "")}
-                  aria-pressed={layout === l} onClick={() => setUi({ summaryLayout: l })}
-                  title={l === "side" ? "Detailed and summary side by side"
-                    : l === "stack" ? "Detailed above, summary below" : "One pane at a time"}>
-                  {l === "side" ? "Side" : l === "stack" ? "Stacked" : "One"}
-                </button>
-              ))}
-            </div>
-            {layout === "one" && (
-              <div className="segmented sumLayout" role="group" aria-label="Pane">
-                <button className={"seg" + (pane === "detail" ? " on" : "")}
-                  aria-pressed={pane === "detail"} onClick={() => setPane("detail")}>Detailed</button>
-                <button className={"seg" + (pane === "text" ? " on" : "")}
-                  aria-pressed={pane === "text"} onClick={() => setPane("text")}>Summary</button>
-              </div>
-            )}
-            <button className="btn sumGen" onClick={() => setGenOpen(true)}
-              title="Draft a summary with AI from this session's events and coded excerpts (sends them to OpenAI after your approval)">
-              <Icon name="sparkle" size={14} /> Generate
-            </button>
-          </div>
+          {/* the one action, hovering the corner — always there, over the pane
+              it writes into. Bottom-right, so it never sits on the first line
+              a reader lands on; the pane scrolls past its own end anyway. */}
+          <button className="btn sumFab" onClick={() => setGenOpen(true)}
+            style={{ fontSize: sidebarFontSize }}
+            title={`Draft ${pid}'s summary with AI from its events and coded excerpts (sends them to OpenAI after your approval)`}>
+            <Icon name="sparkle" size={14} /> Generate
+          </button>
           <div className={"sumSplit " + layout}>
             {(layout !== "one" || pane === "detail") && <DetailPane pid={pid} />}
             {layout !== "one" && <SplitGrip vertical={layout === "side"} />}
