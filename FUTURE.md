@@ -16,6 +16,29 @@ Shipped items get moved to the "Done" list with the commit.
 
 ## Done
 
+- **(9) Consolidation suite — SHIPPED 2026-08-23** (Waves 0–2, local commits
+  `5291298`…`867288f`). Three layers, all reviewed by a second model:
+  - *The record.* A decision ledger beside `aiLog`: every merge, rename,
+    withdrawal, deletion and set-aside with its reason and whose idea it was
+    (you / matched on wording / AI + model), undo-aware (an undone decision is
+    flagged, not erased), travelling in the project file and exporting as
+    `decisions.csv`. Provenance per code is derived from it (`provenance.ts`),
+    as is the methods paragraph. Assist → **Decisions** shows all of it.
+  - *Seeing and thinning.* The view menu says what each grouping holds
+    ("84 of 123 on one excerpt or none"); an offline whole-book wording sweep
+    (`sweep.ts`) proposes merge capsules with no key and no cost, remembering
+    what you turned down; **the thin tail** (Assist) walks every thin code one
+    screen at a time, keep / fold / set aside, forwards and back.
+  - *Deciding.* **What separates these two?** asks for the distinguishing
+    sentence before anything offers one, and writes it as both definitions;
+    **argue against this merge** asks the model for the strongest case that you
+    are wrong, and may find none; **your call before the model's** withholds an
+    AI proposal's reasoning until you have said what you think, and counts the
+    agreement into the methods paragraph.
+  - Also: `parked` codes (set aside without rejecting or deleting), stable
+    cluster ids, and a Code map that no longer evicts a group's codes when you
+    move it.
+
 - **(5) Session event logs — SHIPPED 2026-08-09.** A recorder's events CSV
   (markers + field notes) loads per transcript from the tab's right-click menu;
   events interleave with the lines by time on the video clock (they follow the
@@ -89,6 +112,25 @@ Shipped items get moved to the "Done" list with the commit.
   accepted excerpts — surfaced in the Assist tab or the codebook, editable, and
   only saved when the researcher finalizes it. The AI drafts; the researcher
   owns the definition.
+
+### Parked, deliberately (2026-08-23)
+- **Per-code history.** `historyOf` in `src/provenance.ts` already walks the
+  decision ledger back through a code's former names; nothing surfaces it. The
+  obvious home is a "History" item in the code context menu. Parked until the
+  ledger has been used on real work.
+- **Decisions panel visual pass**, the left rail especially. It works and it is
+  legible; it has not had a designer's eye on it.
+- **Wave 3 — signals from your own coding.** Co-occurrence (which codes land on
+  the same lines: the only signal made entirely of decisions you already made,
+  and the one that separates "one code" from "one theme"); coverage across
+  declared comparisons (a condition coded on one side and not the other); the
+  codebook's own house style measured and sent with every naming request.
+- **Wave 4 — the handoff into themes.** Three lenses instead of one grouping;
+  a theme's claim with the excerpts that resist it; theme integrity checks.
+- **Index-keyed card state.** `openCards`, `menu.halo.ci` and the card's own
+  `ci` are still list indices; clusters carry a stable `cid` now. A stale index
+  there costs a folded card rather than data, but it is the same class of bug
+  that ate a capsule's position and, once, a neighbouring proposal.
 
 ### Codes → paper — shortens the part after coding
 - **Export excerpts grouped by code** as a quote-ready doc (respecting the `[R:]`

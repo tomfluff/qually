@@ -107,3 +107,38 @@ and striped in the transcript. sanitizeSuggestReply is the trust boundary
   scale).
 - New-code invention by the AI (crosses "coding stays yours").
 - In-transcript grounding underlines (revisit after F1 lands in Browse).
+
+---
+
+## F4–F6 — the consolidation suite (SHIPPED 2026-08-23, Waves 0–2)
+
+Same line, extended: **the AI proposes, the researcher decides** — and now the
+record says which was which.
+
+- **The decision ledger** (`state/store.ts`, `provenance.ts`, Assist →
+  Decisions). `aiLog` records what was ASKED of the model; the ledger records
+  what the researcher DID with the answer. Every merge / rename / withdrawal /
+  deletion / set-aside carries its reason, its source (`you` / `wording` /
+  `ai` + model) and the size of what moved. Exports as `decisions.csv`; the
+  methods paragraph is counted from it, never written by a model.
+- **The offline wording sweep** (`sweep.ts`). The whole book at once, on the
+  device, no key: two tiers (one name's words inside another's, vs merely
+  shares wording), a negation guard so valence flips never reach the confident
+  tier, and refusal memory read out of the ledger's dismiss rows.
+- **The thin tail** (`components/TailQueue.tsx`). One thin code per screen,
+  keep / fold / set aside, walked in both directions. The ledger is its memory.
+- **What separates these two?** (`components/TellApartModal.tsx`). The
+  researcher writes the distinguishing sentence BEFORE any model is asked, and
+  it becomes both codes' definitions. Failing to write it merges, with that
+  failure as the recorded reason.
+- **Argue against this merge** (`ai/reconcile.ts: argueAgainst`). Same model,
+  opposite job: the strongest case that a proposed merge is wrong, with "no
+  real case" a first-class answer drawn as a shrug.
+- **Your call before the model's** (`ui.blindVerdict`, on by default). An AI
+  capsule withholds its reasoning until the researcher has called it; the
+  agreement rate lands in the ledger and in the methods paragraph.
+
+Copy note: the Welcome/README reframe promised above still says "proposes —
+marks, merges and candidate codings — and applies nothing without your
+decision". That remains true of every surface here, and the Decisions panel is
+now the place a reader can check it.
