@@ -1382,8 +1382,12 @@ export const useStore = create<State>()(
         const rows = Object.keys(cb).sort().map((code) => ({
           code, color: cb[code].color, short_def: cb[code].def, status: cb[code].status,
           def_source: cb[code].def ? (cb[code].defAi ? "ai" : "human") : "",
+          // which codes you set aside belongs in an appendix as much as which
+          // you kept: a codebook of 90 codes reads differently when 30 more
+          // are sitting beside it, unrejected
+          set_aside: cb[code].parked ? "yes" : "",
         }));
-        return toCSV(rows, ["code", "color", "short_def", "status", "def_source"]);
+        return toCSV(rows, ["code", "color", "short_def", "status", "def_source", "set_aside"]);
       },
 
       // Re-importable transcript, carrying the CORRECTED text. `original` is the
@@ -2464,6 +2468,10 @@ function importCodebook(get: Get, set: Set_, rows: Record<string, string>[]) {
       status: r.status || cb[key].status,
       // colors come from our own codebook.csv export; older files have no column
       color: /^#[0-9a-f]{6}$/i.test(r.color || "") ? r.color : cb[key].color,
+      // absent column leaves the flag alone — a hand-made file must not
+      // silently bring back everything you set aside
+      parked: r.set_aside === undefined ? cb[key].parked
+        : /^(yes|true|1)$/i.test(r.set_aside.trim()) || undefined,
     } } });
   });
 }

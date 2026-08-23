@@ -72,6 +72,15 @@ describe("setting a code aside", () => {
     expect(parkedCodes(useStore.getState().codebook)).toEqual([]);
   });
 
+  it("says which codes are set aside in codebook.csv", () => {
+    useStore.getState().setParked("stray", true);
+    const rows = useStore.getState().exportCodebook().trim().split(/\r?\n/);
+    expect(rows[0]).toContain("set_aside");
+    // sorted by code: "small text" then "stray"
+    expect(rows[1].endsWith(",")).toBe(true);      // not set aside — empty cell
+    expect(rows[2].endsWith("yes")).toBe(true);
+  });
+
   it("travels in the project file", () => {
     useStore.getState().setParked("stray", true);
     const p = parseProject(useStore.getState().exportProject());
