@@ -35,6 +35,8 @@ export function SettingsButton() {
   const fontFamily = useStore((s) => s.ui.fontFamily);
   const warnSize = useStore((s) => s.ui.warnSize);
   const laneWidth = useStore((s) => s.ui.laneWidth);
+  const stretchBand = useStore((s) => s.ui.stretchBand);
+  const stretchLabel = useStore((s) => s.ui.stretchLabel);
   const lanePattern = useStore((s) => s.ui.lanePattern);
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const coderName = useStore((s) => s.ui.coderName);
@@ -285,6 +287,24 @@ export function SettingsButton() {
                     ))}
                   </div>
                 </div>
+                <div className="srow">
+                  <span>Stretch band</span>
+                  <div className="segmented">
+                    {(["xs", "sm", "md", "lg"] as const).map((sz) => (
+                      <button key={sz} className={"seg" + (stretchBand === sz ? " on" : "")} onClick={() => setUi({ stretchBand: sz })}>{sz}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-note">The coloured bands marking what a span of lines belongs to (select lines, right-click, Mark).</div>
+                <div className="srow">
+                  <span>Stretch label size</span>
+                  <div className="segmented">
+                    {(["sm", "md", "lg"] as const).map((sz) => (
+                      <button key={sz} className={"seg" + (stretchLabel === sz ? " on" : "")} onClick={() => setUi({ stretchLabel: sz })}>{sz}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-note">The vertical labels riding each band — grow them until they read comfortably.</div>
                 <div className="srow">
                   <span>Code patterns</span>
                   <div className="segmented">

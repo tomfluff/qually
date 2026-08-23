@@ -38,6 +38,7 @@ beforeAll(async () => {
   s.logAiCall({ at: "2026-07-14T00:00:00Z", model: "gpt-5.6-luna", task: "scan:evaluation", pid: "P01",
     lines: 3, redactions: 0, inTok: 100, outTok: 20, costUsd: 0.0002 });
   s.setAi({ redactTerms: ["Ann Lee"] });
+  s.markStretch({ pid: "P01", start: 1, end: 2, dim: "condition", value: "baseline" }); // a stretch
 });
 
 test("the project file carries everything that is the research work", () => {
@@ -55,6 +56,8 @@ test("the project file carries everything that is the research work", () => {
   expect(p.aiLog).toHaveLength(1);
   expect(p.ai.redactTerms).toEqual(["Ann Lee"]);
   expect(p.segments).toHaveLength(1);
+  // what a span of talk belongs to is study data — it must survive the file
+  expect(p.stretches).toEqual([{ pid: "P01", start: 1, end: 2, dim: "condition", value: "baseline" }]);
 });
 
 test("the API key never enters the project file", () => {

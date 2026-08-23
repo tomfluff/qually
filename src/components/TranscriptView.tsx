@@ -13,6 +13,7 @@ import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
 import { useDismiss } from "../usePopover";
+import { stretchColor, stretchDims, stretchOverlaps, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
@@ -124,6 +125,14 @@ export function shortLabels(names: string[]): Record<string, string> {
 }
 const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 
+// the stretch gutter's geometry: band px per thickness step, vertical-label
+// font px per size step — the label rides its band, so a dimension costs a
+// band plus one letter-height, not a column of prose
+const STRETCH_BAND_PX = { xs: 3, sm: 5, md: 8, lg: 12 } as const;
+const STRETCH_LABEL_PX = { sm: 9, md: 11, lg: 13 } as const;
+// lazy: this module is imported by node-side tests where document is absent
+let stMeasure: CanvasRenderingContext2D | null = null;
+
 const MIN_PAD = 48;    // headroom floor (also the spacer height until the viewport is measured)
 const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
 // There is deliberately no animated scrolling here. Every jump lands in one frame.
@@ -152,6 +161,78 @@ export function TranscriptView() {
   const segments = useStore((s) => s.segments);
   const codebook = useStore((s) => s.codebook);
   const selLines = useStore((s) => (s.selection.pid === s.active ? s.selection.lines : null));
+  const allStretches = useStore((s) => s.stretches);
+  const stretchBand = useStore((s) => s.ui.stretchBand);
+  const stretchLabel = useStore((s) => s.ui.stretchLabel);
+  // the gutter exists only while this transcript has stretches; every row
+  // shares one geometry so the text column stays aligned
+  const stretchCtx = useMemo(() => {
+    const list = allStretches.filter((st) => st.pid === active);
+    if (!list.length) return null;
+    const dims = stretchDims(list);
+    const bandPx = STRETCH_BAND_PX[stretchBand];
+    const labelPx = STRETCH_LABEL_PX[stretchLabel];
+    // a dimension's column: its vertical label lane, then its band
+    const colW = labelPx + 3 + bandPx + 2;
+    return {
+      list, dims, bandPx, labelPx, colW,
+      // one shared width, so marker rows can reserve the same room (see MarkerRow)
+      width: `${dims.length * colW + 2}px`,
+      widthPx: dims.length * colW + 2,
+    };
+  }, [allStretches, active, stretchBand, stretchLabel]);
+  const [stretchMenu, setStretchMenu] = useState<{ x: number; y: number; start: number; end: number; addAfter: Group } | null>(null);
+  // The sticky labels: a stretch's name rides the top of the viewport while
+  // you are inside it and hands off where the next stretch begins — computed
+  // imperatively on scroll (the rows are virtualized; no row can know it is
+  // the first visible one), same rhythm as the minimap sync.
+  const stretchOvRef = useRef<HTMLDivElement>(null);
+  const stretchCtxRef = useRef<StretchCtx | null>(null);
+  stretchCtxRef.current = stretchCtx;
+  const syncStretchLabels = useCallback(() => {
+    const ov = stretchOvRef.current, v = vref.current, ctx = stretchCtxRef.current;
+    if (!ov) return;
+    if (!ctx || !v || !v.viewportSize) { ov.replaceChildren(); return; }
+    const idx = itemIdxRef.current;
+    const listEl = ov.parentElement?.querySelector(".tviewlist");
+    const ovRect = ov.getBoundingClientRect();
+    const listRect = listEl?.getBoundingClientRect();
+    const baseX = listRect ? listRect.left - ovRect.left : 0;
+    const frag = document.createDocumentFragment();
+    for (const st of ctx.list) {
+      const gi0 = idx?.get(st.start), gi1 = idx?.get(st.end);
+      if (gi0 === undefined || gi1 === undefined) continue;
+      // virtua child indices carry the vpad at 0, so items shift by one; the
+      // stretch's end is the start of whatever follows its last row
+      const y0 = v.getItemOffset(gi0 + 1) - v.scrollOffset;
+      const y1 = v.getItemOffset(gi1 + 2) - v.scrollOffset;
+      if (y1 <= 0 || y0 >= v.viewportSize) continue;
+      const col = ctx.dims.indexOf(st.dim);
+      if (col < 0) continue;
+      // measured, not guessed: a vertical label's height is its horizontal
+      // text advance — canvas measure, no layout read (wide glyphs, CJK)
+      stMeasure ??= document.createElement("canvas").getContext("2d")!;
+      stMeasure.font = `700 ${ctx.labelPx}px ${getComputedStyle(document.body).fontFamily}`;
+      const len = stMeasure.measureText(st.value.toUpperCase()).width + 12;
+      const top = Math.min(Math.max(y0 + 2, 4), Math.max(y1 - len, y0 + 2));
+      const el = document.createElement("span");
+      el.className = "stFloatLabel";
+      el.textContent = st.value;
+      el.title = `${st.dim}: ${st.value} · lines ${st.start}–${st.end}`;
+      el.style.cssText = `left:${baseX + col * ctx.colW + 1}px;top:${top}px;` +
+        `font-size:${ctx.labelPx}px;color:${stretchColor(st.value)};`;
+      frag.appendChild(el);
+    }
+    ov.replaceChildren(frag);
+  }, []);
+  useEffect(() => { syncStretchLabels(); });
+  // a window resize re-wraps rows (offsets shift) without a re-render or scroll;
+  // rAF so virtua has remeasured before we read offsets
+  useEffect(() => {
+    const onResize = () => requestAnimationFrame(syncStretchLabels);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [syncStretchLabels]);
   // a primitive, not an object — a fresh-object selector re-renders forever (see CodeMenu)
   const headId = useStore((s) => (s.selection.pid === s.active ? s.selection.head : null));
   const fontSize = useStore((s) => s.ui.fontSize);
@@ -725,7 +806,7 @@ export function TranscriptView() {
           live region can express our order + the AI marks + a whole multi-line selection.
           So the selection-announce effect above is the single, consistent voice; the rows
           drop role=option/aria-selected for the same reason. */}
-      <VList ref={vref} className="tviewlist" onScroll={syncMinimap}
+      <VList ref={vref} className="tviewlist" onScroll={() => { syncMinimap(); syncStretchLabels(); }}
         tabIndex={0} onKeyDown={onListKeyDown}
         aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line, M to review the selected line's AI observations.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
@@ -734,7 +815,7 @@ export function TranscriptView() {
           ...items.map((it) => it.kind === "m" ? (
             <MarkerRow key={`m${it.m.mid}`} marker={it.m} offset={mkOffset}
               tsSample={tsSample} colors={ui.markerColors} showLid={showLineNumbers}
-              onEdit={() => setAddEv({ m: it.m })} />
+              stretchW={stretchCtx?.width} onEdit={() => setAddEv({ m: it.m })} />
           ) : (
             <Row
               key={`g${it.g.startId}`}
@@ -747,7 +828,17 @@ export function TranscriptView() {
               laned={laned}
               codebook={codebook}
               onRowDown={(e) => onRowDown(e, it.g.startId)}
-              onAddEvent={() => openAddEvent(it.g)}
+              stretchCtx={stretchCtx}
+              // right-click: with a selection under the cursor it is the
+              // stretch gesture; bare, it stays "add an event here"
+              onRowContext={(e) => {
+                const st = useStore.getState();
+                const sel = st.selection.pid === active ? st.selection.lines : null;
+                if (sel?.size && it.g.ids.some((id) => sel.has(id))) {
+                  setStretchMenu({ x: e.clientX, y: e.clientY,
+                    start: Math.min(...sel), end: Math.max(...sel), addAfter: it.g });
+                } else openAddEvent(it.g);
+              }}
               onLaneClick={(seg, e) =>
                 // clicking the segment's own lane while its popover is open closes it
                 // (useDismiss ignores this lane, so the mousedown doesn't close-then-reopen)
@@ -786,7 +877,8 @@ export function TranscriptView() {
       <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: clampMinimapWidth(w) })} />
       <Minimap ref={mmRef} items={items} laned={laned} cols={cols} codebook={codebook}
         closeCallSids={closeCallSids} flagsByLine={flagsByLine}
-        detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims} />
+        detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims}
+        stretches={stretchCtx?.list ?? []} stretchDimList={stretchCtx?.dims ?? []} />
         {selOff && (
           <button className={`backtosel ${selOff}`} onClick={backToSelection}
             style={{ fontSize: ui.sidebarFontSize }} aria-label="Scroll back to your selected line(s)">
@@ -813,6 +905,12 @@ export function TranscriptView() {
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
       {codeMenu && <CodeMenu code={codeMenu.code} x={codeMenu.x} y={codeMenu.y}
         onClose={() => setCodeMenu(null)} />}
+      <div className="stretchLabels" ref={stretchOvRef} aria-hidden="true" />
+      {stretchMenu && (
+        <StretchMenu x={stretchMenu.x} y={stretchMenu.y} start={stretchMenu.start} end={stretchMenu.end}
+          pid={active} onAddEvent={() => openAddEvent(stretchMenu.addAfter)}
+          onClose={() => setStretchMenu(null)} />
+      )}
       {aiPop && <AiMarkPopover pid={active} line={aiPop.line} span={aiPop.span}
         x={aiPop.x} y={aiPop.y} onClose={() => setAiPop(null)} onCycle={cycleMarkPopover} />}
     </>
@@ -831,11 +929,12 @@ export function TranscriptView() {
 // The timecode plays from the moment the note was made: the marker's time is on the
 // video clock, so it goes back through the dock's offset to reach a line time — the
 // same conversion anchorMarkers uses, in the same direction.
-function MarkerRow({ marker, offset, tsSample, colors, showLid, onEdit }: {
+function MarkerRow({ marker, offset, tsSample, colors, showLid, stretchW, onEdit }: {
   marker: Marker; offset: number;
   tsSample: string | undefined;          // a real line's timecode, to copy its shape
   colors: Record<string, string>;        // chosen event-type colours (ui.markerColors)
   showLid: boolean;                      // line numbers on: pad so the chips still line up
+  stretchW?: string;                     // stretch gutter width — same reason, same edge
   onEdit: () => void;                    // open the add-event modal on this event
 }) {
   const [editing, setEditing] = useState(false);
@@ -880,6 +979,9 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, onEdit }: {
         openColorPicker(color, (v) => useStore.getState().setMarkerColor(key, v),
           { x: e.clientX, y: e.clientY });
       }}>
+      {/* the stretch gutter's room, kept empty: a marker is a moment, not a span —
+          the bands break here on purpose, but the column rhythm holds */}
+      {stretchW && <span className="stretchCell" style={{ width: stretchW }} aria-hidden="true" />}
       {showLid && <span className="lid" aria-hidden="true" />}
       <button className="ts" tabIndex={-1} title="Play from here"
         onClick={() => seekVideo(lineTs)}>{lineTs}</button>
@@ -917,15 +1019,99 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, onEdit }: {
   );
 }
 
-function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onAddEvent, onLaneClick, onLaneMenu, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+// The mark-stretch menu: right-click on a selection. One form, two lists —
+// what to mark these lines as (dimension + value, both remembering what the
+// project already uses), and what already covers them, unmarkable in place.
+function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
+  x: number; y: number; start: number; end: number; pid: string;
+  onAddEvent: () => void; onClose: () => void;
+}) {
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const stretches = useStore((s) => s.stretches);
+  const dims = stretchDims(stretches);
+  const [dim, setDim] = useState(dims[0] ?? "condition");
+  const [value, setValue] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useDismiss(ref, onClose);
+  const values = [...new Set(stretches.filter((s2) => s2.dim === dim.trim()).map((s2) => s2.value))];
+  const here = stretches.map((st, i) => ({ st, i }))
+    .filter(({ st }) => st.pid === pid && st.start <= end && st.end >= start);
+  const mark = () => {
+    const d = dim.trim() || "condition", v = value.trim();
+    if (!v) return;
+    useStore.getState().markStretch({ pid, start, end, dim: d, value: v });
+    announce(`Lines ${start}–${end} marked ${d}: ${v}`);
+    onClose();
+  };
+  return (
+    <div ref={ref} className="ctxmenu stretchMenu" role="dialog" aria-label="Mark these lines"
+      style={{ left: Math.min(x, window.innerWidth - 280), top: Math.min(y, window.innerHeight - 300), fontSize: fs }}>
+      <button role="menuitem" onClick={() => { onAddEvent(); onClose(); }}>Add event after this line</button>
+      <div className="ctxdiv" />
+      <div className="ctxhead">Mark lines {start}–{end} as</div>
+      <div className="stForm">
+        <input value={dim} onChange={(e) => setDim(e.target.value)} list="stretch-dims"
+          aria-label="Dimension" placeholder="condition" />
+        <datalist id="stretch-dims">{dims.map((d) => <option key={d} value={d} />)}</datalist>
+        <input value={value} onChange={(e) => setValue(e.target.value)} list="stretch-values"
+          aria-label="Value" placeholder="baseline" autoFocus
+          onKeyDown={(e) => { if (e.key === "Enter") mark(); }} />
+        <datalist id="stretch-values">{values.map((v) => <option key={v} value={v} />)}</datalist>
+        <button className="btn primary" disabled={!value.trim()} onClick={mark}>Mark</button>
+      </div>
+      {here.length > 0 && <div className="ctxdiv" />}
+      {here.map(({ st, i }) => (
+        <button key={i} role="menuitem" className="stUnmark"
+          title={`Remove this mark (lines ${st.start}–${st.end})`}
+          onClick={() => { useStore.getState().unmarkStretch(i); announce(`Unmarked ${st.dim}: ${st.value}`); onClose(); }}>
+          <span className="stDot" style={{ background: stretchColor(st.value) }} />
+          {st.dim}: {st.value} <span className="stRange">{st.start}–{st.end}</span> ×
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type StretchCtx = {
+  list: Stretch[]; dims: string[]; bandPx: number; labelPx: number; colW: number;
+  width: string; widthPx: number;
+};
+
+// The stretch gutter cell: one column per dimension — a vertical-label lane
+// and its band. The cell draws only the bands; the labels are STICKY, drawn by
+// the overlay in the parent so they ride the scroll and hand off at the next
+// stretch (a virtualized row cannot know it is the first one on screen).
+function StretchCell({ ctx, start, end }: { ctx: StretchCtx; start: number; end: number }) {
+  // ctx.list is already this transcript's stretches — a plain overlap test
+  const covering = ctx.list.filter((st) => stretchOverlaps(st, start, end));
+  const starting = covering.filter((st) => st.start >= start && st.start <= end);
+  return (
+    <span className="stretchCell" style={{ width: ctx.width }} aria-hidden="true">
+      {covering.map((st, i) => {
+        const col = ctx.dims.indexOf(st.dim);
+        return (
+          <span key={i} className={"stBand" + (starting.includes(st) ? " stStart" : "")} style={{
+            right: `${(ctx.dims.length - 1 - col) * ctx.colW + 2}px`,
+            width: `${ctx.bandPx}px`, background: stretchColor(st.value),
+          }} title={`${st.dim}: ${st.value} · lines ${st.start}–${st.end}`} />
+        );
+      })}
+    </span>
+  );
+}
+
+function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowContext, stretchCtx, onLaneClick, onLaneMenu, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
+  /** right-click on the row body — the parent decides between "add event" and
+      the stretch menu (a selection is the stretch gesture's handle) */
+  onRowContext: (e: MouseEvent) => void;
+  stretchCtx: StretchCtx | null;
   selected: boolean;
   spkOff: string; // speaker focus: class(es) a NON-focused speaker's row carries ("" = focused/none)
   cols: number;
   laned: LanedSeg[];
   codebook: Record<string, { color: string }>;
   onRowDown: (e: MouseEvent) => void;
-  onAddEvent: () => void;
   onLaneClick: (seg: LanedSeg, at: { clientX: number; clientY: number }) => void;
   onLaneMenu: (seg: LanedSeg, at: { clientX: number; clientY: number }) => void;
   onGripDown: (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => void;
@@ -1050,9 +1236,10 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onAddE
       // native menu (paste); nothing else on a row had a use for right-click.
       onContextMenu={(e) => {
         if ((e.target as HTMLElement).closest(".lineEdit")) return;
-        e.preventDefault(); onAddEvent();
+        e.preventDefault(); onRowContext(e);
       }}
       style={{ "--spk-c": spkColor, "--spk-ink": inkOn(spkColor), ...(shadow.length ? { boxShadow: shadow.join(",") } : {}) } as CSSProperties}>
+      {stretchCtx && <StretchCell ctx={stretchCtx} start={group.startId} end={group.endId} />}
       {showLid && <span className="lid">{lidLabel(group)}</span>}
       {/* out of the Tab order: tabbing walked every rendered timecode. Mouse users
           click it; keyboard users press Enter on the selected line (see the list). */}

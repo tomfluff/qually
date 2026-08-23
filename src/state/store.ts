@@ -11,6 +11,7 @@ import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, spanLens, type Flag } from "../ai/flag";
 import type { GroundRec } from "../ai/ground";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
+import type { Stretch } from "../stretches";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll, renameScroll } from "../scrollMemory";
@@ -119,6 +120,9 @@ export interface Ui {
   mapViewport: { x: number; y: number; zoom: number } | null;
   // earcons on the Code map (multimodal confirmation for low-vision use)
   mapSounds: boolean;
+  /** stretch gutter: band thickness and the room reserved for labels */
+  stretchBand: "xs" | "sm" | "md" | "lg";
+  stretchLabel: "sm" | "md" | "lg";
   /** how heavy the Code map's selection ring paints, in SCREEN px at any zoom */
   mapRing: MapRingSize;
   mapMinimap: "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -316,6 +320,9 @@ export interface State {
   // map can say when it has drifted.
   codeAreas: CodeGroup[];
   codeAreasFp: string;
+  /** labelled spans of transcript — "these lines are the baseline condition";
+      dimension:value pairs, overlapping freely (see stretches.ts) */
+  stretches: Stretch[];
   // the pending revision plan from the last reconcile run — study data too:
   // the review can continue in a later session
   codePlan: CodePlanAction[];
@@ -434,6 +441,8 @@ export interface State {
   setProjectName: (name: string) => void;
   setCodeGroups: (groups: CodeGroup[]) => void;
   setCodeAreas: (areas: CodeGroup[], fp: string) => void;
+  markStretch: (st: Stretch) => void;
+  unmarkStretch: (i: number) => void;
   setCodePlan: (plan: CodePlanAction[]) => void;
   setCodeClusters: (clusters: CodeCluster[]) => void;
   /** turn a merge proposal down — the record wants the noes as much as the yeses */
@@ -568,6 +577,7 @@ function snapshot(s: State): string {
     codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp,
     codePlan: s.codePlan, codeClusters: s.codeClusters,
     mapPositions: s.mapPositions, mapIslandPos: s.mapIslandPos,
+    stretches: s.stretches,
     // not the ledger itself — its LENGTH. Undo flags the decisions logged after
     // this point as undone instead of erasing them (see restore).
     ledgerLen: s.ledger.length,
@@ -723,6 +733,7 @@ function restore(get: () => State, set: (p: Partial<State>) => void, json: strin
     codeGroups: o.codeGroups ?? cur.codeGroups,
     codeAreas: o.codeAreas ?? cur.codeAreas,
     codeAreasFp: o.codeAreasFp ?? cur.codeAreasFp,
+    stretches: o.stretches ?? cur.stretches,
     codePlan: o.codePlan ?? cur.codePlan,
     codeClusters: o.codeClusters ?? cur.codeClusters,
     mapPositions: o.mapPositions ?? cur.mapPositions,
@@ -796,9 +807,9 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: { open: false, query: "", scope: "tab", current: null },
@@ -812,7 +823,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1619,6 +1630,7 @@ export const useStore = create<State>()(
           codeGroups: s.codeGroups,       // Code map groupings — ditto
           codeAreas: s.codeAreas,         // the AI areas view — an AI pass, worth keeping
           codeAreasFp: s.codeAreasFp,
+          stretches: s.stretches,         // what each span of talk belongs to — study data
           codePlan: s.codePlan,           // pending reconciliation verdicts — ditto
           codeClusters: s.codeClusters,   // pending merge-clusters — ditto
           answers: s.answers,     // …and so are the questions asked of the material
@@ -1660,6 +1672,7 @@ export const useStore = create<State>()(
           projectName: p.projectName ?? "",
           codeGroups: p.codeGroups ?? [],
           codeAreas: p.codeAreas ?? [],
+          stretches: p.stretches ?? [],
           codeAreasFp: p.codeAreasFp ?? "",
           codePlan: (p.codePlan ?? []).filter((a) => a.action !== "merge"),
           // emit-never, load-always: pairwise merges from older files become
@@ -1759,6 +1772,19 @@ export const useStore = create<State>()(
       setCodeAreas: (areas, fp) => {
         get().pushUndo();
         set({ codeAreas: areas.filter((g) => g.codes.length > 0), codeAreasFp: fp });
+      },
+      markStretch: (st) => {
+        // an exact duplicate is a full no-op: no state change, no history entry.
+        // Overlaps are allowed on purpose (dims, and re-marking).
+        const cur = get().stretches;
+        if (cur.some((x) => x.pid === st.pid && x.start === st.start && x.end === st.end
+          && x.dim === st.dim && x.value === st.value)) return;
+        get().pushUndo();
+        set({ stretches: [...cur, st] });
+      },
+      unmarkStretch: (i) => {
+        get().pushUndo();
+        set({ stretches: get().stretches.filter((_, k) => k !== i) });
       },
       setCodePlan: (plan) => { get().pushUndo(); set({ codePlan: plan }); },
       resetMapLayout: (stage) => {
@@ -2400,7 +2426,7 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, ledger: s.ledger, // NB: the API key is not in the store (ai/key.ts)
-        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
+        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp, stretches: s.stretches, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
       }),
       onRehydrateStorage: () => (s) => {
         if (!s) return;
@@ -2423,6 +2449,9 @@ export const useStore = create<State>()(
         s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
         s.ui.assistPanel ??= "observations";
         s.ui.tailLimit ??= 1;
+        s.ui.stretchBand ??= "sm";
+        s.ui.stretchLabel ??= "md";
+        s.stretches ??= [];
         s.ui.eventSort ??= "type";
         // normalize, not just default: a corrupt persisted value would make the
         // sidebar chip index SORTS with -1 and crash the whole sidebar

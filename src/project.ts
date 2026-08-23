@@ -70,6 +70,9 @@ export interface Project {
   // out from — an AI pass is worth carrying with the project
   codeAreas?: { name: string; codes: string[]; rationale?: string }[];
   codeAreasFp?: string;
+  // labelled spans of transcript (dimension:value), e.g. which condition a
+  // stretch of a within-subject session came from — study data
+  stretches?: { pid: string; start: number; end: number; dim: string; value: string }[];
   codePlan?: { code: string; action: "rename" | "merge" | "remove"; newName?: string; into?: string; rationale: string }[];
   // the full cluster shape, declared: it round-trips verbatim, and a type that
   // lists half the fields tells the next reader the other half is not saved
@@ -155,6 +158,12 @@ export function parseProject(text: string): Project {
           !!g && typeof g.name === "string" && Array.isArray(g.codes) && g.codes.every((c: unknown) => typeof c === "string"))
       : [],
     codeAreasFp: typeof p.codeAreasFp === "string" ? p.codeAreasFp : "",
+    stretches: Array.isArray(p.stretches)
+      ? p.stretches.filter((s): s is NonNullable<Project["stretches"]>[number] =>
+          !!s && typeof s.pid === "string" && Number.isSafeInteger(s.start)
+          && Number.isSafeInteger(s.end) && s.start <= s.end
+          && typeof s.dim === "string" && typeof s.value === "string")
+      : [],
     codePlan: Array.isArray(p.codePlan)
       ? p.codePlan.filter((a): a is NonNullable<Project["codePlan"]>[number] =>
           !!a && typeof a.code === "string" && ["rename", "merge", "remove"].includes(a.action))

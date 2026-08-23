@@ -307,3 +307,26 @@
   box-shadow:0 3px 14px rgba(0,0,0,.3); }
 [data-theme=dark] .backtosel { color:#12161a; }
 .backtosel:hover { filter:brightness(1.08); }
+
+/* ── stretches: the gutter that says what a span of talk belongs to ────────
+   One band column per dimension, label horizontal in its own reserved room
+   (legibility is a setting: band thickness and label space both scale). */
+.stretchCell { flex:none; position:relative; align-self:stretch; user-select:none; }
+.stretchCell .stBand { position:absolute; top:0; bottom:0; border-radius:0; opacity:.85; }
+.stretchCell .stBand.stStart { border-top-left-radius:3px; border-top-right-radius:3px; top:2px; }
+/* the sticky labels: vertical, riding their band's column, pinned to the top
+   of the viewport while inside the stretch (see syncStretchLabels) */
+.stretchLabels { position:absolute; inset:0; pointer-events:none; z-index:3; overflow:hidden; }
+.stretchLabels .stFloatLabel { position:absolute; writing-mode:vertical-rl;
+  font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  white-space:nowrap; line-height:1; pointer-events:auto; }
+
+/* the mark-stretch menu's little form */
+.stretchMenu { min-width:240px; }
+.stForm { display:flex; gap:6px; padding:6px 10px 8px; }
+.stForm input { flex:1; min-width:0; font:inherit; padding:3px 7px;
+  background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:7px; }
+.stForm .btn { flex:none; }
+.stUnmark { display:flex; align-items:center; gap:7px; }
+.stUnmark .stDot { width:9px; height:9px; border-radius:3px; flex:none; }
+.stUnmark .stRange { color:var(--muted); font-variant-numeric:tabular-nums; margin-left:auto; }

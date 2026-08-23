@@ -6,6 +6,7 @@ import { laneAssign, speakerColor, weightOf } from "../state/store";
 import type { Ui } from "../state/store";
 import { lensOf, spanLens, type Flag } from "../ai/flag";
 import { markerColor, markerKey } from "../markers";
+import { stretchColor, type Stretch } from "../stretches";
 import type { Item } from "./TranscriptView";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
@@ -40,10 +41,14 @@ export const Minimap = forwardRef<MinimapHandle, {
   closeCallSids: Set<number>;
   flagsByLine: Map<number, Flag[]>; // the transcript's VISIBLE marks (already lens-filtered)
   detail: "detailed" | "simplified";
+  /** the active transcript's stretches (condition/task spans) and their dims,
+      drawn as thin colour strips in their own leftmost column */
+  stretches: Stretch[];
+  stretchDimList: string[];
   ui: Ui; // speaker colours + weights; the minimap was the LAST place still hardcoding "R"
   vref: RefObject<VListHandle | null>;
   onNav?: () => void; // stop the list's scroll animations before a scrub jump, or they overwrite it
-}>(function Minimap({ items, laned, cols, codebook, closeCallSids, flagsByLine, detail, ui, vref, onNav }, ref) {
+}>(function Minimap({ items, laned, cols, codebook, closeCallSids, flagsByLine, detail, ui, vref, onNav, stretches, stretchDimList }, ref) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -96,6 +101,12 @@ export const Minimap = forwardRef<MinimapHandle, {
       // columns: [0..warnW] warnings gutter · text · lane columns (flush right).
       // simplified widens everything and enforces min sizes so marks stay obvious.
       const warnW = simple ? 6 : 4;
+      // the stretch strips: one thin column per dimension, leftmost — what a
+      // span BELONGS to reads before what happened in it
+      // capped like the event band: many dimensions thin out rather than
+      // pushing the speech and code columns off the map
+      const stColW = stretchDimList.length
+        ? Math.min(stretchDimList.length * (simple ? 5 : 4) + 1, w * 0.15) : 0;
       // Session events: ONE COLUMN PER TYPE, before the speaker rail. Sharing a
       // single lane meant two types at the same scroll position drew over each
       // other, and a type had no fixed x to scan down — "where did the breaks
@@ -121,7 +132,7 @@ export const Minimap = forwardRef<MinimapHandle, {
       const mkGap = Math.min(1, mkPitch * 0.25);
       const mkW = mkKeys.length ? Math.max(0.8, mkPitch - mkGap) : 0;
       const mkBandW = mkKeys.length * mkPitch;
-      const mkX = warnW + 2;
+      const mkX = stColW + warnW + 2;
       // speaker rail: WHO is talking, as its own channel. Deliberately a separate strip
       // rather than tinting the text bars — the text bars stay a pure "how much was
       // said" signal, and the two colour systems (speaker, code) never share a column.
@@ -157,6 +168,23 @@ export const Minimap = forwardRef<MinimapHandle, {
       // content rows live UNDER the glyph header
       const mh = h - HDR;
       const yOf = (i: number) => HDR + (i / N) * mh;
+
+      // stretch strips: the span's colour down its dimension's column
+      if (stColW) {
+        const sw = simple ? 4 : 3;
+        for (const st of stretches) {
+          const col = stretchDimList.indexOf(st.dim);
+          if (col < 0) continue;
+          const gi0 = lineToGi.current.get(st.start), gi1 = lineToGi.current.get(st.end);
+          if (gi0 === undefined || gi1 === undefined) continue;
+          // same line-id → row math as the code-lane bars below
+          const y0 = yOf(gi0), y1 = yOf(gi1 + 1);
+          ctx.fillStyle = stretchColor(st.value);
+          ctx.globalAlpha = 0.9;
+          ctx.fillRect(col * (sw + 1), y0, sw, Math.max(2, y1 - y0));
+          ctx.globalAlpha = 1;
+        }
+      }
 
       // ── zone furniture (lab option 1, "Ruled zones"): a whisper of accent
       // tint behind the machine zones (events 2.5%, AI + lanes 5%), a hairline
@@ -282,7 +310,7 @@ export const Minimap = forwardRef<MinimapHandle, {
         ctx.fillRect(laneX + s.lane * colW, y0, Math.max(1, colW - 1.5), Math.max(codeMinH, y1 - y0));
         if (s.status !== "rejected" && closeCallSids.has(s.sid)) {
           ctx.globalAlpha = 1; ctx.fillStyle = WARN;
-          ctx.fillRect(0, y0, warnW, Math.max(warnMinH, y1 - y0));
+          ctx.fillRect(stColW, y0, warnW, Math.max(warnMinH, y1 - y0));
         }
       }
 
@@ -304,6 +332,7 @@ export const Minimap = forwardRef<MinimapHandle, {
     syncFromList();
     drawRef.current = draw; syncRef.current = syncFromList; // the mount-only observer calls through these
   }, [items, laned, cols, codebook, closeCallSids, flagsByLine, detail, N,
+      stretches, stretchDimList, // the strips redraw when spans are (un)marked
       ui.speakerColors, ui.speakerWeight, // recolour the rail when the speaker map changes
       ui.markerColors, // and the event lane when a type is recoloured
       ui.dark]); // repaint on theme flip so the muted amount-bars pick up the new --muted
