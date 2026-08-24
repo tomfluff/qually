@@ -350,5 +350,14 @@
 .stForm .stComboWrap .signinput { width:100%; }
 .stForm .btn { flex:none; align-self:flex-start; }
 .stUnmark { display:flex; align-items:center; gap:7px; }
-.stUnmark .stDot { width:9px; height:9px; border-radius:3px; flex:none; }
 .stUnmark .stRange { color:var(--muted); font-variant-numeric:tabular-nums; margin-left:auto; }
+/* Every row in the section menus leads with this fixed slot, so their labels
+   start on ONE edge whether the row is fronted by a colour dot (which says
+   WHICH section) or an icon (which says what the row does). Without it the
+   coloured rows sat a swatch-width to the right of the plain ones. */
+.stretchMenu .stLead { width:16px; flex:none; display:flex; align-items:center; justify-content:center; }
+.stretchMenu .stLead .stDot { width:11px; height:11px; border-radius:3px; flex:none; }
+/* the trailing × on an "already covers these lines" row: the affordance, quiet
+   until the row is under the pointer */
+.stretchMenu .stUnmark svg { color:var(--muted); }
+.stretchMenu .stUnmark:hover svg { color:var(--fg); }

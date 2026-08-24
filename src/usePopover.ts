@@ -35,7 +35,16 @@ export function useDismiss(
   useEffect(() => {
     if (!enabled) return;
     const down = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node) && !ignore?.(e)) onClose();
+      // "Inside" is judged by where the press LANDED, not where its target is
+      // now: React flushes a discrete event's state update before this
+      // document-level listener runs, so a combobox suggestion (which closes
+      // its list on pick) is already detached by the time we ask, and
+      // `contains` said "outside" and shut the whole popover — swallowing the
+      // pick. composedPath() is frozen when the event starts dispatching, so
+      // it still holds the pressed node's ancestry — while a press on an
+      // OUTSIDE control that removed itself (a backdrop, a selection grip)
+      // still reads as outside and dismisses as it should.
+      if (ref.current && !e.composedPath().includes(ref.current) && !ignore?.(e)) onClose();
     };
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onEscape(); } };
     document.addEventListener("mousedown", down, capture);

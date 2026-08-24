@@ -1268,7 +1268,12 @@ function StretchCombobox({ value, onChange, options, placeholder, ariaLabel, aut
   const choose = (name: string) => { onChange(name); setOpen(false); setHl(0); };
   const onKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing) return; // an IME's confirm-Enter is not a pick
-    if (!showList) { if (e.key === "Enter" && onCommit) { e.preventDefault(); onCommit(); } return; }
+    if (!showList) {
+      // Down is the ARIA combobox gesture for "show me what there is"
+      if (e.key === "ArrowDown" && entries.length) { e.preventDefault(); setOpen(true); setHl(0); return; }
+      if (e.key === "Enter" && onCommit) { e.preventDefault(); onCommit(); }
+      return;
+    }
     if (e.key === "ArrowDown") { e.preventDefault(); setHl((h) => Math.min(h + 1, entries.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
     else if (e.key === "Enter") { e.preventDefault(); const en = entries[Math.min(hl, entries.length - 1)]; if (en) choose(en.name); }
@@ -1281,7 +1286,11 @@ function StretchCombobox({ value, onChange, options, placeholder, ariaLabel, aut
         aria-label={ariaLabel}
         aria-activedescendant={showList ? `${listId}-${hl}` : undefined}
         onChange={(e) => { onChange(e.target.value); setOpen(true); setHl(0); }}
-        onFocus={() => setOpen(true)}
+        // NOT on focus: this field is autofocused inside a menu, and a list that
+        // unfurls the moment the menu opens covers the menu's own rows before
+        // the researcher has asked for anything. Typing, clicking the field, or
+        // pressing Down asks; arriving does not.
+        onClick={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onKeyDown={onKey} />
       {showList && (
@@ -1361,8 +1370,13 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
     <div ref={ref} className="ctxmenu stretchMenu" role="dialog" aria-label="Mark these lines"
       onKeyDown={arrows} style={{ left: x, top: y, fontSize: fs }}>
       {/* a plain button: role=menuitem outside a role=menu is not a thing, and
-          this surface is a dialog on purpose (it holds two comboboxes) */}
-      <button onClick={() => { onAddEvent(); onClose(); }}>Add event after this line</button>
+          this surface is a dialog on purpose (it holds two comboboxes).
+          .stLead is the fixed slot every row in this menu leads with, so the
+          labels line up whether the row is fronted by an icon or a colour */}
+      <button onClick={() => { onAddEvent(); onClose(); }}>
+        <span className="stLead"><Icon name="file-plus" size={15} /></span>
+        Add event after this line
+      </button>
       <div className="ctxdiv" />
       <div className="ctxhead">Mark lines {start}–{end} as</div>
       <div className="stForm">
@@ -1378,8 +1392,9 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
         <button key={i} className="stUnmark"
           title={`Remove this mark (lines ${st.start}–${st.end})`}
           onClick={() => { useStore.getState().unmarkStretch(i); announce(`Unmarked ${st.dim}: ${st.value}`); onClose(); }}>
-          <span className="stDot" style={{ background: stretchColorOf(st.value, stColors, dark) }} />
-          {st.dim}: {st.value} <span className="stRange">{st.start}–{st.end}</span> ×
+          <span className="stLead"><span className="stDot" style={{ background: stretchColorOf(st.value, stColors, dark) }} /></span>
+          {st.dim}: {st.value} <span className="stRange">{st.start}–{st.end}</span>
+          <Icon name="x" size={14} />
         </button>
       ))}
     </div>
@@ -1447,14 +1462,16 @@ function StretchPillMenu({ x, y, si, onClose }: {
           announce(`${v} recoloured`);
         }, at);
       }}>
-        <span className="stDot" style={{ background: cur }} /> Change colour…
+        <span className="stLead"><span className="stDot" style={{ background: cur }} /></span>
+        Change colour…
       </button>
       <button onClick={() => {
         useStore.getState().unmarkStretch(si);
         announce(`Unmarked ${st.dim}: ${st.value}`);
         onClose();
       }}>
-        Remove this mark <span className="stRange">{st.start}–{st.end}</span> ×
+        <span className="stLead"><Icon name="trash" size={15} /></span>
+        Remove this mark <span className="stRange">{st.start}–{st.end}</span>
       </button>
     </div>
   );
