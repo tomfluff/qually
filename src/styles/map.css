@@ -435,3 +435,40 @@
    too — otherwise "no real case against" reads as an objection at a glance */
 .mapCardAgainst.weak .mapNoteWho { color:var(--muted); }
 
+
+/* the view's name, first thing on the bar: the label reads as a statement of
+   where you are, not a button — it is deliberately not clickable, because the
+   Map tab's menu is the one place a view changes. */
+.mapMode { flex:none; padding-inline:4px 2px; font-weight:650; letter-spacing:.01em;
+  white-space:nowrap; color:var(--fg); }
+
+/* Find on the map. Its own strip under the bar, sized to the field — the bar
+   above it is a fixed row of controls and must not stretch with a query. */
+.mapFind { position:absolute; left:12px; top:56px; z-index:6;
+  display:flex; align-items:center; gap:6px;
+  padding:5px 6px 5px 10px; border:1px solid var(--line); border-radius:10px;
+  background:var(--panel); box-shadow:0 4px 14px rgba(0,0,0,.22); }
+.mapFindInput { width:20ch; border:none; background:none; color:var(--fg);
+  font:inherit; padding:2px 4px; border-radius:5px; outline:none; }
+/* the field has no border of its own, so removing the outline would leave a
+   keyboard user with a caret as the ONLY sign of where they are — the strip's
+   own edge stands in for it */
+.mapFindInput:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.mapFindCount { min-width:5ch; color:var(--muted); font-variant-numeric:tabular-nums;
+  text-align:right; }
+.mapFind .btn.iconbtn { height:2.2em; aspect-ratio:1; padding-inline:0;
+  display:inline-flex; align-items:center; justify-content:center; }
+
+/* Every match is dimly ringed so the shape of the answer is visible at a
+   glance ("they are all in one theme"); the one you are ON gets the loud ring
+   AND a wash, because at a distance a ring alone reads as just another
+   selected chip. Deliberately NOT the selection accent: a search hit is not
+   selected, and acting on the selection must not act on what you searched. */
+/* half the selection ring's weight — but the same SCREEN-priced --map-ring
+   unit (see its note above): a fixed 2px world ring painted at 0.2px zoomed
+   out, and the dim marks vanished exactly when the overview needed them. */
+.findMatch > .mapChip, .findMatch > .mapIsland, .findMatch > .mapHalo {
+  box-shadow:0 0 0 calc(var(--map-ring, 4px) / 2) var(--find-ring); }
+.findHit > .mapChip, .findHit > .mapIsland, .findHit > .mapHalo {
+  box-shadow:0 0 0 var(--map-ring, 4px) var(--find-ring);
+  background:color-mix(in srgb, var(--find-ring) 16%, var(--panel)); }

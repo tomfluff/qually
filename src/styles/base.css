@@ -9,6 +9,10 @@
   --bg:#ffffff; --fg:#1a1a1a; --fg-dim:#4a4a4a; --muted:#6b6b6b; --line:#e4e4e4;
   --panel:#f6f6f6; --accent:#6d28d9; /* brand purple; App.tsx overwrites from palettes.ts */
   --warn:#b45309; /* objections and reversals; dark theme lifts it below */
+  /* search hits on the map: deliberately NOT the accent, which means
+     "selected" everywhere else — a hit is somewhere you were sent, not
+     something you picked. Amber clears 3:1 on both grounds (1.4.11). */
+  --find-ring:#b45309;
   --row-hover:#ebebeb; --mm-w:66px;
   /* reading font for transcript text + excerpts; App.tsx sets it from ui.fontFamily */
   --read-font:system-ui, Segoe UI, Roboto, sans-serif;
@@ -26,6 +30,7 @@
   --bg:#161a1e; --fg:#e6e6e6; --fg-dim:#a8b0b8; --muted:#97a3ad; --line:#2c333a;
   --panel:#1e242a; --accent:#a78bfa;
   --warn:#e8964f;
+  --find-ring:#e8b563;
   --row-hover:#23282e;
 }
 /* Honour the OS "increase contrast" setting rather than making users hunt for it. */

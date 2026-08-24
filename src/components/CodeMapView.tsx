@@ -133,6 +133,13 @@ type DefCardData = { def: string; color: string };
 type DefCardNodeT = Node<DefCardData, "defcard">;
 type MapNode = ChipNodeT | IslandNodeT | HaloNodeT | CardNodeT | SimilarNodeT | DefCardNodeT;
 
+/** What a node is CALLED — the thing map search matches on, and the only text
+    a researcher can be looking for when they type into it. Cards and stems
+    have no name of their own; they hang off a chip that does. */
+const labelOf = (n: MapNode): string =>
+  n.type === "chip" ? n.data.code
+    : n.type === "island" || n.type === "halo" ? n.data.name : "";
+
 // THE VIEWS. One value — not a stage crossed with a lens. The old pair could
 // express eight situations for a product that has five, and every feature had
 // to answer "is this a stage thing or a lens thing?" with "neither, it
@@ -314,7 +321,55 @@ function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onS
   // the one place that already re-renders exactly when chip selection changes
   useEffect(() => { onSelectionChanged(); }, [joined, onSelectionChanged]);
   const clusters = useStore((st) => st.codeClusters);
-  const { getNodes } = useReactFlow();
+  const { getNodes, getInternalNode } = useReactFlow();
+  // The selected codes as text, one name per line, in the order they are laid
+  // out — reading order, top row first, because that is the order the
+  // researcher sees and the only one they can predict. (Click order would be
+  // the other candidate; react-flow does not keep it, and a marquee has none.)
+  const selectedText = useCallback(() => {
+    const at = (id: string) => getInternalNode(id)?.internals.positionAbsolute ?? { x: 0, y: 0 };
+    // rows first: chips packed in a container sit on visual rows, and raw
+    // y-sorting would zigzag between two chips a pixel apart in height
+    return sel.slice().sort((a, b) => {
+      const pa = at(a), pb = at(b);
+      return Math.round(pa.y / 24) - Math.round(pb.y / 24) || pa.x - pb.x;
+    }).join("\n");
+  }, [sel, getInternalNode]);
+  const copySelected = () => {
+    const t = selectedText();
+    if (!t) return;
+    const said = `Copied ${sel.length} code name${sel.length === 1 ? "" : "s"}`;
+    // No async clipboard (an insecure origin — this app is offline-first and
+    // gets served off a LAN address as often as localhost): ask the document
+    // to copy instead, which fires the copy event the handler below already
+    // fills. Silently doing nothing is the one outcome a copy button must not
+    // have.
+    if (!navigator.clipboard) {
+      if (document.execCommand("copy")) announce(said);
+      else announce("Could not copy — press Ctrl+C instead", { assertive: true });
+      return;
+    }
+    navigator.clipboard.writeText(t).then(() => announce(said), () => announce("Could not copy"));
+  };
+  // Ctrl/Cmd+C with the map open. On the copy EVENT, like the transcript's own
+  // copy (App.tsx): it needs no clipboard permission and works where
+  // navigator.clipboard is missing. The button above is the same thing for the
+  // mouse, and goes through the async API because no event is in flight.
+  useEffect(() => {
+    if (!sel.length) return;
+    const onCopy = (e: ClipboardEvent) => {
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (window.getSelection()?.toString().trim()) return; // a real text selection copies itself
+      const t = selectedText();
+      if (!t) return;
+      e.clipboardData?.setData("text/plain", t);
+      e.preventDefault();
+      announce(`Copied ${sel.length} code name${sel.length === 1 ? "" : "s"}`);
+    };
+    document.addEventListener("copy", onCopy);
+    return () => document.removeEventListener("copy", onCopy);
+  }, [sel, selectedText]);
   // the keyboard path for eviction: dragging out is pointer-only, this is not.
   // Only offered in the Reconcile view — capsules are not drawn anywhere else,
   // so eviction would have no visible effect.
@@ -353,6 +408,8 @@ function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onS
           Remove from merge
         </button>
       )}
+      <button className="btn" onClick={copySelected}
+        title="Copy the selected code names, one per line (Ctrl+C)">Copy names</button>
       <button className="btn" onClick={() => openInCodebook(sel)}>Open in Codebook</button>
     </Panel>
   );
@@ -830,6 +887,40 @@ function useKeepOnScreen<T extends HTMLElement>(deps: unknown[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   return ref;
+}
+
+// The find marks, reconciled AFTER React Flow paints. They are DOM classes on
+// RF's node wrappers (a match changes nothing about what a node IS, and node
+// data would churn the whole flow per keystroke) — but RF rewrites those
+// wrappers' classNames on select and drag, and a layout rebuild (rfSetNodes)
+// or view switch swaps the DOM set, and both silently wiped classes set from
+// a plain effect (which also ran BEFORE the rebuild committed, marking DOM
+// about to be thrown away). Subscribing to the flow store re-runs this after
+// every commit RF makes, so the marks are re-asserted over whatever it just
+// painted; class toggles that change nothing are no-ops, so the steady state
+// costs one read pass. Mounted only while find is open; unmounting sweeps.
+function FindMarks({ canvas, hits, cur }: {
+  canvas: { current: HTMLDivElement | null }; hits: string[]; cur?: string;
+}) {
+  useFlowStore((s: { nodes: Node[] }) => s.nodes);
+  useEffect(() => {           // deliberately undepped: reconcile after EVERY render
+    const el = canvas.current;
+    if (!el) return;
+    const want = new Map(hits.map((id) => [id, id === cur]));
+    for (const n of el.querySelectorAll<HTMLElement>(".react-flow__node")) {
+      const w = want.get(n.dataset.id ?? "");
+      n.classList.toggle("findMatch", w === false);
+      n.classList.toggle("findHit", w === true);
+    }
+  });
+  useEffect(() => {
+    const el = canvas.current;
+    return () => {
+      for (const n of el?.querySelectorAll(".findMatch, .findHit") ?? [])
+        n.classList.remove("findMatch", "findHit");
+    };
+  }, [canvas]);
+  return null;
 }
 
 function MapInner() {
@@ -1523,6 +1614,93 @@ function MapInner() {
   }, [codes, codebook, stats, cooc, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev, stretches, activeDims]);
   const build = useCallback(() => layout.nodes, [layout]);
 
+  const canvasRef = useRef<HTMLDivElement>(null);
+  // ── Find on the map ────────────────────────────────────────────────────
+  // The map is the one view where "where is that code?" has no answer without
+  // panning around hunting for it. Same contract as the transcript's search
+  // (Ctrl+F, Enter steps, Esc closes), and the same reason Figma's works: it
+  // MOVES you — every hit is a camera trip, not a row in a list you then have
+  // to find by eye.
+  const [find, setFind] = useState<{ q: string; i: number } | null>(null);
+  const findRef = useRef<HTMLInputElement>(null);
+  const hits = useMemo(() => {
+    const q = find?.q.trim().toLowerCase();
+    if (!q) return [] as string[];
+    // reading order — top row first, left to right. Chips inside a container
+    // carry positions relative to it, so absolute coordinates are accumulated
+    // in one pass (parents are emitted strictly before their children).
+    const abs = new Map<string, { x: number; y: number }>();
+    const found: { id: string; x: number; y: number }[] = [];
+    for (const n of layout.nodes) {
+      const p = n.parentId ? abs.get(n.parentId) : undefined;
+      const at = { x: (p?.x ?? 0) + n.position.x, y: (p?.y ?? 0) + n.position.y };
+      abs.set(n.id, at);
+      if (labelOf(n).toLowerCase().includes(q)) found.push({ id: n.id, ...at });
+    }
+    // banded by row before x: two chips a pixel apart in height are on the
+    // same row to the eye, and raw y-sorting would zigzag between them
+    found.sort((a, b) => Math.round(a.y / 24) - Math.round(b.y / 24) || a.x - b.x);
+    return found.map((f) => f.id);
+  }, [layout, find?.q]);
+  // the hit list changes under a live query (typing, or a merge landing) —
+  // never leave the cursor past its end
+  const at = hits.length ? Math.min(find?.i ?? 0, hits.length - 1) : 0;
+  const stepFind = (d: number) =>
+    setFind((f) => (f && hits.length ? { ...f, i: (at + d + hits.length) % hits.length } : f));
+  // Fly to the current hit — and only when the DESTINATION changes (new query
+  // text, or a step). `hits` gets a fresh identity every time `layout`
+  // recomputes (a card opening, a chip dropped, an AI result landing), and a
+  // flight on mere identity yanked the camera back to the hit mid-gesture.
+  // The trip is deferred one frame: a rebuild landing in the same flush (the
+  // rfSetNodes effect below) has then committed, so fitView is never aimed at
+  // a node id React Flow does not hold yet — that trip was a silent no-op.
+  // (The marks themselves are FindMarks' job, rendered with the strip below.)
+  const flown = useRef("");
+  useEffect(() => {
+    const cur = hits[at];
+    const trip = cur ? (find?.q.trim() ?? "") + "\u0000" + cur : ""; // NUL: never in a code name
+    if (trip === flown.current) return;
+    flown.current = trip;
+    if (!cur) return;
+    requestAnimationFrame(() => {
+      if (flown.current !== trip) return; // superseded while the frame waited
+      // keep the zoom the researcher chose, but not so far out that landing on
+      // the hit shows them a speck: below 0.9 the trip zooms in to read it
+      void fitView({ nodes: [{ id: cur }], duration: 320, maxZoom: Math.max(getZoom(), 0.9) });
+    });
+  }, [hits, at, find?.q, fitView, getZoom]);
+  const closeFind = useCallback(() => {
+    setFind(null); // FindMarks unmounts with the strip and sweeps its marks
+    canvasRef.current?.focus();
+  }, []);
+  // Ctrl+F, from anywhere on the map. App's handler owns it on a transcript
+  // and steps aside here (it checks the active tab), so this is the only
+  // listener that answers — and it must, or the browser's own find opens over
+  // a canvas whose text it cannot see.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || (e.key !== "f" && e.key !== "F")) return;
+      // A dialog on top owns the keyboard, and a find strip opening BEHIND one
+      // breaks its focus trap — the researcher would be typing into something
+      // they cannot see. The modal is theirs to close first. (.mapFind is in
+      // that list too, so this is also what makes a second Ctrl+F a no-op
+      // rather than a re-select of a field that is already focused.)
+      if (document.querySelector(".about-backdrop, .modal-backdrop, [role=dialog], .palette-backdrop")) return;
+      e.preventDefault();
+      setHelpOpen(false); setLayoutMenu(null); setMapSetMenu(null); setCompareMenu(null);
+      // and the canvas popovers: their Escape listener runs in the capture
+      // phase, so leaving one open would make the first Escape close IT and
+      // the find strip need a second one
+      setMenu(null); setConfirmAi(null); setConfirmRelayout(null); setConfirmFocus(null); setConfirmArea(null);
+      setSimilar(null);
+      setFind((f) => f ?? { q: "", i: 0 });
+      findRef.current?.select();
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, []);
+  useEffect(() => { if (find) findRef.current?.focus(); }, [find !== null]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   // built once per mount; RF owns the array from here (uncontrolled). When the
   // codebook changes under the map (a merge, a rename, new codes), rebuild —
   // dragged chips keep their place via remembered.positions.
@@ -2029,7 +2207,6 @@ function MapInner() {
   // codes lands near 20% where nothing is readable — the losing-your-place bug.
   // The camera only moves when the new layout left you looking at empty canvas,
   // and then it pans (same zoom) to the content rather than zooming out to it.
-  const canvasRef = useRef<HTMLDivElement>(null);
   const switchView = useCallback((next: MapView) => {
     if (next === view) return;
     setViewOverride(next);
@@ -2543,11 +2720,32 @@ function MapInner() {
           every view), then THIS view's actions, icon+name so they read without
           a hover. Which view this is lives on the Map tab's menu now. */}
       <div className="mapBar" role="toolbar" aria-label="Map controls">
+        {/* Which view you are in, said out loud. The Map tab's menu is still the
+            way to CHANGE it, but the answer to "what am I looking at" belongs
+            on the thing itself — every action to the right reads differently
+            depending on it. */}
+        <span className="mapMode" title={spec.label + " — " + spec.hint + ". Switch view from the Map tab."}>
+          {spec.label}
+        </span>
+        <span className="mapBarDivider" role="separator" aria-orientation="vertical" />
         <button className="btn iconbtn mapHelpBtn" aria-expanded={helpOpen}
           aria-label={helpOpen ? "Hide how to use the map" : "How to use the map"}
-          onClick={() => { setLayoutMenu(null); setMapSetMenu(null); setCompareMenu(null); setHelpOpen((v) => !v); }}
+          onClick={() => {
+            // find shares this exact spot under the bar (left:12 / top:56) —
+            // the two are exclusive both ways (Ctrl+F closes help likewise)
+            setLayoutMenu(null); setMapSetMenu(null); setCompareMenu(null); setFind(null); setHelpOpen((v) => !v);
+          }}
           title="How to use the map">
           <Icon name="help" size={16} />
+        </button>
+        <button className="btn iconbtn" aria-expanded={!!find}
+          aria-label={find ? "Close find on the map" : "Find a code on the map"}
+          onClick={() => {
+            setHelpOpen(false); setLayoutMenu(null); setMapSetMenu(null); setCompareMenu(null);
+            find ? closeFind() : setFind({ q: "", i: 0 });
+          }}
+          title="Find a code on the map (Ctrl+F)">
+          <Icon name="search" size={16} />
         </button>
         <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!mapSetMenu}
           ref={mapSetBtn} aria-label="Map settings"
@@ -2846,6 +3044,44 @@ function MapInner() {
           </div>
         );
       })()}
+      {find && <FindMarks canvas={canvasRef} hits={hits} cur={hits[at]} />}
+      {find && (
+        // its own strip under the bar, not a field inside it: the bar is a row
+        // of controls that never changes width, and a text field that grows
+        // with the query would push every action along it.
+        <div className="mapFind" role="search"
+          // Escape from ANY of it — the steppers are buttons a keyboard user
+          // lands on, and Escape there must not fall through to the map's own
+          // Escape (clear the selection) instead of closing what is in front.
+          onKeyDown={(e) => {
+            if (e.key !== "Escape") return;
+            e.preventDefault(); e.stopPropagation();
+            closeFind();
+          }}>
+          <input ref={findRef} className="mapFindInput" value={find.q}
+            placeholder="Find a code…" aria-label="Find a code on the map"
+            onChange={(e) => setFind({ q: e.target.value, i: 0 })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); stepFind(e.shiftKey ? -1 : 1); }
+              else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeFind(); }
+            }} />
+          {/* role=status: the position announces as you type and as you step */}
+          <span className="mapFindCount" role="status">
+            {find.q.trim() ? `${hits.length ? at + 1 : 0}/${hits.length}` : ""}
+          </span>
+          <button className="btn iconbtn" onClick={() => stepFind(-1)} disabled={!hits.length}
+            aria-label="Previous match" title="Previous (Shift+Enter)">
+            <Icon name="chevron-up" size={16} />
+          </button>
+          <button className="btn iconbtn" onClick={() => stepFind(1)} disabled={!hits.length}
+            aria-label="Next match" title="Next (Enter)">
+            <Icon name="chevron-down" size={16} />
+          </button>
+          <button className="btn iconbtn" onClick={closeFind} aria-label="Close find" title="Close (Esc)">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+      )}
       {helpOpen && (
         <div className="mapMenu mapHelp" role="dialog" aria-label="How to use the map"
           style={{ fontSize: sidebarFontSize }}>
