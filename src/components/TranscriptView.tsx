@@ -1355,17 +1355,20 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
   const stretches = useStore((s) => s.stretches);
   const stColors = useStore((s) => s.ui.stretchColors);
   const dark = useStore((s) => s.ui.dark);
-  // suggestions come from THIS transcript's dimensions first — the gutter the
-  // menu is standing in — never pre-filling another participant's axis
+  // the dimension list offers THIS transcript's axes first — the gutter the menu
+  // is standing in — and falls back to the study's; it only ever suggests
   const dims = stretchDims(stretches.filter((s2) => s2.pid === pid));
   const allDims = stretchDims(stretches);
   // the menu opens as a MENU; the mark form is one of its answers (see below)
   const [mode, setMode] = useState<"menu" | "mark">("menu");
-  const [dim, setDim] = useState(dims[0] ?? allDims[0] ?? "condition");
+  // both fields start EMPTY and the dimension takes focus: a prefilled axis is
+  // a guess the researcher has to notice and undo, and the one it guesses is
+  // whatever they used last — the placeholders say what the fields are for, the
+  // lists say what the project already uses, and neither writes anything.
+  const [dim, setDim] = useState("");
   const [value, setValue] = useState("");
   const ref = useRef<HTMLDivElement>(null);
-  // Escape peels one layer, like CodeMenu: the form steps back to the menu,
-  // and the menu closes. An outside click closes outright, whatever the mode.
+  // Escape cancels outright, like the event card this menu's other row opens
   useDismiss(ref, onClose);
   // marking/unmarking rebuilds the overlay the pill lives in, so the opener can
   // be gone by the time focus goes back — land in the transcript either way
@@ -1402,8 +1405,8 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
   // "lines 4–4" is not how anyone says it
   const span = start === end ? `line ${start}` : `lines ${start}–${end}`;
   const mark = () => {
-    const d = dim.trim() || "condition", v = value.trim();
-    if (!v) return;
+    const d = dim.trim(), v = value.trim();
+    if (!d || !v) return; // nothing is assumed for you — both are yours to say
     useStore.getState().markStretch({ pid, start, end, dim: d, value: v });
     announce(`${span[0].toUpperCase()}${span.slice(1)} marked ${d}: ${v}`);
     onClose();
@@ -1434,11 +1437,12 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
           <span className="stHint">Enter to save · Esc to cancel</span></div>
         <div className="stForm">
           <StretchCombobox value={dim} onChange={setDim} options={dimOptions} listId="stretch-dims"
-            placeholder="condition" ariaLabel="Dimension — pick an existing one or write a new one" />
+            placeholder="condition" ariaLabel="Dimension — pick an existing one or write a new one"
+            autoFocus onCommit={() => ref.current?.querySelectorAll("input")[1]?.focus()} />
           <StretchCombobox value={value} onChange={setValue} options={valueOptions} listId="stretch-values"
             placeholder="baseline" ariaLabel="Value — pick an existing one or write a new one"
-            autoFocus onCommit={mark} />
-          <button className="btn primary" disabled={!value.trim()} onClick={mark}>Mark</button>
+            onCommit={mark} />
+          <button className="btn primary" disabled={!dim.trim() || !value.trim()} onClick={mark}>Mark</button>
         </div>
       </>)}
       {mode === "menu" && here.length > 0 && <div className="ctxdiv" />}
