@@ -156,7 +156,17 @@ export function TranscriptView() {
   const speakerNames = useStore((s) => s.ui.speakerNames);
   const warnCls = useStore((s) => `cc-${s.ui.warnSize} cc-${s.ui.warnCorner}`);
   const lanePattern = useStore((s) => s.ui.lanePattern);
-  const ui = useStore((s) => s.ui);
+  // narrow ui subscriptions, NOT the whole object: setUi replaces `ui` on every
+  // patch, and a whole-ui subscription re-rendered this entire view (and its
+  // 1000-element list build) on every sidebar-resize mousemove
+  const speakerColors = useStore((s) => s.ui.speakerColors);
+  const speakerWeight = useStore((s) => s.ui.speakerWeight);
+  const speakerFocus = useStore((s) => s.ui.speakerFocus);
+  const markerColors = useStore((s) => s.ui.markerColors);
+  const focusDim = useStore((s) => s.ui.focusDim);
+  const focusCollapse = useStore((s) => s.ui.focusCollapse);
+  const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
+  const dark = useStore((s) => s.ui.dark);
   const laneWidth = useStore((s) => s.ui.laneWidth);
   const minimapDetail = useStore((s) => s.ui.minimapDetail);
   const setUi = useStore((s) => s.setUi);
@@ -478,7 +488,7 @@ export function TranscriptView() {
   // speaker focus (the target button, bottom right) — per transcript. A stale
   // focus name no longer in THIS transcript is ignored rather than dimming
   // every row (a re-import can rename speakers under a stored focus).
-  const focusName = ui.speakerFocus[active];
+  const focusName = speakerFocus[active];
   const focusActive = useMemo(
     () => focusName && groups.some((g) => g.speaker.trim() === focusName) ? focusName : null,
     [groups, focusName]);
@@ -865,6 +875,27 @@ export function TranscriptView() {
     return set;
   }, [laned, transcript]);
 
+  // the narrow ui slice speakerColor/weightOf/Minimap paint with — one stable
+  // object, so a width-only ui change re-renders none of them
+  const uiSlim = useMemo(() => ({ speakerColors, speakerWeight, markerColors, stretchColors, dark }),
+    [speakerColors, speakerWeight, markerColors, stretchColors, dark]);
+
+  // uniform column widths sized to the longest displayed label in this transcript.
+  // Memoized: measureSpk runs one canvas measureText per LINE, and this used to
+  // sit in the render body — 1000 measurements on every keystroke and selection
+  const spkCols = useMemo(() => {
+    if (!transcript) return null;
+    const shorts = shortLabels([...new Set(transcript.lines.map((l) => l.speaker.trim()))]);
+    const spkLabel = (sp: string) => speakerNames === "short" ? shorts[sp.trim()] ?? sp.trim() : sp.trim();
+    // MEASURED, not counted in `ch`: the chip's font is proportional and bold, so
+    // "Interviewer" is far wider than 11 digit-widths — a ch-based min-width let the
+    // longest chips overflow and shove the text column right, one indent per name
+    // length. Measuring the real glyphs is what keeps every row's text on one edge.
+    const spkWidth = measureSpk(transcript.lines.map((l) => spkLabel(l.speaker)), fontSize);
+    const lidChars = groups.reduce((m, g) => Math.max(m, lidLabel(g).length), 1);
+    return { shorts, spkWidth, lidWidth: `${Math.max(2, lidChars)}ch` };
+  }, [transcript, speakerNames, fontSize, groups]);
+
   // drag a segment edge to another unit (elementFromPoint -> that unit's boundary line id)
   const dragEdge = (e: MouseEvent, seg: LanedSeg, which: "start" | "end") => {
     e.preventDefault(); e.stopPropagation();
@@ -940,16 +971,7 @@ export function TranscriptView() {
     return <div className="empty">Import transcript CSVs to begin (Import files).</div>;
   }
 
-  // uniform column widths sized to the longest displayed label in this transcript
-  const shorts = shortLabels([...new Set(transcript.lines.map((l) => l.speaker.trim()))]);
-  const spkLabel = (s: string) => speakerNames === "short" ? shorts[s.trim()] ?? s.trim() : s.trim();
-  // MEASURED, not counted in `ch`: the chip's font is proportional and bold, so
-  // "Interviewer" is far wider than 11 digit-widths — a ch-based min-width let the
-  // longest chips overflow and shove the text column right, one indent per name
-  // length. Measuring the real glyphs is what keeps every row's text on one edge.
-  const spkWidth = measureSpk(transcript.lines.map((l) => spkLabel(l.speaker)), fontSize);
-  const lidChars = groups.reduce((m, g) => Math.max(m, lidLabel(g).length), 1);
-  const lidWidth = `${Math.max(2, lidChars)}ch`;
+  const { shorts, spkWidth, lidWidth } = spkCols!; // guarded by the !transcript return above
 
   // bracket the hovered (or popover-open) segment's first/last lines
   const activeSid = hoverSid ?? pop?.sid ?? null;
@@ -975,7 +997,7 @@ export function TranscriptView() {
           <div className="vpad vpad-top" key="vpad-top" style={{ height: pad ?? MIN_PAD }} />, // headroom before the first line
           ...items.map((it) => it.kind === "m" ? (
             <MarkerRow key={`m${it.m.mid}`} marker={it.m} offset={mkOffset}
-              tsSample={tsSample} colors={ui.markerColors} showLid={showLineNumbers}
+              tsSample={tsSample} colors={markerColors} showLid={showLineNumbers}
               stretchW={stretchCtx?.width} onEdit={() => setAddEv({ m: it.m })} />
           ) : (
             <Row
@@ -983,7 +1005,7 @@ export function TranscriptView() {
               group={it.g}
               selected={it.g.ids.some((id) => selLines?.has(id))}
               spkOff={focusActive && focusActive !== it.g.speaker.trim()
-                ? (ui.focusDim ? " spk-off-dim" : "") + (ui.focusCollapse ? " spk-off-collapse" : "")
+                ? (focusDim ? " spk-off-dim" : "") + (focusCollapse ? " spk-off-collapse" : "")
                 : ""}
               cols={cols}
               laned={laned}
@@ -1014,8 +1036,8 @@ export function TranscriptView() {
               closeCallSids={closeCallSids}
               warnCls={warnCls}
               lanePattern={lanePattern}
-              spkColor={speakerColor(ui, it.g.speaker)}
-              weight={weightOf(ui, it.g.speaker)}
+              spkColor={speakerColor(uiSlim, it.g.speaker)}
+              weight={weightOf(uiSlim, it.g.speaker)}
               showLid={showLineNumbers}
               speakerNames={speakerNames}
               shortName={shorts[it.g.speaker.trim()] ?? it.g.speaker.trim()}
@@ -1035,15 +1057,18 @@ export function TranscriptView() {
           <div className="vpad vpad-bot" key="vpad-bot" style={{ height: pad ?? MIN_PAD }} />, // headroom after the last line
         ]}
       </VList>
-      <Resizer side="right" onWidth={(w) => setUi({ minimapWidth: clampMinimapWidth(w) })} />
+      <Resizer side="right" clamp={clampMinimapWidth} onWidth={(w) => setUi({ minimapWidth: w })}
+        // the searchbar/notice/focus overlays position off this var (see App's
+        // effect) — ride the preview so they track the drag, not just the commit
+        onPreview={(w) => document.documentElement.style.setProperty("--mm-w", `${w}px`)} />
       <Minimap ref={mmRef} items={items} laned={laned} cols={cols} codebook={codebook}
         closeCallSids={closeCallSids} flagsByLine={flagsByLine}
-        detail={minimapDetail} ui={ui} vref={vref} onNav={stopAnims}
+        detail={minimapDetail} ui={uiSlim} vref={vref} onNav={stopAnims}
         stretches={stretchCtx?.list ?? []} stretchDimList={stretchCtx?.dims ?? []} />
         {selOff && (
           <button className={`backtosel ${selOff}`} onClick={backToSelection}
-            style={{ fontSize: ui.sidebarFontSize }} aria-label="Scroll back to your selected line(s)">
-            <Icon name={selOff === "up" ? "arrow-up" : "arrow-down"} size={ui.sidebarFontSize + 2} /> return
+            style={{ fontSize: sidebarFontSize }} aria-label="Scroll back to your selected line(s)">
+            <Icon name={selOff === "up" ? "arrow-up" : "arrow-down"} size={sidebarFontSize + 2} /> return
           </button>
         )}
       <SpeakerFocus active={active} groups={groups} />

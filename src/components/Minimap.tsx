@@ -45,7 +45,9 @@ export const Minimap = forwardRef<MinimapHandle, {
       drawn as thin colour strips in their own leftmost column */
   stretches: Stretch[];
   stretchDimList: string[];
-  ui: Ui; // speaker colours + weights; the minimap was the LAST place still hardcoding "R"
+  // only the colour/weight maps it paints with — a narrow slice, so the caller
+  // can hand a memoized object and a width-only ui change never reaches here
+  ui: Pick<Ui, "speakerColors" | "speakerWeight" | "markerColors" | "stretchColors" | "dark">;
   vref: RefObject<VListHandle | null>;
   onNav?: () => void; // stop the list's scroll animations before a scrub jump, or they overwrite it
 }>(function Minimap({ items, laned, cols, codebook, closeCallSids, flagsByLine, detail, ui, vref, onNav, stretches, stretchDimList }, ref) {

@@ -2850,7 +2850,7 @@ const SPEAKER_COLORS = ["#6d28d9", "#0f766e", "#b45309", "#b91c1c",
   "#1d4ed8", "#4d7c0f", "#a21caf", "#0369a1"];
 
 // stable default: the same speaker gets the same colour across sessions and transcripts
-export const speakerColor = (ui: Ui, speaker: string): string => {
+export const speakerColor = (ui: Pick<Ui, "speakerColors">, speaker: string): string => {
   const key = speaker.trim();
   const own = ui.speakerColors[key];
   if (own) return own;
@@ -2871,7 +2871,7 @@ export const speakersOf = (s: Pick<State, "transcripts" | "tabs">): string[] => 
   return seen;
 };
 
-export const weightOf = (ui: Ui, speaker: string): SpeakerWeight =>
+export const weightOf = (ui: Pick<Ui, "speakerWeight">, speaker: string): SpeakerWeight =>
   ui.speakerWeight[speaker.trim()] ?? "normal";
 
 // The chip's label used to be hardcoded white, which is fine for the eight defaults

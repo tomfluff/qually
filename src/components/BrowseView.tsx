@@ -56,7 +56,14 @@ export function BrowseView() {
   const leftWidth = useStore((s) => s.ui.browseLeftWidth);
   const setUi = useStore((s) => s.setUi);
   const aiGrounds = useStore((s) => s.aiGrounds);
-  const ui = useStore((s) => s.ui);
+  // narrow subscriptions, not the whole ui object — setUi replaces `ui` on every
+  // patch, and this view re-rendered its whole excerpt list on every one
+  const groundBold = useStore((s) => s.ui.groundBold);
+  const groundWash = useStore((s) => s.ui.groundWash);
+  const groundUnderline = useStore((s) => s.ui.groundUnderline);
+  const codeSort = useStore((s) => s.ui.codeSort);
+  const uiGround = useMemo(() => ({ groundBold, groundWash, groundUnderline, codeSort }),
+    [groundBold, groundWash, groundUnderline, codeSort]);
   const [groundOpen, setGroundOpen] = useState(false);
   const [describeOpen, setDescribeOpen] = useState(false);
   const hasGrounds = Object.keys(aiGrounds).length > 0;
@@ -93,14 +100,14 @@ export function BrowseView() {
 
   // the order the View menu asks for — the same three the transcript sidebar and
   // the Assist definitions panel offer, off the same setting
-  const sortIdx = Math.max(0, SORTS.findIndex((x) => x.id === ui.codeSort));
+  const sortIdx = Math.max(0, SORTS.findIndex((x) => x.id === codeSort));
   const nextSort = SORTS[(sortIdx + 1) % SORTS.length];
   const allCodes = useMemo(
-    () => sortCodes(liveCodes(codebook), counts, ui.codeSort), [codebook, counts, ui.codeSort]);
+    () => sortCodes(liveCodes(codebook), counts, codeSort), [codebook, counts, codeSort]);
   // the Codebook is where a set-aside code stays visible — everywhere else has
   // stopped offering it, so this list is the only way back
   const parked = useMemo(
-    () => sortCodes(parkedCodes(codebook), counts, ui.codeSort), [codebook, counts, ui.codeSort]);
+    () => sortCodes(parkedCodes(codebook), counts, codeSort), [codebook, counts, codeSort]);
   const hit = (c: string) => c.toLowerCase().includes(filter.toLowerCase());
   const listed = allCodes.filter(hit);
   const listedParked = parked.filter(hit);
@@ -143,7 +150,7 @@ export function BrowseView() {
           <CbAiMenu onGround={() => setGroundOpen(true)} onDescribe={() => setDescribeOpen(true)}
             fontSize={sidebarFontSize} />
           <CbViewMenu showRejected={showRejected} setShowRejected={setShowRejected}
-            ui={ui} setUi={setUi} hasGrounds={hasGrounds} fontSize={sidebarFontSize}
+            ui={uiGround} setUi={setUi} hasGrounds={hasGrounds} fontSize={sidebarFontSize}
             onRecolor={(r) => setRecolor({ x: r.left, y: r.bottom + 4 })} />
         </div>
         {/* the transcript sidebar's header, twinned: name, count, the same cycling
@@ -229,7 +236,7 @@ export function BrowseView() {
         </div>
       </div>
 
-      <Resizer onWidth={(w) => setUi({ browseLeftWidth: Math.max(sidebarFontSize * 14, Math.min(520, w)) })} />
+      <Resizer clamp={(w) => Math.max(sidebarFontSize * 14, Math.min(520, w))} onWidth={(w) => setUi({ browseLeftWidth: w })} />
 
       {/* the excerpt list keeps its place across a trip into a transcript: its
           refs are links out, and the view unmounts on a tab change (see
@@ -262,7 +269,7 @@ export function BrowseView() {
                       style={{ borderLeftColor: codebook[code].color || "var(--line)" }}>
                       <div>{rej && <span className="rejtag">rejected</span>}{
                         ex?.text
-                          ? groundedText(ex.text, groundsFor(s, ex.text), codebook[code].color, ui)
+                          ? groundedText(ex.text, groundsFor(s, ex.text), codebook[code].color, uiGround)
                           : "(excerpt in coded-segments.csv)"
                       }</div>
                       {s.notes && <div className="bNote">{s.notes}</div>}
