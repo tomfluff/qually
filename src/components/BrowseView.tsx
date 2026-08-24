@@ -14,7 +14,7 @@ import { DefLine } from "./CodeDef";
 import { groundHash } from "../ai/ground";
 import { GroundModal } from "./GroundModal";
 import { DescribeModal } from "./DescribeModal";
-import { useToggleMenu, useDismiss } from "../usePopover";
+import { useToggleMenu, useDismiss, useMenuArrows, useMenuFocus } from "../usePopover";
 import { Icon, countIconSize } from "./Icon";
 import { CodeCounts } from "./CodeCounts";
 import { announce } from "../announce";
@@ -48,6 +48,7 @@ export function BrowseView() {
   const segments = useStore((s) => s.segments);
   const stretches = useStore((s) => s.stretches);
   const stretchColors = useStore((s) => s.ui.stretchColors);
+  const dark = useStore((s) => s.ui.dark);
   const transcripts = useStore((s) => s.transcripts);
   const paneRef = useCallback((el: HTMLDivElement | null) => { if (el) el.scrollTop = excerptScroll; }, []);
   const listRef = useCallback((el: HTMLDivElement | null) => { if (el) el.scrollTop = codeListScroll; }, []);
@@ -310,7 +311,7 @@ export function BrowseView() {
                             {marks.map((st, i) => (
                               <span key={`st${i}`} className="bCtxChip bCtxStretch"
                                 title={`${st.dim}: ${st.value} · lines ${st.start}–${st.end}`}>
-                                <span className="stDot" style={{ background: stretchColorOf(st.value, stretchColors) }} />
+                                <span className="stDot" style={{ background: stretchColorOf(st.value, stretchColors, dark) }} />
                                 {st.dim}: {st.value}
                               </span>
                             ))}
@@ -356,7 +357,7 @@ export function BrowseView() {
 function CbAiMenu({ onGround, onDescribe, fontSize }: {
   onGround: () => void; onDescribe: () => void; fontSize: number;
 }) {
-  const { open, setOpen, btnRef, menuRef } = useToggleMenu();
+  const { open, setOpen, btnRef, menuRef, arrows } = useToggleMenu();
   return (
     <div className="cbMenuWrap">
       <button className="btn aibtn cbMenuBtn" ref={btnRef} aria-haspopup="menu" aria-expanded={open}
@@ -365,7 +366,7 @@ function CbAiMenu({ onGround, onDescribe, fontSize }: {
       </button>
       {open && (
         <div className="ctxmenu cbMenu" ref={menuRef} role="menu" aria-label="Codebook AI"
-          style={{ fontSize }}>
+          onKeyDown={arrows} style={{ fontSize }}>
           <button role="menuitem" onClick={() => { onGround(); setOpen(false); }}>
             <Icon name="sparkle" size={fontSize} /> Ground codes
           </button>
@@ -387,6 +388,8 @@ function RecolorConfirm({ x, y, onClose }: { x: number; y: number; onClose: () =
   const codebook = useStore((s) => s.codebook);
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose);
+  useMenuFocus(ref);
+  const arrows = useMenuArrows(ref);
   const codes = Object.keys(codebook);
   const locked = codes.filter((c) => codebook[c].colorLock).length;
   const run = (keepManual: boolean) => {
@@ -395,7 +398,7 @@ function RecolorConfirm({ x, y, onClose }: { x: number; y: number; onClose: () =
     onClose();
   };
   return (
-    <div className="ctxmenu" ref={ref} role="dialog" aria-label="Recolour codes"
+    <div className="ctxmenu" ref={ref} role="dialog" aria-label="Recolour codes" onKeyDown={arrows}
       style={{ left: Math.min(x, window.innerWidth - 280), top: y, fontSize: fs }}>
       <div className="ctxhead">Recolour {codes.length} code{codes.length === 1 ? "" : "s"}</div>
       <div className="ctxnote">
@@ -433,7 +436,7 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
   fontSize: number;
   onRecolor: (rect: DOMRect) => void;
 }) {
-  const { open, setOpen, btnRef, menuRef } = useToggleMenu();
+  const { open, setOpen, btnRef, menuRef, arrows } = useToggleMenu();
   // defaults: rejected off, bold on, wash on, underline off, codes A–Z
   const nonDefault = showRejected || !ui.groundBold || !ui.groundWash || ui.groundUnderline
     || ui.codeSort !== "name";
@@ -446,7 +449,7 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
       </button>
       {open && (
         <div className="ctxmenu cbMenu cbViewMenu" ref={menuRef} role="group" aria-label="Codebook options"
-          style={{ fontSize }}>
+          onKeyDown={arrows} style={{ fontSize }}>
           {/* labelled groups like the Assist menu: the button says Options
               because the list is settings AND sweeps, not just display */}
           <div className="cbMenuGrp">Display</div>

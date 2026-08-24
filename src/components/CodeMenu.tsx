@@ -7,7 +7,7 @@ import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
 import { openColorPicker } from "../colorPicker";
 import { openDefine } from "./CodeDef";
-import { useDismiss, useClampToViewport } from "../usePopover";
+import { useDismiss, useClampToViewport, useMenuFocus, useMenuArrows } from "../usePopover";
 
 export function CodeMenu({ code, x, y, onClose }: {
   code: string; x: number; y: number; onClose: () => void;
@@ -34,23 +34,13 @@ export function CodeMenu({ code, x, y, onClose }: {
   const ref = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<"menu" | "rename" | "merge">("menu");
 
-  // Keyboard route: focus lands on the first item on open, returns to the opener
-  // on close — unless the action DESTROYED the opener. Rename and Delete
-  // re-render a list whose rows are keyed by code name, so the button that
-  // opened this menu is gone by the time the cleanup runs, and focus()ing a
-  // detached node is a silent no-op that drops the caret to <body>. Fall back to
-  // the list the row lived in, so the user stays where they were working.
-  useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const home = opener?.closest<HTMLElement>(".cbList, .cbSide, .sideList, [role=listbox]") ?? null;
-    ref.current?.querySelector("button")?.focus();
-    return () => {
-      if (opener?.isConnected) { opener.focus(); return; }
-      if (!home) return;
-      home.tabIndex = -1; // a scroll container isn't focusable on its own
-      home.focus();
-    };
-  }, []);
+  // Keyboard route (shared with every other menu — see usePopover): focus lands
+  // inside on open and returns to the opener on close. Rename and Delete destroy
+  // that opener (the list rows are keyed by code name), so name the list to fall
+  // back to.
+  // .codeList is the transcript sidebar's list — this menu opens from there too,
+  // and deleting or renaming from it detaches the row the same way
+  useMenuFocus(ref, { home: ".cbList, .cbSide, .sideList, .codeList, [role=listbox]" });
 
   // Escape peels one layer (a sub-form goes back to the menu); an outside click
   // closes outright whatever the mode
@@ -69,15 +59,7 @@ export function CodeMenu({ code, x, y, onClose }: {
   };
 
   // ArrowUp/Down walk the visible items (Enter is the buttons' own click); text fields keep their arrows
-  const onArrows = (e: React.KeyboardEvent) => {
-    if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || (e.target as HTMLElement).matches("input, textarea")) return;
-    e.preventDefault();
-    // skip disabled items: focus() on one is a silent no-op, and the walk would stick
-    const items = Array.from(ref.current?.querySelectorAll("button") ?? []).filter((b) => !b.disabled);
-    if (!items.length) return;
-    const at = items.indexOf(document.activeElement as HTMLButtonElement);
-    items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length].focus();
-  };
+  const onArrows = useMenuArrows(ref);
 
   return (
     // dialog, not menu: two of its modes are text-input forms

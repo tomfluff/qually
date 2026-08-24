@@ -23,7 +23,7 @@ import type { MergeProposal } from "../ai/dedupe";
 import { segExcerpt } from "../contract/excerpt";
 import { DefLine } from "./CodeDef";
 import { codeStats, sortCodes, SORTS, type CodeStat, type SortBy } from "../codeStats";
-import { useDismiss } from "../usePopover";
+import { useDismiss, useMenuArrows, useMenuToggleFocus } from "../usePopover";
 import { Icon } from "./Icon";
 import { DecisionsList, DecisionsSide } from "./DecisionsPanel";
 import { TailQueue, TailSide, type TailLimit } from "./TailQueue";
@@ -823,7 +823,11 @@ function ClearSuggestions({ pid }: { pid: string | null }) {
   const [open, setOpen] = useState(false);
   const [armed, setArmed] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   useDismiss(ref, () => { setOpen(false); setArmed(false); });
+  useMenuToggleFocus(open, menuRef, btnRef);
+  const arrows = useMenuArrows(menuRef);
   const n = (status: string, p: string | null) =>
     segments.filter((x) => x.status === status && (!p || x.pid === p)).length;
   const run = (status: Segment["status"], p: string | null) => {
@@ -841,12 +845,13 @@ function ClearSuggestions({ pid }: { pid: string | null }) {
   return (
     // full-width, or the groundBtn inside resolves its 100% against a shrink-wrapped anchor
     <div className="settings-wrap clearSugWrap" ref={ref}>
-      <button className="btn groundBtn clearSug" aria-haspopup="menu" aria-expanded={open}
+      <button className="btn groundBtn clearSug" aria-haspopup="menu" aria-expanded={open} ref={btnRef}
         onClick={() => { setOpen((v) => !v); setArmed(false); }}>
         <Icon name="trash" size={14} /> Clear codings
       </button>
       {open && (
-        <div className="ctxmenu" role="menu" aria-label="Clear codings" style={{ fontSize: fs }}>
+        <div className="ctxmenu" role="menu" aria-label="Clear codings" ref={menuRef}
+          onKeyDown={arrows} style={{ fontSize: fs }}>
           <div className="ctxhead">{pid ? `In ${pid}, or everywhere` : "Across every transcript"}</div>
           {pid && item(`Rejected in ${pid}`, n("rejected", pid), () => run("rejected", pid))}
           {item("All rejected codings", n("rejected", null), () => run("rejected", null))}

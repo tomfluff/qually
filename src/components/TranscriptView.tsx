@@ -13,7 +13,7 @@ import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
-import { useDismiss, useClampToViewport } from "../usePopover";
+import { useDismiss, useClampToViewport, useMenuArrows, useMenuFocus } from "../usePopover";
 import { fuzzy } from "./CodeCombobox";
 import { stretchColorOf, stretchDims, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
@@ -199,8 +199,8 @@ export function TranscriptView() {
     const si = new Map<Stretch, number>();
     allStretches.forEach((st, i) => { if (st.pid === active) si.set(st, i); });
     return { list, dims, bandPx, labelPx, pillW, leadIn, colW, width: `${widthPx}px`, widthPx,
-      colors: stretchColors, sorted, si };
-  }, [allStretches, active, stretchBand, stretchLabel, stretchColors]);
+      colors: stretchColors, dark, sorted, si };
+  }, [allStretches, active, stretchBand, stretchLabel, stretchColors, dark]);
   const [stretchMenu, setStretchMenu] = useState<{ x: number; y: number; start: number; end: number; addAfter: Group } | null>(null);
   // right-click on a label pill: edit/recolour/remove THAT stretch. Delegated
   // from the overlay — the pills are imperative DOM, not React children.
@@ -306,7 +306,7 @@ export function TranscriptView() {
       band.className = "stFloatBand" + (y0 >= -20 ? " stStart" : "");
       band.title = `${st.dim}: ${st.value} · lines ${st.start}–${st.end}`;
       band.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW + ctx.pillW}px;` +
-        `top:${top}px;height:${bottom - top}px;width:${ctx.bandPx}px;background:${stretchColorOf(st.value, ctx.colors)};`;
+        `top:${top}px;height:${bottom - top}px;width:${ctx.bandPx}px;background:${stretchColorOf(st.value, ctx.colors, ctx.dark)};`;
       frag.appendChild(band);
       // drag grips at the band's REAL ends (only when that end is on screen):
       // the stretch's start/end move like a segment's edges. The grip spans
@@ -357,7 +357,7 @@ export function TranscriptView() {
       el.className = "stFloatLabel";
       el.textContent = st.value;
       el.title = `${st.dim}: ${st.value} · lines ${st.start}–${st.end}`;
-      const c = stretchColorOf(st.value, ctx.colors);
+      const c = stretchColorOf(st.value, ctx.colors, ctx.dark);
       el.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW}px;top:${top}px;` +
         `font-size:${ctx.labelPx}px;background:${c};color:${inkOn(c)};width:${ctx.pillW}px;`;
       el.dataset.y0 = String(y0); el.dataset.y1 = String(y1);
@@ -1320,6 +1320,7 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const stretches = useStore((s) => s.stretches);
   const stColors = useStore((s) => s.ui.stretchColors);
+  const dark = useStore((s) => s.ui.dark);
   // suggestions come from THIS transcript's dimensions first — the gutter the
   // menu is standing in — never pre-filling another participant's axis
   const dims = stretchDims(stretches.filter((s2) => s2.pid === pid));
@@ -1328,6 +1329,10 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose);
+  // marking/unmarking rebuilds the overlay the pill lives in, so the opener can
+  // be gone by the time focus goes back — land in the transcript either way
+  useMenuFocus(ref, { home: ".tviewlist" });
+  const arrows = useMenuArrows(ref);
   useClampToViewport(ref, [x, y]);
   const countBy = (list: string[]) => {
     const n = new Map<string, number>();
@@ -1341,7 +1346,7 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
     const vals = countBy(stretches.filter((s2) => s2.dim === dim.trim()).map((s2) => s2.value));
     return [...vals.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([name, count]) => ({ name, count, color: stretchColorOf(name, stColors) }));
+      .map(([name, count]) => ({ name, count, color: stretchColorOf(name, stColors, dark) }));
   })();
   const here = stretches.map((st, i) => ({ st, i }))
     .filter(({ st }) => st.pid === pid && st.start <= end && st.end >= start);
@@ -1354,8 +1359,10 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
   };
   return (
     <div ref={ref} className="ctxmenu stretchMenu" role="dialog" aria-label="Mark these lines"
-      style={{ left: x, top: y, fontSize: fs }}>
-      <button role="menuitem" onClick={() => { onAddEvent(); onClose(); }}>Add event after this line</button>
+      onKeyDown={arrows} style={{ left: x, top: y, fontSize: fs }}>
+      {/* a plain button: role=menuitem outside a role=menu is not a thing, and
+          this surface is a dialog on purpose (it holds two comboboxes) */}
+      <button onClick={() => { onAddEvent(); onClose(); }}>Add event after this line</button>
       <div className="ctxdiv" />
       <div className="ctxhead">Mark lines {start}–{end} as</div>
       <div className="stForm">
@@ -1368,10 +1375,10 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
       </div>
       {here.length > 0 && <div className="ctxdiv" />}
       {here.map(({ st, i }) => (
-        <button key={i} role="menuitem" className="stUnmark"
+        <button key={i} className="stUnmark"
           title={`Remove this mark (lines ${st.start}–${st.end})`}
           onClick={() => { useStore.getState().unmarkStretch(i); announce(`Unmarked ${st.dim}: ${st.value}`); onClose(); }}>
-          <span className="stDot" style={{ background: stretchColorOf(st.value, stColors) }} />
+          <span className="stDot" style={{ background: stretchColorOf(st.value, stColors, dark) }} />
           {st.dim}: {st.value} <span className="stRange">{st.start}–{st.end}</span> ×
         </button>
       ))}
@@ -1387,11 +1394,16 @@ function StretchPillMenu({ x, y, si, onClose }: {
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const stretches = useStore((s) => s.stretches);
   const stColors = useStore((s) => s.ui.stretchColors);
+  const dark = useStore((s) => s.ui.dark);
   const st = stretches[si];
   const [dim, setDim] = useState(st?.dim ?? "");
   const [value, setValue] = useState(st?.value ?? "");
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose);
+  // marking/unmarking rebuilds the overlay the pill lives in, so the opener can
+  // be gone by the time focus goes back — land in the transcript either way
+  useMenuFocus(ref, { home: ".tviewlist" });
+  const arrows = useMenuArrows(ref);
   useClampToViewport(ref, [x, y]);
   if (!st) return null;
   const countBy = (list: string[]) => {
@@ -1403,7 +1415,7 @@ function StretchPillMenu({ x, y, si, onClose }: {
   const dimOptions = stretchDims(stretches).map((d) => ({ name: d, count: dimCounts.get(d) ?? 0 }));
   const valueOptions = [...countBy(stretches.filter((s2) => s2.dim === dim.trim()).map((s2) => s2.value)).entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([name, count]) => ({ name, count, color: stretchColorOf(name, stColors) }));
+    .map(([name, count]) => ({ name, count, color: stretchColorOf(name, stColors, dark) }));
   const changed = dim.trim() !== st.dim || value.trim() !== st.value;
   const save = () => {
     if (!changed || !dim.trim() || !value.trim()) return;
@@ -1411,10 +1423,10 @@ function StretchPillMenu({ x, y, si, onClose }: {
     announce(`Now marked ${dim.trim()}: ${value.trim()}`);
     onClose();
   };
-  const cur = stretchColorOf(st.value, stColors);
+  const cur = stretchColorOf(st.value, stColors, dark);
   return (
     <div ref={ref} className="ctxmenu stretchMenu" role="dialog" aria-label={`${st.dim}: ${st.value}`}
-      style={{ left: x, top: y, fontSize: fs }}>
+      onKeyDown={arrows} style={{ left: x, top: y, fontSize: fs }}>
       <div className="ctxhead">{st.dim}: {st.value} <span className="stRange">{st.start}–{st.end}</span></div>
       <div className="stForm">
         <StretchCombobox value={dim} onChange={setDim} options={dimOptions} listId="stretch-pill-dims"
@@ -1424,7 +1436,9 @@ function StretchPillMenu({ x, y, si, onClose }: {
         <button className="btn primary" disabled={!changed || !dim.trim() || !value.trim()} onClick={save}>Save</button>
       </div>
       <div className="ctxdiv" />
-      <button role="menuitem" onClick={(e) => {
+      {/* plain buttons: this surface is a dialog (it holds two comboboxes), and
+          role=menuitem outside a role=menu is not a thing */}
+      <button onClick={(e) => {
         const at = { x: (e.currentTarget as HTMLElement).getBoundingClientRect().left, y: e.clientY + 6 };
         const v = st.value; // captured: the menu closes before the pick lands
         onClose();
@@ -1435,7 +1449,7 @@ function StretchPillMenu({ x, y, si, onClose }: {
       }}>
         <span className="stDot" style={{ background: cur }} /> Change colour…
       </button>
-      <button role="menuitem" onClick={() => {
+      <button onClick={() => {
         useStore.getState().unmarkStretch(si);
         announce(`Unmarked ${st.dim}: ${st.value}`);
         onClose();
@@ -1450,6 +1464,7 @@ type StretchCtx = {
   list: Stretch[]; dims: string[]; bandPx: number; labelPx: number;
   pillW: number; leadIn: number; colW: number; width: string; widthPx: number;
   colors: Record<string, string>;
+  dark: boolean;              // the band's tone follows the ground it sits on
   sorted: Stretch[];          // list in band paint order (start, then end)
   si: Map<Stretch, number>;   // store index per stretch (the pills' identity)
 };

@@ -13,7 +13,7 @@ import { clampEventHeight, useStore } from "../state/store";
 import { useMarkers } from "../useMarkers";
 import { fmtLike, markerColor, markerKey, type Marker } from "../markers";
 import { openColorPicker } from "../colorPicker";
-import { useDismiss } from "../usePopover";
+import { useDismiss, useMenuArrows, useMenuFocus } from "../usePopover";
 import { Icon } from "./Icon";
 
 export function EventList({ pid }: { pid: string }) {
@@ -122,12 +122,15 @@ function TypeMenu({ evkey, x, y, colors, onClose }: {
   const [name, setName] = useState(evkey);
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose);
+  // renaming re-keys the group rows, so the opener can be gone on close
+  useMenuFocus(ref, { home: ".eventList" });
+  const arrows = useMenuArrows(ref);
   const commit = () => {
     useStore.getState().renameMarkerType(evkey, name);
     onClose();
   };
   return (
-    <div className="ctxmenu" ref={ref} role="menu" aria-label={`Event type ${evkey}`}
+    <div className="ctxmenu" ref={ref} role="menu" aria-label={`Event type ${evkey}`} onKeyDown={arrows}
       style={{ left: Math.min(x, window.innerWidth - 240), top: y, fontSize: fs }}>
       <div className="ctxhead">{evkey}</div>
       {!renaming ? (

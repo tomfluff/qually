@@ -52,6 +52,7 @@ import { TellApartModal } from "./TellApartModal";
 import { DescribeModal } from "./DescribeModal";
 import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
 import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, argueAgainst, estimateAgainstTokens, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, nameArea, estimateNameAreaTokens, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
+import { useMenuArrows, useMenuToggleFocus } from "../usePopover";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -880,11 +881,28 @@ function MapInner() {
   const [mapSetMenu, setMapSetMenu] = useState<{ left: number; y: number } | null>(null);
   const mapSetRef = useKeepOnScreen<HTMLDivElement>([mapSetMenu]);
   const layoutRef = useKeepOnScreen<HTMLDivElement>([layoutMenu]);
+  // the chrome menus are reachable by keyboard, so they owe the keyboard the
+  // usual contract: focus moves in on open and back to the button on close
+  const mapSetBtn = useRef<HTMLButtonElement>(null);
+  const layoutBtn = useRef<HTMLButtonElement>(null);
+  const compareBtn = useRef<HTMLButtonElement>(null);
+  const compareRef = useRef<HTMLDivElement>(null);
+  useMenuToggleFocus(!!mapSetMenu, mapSetRef, mapSetBtn);
+  useMenuToggleFocus(!!layoutMenu, layoutRef, layoutBtn);
+  useMenuToggleFocus(!!compareMenu, compareRef, compareBtn);
+  const mapSetArrows = useMenuArrows(mapSetRef);
+  const layoutArrows = useMenuArrows(layoutRef);
+  const compareArrows = useMenuArrows(compareRef);
   const relayoutRef = useKeepOnScreen<HTMLDivElement>([confirmRelayout]);
   // the gestures used to sit in the bar as a paragraph; they are reference,
   // not something to read every session, so they live behind a button
   const [helpOpen, setHelpOpen] = useState(false);
   const menuRef = useKeepOnScreen<HTMLDivElement>([menu]);
+  const menuArrows = useMenuArrows(menuRef);
+  // no trigger button: these open by right-click (or the keyboard's context-menu
+  // key) on a canvas node, and focus returns to whatever held it — without the
+  // focus-in the arrows above could never reach the menu at all
+  useMenuToggleFocus(!!menu, menuRef);
   // "find similar codes": a ranked panel at the cursor. Local matches appear
   // instantly; the AI pass is a second, paid step inside the same panel.
   const [similar, setSimilar] = useState<null | {
@@ -2532,7 +2550,7 @@ function MapInner() {
           <Icon name="help" size={16} />
         </button>
         <button className="btn iconbtn" aria-haspopup="menu" aria-expanded={!!mapSetMenu}
-          aria-label="Map settings"
+          ref={mapSetBtn} aria-label="Map settings"
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setLayoutMenu(null); setHelpOpen(false); setCompareMenu(null);
@@ -2542,7 +2560,7 @@ function MapInner() {
           <Icon name="settings" size={16} />
         </button>
         <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!layoutMenu}
-          onClick={(e) => {
+          ref={layoutBtn} onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             setMapSetMenu(null); setHelpOpen(false); setCompareMenu(null);
             setLayoutMenu(layoutMenu ? null : { left: r.left, y: r.bottom + 8 });
@@ -2592,7 +2610,7 @@ function MapInner() {
         )}
         {view === "compare" && allDims.length > 0 && (
           <button className="btn iconlabel" aria-haspopup="menu" aria-expanded={!!compareMenu}
-            onClick={(e) => {
+            ref={compareBtn} onClick={(e) => {
               const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
               setLayoutMenu(null); setMapSetMenu(null); setHelpOpen(false);
               setCompareMenu(compareMenu ? null : { left: r.left, y: r.bottom + 8 });
@@ -2849,7 +2867,8 @@ function MapInner() {
         </div>
       )}
       {compareMenu && (
-        <div className="ctxmenu mapMenu" role="menu" aria-label="Divide the piles by"
+        <div ref={compareRef} className="ctxmenu mapMenu" role="menu" aria-label="Divide the piles by"
+          onKeyDown={compareArrows}
           style={{ left: compareMenu.left, top: compareMenu.y, fontSize: sidebarFontSize }}>
           <div className="ctxhead">Divide by</div>
           {allDims.map((d) => {
@@ -2870,6 +2889,7 @@ function MapInner() {
            so the map's settings read like settings, not like a context menu
            that grew form controls */
         <div ref={mapSetRef} className="ctxmenu mapMenu mapSetMenu" role="dialog" aria-label="Map settings"
+          onKeyDown={mapSetArrows}
           style={{ left: mapSetMenu.left, top: mapSetMenu.y, fontSize: sidebarFontSize }}>
           <div className="set-h">Map</div>
           <div className="srow">
@@ -2903,6 +2923,7 @@ function MapInner() {
       )}
       {layoutMenu && (
         <div ref={layoutRef} className="ctxmenu mapMenu mapLayoutMenu" role="menu" aria-label="Layout"
+          onKeyDown={layoutArrows}
           style={{ left: layoutMenu.left, top: layoutMenu.y, fontSize: sidebarFontSize }}>
           <button role="menuitem" onClick={() => {
             const at = layoutMenu;
@@ -2995,7 +3016,7 @@ function MapInner() {
         );
       })()}
       {menu && menu.halo && (
-        <div ref={menuRef} className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
+        <div ref={menuRef} className="ctxmenu mapMenu" onKeyDown={menuArrows} style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => {
             const list = clusters[menu.halo!.ci]?.codes.filter((c) => c in codebook) ?? [];
             openInCodebook(list); setMenu(null);
@@ -3020,7 +3041,7 @@ function MapInner() {
         </div>
       )}
       {menu && menu.island && (
-        <div ref={menuRef} className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
+        <div ref={menuRef} className="ctxmenu mapMenu" onKeyDown={menuArrows} style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => {
             const list = menu.island!.gi === -1
               ? codes.filter((c) => !codeGroups.some((g) => g.codes.includes(c)))
@@ -3037,7 +3058,7 @@ function MapInner() {
         </div>
       )}
       {menu && !menu.island && !menu.halo && menu.sel.length > 0 && (
-        <div ref={menuRef} className="ctxmenu mapMenu" style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
+        <div ref={menuRef} className="ctxmenu mapMenu" onKeyDown={menuArrows} style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>

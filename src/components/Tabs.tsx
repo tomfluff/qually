@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useStore, liveCodes } from "../state/store";
 import { SCROLL_BASE, wheelPixels } from "../scrollSpeed";
-import { useClampToViewport, useDismiss } from "../usePopover";
+import { useClampToViewport, useDismiss, useMenuArrows, useMenuFocus } from "../usePopover";
 import { MAP_VIEW_ITEMS, currentMapView, openMapView, type MapView } from "./CodeMapView";
 import { Icon } from "./Icon";
 import { codeStats } from "../codeStats";
@@ -212,6 +212,9 @@ function CloseConfirm({ pid, x, y, onClose }: { pid: string; x: number; y: numbe
   const fs = useStore((s) => s.ui.sidebarFontSize);
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose);
+  // confirming CLOSES the tab, destroying the × that opened this — fall back to
+  // the tab bar rather than dropping the caret to <body>
+  useMenuFocus(ref, { home: "#tabs" });
   const confirm = () => { useStore.getState().closeTab(pid); onClose(); };
   return (
     <div className="ctxmenu" ref={ref} role="dialog" aria-label={`Close ${pid}?`}
@@ -239,8 +242,10 @@ function ReopenMenu({ pids, x, y, onClose }: {
   const ref = useRef<HTMLDivElement>(null);
   // the + button toggles; its own mousedown must not count as "outside"
   useDismiss(ref, onClose, { ignore: (e) => !!(e.target as Element | null)?.closest?.(".tabadd") });
+  useMenuFocus(ref, { home: "#tabs" });
+  const arrows = useMenuArrows(ref);
   return (
-    <div className="ctxmenu" ref={ref} role="menu" aria-label="Reopen a closed transcript"
+    <div className="ctxmenu" ref={ref} role="menu" aria-label="Reopen a closed transcript" onKeyDown={arrows}
       style={{ left: Math.min(x, window.innerWidth - 240), top: y, fontSize: fs }}>
       <div className="ctxhead">Reopen</div>
       {pids.map((p) => (
@@ -275,6 +280,9 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
   const evRef = useRef<HTMLInputElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose);
+  // pinning and closing both re-order the bar, so the opening tab can be gone
+  useMenuFocus(ref, { home: "#tabs" });
+  const arrows = useMenuArrows(ref);
   const commit = () => {
     const e = useStore.getState().renameTranscript(pid, name);
     if (e) setErr(e); else onClose();
@@ -302,7 +310,7 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
     }
   };
   return (
-    <div className="ctxmenu" ref={ref} role="menu" aria-label={`Tab ${pid}`}
+    <div className="ctxmenu" ref={ref} role="menu" aria-label={`Tab ${pid}`} onKeyDown={arrows}
       style={{ left: Math.min(x, window.innerWidth - 240), top: y, fontSize: fs }}>
       <div className="ctxhead">{pid}</div>
       <button role="menuitem"
@@ -452,20 +460,14 @@ function MapViewsMenu({ x, y, onClose }: { x: number; y: number; onClose: () => 
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(ref, onClose, { ignore: (e) => !!(e.target as Element | null)?.closest?.(".mapcaret") });
   useClampToViewport(ref, [fs]);
+  useMenuFocus(ref);
   const counts: Partial<Record<MapView, string>> = {
     reconcile: pending ? `${pending} pending` : "",
     themes: groups.length ? `${groups.length}` : "",
     areas: areas.length ? `${areas.length}` : "",
   };
   const pick = (id: MapView) => { openMapView(id); onClose(); };
-  const onArrows = (e: React.KeyboardEvent) => {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    e.preventDefault();
-    const items = Array.from(ref.current?.querySelectorAll("button") ?? []);
-    if (!items.length) return;
-    const at = items.indexOf(document.activeElement as HTMLButtonElement);
-    items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length].focus();
-  };
+  const onArrows = useMenuArrows(ref);
   const row = (v: typeof MAP_VIEW_ITEMS[number]) => (
     <button key={v.id} role="menuitemradio" aria-checked={current === v.id}
       className={current === v.id ? "on" : ""} onClick={() => pick(v.id)}>
@@ -501,20 +503,14 @@ function AssistMenu({ x, y, onClose }: { x: number; y: number; onClose: () => vo
   // it grows with the text setting and with every panel added, so measure and
   // pull it back rather than trusting the anchor
   useClampToViewport(ref, [fs]);
+  useMenuFocus(ref);
   const pick = (id: AssistPanelId) => {
     useStore.getState().setUi({ assistPanel: id });
     useStore.getState().setActive("assist");
     onClose();
   };
   // Up/Down walk every item in reading order, whatever the columns do
-  const onArrows = (e: React.KeyboardEvent) => {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    e.preventDefault();
-    const items = Array.from(ref.current?.querySelectorAll("button") ?? []);
-    if (!items.length) return;
-    const at = items.indexOf(document.activeElement as HTMLButtonElement);
-    items[(at + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length].focus();
-  };
+  const onArrows = useMenuArrows(ref);
   return (
     <div className="ctxmenu assistmenu" ref={ref} role="menu" aria-label="Assist panel"
       onKeyDown={onArrows}

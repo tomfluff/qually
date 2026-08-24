@@ -184,7 +184,7 @@ export const Minimap = forwardRef<MinimapHandle, {
           if (gi0 === undefined || gi1 === undefined) continue;
           // same line-id → row math as the code-lane bars below
           const y0 = yOf(gi0), y1 = yOf(gi1 + 1);
-          ctx.fillStyle = stretchColorOf(st.value, ui.stretchColors);
+          ctx.fillStyle = stretchColorOf(st.value, ui.stretchColors, ui.dark);
           ctx.globalAlpha = 0.9;
           ctx.fillRect(col * stPitch, y0, sw, Math.max(2, y1 - y0));
           ctx.globalAlpha = 1;

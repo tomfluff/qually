@@ -23,11 +23,65 @@ export interface Stretch {
 /** deterministic colour per value: stable across sessions and machines with no
     stored palette — the value IS the identity. Hex, not hsl(), so inkOn() can
     pick a readable text colour for the solid label pill. */
-export function stretchColor(value: string): string {
+// The band is the ONLY visual signal that a line belongs to a section, so it
+// owes the 3:1 that WCAG asks of a meaningful graphic. Lightness is what buys
+// that, and which lightness depends on the ground: the hue comes from a hash of
+// the label, so at one fixed lightness the contrast was a lottery decided by how
+// the researcher spelled their condition — and the losing hue FLIPPED between
+// themes (yellow reached only 2.26:1 on white, blue 1.89:1 on the dark ground).
+// The colour has TWO jobs, and they pull in opposite directions: the band has to
+// stand out from the page, and the label pill has to carry small uppercase text
+// printed on it. A fixed HSL lightness serves neither reliably, because HSL
+// lightness is not brightness — at one setting a yellow is luminous and a blue
+// is nearly black, so some labels landed in the dead zone where NEITHER white
+// nor black ink clears much over 4.5:1 and the tab reads as mush.
+//
+// So the target is stated in the terms that actually matter — relative
+// luminance — and the lightness is solved per hue to hit it. Every section then
+// behaves identically whatever it is called: on the light ground a deep fill
+// with white lettering (the same voice as the speaker chips), on the dark
+// ground a bright fill with black lettering. Measured over all 360 hues, the
+// worst case is 5.76:1 (light) / 8.25:1 (dark) for both the text and the band,
+// whichever hue the name happens to hash to.
+const BAND = { light: { lum: 0.13, sat: 0.6 }, dark: { lum: 0.45, sat: 0.55 } };
+
+/** relative luminance (WCAG 2.1), the perceptual brightness contrast is built on */
+const relLum = ([r, g, b]: [number, number, number]): number => {
+  const f = (v: number) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+};
+
+/** the HSL lightness at which this hue reaches `target` luminance — bisection,
+    because luminance climbs monotonically with lightness at a fixed hue but has
+    no closed form worth writing */
+const lightnessFor = (hue: number, sat: number, target: number): number => {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2;
+    if (relLum(hslToRgb(hue, sat, mid)) < target) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+};
+
+// The solve is 20 bisection steps, and the overlay recolours every visible band
+// and pill on every scroll frame — so remember the answer. It is a pure function
+// of (value, theme) and the palette is tiny, so the cache is simply kept.
+const colorCache = new Map<string, string>();
+
+export function stretchColor(value: string, dark = false): string {
+  const key = `${dark ? "d" : "l"}:${value.toLowerCase().trim()}`;
+  const hit = colorCache.get(key);
+  if (hit) return hit;
   let h = 0;
   for (const ch of value.toLowerCase().trim()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const [r, g, b] = hslToRgb(h % 360, 0.55, 0.45);
-  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+  // the HUE still comes from the value alone: a section keeps its identity
+  // across sessions, machines and themes, and only its tone follows the ground
+  const hue = h % 360;
+  const { lum, sat } = dark ? BAND.dark : BAND.light;
+  const [r, g, b] = hslToRgb(hue, sat, lightnessFor(hue, sat, lum));
+  const hex = `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+  colorCache.set(key, hex);
+  return hex;
 }
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   const c = (1 - Math.abs(2 * l - 1)) * s;
@@ -40,8 +94,8 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
 
 /** the value's colour, honouring a hand-picked override; keys are normalized
     the same way the hash reads the value, so "Baseline " finds "baseline" */
-export const stretchColorOf = (value: string, overrides?: Record<string, string>): string =>
-  overrides?.[value.toLowerCase().trim()] ?? stretchColor(value);
+export const stretchColorOf = (value: string, overrides?: Record<string, string>, dark = false): string =>
+  overrides?.[value.toLowerCase().trim()] ?? stretchColor(value, dark);
 
 export const stretchOverlaps = (s: Stretch, start: number, end: number): boolean =>
   s.start <= end && s.end >= start;

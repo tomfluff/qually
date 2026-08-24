@@ -33,7 +33,7 @@ export function CodeSidebar() {
   const [aiOpen, setAiOpen] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const hasCodes = liveCodes(codebook).length > 0;
-  const { open: aiMenu, setOpen: setAiMenu, btnRef: aiBtnRef, menuRef: aiMenuRef } = useToggleMenu();
+  const { open: aiMenu, setOpen: setAiMenu, btnRef: aiBtnRef, menuRef: aiMenuRef, arrows: aiArrows } = useToggleMenu();
 
   // keyboard/visible route to the same menu right-click opens, anchored to the row or ⋯ button
   const openMenuAt = (code: string, el: HTMLElement) => {
@@ -71,7 +71,7 @@ export function CodeSidebar() {
         </button>
         {aiMenu && (
           <div className="ctxmenu aiMenu" ref={aiMenuRef} role="menu" aria-label="AI for this transcript"
-            style={{ fontSize: sidebarFontSize }}>
+            onKeyDown={aiArrows} style={{ fontSize: sidebarFontSize }}>
             <button role="menuitem" onClick={() => { setAiOpen(true); setAiMenu(false); }}>
               <Icon name="sparkle" size={sidebarFontSize} /> AI observation scan
             </button>

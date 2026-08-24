@@ -71,7 +71,29 @@ const idbDel = (key: string): Promise<void> =>
 /** the store tells us when hydration finished; until then, writes are dropped —
     a boot-time set() must never overwrite the saved project with fresh state */
 let hydrated = false;
-export const markHydrated = () => { hydrated = true; };
+/** the read didn't just come back EMPTY, it came back BROKEN (threw, or never
+    answered). The two must never be confused: an empty read is a first run and
+    the workspace should save normally, but a broken read means a project we
+    could not see is still sitting in there — and letting an empty store write
+    over it would destroy the researcher's work to no purpose. So the write gate
+    stays shut for the session, and the banner says saving is not happening. */
+let readFailed = false;
+let hydrateAnnounced = false; // markHydrated already ran (a late all-clear must finish its job)
+export const markHydrated = () => {
+  hydrateAnnounced = true;
+  if (readFailed) { onSaveResult(false); return; }
+  hydrated = true;
+};
+/** A read that TIMED OUT may still answer. If the answer is "empty", nothing
+    was hidden after all — this was a slow first run, not a broken one, and
+    keeping the gate shut would leave a brand-new user unable to save for the
+    whole session. A late VALUE keeps the gate shut: a project we failed to
+    show IS in there. */
+const recoverIfEmpty = (v: unknown) => {
+  if (v !== undefined || !readFailed) return;
+  readFailed = false;
+  if (hydrateAnnounced) { hydrated = true; onSaveResult(true); }
+};
 
 /** the store's ear on save health (drives the App's autosave-failing banner) */
 let onSaveResult: (ok: boolean) => void = () => {};
@@ -132,16 +154,21 @@ const idbStorage: PersistStorage<unknown> = {
       const v = await Promise.race([idbGet(key),
         new Promise((_, rej) => setTimeout(() => rej(new Error("IndexedDB read timed out")), 3000))]);
       if (v !== undefined) return v as StorageValue<unknown>;
-    } catch { /* fall through to the legacy copy */ }
+    } catch {
+      readFailed = true;
+      idbGet(key).then(recoverIfEmpty, () => { /* still broken — gate stays shut */ });
+      /* fall through to the legacy copy */
+    }
     try {
       // one-time migration: a project saved by a localStorage build moves over,
       // and the legacy key is removed only after the IndexedDB copy has landed
       const raw = localStorage.getItem(key);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as StorageValue<unknown>;
+      readFailed = false; // the legacy copy answered — nothing is hidden from us
       idbSet(key, parsed).then(() => localStorage.removeItem(key)).catch(() => { /* keep the legacy copy */ });
       return parsed;
-    } catch { return null; }
+    } catch { readFailed = true; return null; }
   },
   setItem: (key, value) => {
     if (!hydrated) return;
