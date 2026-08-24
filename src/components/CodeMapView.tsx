@@ -328,13 +328,20 @@ function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onS
   // the other candidate; react-flow does not keep it, and a marquee has none.)
   const selectedText = useCallback(() => {
     const at = (id: string) => getInternalNode(id)?.internals.positionAbsolute ?? { x: 0, y: 0 };
+    // what the chip itself says: the name and its two counts, so a line of the
+    // paste carries the same evidence the map showed — not just a bare word
+    const say = (id: string) => {
+      const d = getNodes().find((n) => n.id === id)?.data as ChipData | undefined;
+      if (!d) return id;
+      return `${id} (${d.segs} excerpt${d.segs === 1 ? "" : "s"}, ${d.pids} transcript${d.pids === 1 ? "" : "s"})`;
+    };
     // rows first: chips packed in a container sit on visual rows, and raw
     // y-sorting would zigzag between two chips a pixel apart in height
     return sel.slice().sort((a, b) => {
       const pa = at(a), pb = at(b);
       return Math.round(pa.y / 24) - Math.round(pb.y / 24) || pa.x - pb.x;
-    }).join("\n");
-  }, [sel, getInternalNode]);
+    }).map(say).join("\n");
+  }, [sel, getInternalNode, getNodes]);
   const copySelected = () => {
     const t = selectedText();
     if (!t) return;
@@ -1332,10 +1339,13 @@ function MapInner() {
             ...(b.ai !== undefined ? { ai: b.ai } : {}) },
         });
         for (const c of b.list) {
-          children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key, b.cover?.(c)));
           if (b.def) {
             // the branch: not selectable, not draggable — a reading surface
-            // tethered under its chip, wearing the chip's colour
+            // tethered under its chip, wearing the chip's colour. Pushed
+            // BEFORE the chip: siblings share a z (react-flow levels children
+            // to parent+1), so paint order is array order — and the card's
+            // stem pokes up through the gap to the chip, where drawn after it
+            // crossed the chip's selection ring
             children.push({
               id: `def:${c}`, type: "defcard" as const, parentId: key,
               position: { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y + ch + DEF_STEM },
@@ -1344,6 +1354,7 @@ function MapInner() {
               data: { def: b.def(c), color: codebook[c]?.color || "#999" },
             } as DefCardNodeT);
           }
+          children.push(chipNode(c, { x: PAD + b.pos[c].x, y: PAD + b.pos[c].y }, key, b.cover?.(c)));
         }
         ix += stepW + ISLAND_GAP;
         rowH = Math.max(rowH, bh);
@@ -1661,6 +1672,10 @@ function MapInner() {
   // a node id React Flow does not hold yet — that trip was a silent no-op.
   // (The marks themselves are FindMarks' job, rendered with the strip below.)
   const flown = useRef("");
+  // the zoom the researcher chose (see the flight below); a flight of OURS
+  // ending must not be mistaken for them choosing a new one
+  const findWantZoom = useRef<number | null>(null);
+  const findFlying = useRef(false);
   useEffect(() => {
     const cur = hits[at];
     const trip = cur ? (find?.q.trim() ?? "") + "\u0000" + cur : ""; // NUL: never in a code name
@@ -1669,12 +1684,36 @@ function MapInner() {
     if (!cur) return;
     requestAnimationFrame(() => {
       if (flown.current !== trip) return; // superseded while the frame waited
-      // keep the zoom the researcher chose, but not so far out that landing on
-      // the hit shows them a speck: below 0.9 the trip zooms in to read it
-      void fitView({ nodes: [{ id: cur }], duration: 320, maxZoom: Math.max(getZoom(), 0.9) });
+      // The researcher's zoom is theirs: they set it because that is the size
+      // they can read at, and a trip that zooms out and back in on every step
+      // (fitView's smooth flight) made stepping matches feel like turbulence.
+      // So: ONE motion, straight to the hit, at their zoom — unless the hit
+      // does not fit at that zoom (a wide island), in which case zoom out
+      // exactly enough to hold it, and the next fitting hit is back at theirs.
+      const inner = getInternalNode(cur);
+      const el = canvasRef.current;
+      if (!inner || !el) return;
+      const { x, y } = inner.internals.positionAbsolute;
+      const w = inner.measured?.width ?? inner.width ?? 0;
+      const h = inner.measured?.height ?? inner.height ?? 0;
+      const vw = el.clientWidth, vh = el.clientHeight;
+      // THEIR zoom, not the current one: a previous hop that had to zoom out
+      // for a wide island must not become the new normal — the next hit that
+      // fits at the zoom the researcher chose goes back to it. The ref is
+      // cleared whenever they zoom by hand (onMoveEnd), so "their zoom" is
+      // always the last one they actually set.
+      const z0 = findWantZoom.current ?? getZoom();
+      findWantZoom.current = z0;
+      const zFit = Math.min((vw * 0.85) / Math.max(w, 1), (vh * 0.85) / Math.max(h, 1));
+      const z = Math.max(0.1, Math.min(z0, zFit)); // never zoom IN uninvited
+      findFlying.current = true;
+      void setViewport(
+        { x: vw / 2 - (x + w / 2) * z, y: vh / 2 - (y + h / 2) * z, zoom: z },
+        { duration: 320, interpolate: "linear" });
     });
-  }, [hits, at, find?.q, fitView, getZoom]);
+  }, [hits, at, find?.q, getInternalNode, setViewport, getZoom]);
   const closeFind = useCallback(() => {
+    findWantZoom.current = null;
     setFind(null); // FindMarks unmounts with the strip and sweeps its marks
     canvasRef.current?.focus();
   }, []);
@@ -2384,7 +2423,13 @@ function MapInner() {
   };
   // the camera persists across tab switches AND reloads
   const [initialViewport] = useState(() => useStore.getState().ui.mapViewport);
-  const onMoveEnd = useCallback((_: unknown, vp: Viewport) => { setUi({ mapViewport: vp }); }, [setUi]);
+  const onMoveEnd = useCallback((_: unknown, vp: Viewport) => {
+    // a move WE animated (a find flight) ending is not the researcher picking
+    // a zoom; any other move is, and resets what "their zoom" means
+    if (findFlying.current) findFlying.current = false;
+    else findWantZoom.current = null;
+    setUi({ mapViewport: vp });
+  }, [setUi]);
   // While you hold a chip, the container it would join is tracked — in
   // Reconcile it also outlines in the accent. rAF-coalesced imperative class
   // toggle, no React work per move.

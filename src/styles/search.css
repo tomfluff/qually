@@ -17,7 +17,16 @@
   border-radius:6px; background:var(--panel); color:var(--fg); font-family:inherit; }
 .searchcount { min-width:3ch; text-align:center; font-size:12px; color:var(--muted);
   font-variant-numeric:tabular-nums; }
-.searchbar .iconbtn { padding:4px 7px; line-height:1; display:inline-flex; align-items:center; }
+/* no query, no count — but the ELEMENT stays (it is the live region search
+   announcements speak through), it just stops holding a blank 3ch gap open
+   between the field and the arrows */
+.searchcount:empty { min-width:0; }
+/* every control in the bar stands the same height as the This tab / All
+   toggle — the arrows and buttons read as one instrument, not two sizes */
+.searchmain .btn { height:28px; box-sizing:border-box; display:inline-flex;
+  align-items:center; justify-content:center; }
+.searchbar .iconbtn { width:34px; padding:0; line-height:1; display:inline-flex;
+  align-items:center; justify-content:center; }
 /* magnifier toggle — same top-right anchor, height, radius, and shadow as the
    search bar, so opening the bar looks like it grows from the magnifier */
 .searchtoggle { position:absolute; top:8px; right:calc(16px + var(--mm-w)); z-index:40;
@@ -86,7 +95,12 @@
 /* find-and-replace: a second row under the query, sharing its padding and
    field so the two read as one instrument */
 .searchrep { border-top:1px solid var(--line); }
-.searchrep .btn { padding:4px 9px; white-space:nowrap; }
+.searchrep .btn { padding:0 12px; white-space:nowrap; }
 /* the bracket toggle says what it does by BEING the thing it inserts */
-.searchbar .btn.brackets { font-weight:700; letter-spacing:.04em; color:var(--muted); }
-.searchbar .btn.brackets.on { color:var(--subst-ink); border-color:var(--subst-ink); }
+.searchbar .btn.brackets { width:34px; padding:0; font-weight:700;
+  letter-spacing:.04em; line-height:1; color:var(--muted); }
+/* pressed = the substitution's own look, not a hairline colour change: the
+   ink, its wash behind, and the weight — the same three carriers .subst uses,
+   so the button previews exactly what the brackets will do */
+.searchbar .btn.brackets.on { color:var(--subst-ink); border-color:var(--subst-ink);
+  background:color-mix(in srgb, var(--subst-ink) 12%, var(--bg)); }
