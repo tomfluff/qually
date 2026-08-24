@@ -361,3 +361,5 @@
    until the row is under the pointer */
 .stretchMenu .stUnmark svg { color:var(--muted); }
 .stretchMenu .stUnmark:hover svg { color:var(--fg); }
+/* the form's own "how do I get out of this" line, in the event card's words */
+.stretchMenu .ctxhead .stHint { float:right; font-weight:400; color:var(--muted); font-size:.85em; }

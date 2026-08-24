@@ -1366,7 +1366,7 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
   const ref = useRef<HTMLDivElement>(null);
   // Escape peels one layer, like CodeMenu: the form steps back to the menu,
   // and the menu closes. An outside click closes outright, whatever the mode.
-  useDismiss(ref, onClose, { onEscape: () => (mode === "menu" ? onClose() : setMode("menu")) });
+  useDismiss(ref, onClose);
   // marking/unmarking rebuilds the overlay the pill lives in, so the opener can
   // be gone by the time focus goes back — land in the transcript either way
   useMenuFocus(ref, { home: ".tviewlist" });
@@ -1428,7 +1428,10 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
           Mark {span} as…
         </button>
       </>) : (<>
-        <div className="ctxhead">Mark {span} as</div>
+        {/* the same contract the event card states in its own header: no Back
+            row, because Escape cancels and clicking away closes, as everywhere */}
+        <div className="ctxhead">Mark {span} as
+          <span className="stHint">Enter to save · Esc to cancel</span></div>
         <div className="stForm">
           <StretchCombobox value={dim} onChange={setDim} options={dimOptions} listId="stretch-dims"
             placeholder="condition" ariaLabel="Dimension — pick an existing one or write a new one" />
@@ -1437,10 +1440,6 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
             autoFocus onCommit={mark} />
           <button className="btn primary" disabled={!value.trim()} onClick={mark}>Mark</button>
         </div>
-        <button onClick={() => setMode("menu")}>
-          <span className="stLead"><Icon name="chevron-left" size={15} /></span>
-          Back
-        </button>
       </>)}
       {mode === "menu" && here.length > 0 && <div className="ctxdiv" />}
       {mode === "menu" && here.map(({ st, i }) => (
