@@ -558,9 +558,19 @@ const emptySel = (): Selection => ({ pid: null, anchor: null, head: null, lines:
 // Display units for the active transcript. When mergeLines is off these are
 // one-line singletons, so the group-aware selection below reduces to per-line.
 // anchor/head are the startId of the anchor/head group.
+// One-entry cache: selectLine calls this per mousemove during a drag-select,
+// and re-merging a 1000-line transcript per pixel was real time. The inputs
+// are all replaced copy-on-write, so identity comparison is exact.
+let groupsCache: { lines: Line[]; merge: boolean; gap: number | null; groups: Group[] } | null = null;
 function groupsOf(s: State): Group[] {
   const t = s.transcripts[s.active];
-  return t ? mergeGroups(t.lines, s.ui.mergeLines, s.ui.mergeGapOn ? s.ui.mergeGap : null) : [];
+  if (!t) return [];
+  const gap = s.ui.mergeGapOn ? s.ui.mergeGap : null;
+  if (groupsCache && groupsCache.lines === t.lines && groupsCache.merge === s.ui.mergeLines && groupsCache.gap === gap)
+    return groupsCache.groups;
+  const groups = mergeGroups(t.lines, s.ui.mergeLines, gap);
+  groupsCache = { lines: t.lines, merge: s.ui.mergeLines, gap, groups };
+  return groups;
 }
 const groupIdxOf = (gs: Group[], lineId: number) => gs.findIndex((g) => lineId >= g.startId && lineId <= g.endId);
 function idsBetween(gs: Group[], i: number, j: number): number[] {
@@ -1782,7 +1792,13 @@ export const useStore = create<State>()(
           ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {},
             markerColors: p.markerColors ?? {},
             stretchColors: p.stretchColors ?? {} },
-          transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
+          // ascending line ids are an invariant everything downstream leans on
+          // (binary searches, rowsToLines) — rehydrate enforces it, and a
+          // hand-edited project file must not be the one path that skips it
+          transcripts: Object.fromEntries(Object.entries(p.transcripts).map(([pid, t]) =>
+            [pid, t.lines.some((l, i) => i > 0 && l.id < t.lines[i - 1].id)
+              ? { ...t, lines: [...t.lines].sort((a, b) => a.id - b.id) } : t])),
+          segments: p.segments, codebook: p.codebook,
           extSegRows: p.extSegRows, tabs: p.tabs, pinnedTabs: p.pinnedTabs ?? [], active: p.active,
           hotbar: p.hotbar, video: p.video, ai: p.ai, aiFlags: p.aiFlags, aiGrounds: p.aiGrounds ?? {}, aiLog: p.aiLog,
           ledger: p.ledger ?? [],
@@ -1814,9 +1830,9 @@ export const useStore = create<State>()(
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
           jump: null, search: { open: false, query: "", scope: "tab", current: null },
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
-          nextSid: Math.max(0, ...p.segments.map((x) => x.sid)) + 1,
-          nextMid: Math.max(0, ...(p.markers ?? []).map((x) => x.mid)) + 1,
-          nextAid: Math.max(0, ...(p.answers ?? []).map((x) => x.aid)) + 1,
+          nextSid: p.segments.reduce((m, x) => Math.max(m, x.sid), 0) + 1, // reduce, not spread: spreading throws past ~65k elements
+          nextMid: (p.markers ?? []).reduce((m, x) => Math.max(m, x.mid), 0) + 1,
+          nextAid: (p.answers ?? []).reduce((m, x) => Math.max(m, x.aid), 0) + 1,
         });
         set({
           hotbarCache: hotbarCodes(get()),
@@ -2552,7 +2568,7 @@ export const useStore = create<State>()(
         // hydration, or a fresh workspace would never save at all
         markHydrated();
         if (!s) return;
-        s.nextSid = Math.max(0, ...s.segments.map((x) => x.sid)) + 1;
+        s.nextSid = s.segments.reduce((m, x) => Math.max(m, x.sid), 0) + 1; // reduce, not spread: spreading throws past ~65k elements
         // Ascending line ids are an assumption everything downstream makes (see
         // rowsToLines). A workspace saved before that sort existed can hold an
         // out-of-order transcript, and re-import alignment would then compare two
@@ -2561,7 +2577,7 @@ export const useStore = create<State>()(
           if (t.lines.some((l, i) => i > 0 && l.id < t.lines[i - 1].id))
             t.lines = [...t.lines].sort((a, b) => a.id - b.id);
         s.markers ??= [];
-        s.nextMid = Math.max(0, ...s.markers.map((x) => x.mid)) + 1;
+        s.nextMid = s.markers.reduce((m, x) => Math.max(m, x.mid), 0) + 1;
         s.hotbarCache = hotbarCodes(s as State);
         // fields added after a persisted state was written (persist merges shallowly)
         s.ai.lenses ??= ["transcription"];
@@ -2599,7 +2615,7 @@ export const useStore = create<State>()(
         }
         s.codeClusters = normalizeClusters(s as State, s.codeClusters);
         s.answers ??= [];
-        s.nextAid = Math.max(0, ...s.answers.map((x) => x.aid)) + 1;
+        s.nextAid = s.answers.reduce((m, x) => Math.max(m, x.aid), 0) + 1;
         s.ui.summaryLayout ??= "side";
         s.ui.mapMinimap ??= "bottom-right";
         s.ui.mapViewport ??= null;
@@ -2798,42 +2814,91 @@ function importCodebook(get: Get, set: Set_, rows: Record<string, string>[]) {
 }
 
 function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
-  rows.forEach((r) => {
+  // One pass over the rows, ONE set() at the end. The per-row version did an
+  // O(segments) dedup .find plus one-to-three store writes — each a persist —
+  // per row: a few thousand imported rows froze the tab for the better part of
+  // a minute. The Maps below carry the same dedup rules in O(1) per row.
+  const s0 = get();
+  const segments = [...s0.segments];
+  const codebook = { ...s0.codebook };
+  const extSegRows = [...s0.extSegRows];
+  const pendingSegUpdates = [...s0.pendingSegUpdates];
+  let nextSid = s0.nextSid;
+  let cbChanged = false;
+
+  // dedup is per coder: two coders holding the same span+code is agreement data
+  // NUL-joined, not "|": a code or coder name CONTAINING "|" must not make two
+  // distinct rows collide into one key
+  const segKey = (pid: string, start: number, end: number, code: string, by: string) =>
+    [pid, start, end, norm(code), by].join("\u0000");
+  // first-wins, like the old .find(): with pre-existing duplicate logical
+  // segments, a consent row must target the same (earliest) sid it used to
+  const bySeg = new Map<string, Segment>();
+  for (const x of segments) {
+    const k = segKey(x.pid, x.start, x.end, x.code, x.proposedBy);
+    if (!bySeg.has(k)) bySeg.set(k, x);
+  }
+  // parked passthrough rows dedup too, or re-importing the same file grows
+  // them without bound and export re-emits the duplicates
+  const extKey = (x: Record<string, string>) =>
+    `${x.segment_ref}|${norm(x.code || "")}|${(x.proposed_by || "").trim()}`;
+  const extSeen = new Set(extSegRows.map(extKey));
+  const pendingSids = new Set(pendingSegUpdates.map((u) => u.sid));
+  // first-wins, like the old Object.keys().find() — if two norm-equal keys ever
+  // coexist, imports must keep canonicalizing to the same one they always did
+  const byNorm = new Map<string, string>();
+  for (const c of Object.keys(codebook)) if (!byNorm.has(norm(c))) byNorm.set(norm(c), c);
+  const ensure = (code: string): string => {
+    const hit = byNorm.get(norm(code));
+    if (hit) return hit;
+    codebook[code] = { color: pickNewColor(Object.values(codebook).map((c) => c.color)), def: "", status: "candidate" };
+    byNorm.set(norm(code), code);
+    cbChanged = true;
+    return code;
+  };
+
+  for (const r of rows) {
     const m = /^(.+?):(\d+)(?:-(\d+))?$/.exec(r.segment_ref || "");
-    if (!m) return;
+    if (!m) continue;
     const pid = m[1], start = +m[2], end = +(m[3] || m[2]);
     // a corrupt/hand-edited ref like p1:1-999999999 would hang remapSegment on the
     // next re-import (it walks every line in the range); no real segment spans 10k
-    if (end < start || end - start > 9999) return;
-    if (!get().transcripts[pid]) {
-      // parked, not imported — dedup here, or re-importing the same file grows the
-      // passthrough rows without bound and export re-emits the duplicates
-      const key = (x: Record<string, string>) =>
-        `${x.segment_ref}|${norm(x.code || "")}|${(x.proposed_by || "").trim()}`;
-      if (!get().extSegRows.some((x) => key(x) === key(r))) set({ extSegRows: [...get().extSegRows, r] });
-      return;
+    if (end < start || end - start > 9999) continue;
+    if (!s0.transcripts[pid]) {
+      // parked, not imported — the transcript isn't here (yet)
+      if (!extSeen.has(extKey(r))) { extSeen.add(extKey(r)); extSegRows.push(r); }
+      continue;
     }
-    const canon = ensureCode(get, set, r.code);
+    const canon = ensure(r.code);
     // an imported row with no coder is NOT yours — mark it "(default)", never your name
     const coder = (r.proposed_by || "").trim() || "(default)";
     const status = r.status || "accepted", notes = r.notes || "";
-    const existing = get().segments.find((x) =>
-      x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(canon) && x.proposedBy === coder);
+    const existing = bySeg.get(segKey(pid, start, end, canon, coder));
     if (existing) {
       // a re-imported row that only changed status/notes must not vanish into
-      // addSegment's dedup — but it would OVERWRITE in-app review work, so it's
-      // parked for consent (SegUpdateModal) instead of applied silently
-      if ((existing.status !== status || existing.notes !== notes)
-          && !get().pendingSegUpdates.some((u) => u.sid === existing.sid))
-        set({ pendingSegUpdates: [...get().pendingSegUpdates, {
+      // the dedup — but it would OVERWRITE in-app review work, so it's parked
+      // for consent (SegUpdateModal) instead of applied silently
+      if ((existing.status !== status || existing.notes !== notes) && !pendingSids.has(existing.sid)) {
+        pendingSids.add(existing.sid);
+        pendingSegUpdates.push({
           sid: existing.sid, ref: formatSegRef(pid, start, end), code: canon,
           from: { status: existing.status, notes: existing.notes },
           to: { status, notes },
-        }] });
+        });
+      }
     } else {
-      get().addSegment(pid, start, end, canon, coder, status, notes);
+      const seg = { sid: nextSid++, pid, start, end, code: canon, notes, proposedBy: coder, status };
+      segments.push(seg);
+      bySeg.set(segKey(pid, start, end, canon, coder), seg);
     }
-  });
+  }
+
+  set({ segments, codebook, extSegRows, pendingSegUpdates, nextSid,
+    // a new code clears redo (codebook is snapshotted — a code created after an
+    // undo must not vanish on the next Ctrl+Y), same as ensureCode
+    ...(cbChanged ? { redoStack: [] } : {}) });
+  // new codes should appear in the hotbar immediately (no manual refresh)
+  if (cbChanged) set({ hotbarCache: hotbarCodes(get()) });
 }
 
 // selector helpers

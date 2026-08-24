@@ -134,6 +134,8 @@ const STRETCH_BAND_PX = { xs: 3, sm: 5, md: 8, lg: 12 } as const;
 const STRETCH_LABEL_PX = { sm: 10, md: 13, lg: 16 } as const;
 // lazy: this module is imported by node-side tests where document is absent
 let stMeasure: CanvasRenderingContext2D | null = null;
+// the body font never changes at runtime — read it once, not per scroll frame
+let bodyFont: string | null = null;
 
 const MIN_PAD = 48;    // headroom floor (also the spacer height until the viewport is measured)
 const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height + padding)
@@ -191,8 +193,13 @@ export function TranscriptView() {
     // booklet's spine), then 4px clear of the NEXT lane
     const colW = pillW + bandPx + 4;
     const widthPx = leadIn + dims.length * colW;
+    // computed HERE, not per scroll event: the sync used to sort the list and
+    // indexOf the store array per stretch on every scroll frame
+    const sorted = [...list].sort((a, b) => a.start - b.start || a.end - b.end);
+    const si = new Map<Stretch, number>();
+    allStretches.forEach((st, i) => { if (st.pid === active) si.set(st, i); });
     return { list, dims, bandPx, labelPx, pillW, leadIn, colW, width: `${widthPx}px`, widthPx,
-      colors: stretchColors };
+      colors: stretchColors, sorted, si };
   }, [allStretches, active, stretchBand, stretchLabel, stretchColors]);
   const [stretchMenu, setStretchMenu] = useState<{ x: number; y: number; start: number; end: number; addAfter: Group } | null>(null);
   // right-click on a label pill: edit/recolour/remove THAT stretch. Delegated
@@ -279,7 +286,7 @@ export function TranscriptView() {
     // previous ones (allowed on purpose — re-marking, containment) is not
     // clamped: it paints over them, as marked.
     const lastBand = new Map<number, { end: number; bottom: number }>();
-    for (const st of [...ctx.list].sort((a, b) => a.start - b.start || a.end - b.end)) {
+    for (const st of ctx.sorted) {
       const gi0 = idx?.get(st.start), gi1 = idx?.get(st.end);
       if (gi0 === undefined || gi1 === undefined) continue;
       const col = ctx.dims.indexOf(st.dim);
@@ -306,7 +313,7 @@ export function TranscriptView() {
       // the whole column so it can actually be grabbed at thin band widths.
       const gripX = baseX + ctx.leadIn + col * ctx.colW;
       const gripW = ctx.pillW + ctx.bandPx;
-      const si = String(useStore.getState().stretches.indexOf(st));
+      const si = String(ctx.si.get(st) ?? -1);
       if (rawY0 >= -20 && rawY0 < vp) {
         const g = document.createElement("span");
         g.className = "stGrip";
@@ -337,7 +344,10 @@ export function TranscriptView() {
       // measured, not guessed: a vertical label's height is its horizontal
       // text advance — canvas measure, no layout read (wide glyphs, CJK)
       stMeasure ??= document.createElement("canvas").getContext("2d")!;
-      stMeasure.font = `700 ${ctx.labelPx}px ${getComputedStyle(document.body).fontFamily}`;
+      // the font is per-sync, not per-stretch: getComputedStyle here cost a
+      // style read per stretch on every scroll frame
+      bodyFont ??= getComputedStyle(document.body).fontFamily;
+      stMeasure.font = `700 ${ctx.labelPx}px ${bodyFont}`;
       // a first ESTIMATE for placement; the real rendered height is read back
       // below and re-clamped — letter-spacing and font metrics drift enough
       // that an estimated pill poked past its band's end
@@ -353,7 +363,7 @@ export function TranscriptView() {
       el.dataset.y0 = String(y0); el.dataset.y1 = String(y1);
       // the pill is a right-click target: it must know WHICH stretch it is —
       // the store index, since ctx.list holds references into the store array
-      el.dataset.si = String(useStore.getState().stretches.indexOf(st));
+      el.dataset.si = String(ctx.si.get(st) ?? -1);
       frag.appendChild(el);
     }
     ov.replaceChildren(frag);
@@ -423,6 +433,18 @@ export function TranscriptView() {
     // it — the selection is your place in the argument, not your place on screen — note
     // when it has gone off-screen and offer a way back.
     setSelOff(offscreenDir(v));
+  };
+  // Scroll fires ~120/s on a precision touchpad and virtua forwards every raw
+  // event; the syncs rebuild the stretch overlay and read layout, so run them
+  // once per FRAME — a screen can't show more anyway.
+  const scrollRaf = useRef(0);
+  const onListScroll = () => {
+    if (scrollRaf.current) return;
+    scrollRaf.current = requestAnimationFrame(() => {
+      scrollRaf.current = 0;
+      syncMinimap();
+      syncStretchLabels();
+    });
   };
   // Which way the selection lies, if it isn't visible. Runs on EVERY scroll event, so it
   // may not walk the selection: `Math.min(...set)` spreads it, which is O(n) per frame
@@ -869,7 +891,13 @@ export function TranscriptView() {
     const set = new Set<number>();
     const lines = transcript?.lines ?? [];
     for (const s of laned) {
-      const range = lines.filter((l) => l.id >= s.start && l.id <= s.end).map((l) => ({ text: l.text, speaker: l.speaker }));
+      // binary-search the range start (ids are kept ascending): the full filter
+      // was O(lines) per segment, recomputed on every coding action
+      let lo = 0, hi = lines.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (lines[mid].id < s.start) lo = mid + 1; else hi = mid; }
+      const range = [];
+      for (let i = lo; i < lines.length && lines[i].id <= s.end; i++)
+        range.push({ text: lines[i].text, speaker: lines[i].speaker });
       if (excerptOf(range).closeCall) set.add(s.sid);
     }
     return set;
@@ -989,7 +1017,7 @@ export function TranscriptView() {
           live region can express our order + the AI marks + a whole multi-line selection.
           So the selection-announce effect above is the single, consistent voice; the rows
           drop role=option/aria-selected for the same reason. */}
-      <VList ref={vref} className="tviewlist" onScroll={() => { syncMinimap(); syncStretchLabels(); }}
+      <VList ref={vref} className="tviewlist" onScroll={onListScroll}
         tabIndex={0} onKeyDown={onListKeyDown}
         aria-label={`Transcript ${active}. Press the down arrow to select a line, 1 to 9 to apply a code, Enter to play from the selected line, M to review the selected line's AI observations.`}
         style={{ height: "100%", flex: 1, minWidth: 0, fontSize, "--spk-w": spkWidth, "--lid-w": lidWidth, "--lane-w": `${LANE_W[laneWidth]}px` } as CSSProperties}>
@@ -1422,6 +1450,8 @@ type StretchCtx = {
   list: Stretch[]; dims: string[]; bandPx: number; labelPx: number;
   pillW: number; leadIn: number; colW: number; width: string; widthPx: number;
   colors: Record<string, string>;
+  sorted: Stretch[];          // list in band paint order (start, then end)
+  si: Map<Stretch, number>;   // store index per stretch (the pills' identity)
 };
 
 // The stretch gutter cell: pure reserved SPACE. Bands and labels both live on

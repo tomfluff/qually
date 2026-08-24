@@ -82,12 +82,33 @@ export function BrowseView() {
   const counts = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   const cntIcon = countIconSize(sidebarFontSize);
 
+  // one pass over the segments, reused by every excerpt below: the per-excerpt
+  // filters were O(all segments) EACH — a few hundred rendered excerpts
+  // re-scanned the whole array on every render of this view
+  const segIndex = useMemo(() => {
+    const byCode = new Map<string, Segment[]>();
+    const byPid = new Map<string, Segment[]>();
+    for (const s of segments) {
+      const ck = norm(s.code);
+      const c = byCode.get(ck); c ? c.push(s) : byCode.set(ck, [s]);
+      const p = byPid.get(s.pid); p ? p.push(s) : byPid.set(s.pid, [s]);
+    }
+    return { byCode, byPid };
+  }, [segments]);
+
   // The excerpt's dominant speaker is shown as its own field in the ref row (below),
   // so the display text drops the "[R:] " prefix the export keeps baked in.
   const excerptFor = (s: Segment): { text: string; speaker: string } | null => {
     const t = transcripts[s.pid];
     if (!t) return null;
-    const r = segExcerpt(s, t.lines);
+    // binary-search the range start (ids are kept ascending — rehydrate sorts)
+    // instead of filtering all of a 1000-line transcript per excerpt
+    const lines = t.lines;
+    let lo = 0, hi = lines.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (lines[mid].id < s.start) lo = mid + 1; else hi = mid; }
+    const slice = [];
+    for (let i = lo; i < lines.length && lines[i].id <= s.end; i++) slice.push(lines[i]);
+    const r = segExcerpt(s, slice);
     return { text: r.excerpt, speaker: r.speaker };
   };
 
@@ -247,8 +268,8 @@ export function BrowseView() {
           <div className="empty">Select a code on the left to see its excerpts.</div>
         ) : (
           chosen.map((code) => {
-            const segs = segments.filter((s) => norm(s.code) === norm(code) &&
-              (s.status === "accepted" || (showRejected && s.status === "rejected")));
+            const segs = (segIndex.byCode.get(norm(code)) ?? []).filter((s) =>
+              s.status === "accepted" || (showRejected && s.status === "rejected"));
             return (
               <div key={code} className="bGroup">
                 <h2 className="bTitle">
@@ -278,8 +299,8 @@ export function BrowseView() {
                         // whose accepted coding overlaps this excerpt, and the
                         // section marks (condition/task spans) covering it —
                         // an excerpt read without them is read out of context
-                        const others = [...new Set(segments
-                          .filter((o) => o.pid === s.pid && o.status === "accepted"
+                        const others = [...new Set((segIndex.byPid.get(s.pid) ?? [])
+                          .filter((o) => o.status === "accepted"
                             && o.start <= s.end && o.end >= s.start && norm(o.code) !== norm(code))
                           .map((o) => o.code))].sort((a, b) => a.localeCompare(b));
                         const marks = stretchesAt(stretches, s.pid, s.start, s.end);

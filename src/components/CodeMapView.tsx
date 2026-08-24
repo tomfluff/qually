@@ -1041,6 +1041,10 @@ function MapInner() {
   }, []);
 
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
+  // which codes share lines — keyed on segments alone: the layout memo below
+  // rebuilds on every card fold and drag-drop, and re-sweeping all segments
+  // each time was the most expensive thing in it
+  const cooc = useMemo(() => cooccurrence(segments), [segments]);
   // biggest first: the codes doing the most work anchor the top of the map
   // codes you set aside are off the map too — the map IS the working codebook
   const codes = useMemo(() =>
@@ -1055,8 +1059,6 @@ function MapInner() {
   const layout = useMemo(() => {
     const fs = MAP_FS;
     const ch = chipH(fs);
-    // which codes share lines — cheap, offline, and cited on the pair cards
-    const cooc = cooccurrence(segments);
     const family = getComputedStyle(document.body).fontFamily; // read once per rebuild
     const widths = new Map(codes.map((c) => [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0)]));
     const pack = (list: string[], targetW: number, dimsOf?: (c: string) => { w: number; h: number }) => {
@@ -1500,7 +1502,7 @@ function MapInner() {
     for (const c of looseFree) children.push(chipNode(c, { x: 0, y: 0 }));
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
-  }, [codes, codebook, stats, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev, stretches, activeDims]);
+  }, [codes, codebook, stats, cooc, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev, stretches, activeDims]);
   const build = useCallback(() => layout.nodes, [layout]);
 
   // built once per mount; RF owns the array from here (uncontrolled). When the

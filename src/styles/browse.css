@@ -37,7 +37,10 @@
 .bOptions { display:flex; align-items:center; margin-bottom:14px; padding:8px 12px;
   border:1px solid var(--line); border-radius:10px; background:var(--panel); }
 .bExcerpt { border-left:4px solid var(--line); margin:10px 0; padding:6px 12px; line-height:1.45;
-  font-family:var(--read-font); }
+  font-family:var(--read-font);
+  /* hundreds of excerpts can be chosen at once: let the browser skip laying out
+     the off-screen ones (the intrinsic-size guess only steadies the scrollbar) */
+  content-visibility:auto; contain-intrinsic-size:auto 90px; }
 /* quiet by COLOUR, never opacity (see base.css): opacity stacked on the --muted
    REJECTED tag and .ref dropped them to ~2.5:1 — the label saying WHY the excerpt
    is dimmed was the least readable thing in the pane. --fg-dim quiets the body;
