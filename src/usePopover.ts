@@ -46,7 +46,18 @@ export function useDismiss(
       // still reads as outside and dismisses as it should.
       if (ref.current && !e.composedPath().includes(ref.current) && !ignore?.(e)) onClose();
     };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onEscape(); } };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // A combobox with its suggestions open owns the FIRST Escape: closing the
+      // list is the innermost layer, and peeling straight past it to close the
+      // popover throws away what the researcher was in the middle of choosing.
+      // The list's own handler does that work; it just needs to be let through,
+      // which the field already advertises via aria-expanded.
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('[role="combobox"][aria-expanded="true"]')) return;
+      e.stopPropagation();
+      onEscape();
+    };
     document.addEventListener("mousedown", down, capture);
     document.addEventListener("keydown", esc, true);
     return () => {

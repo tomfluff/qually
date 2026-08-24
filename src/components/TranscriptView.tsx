@@ -1334,15 +1334,30 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
   // menu is standing in — never pre-filling another participant's axis
   const dims = stretchDims(stretches.filter((s2) => s2.pid === pid));
   const allDims = stretchDims(stretches);
+  // the menu opens as a MENU; the mark form is one of its answers (see below)
+  const [mode, setMode] = useState<"menu" | "mark">("menu");
   const [dim, setDim] = useState(dims[0] ?? allDims[0] ?? "condition");
   const [value, setValue] = useState("");
   const ref = useRef<HTMLDivElement>(null);
-  useDismiss(ref, onClose);
+  // Escape peels one layer, like CodeMenu: the form steps back to the menu,
+  // and the menu closes. An outside click closes outright, whatever the mode.
+  useDismiss(ref, onClose, { onEscape: () => (mode === "menu" ? onClose() : setMode("menu")) });
   // marking/unmarking rebuilds the overlay the pill lives in, so the opener can
   // be gone by the time focus goes back — land in the transcript either way
   useMenuFocus(ref, { home: ".tviewlist" });
+  // Switching modes unmounts whatever held focus (the Back row, the form's
+  // input), dropping the caret to <body> — arrows and Tab then dead-end outside
+  // the dialog. useMenuFocus only runs on mount, so re-land focus here. The
+  // mark form's autoFocus input has first claim; on mount the first item is
+  // already focused, so the guard makes this a no-op both times.
+  useEffect(() => {
+    if (!ref.current?.contains(document.activeElement))
+      ref.current?.querySelector<HTMLElement>("button")?.focus();
+  }, [mode]);
   const arrows = useMenuArrows(ref);
-  useClampToViewport(ref, [x, y]);
+  // `mode` too: the form is taller than the menu, so a surface that fitted on
+  // screen as a list can hang off the bottom the moment it becomes a form
+  useClampToViewport(ref, [x, y, mode, fs]);
   const countBy = (list: string[]) => {
     const n = new Map<string, number>();
     for (const k of list) n.set(k, (n.get(k) ?? 0) + 1);
@@ -1359,36 +1374,51 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
   })();
   const here = stretches.map((st, i) => ({ st, i }))
     .filter(({ st }) => st.pid === pid && st.start <= end && st.end >= start);
+  // "lines 4–4" is not how anyone says it
+  const span = start === end ? `line ${start}` : `lines ${start}–${end}`;
   const mark = () => {
     const d = dim.trim() || "condition", v = value.trim();
     if (!v) return;
     useStore.getState().markStretch({ pid, start, end, dim: d, value: v });
-    announce(`Lines ${start}–${end} marked ${d}: ${v}`);
+    announce(`${span[0].toUpperCase()}${span.slice(1)} marked ${d}: ${v}`);
     onClose();
   };
   return (
-    <div ref={ref} className="ctxmenu stretchMenu" role="dialog" aria-label="Mark these lines"
+    <div ref={ref} className="ctxmenu stretchMenu" role="dialog" aria-label={`Options for ${span}`}
       onKeyDown={arrows} style={{ left: x, top: y, fontSize: fs }}>
-      {/* a plain button: role=menuitem outside a role=menu is not a thing, and
-          this surface is a dialog on purpose (it holds two comboboxes).
-          .stLead is the fixed slot every row in this menu leads with, so the
-          labels line up whether the row is fronted by an icon or a colour */}
-      <button onClick={() => { onAddEvent(); onClose(); }}>
-        <span className="stLead"><Icon name="file-plus" size={15} /></span>
-        Add event after this line
-      </button>
-      <div className="ctxdiv" />
-      <div className="ctxhead">Mark lines {start}–{end} as</div>
-      <div className="stForm">
-        <StretchCombobox value={dim} onChange={setDim} options={dimOptions} listId="stretch-dims"
-          placeholder="condition" ariaLabel="Dimension — pick an existing one or write a new one" />
-        <StretchCombobox value={value} onChange={setValue} options={valueOptions} listId="stretch-values"
-          placeholder="baseline" ariaLabel="Value — pick an existing one or write a new one"
-          autoFocus onCommit={mark} />
-        <button className="btn primary" disabled={!value.trim()} onClick={mark}>Mark</button>
-      </div>
-      {here.length > 0 && <div className="ctxdiv" />}
-      {here.map(({ st, i }) => (
+      {/* Plain buttons: role=menuitem outside a role=menu is not a thing, and
+          this surface stays a dialog on purpose (one of its modes is a form).
+          .stLead is the fixed slot every row leads with, so the labels line up
+          whether the row is fronted by an icon or a colour.
+          The form sits BEHIND a choice, like every other row: a right-click
+          asks "what do you want to do with these lines", and answering it with
+          a half-filled form was answering a question nobody had asked yet. */}
+      {mode === "menu" ? (<>
+        <button onClick={() => { onAddEvent(); onClose(); }}>
+          <span className="stLead"><Icon name="file-plus" size={15} /></span>
+          Add event after this line
+        </button>
+        <button onClick={() => setMode("mark")}>
+          <span className="stLead"><Icon name="bookmark" size={15} /></span>
+          Mark {span} as…
+        </button>
+      </>) : (<>
+        <div className="ctxhead">Mark {span} as</div>
+        <div className="stForm">
+          <StretchCombobox value={dim} onChange={setDim} options={dimOptions} listId="stretch-dims"
+            placeholder="condition" ariaLabel="Dimension — pick an existing one or write a new one" />
+          <StretchCombobox value={value} onChange={setValue} options={valueOptions} listId="stretch-values"
+            placeholder="baseline" ariaLabel="Value — pick an existing one or write a new one"
+            autoFocus onCommit={mark} />
+          <button className="btn primary" disabled={!value.trim()} onClick={mark}>Mark</button>
+        </div>
+        <button onClick={() => setMode("menu")}>
+          <span className="stLead"><Icon name="chevron-left" size={15} /></span>
+          Back
+        </button>
+      </>)}
+      {mode === "menu" && here.length > 0 && <div className="ctxdiv" />}
+      {mode === "menu" && here.map(({ st, i }) => (
         <button key={i} className="stUnmark"
           title={`Remove this mark (lines ${st.start}–${st.end})`}
           onClick={() => { useStore.getState().unmarkStretch(i); announce(`Unmarked ${st.dim}: ${st.value}`); onClose(); }}>
