@@ -28,6 +28,7 @@ import { scoreSimilar } from "../similar";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { preselectBrowse } from "./BrowseView";
+import { withSubs } from "../markup";
 
 /** how thin is thin — the researcher's call, not the tool's */
 // The rail is narrow and this ramp scales with the text setting, so the
@@ -355,7 +356,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
       ) : excerpts.map((e, i) => (
         <blockquote key={i} className="tqEx">
           <span className="tqWho">{e.pid} · {e.speaker}</span>
-          {e.text}
+          {withSubs(e.text)}
         </blockquote>
       ))}
       <div className="tqActs">

@@ -19,6 +19,7 @@ import { norm } from "../contract/segments";
 import { earcon } from "../earcons";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
+import { withSubs } from "../markup";
 
 export function TellApartModal({ codes, survivor, newName, source, model, onClose, onDecided }: {
   /** exactly two codes: the pair under the question */
@@ -100,7 +101,7 @@ export function TellApartModal({ codes, survivor, newName, source, model, onClos
       <div className="taEx nicescroll">
         {rows.length === 0 && <p className="dvNote">Nothing accepted under this code yet.</p>}
         {rows.map((r, i) => (
-          <blockquote key={i}><span className="tqWho">{r.pid} · {r.speaker}</span>{r.excerpt}</blockquote>
+          <blockquote key={i}><span className="tqWho">{r.pid} · {r.speaker}</span>{withSubs(r.excerpt)}</blockquote>
         ))}
       </div>
     </div>

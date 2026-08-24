@@ -7,6 +7,7 @@ import { useStore, liveCodes, parkedCodes, type Segment } from "../state/store";
 import { stretchesAt, stretchColorOf } from "../stretches";
 import { norm } from "../contract/segments";
 import { segExcerpt } from "../contract/excerpt";
+import { withSubs, SubText, subSpans } from "../markup";
 import { Resizer } from "./Resizer";
 import { CodeMenu } from "./CodeMenu";
 import { openColorPicker } from "../colorPicker";
@@ -511,7 +512,8 @@ function groundedText(
   text: string, quotes: string[], color: string,
   ui: { groundBold: boolean; groundWash: boolean; groundUnderline: boolean },
 ): ReactNode {
-  if (!quotes.length || (!ui.groundBold && !ui.groundWash && !ui.groundUnderline)) return text;
+  const subs = subSpans(text);
+  if (!quotes.length || (!ui.groundBold && !ui.groundWash && !ui.groundUnderline)) return withSubs(text, 0, subs);
   const ranges: [number, number][] = [];
   for (const q of quotes) {
     const i = text.indexOf(q); // first occurrence — the model saw this exact text
@@ -526,10 +528,11 @@ function groundedText(
   let at = 0;
   ranges.forEach(([s0, e0], k) => {
     if (s0 < at) return; // overlapping quote — first one wins
-    out.push(text.slice(at, s0));
-    out.push(<mark key={k} className={cls} style={st}>{text.slice(s0, e0)}</mark>);
+    out.push(<SubText key={"p" + k} text={text.slice(at, s0)} from={at} spans={subs} />);
+    out.push(<mark key={k} className={cls} style={st}>
+      <SubText text={text.slice(s0, e0)} from={s0} spans={subs} /></mark>);
     at = e0;
   });
-  out.push(text.slice(at));
+  out.push(<SubText key="tail" text={text.slice(at)} from={at} spans={subs} />);
   return out;
 }

@@ -13,6 +13,16 @@
      "selected" everywhere else — a hit is somewhere you were sent, not
      something you picked. Amber clears 3:1 on both grounds (1.4.11). */
   --find-ring:#b45309;
+  /* a substitution the researcher wrote INTO the transcript — "[Beacon]" where
+     the participant said "the first system". Bold + italic + its own ink, all
+     three: this must not be mistakable for what was actually said, and colour
+     alone fails on a printed transcript or under a colour filter. Teal is
+     unspoken-for here (the accent is the palette's, amber is find/warn).
+     Priced against the DARKEST ground it ever sits on, not white: a selected
+     row's hover tint is the accent at 24%, and the first teal that cleared
+     5.5:1 on white failed AA there (3.6:1). #134e4a is 9.5:1 on white and
+     ≥5.3:1 on every row tint the palettes can make. */
+  --subst-ink:#134e4a;
   --row-hover:#ebebeb; --mm-w:66px;
   /* reading font for transcript text + excerpts; App.tsx sets it from ui.fontFamily */
   --read-font:system-ui, Segoe UI, Roboto, sans-serif;
@@ -31,6 +41,7 @@
   --panel:#1e242a; --accent:#a78bfa;
   --warn:#e8964f;
   --find-ring:#e8b563;
+  --subst-ink:#5eead4;
   --row-hover:#23282e;
 }
 /* Honour the OS "increase contrast" setting rather than making users hunt for it. */
@@ -115,3 +126,11 @@ button { font-family:inherit; }
 .cnt:has(.cntpair) { display:flex; align-items:center; gap:6px; }
 .cntpair { display:inline-flex; align-items:center; gap:2px; }
 .cntpair svg { opacity:.75; }
+
+/* Substitutions (see markup.tsx): "[Beacon]" is the researcher's word standing
+   in for the participant's "the first system". Three carriers, because this one
+   has to survive skimming: weight, slant, and ink. */
+.subst { font-weight:700; font-style:italic; color:var(--subst-ink); }
+/* inside a search hit or an AI mark the ink would fight the highlight's own
+   background — keep the weight and slant, let the highlight own the colour */
+mark .subst, .aidoubt .subst, .ainote .subst { color:inherit; }

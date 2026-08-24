@@ -10,6 +10,7 @@ import { useStore } from "../state/store";
 import { segExcerpt } from "../contract/excerpt";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
+import { withSubs } from "../markup";
 
 // The right-click route needs a surface of its own — it fires from the code
 // sidebar and the lane, where there is no definition on screen to edit in place.
@@ -191,7 +192,7 @@ export function DefLine({ code, excerpts = false, className = "", autoEdit = fal
       )}
       {ex.map((x) => (
         <div key={x.ref} className="defEx" style={{ borderLeftColor: entry.color }}>
-          <div>{x.text}</div>
+          <div>{withSubs(x.text)}</div>
           {/* whose words these are, the way the Codebook already labels them: an
               excerpt the interviewer dominated is not the participant speaking */}
           <div className="defExRef"><span className="refspk">{x.speaker}</span>{x.ref}</div>

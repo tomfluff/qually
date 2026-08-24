@@ -7,6 +7,7 @@ import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
 import { excerptOf, RESEARCHER } from "../contract/excerpt";
 import { mergeGroups, type Group } from "../merge";
+import { replaceAllIn } from "../search";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, spanLens, type Flag } from "../ai/flag";
@@ -414,6 +415,9 @@ export interface State {
   closeSearch: () => void;
   setSearch: (patch: Partial<Search>) => void;
   editLine: (pid: string, id: number, text: string) => void;
+  /** Find-and-replace across ONE transcript: every occurrence in every line,
+      as one undoable gesture. Returns how many occurrences went. */
+  replaceInTranscript: (pid: string, find: string, repl: string) => number;
   exportEdits: () => string;
   setAi: (patch: Partial<Ai>) => void;
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
@@ -604,7 +608,12 @@ export interface Snap {
   sel: { pid: string | null; anchor: number | null; head: number | null; lines: number[] };
 }
 export interface LineSnap { kind: "line"; pid: string; id: number; line: Line; flags: LineFlags | null }
-export type UndoEntry = Snap | LineSnap;
+// A gesture that rewrote SEVERAL lines at once (find-and-replace across a
+// transcript) is ONE thing the researcher did, so it is one thing to undo.
+// Same payload as a line entry, a list of them — the full snapshot cannot
+// serve here, because it deliberately does not carry transcripts.
+export interface LinesSnap { kind: "lines"; pid: string; entries: LineSnap[] }
+export type UndoEntry = Snap | LineSnap | LinesSnap;
 function snapshot(s: State): Snap {
   return {
     segments: s.segments, codebook: s.codebook, hotbar: s.hotbar, active: s.active,
@@ -649,9 +658,31 @@ function restoreLine(get: () => State, set: (p: Partial<State>) => void,
   if (o.flags) flags[key] = o.flags; else delete flags[key];
   set({ aiFlags: flags });
   // a line entry doesn't snapshot `active` the way full snapshots do — navigate
-  // to the edited transcript so the undo is never a silent off-screen change
-  if (get().active !== o.pid && get().tabs.includes(o.pid)) set({ active: o.pid });
+  // to the edited transcript so the undo is never a silent off-screen change.
+  // A CLOSED tab is the sharper case: the transcript is still loaded (closeTab
+  // keeps the data), so the text does change — off-screen, with nothing but
+  // "Undone" said about it. Put its tab back and go there; the whole promise of
+  // this line is that you SEE what the undo did.
+  if (get().active === o.pid) return;
+  if (get().tabs.includes(o.pid)) set({ active: o.pid });
+  else get().openTab(o.pid);
 }
+// The two halves of a history step, for all three entry kinds: what the CURRENT
+// state would have to be restored to (the entry that goes on the other stack),
+// and putting an entry's state back.
+function inverse(s: State, o: UndoEntry): UndoEntry {
+  if (o.kind === "line") return lineEntry(s, o.pid, o.id) ?? o;
+  if (o.kind === "lines") {
+    return { kind: "lines", pid: o.pid, entries: o.entries.map((e) => lineEntry(s, e.pid, e.id) ?? e) };
+  }
+  return snapshot(s);
+}
+function applyEntry(get: () => State, set: (p: Partial<State>) => void, o: UndoEntry) {
+  if (o.kind === "line") restoreLine(get, set, o);
+  else if (o.kind === "lines") for (const e of o.entries) restoreLine(get, set, e);
+  else restore(get, set, o);
+}
+
 // The survivor auto-picks itself: the member with the most accepted excerpts
 // (the name still comes from the halo title / newName; this only chooses the
 // merge target and the fallback display name). A `preferred` survivor wins
@@ -1405,9 +1436,11 @@ export const useStore = create<State>()(
         // Undo entries for text edits carry the whole Line, speaker included, so
         // an untouched stack would put the old name back on one line the next time
         // someone undid an edit. Rewrite them instead of clearing the history.
+        const fixSpeaker = (o: LineSnap) =>
+          o.line.speaker.trim() === from ? { ...o, line: { ...o.line, speaker: to } } : o;
         const fixStack = (stack: UndoEntry[]) => stack.map((o) =>
-          o.kind === "line" && o.line.speaker.trim() === from
-            ? { ...o, line: { ...o.line, speaker: to } } : o);
+          o.kind === "line" ? fixSpeaker(o)
+            : o.kind === "lines" ? { ...o, entries: o.entries.map(fixSpeaker) } : o);
         set({
           transcripts,
           ui: { ...s.ui, speakerColors: move(s.ui.speakerColors), speakerWeight: move(s.ui.speakerWeight), speakerFocus },
@@ -1475,6 +1508,36 @@ export const useStore = create<State>()(
       // editing back to the original clears the flag. Line ids never change, so
       // segments are untouched. On the undo stack as a targeted line entry (see
       // lineEntry) — `orig` stays the RECORD of the change, Ctrl+Z steps it back.
+      replaceInTranscript: (pid, find, repl) => {
+        const s = get();
+        const t = s.transcripts[pid];
+        // NOT `find === repl`: matching is case-insensitive, so replacing
+        // "System" with "system" is a real edit. Whether anything changed is
+        // decided per line, below, where the answer is actually knowable.
+        if (!t || !find) return 0;
+        let n = 0;
+        const entries: LineSnap[] = [];
+        const lines = t.lines.map((l) => {
+          const { text, n: k } = replaceAllIn(l.text, find, repl);
+          if (!k || text === l.text) return l;
+          n += k;
+          entries.push(lineEntry(s, pid, l.id)!);
+          // provenance exactly as a hand edit leaves it (see editLine): the
+          // words as transcribed stay recoverable on every line touched, and a
+          // replace that lands back on the original text drops the mark
+          const orig = l.orig ?? l.text;
+          const { orig: _drop, ...rest } = l;
+          return orig === text ? { ...rest, text } : { ...rest, orig, text };
+        });
+        if (!n) return 0;
+        // ONE entry for the whole sweep — the same rule every multi-item
+        // gesture in this store follows
+        const stack = [...s.undoStack, { kind: "lines" as const, pid, entries }];
+        if (stack.length > UNDO_CAP) stack.shift();
+        set({ undoStack: stack, redoStack: [], selRun: false });
+        set({ transcripts: { ...get().transcripts, [pid]: { lines } } });
+        return n;
+      },
       editLine: (pid, id, text) => {
         const s = get();
         const t = s.transcripts[pid];
@@ -2486,9 +2549,9 @@ export const useStore = create<State>()(
         // silent nothing reads as "the undo worked and changed nothing"
         if (!s.undoStack.length) { earcon.nothing(); announce("Nothing left to undo"); return; }
         const o = s.undoStack[s.undoStack.length - 1];
-        const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? o : snapshot(s);
+        const back = inverse(s, o);
         set({ redoStack: [...s.redoStack, back], undoStack: s.undoStack.slice(0, -1) });
-        if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, o);
+        applyEntry(get, set, o);
         earcon.undo();
         announce("Undone");
       },
@@ -2496,9 +2559,9 @@ export const useStore = create<State>()(
         const s = get();
         if (!s.redoStack.length) { earcon.nothing(); announce("Nothing left to redo"); return; }
         const o = s.redoStack[s.redoStack.length - 1];
-        const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? o : snapshot(s);
+        const back = inverse(s, o);
         set({ undoStack: [...s.undoStack, back], redoStack: s.redoStack.slice(0, -1) });
-        if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, o);
+        applyEntry(get, set, o);
         earcon.redo();
         announce("Redone");
       },

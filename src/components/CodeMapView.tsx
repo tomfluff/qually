@@ -902,7 +902,12 @@ function useKeepOnScreen<T extends HTMLElement>(deps: unknown[]) {
 function FindMarks({ canvas, hits, cur }: {
   canvas: { current: HTMLDivElement | null }; hits: string[]; cur?: string;
 }) {
-  useFlowStore((s: { nodes: Node[] }) => s.nodes);
+  // Subscribed to the node IDS, joined — not the nodes array. A drag rewrites
+  // that array every frame, and re-running a full DOM pass per frame is the
+  // one thing this component must not cost; the ids change only when the set
+  // of nodes does, which is exactly when the marks need re-asserting. (Same
+  // string-identity trick SelectionHud uses above, for the same reason.)
+  useFlowStore((s: { nodes: Node[] }) => s.nodes.map((n) => n.id).join("\n"));
   useEffect(() => {           // deliberately undepped: reconcile after EVERY render
     const el = canvas.current;
     if (!el) return;

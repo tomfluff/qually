@@ -19,6 +19,7 @@ import { stretchColorOf, stretchDims, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches } from "../search";
+import { withSubs, SubText, subSpans } from "../markup";
 import { excerptOf } from "../contract/excerpt";
 import { savedScroll, positioned, rememberScroll } from "../scrollMemory";
 import { announce } from "../announce";
@@ -42,15 +43,17 @@ export type Item = { kind: "g"; g: Group } | { kind: "m"; m: Marker };
 // text with search matches wrapped in <mark>; the occ == curOcc match is emphasized
 function renderText(text: string, query: string, curOcc: number): ReactNode {
   const m = findMatches(text, query);
-  if (!m.length) return text;
+  const subs = subSpans(text);
+  if (!m.length) return withSubs(text, 0, subs);
   const nodes: ReactNode[] = [];
   let last = 0;
   m.forEach(([s, e], k) => {
-    if (s > last) nodes.push(text.slice(last, s));
-    nodes.push(<mark key={k} className={k === curOcc ? "cur" : ""}>{text.slice(s, e)}</mark>);
+    if (s > last) nodes.push(<SubText key={"p" + k} text={text.slice(last, s)} from={last} spans={subs} />);
+    nodes.push(<mark key={k} className={k === curOcc ? "cur" : ""}>
+      <SubText text={text.slice(s, e)} from={s} spans={subs} /></mark>);
     last = e;
   });
-  if (last < text.length) nodes.push(text.slice(last));
+  if (last < text.length) nodes.push(<SubText key="tail" text={text.slice(last)} from={last} spans={subs} />);
   return nodes;
 }
 
@@ -75,13 +78,14 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
     const at = text.indexOf(s.quote);
     if (at >= 0) hits.push({ at, len: s.quote.length, span: s, idx });
   });
-  if (!hits.length) return text;
+  const subs = subSpans(text);
+  if (!hits.length) return withSubs(text, 0, subs);
   hits.sort((a, b) => a.at - b.at);
   const nodes: ReactNode[] = [];
   let last = 0;
   hits.forEach((h, k) => {
     if (h.at < last) return; // overlapping marks: keep the first
-    if (h.at > last) nodes.push(text.slice(last, h.at));
+    if (h.at > last) nodes.push(<SubText key={"p" + k} text={text.slice(last, h.at)} from={last} spans={subs} />);
     const lens = lensOf(spanLens(h.span));
     const isError = spanLens(h.span) === "transcription";
     // A mark's press must NOT select the row (onRowDown bails on [data-ai]), but
@@ -92,7 +96,7 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
     nodes.push(isError
       ? <span key={k} className="aidoubt" data-ai={ai}
           data-tip={h.span.fix ? `${h.span.reason} → “${h.span.fix}”` : h.span.reason}
-          >{text.slice(h.at, h.at + h.len)}</span>
+          ><SubText text={text.slice(h.at, h.at + h.len)} from={h.at} spans={subs} /></span>
       : <span key={k} className={`ainote lens-${spanLens(h.span)}`} style={{ "--lens-c": lens?.color } as CSSProperties}
           data-ai={ai} data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason}`}
           onClick={(e) => {
@@ -100,10 +104,10 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
             e.stopPropagation();
             const st = useStore.getState();
             st.dismissNotice(st.active, lineId, spanLens(h.span), h.span.quote);
-          }}>{text.slice(h.at, h.at + h.len)}</span>);
+          }}><SubText text={text.slice(h.at, h.at + h.len)} from={h.at} spans={subs} /></span>);
     last = h.at + h.len;
   });
-  if (last < text.length) nodes.push(text.slice(last));
+  if (last < text.length) nodes.push(<SubText key="tail" text={text.slice(last)} from={last} spans={subs} />);
   return nodes;
 }
 
@@ -1723,7 +1727,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
                   ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
                   : flagsByLine.has(l.id)
                     ? renderFlagged(l.text, flagsByLine.get(l.id)!, l.id)
-                    : l.text}
+                    : withSubs(l.text)}
                 {l.orig !== undefined && <EditMark orig={l.orig} text={l.text} />}
               </span>
             )}
