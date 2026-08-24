@@ -318,8 +318,9 @@ export function App() {
   );
 }
 
-// localStorage is full: every autosave is silently failing, so anything coded from
-// this moment on exists only in memory. This must out-shout everything else.
+// The browser refused the autosave write (storage full, private mode, a broken
+// profile): everything coded from this moment on exists only in memory. This
+// must out-shout everything else.
 function SaveWarning() {
   const saveFailed = useStore((s) => s.saveFailed);
   // dismissible, but it re-arms: if saves recover and then fail AGAIN, that is a
@@ -337,8 +338,8 @@ function SaveWarning() {
   return (
     <div className="savewarn" role="alert">
       <Icon name="alert-triangle" size={16} />
-      <span><b>Autosave is failing</b> — the browser's storage is full. Nothing saves until space is freed.
-        Export your project now, then start a new project or remove a transcript.</span>
+      <span><b>Autosave is failing</b> — the browser is refusing to store the project. Nothing
+        saves until it recovers. Export your project now, so this session's work is safe.</span>
       <button className="btn" onClick={exportProject}>Export project</button>
       <button className="btn iconbtn" onClick={() => setDismissed(true)} title="Dismiss — saving is still broken"
         aria-label="Dismiss warning"><Icon name="x" size={14} /></button>

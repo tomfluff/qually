@@ -2,11 +2,12 @@
 // Copyright (C) 2026 Yotam Sechayk
 // The last line of defence: a render throw with persisted state behind it is
 // otherwise a PERMANENT white screen — reload rehydrates the same value and
-// throws again, and the researcher's work is trapped inside localStorage with
+// throws again, and the researcher's work is trapped inside the browser with
 // no way to reach the export menu. This screen offers the two things that
 // matter in that moment: get the raw state out, and start the app again.
 import { Component, type ReactNode } from "react";
 import { useStore } from "../state/store";
+import { dropRawState, readRawState } from "../state/persistence";
 
 const KEY = "coding-app-state";
 
@@ -14,7 +15,7 @@ export class CrashScreen extends Component<{ children: ReactNode }, { error: Err
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
 
-  private saveRaw = () => {
+  private saveRaw = async () => {
     // a REAL project file first — the render crashed, but the store usually
     // still stands, and exportProject writes the format the import door
     // accepts. Only when even that throws, fall back to the raw persistence
@@ -22,7 +23,7 @@ export class CrashScreen extends Component<{ children: ReactNode }, { error: Err
     let raw = "", name = "qually-project.json";
     try { raw = useStore.getState().exportProject(); }
     catch {
-      try { raw = localStorage.getItem(KEY) ?? ""; } catch { /* nothing to save */ }
+      try { raw = JSON.stringify(await readRawState(KEY) ?? {}, null, 1); } catch { /* nothing to save */ }
       name = "qually-raw-state.json";
     }
     const a = document.createElement("a");
@@ -33,8 +34,9 @@ export class CrashScreen extends Component<{ children: ReactNode }, { error: Err
   };
 
   private reset = () => {
-    try { localStorage.removeItem(KEY); } catch { /* a failed remove changes nothing */ }
-    location.reload();
+    // reload only after the drop settles — reloading mid-delete rehydrates the
+    // same crashing state and this screen just comes back
+    dropRawState(KEY).finally(() => location.reload());
   };
 
   render() {

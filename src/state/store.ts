@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist, type PersistStorage } from "zustand/middleware";
+import { markHydrated, projectStorage, setOnSaveResult } from "./persistence";
 import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
 import { excerptOf, RESEARCHER } from "../contract/excerpt";
@@ -351,8 +352,8 @@ export interface State {
   // transient (not persisted)
   selection: Selection;
   savedSelections: Record<string, Selection>; // each tab's parked selection, restored on return
-  undoStack: string[];
-  redoStack: string[];
+  undoStack: UndoEntry[];
+  redoStack: UndoEntry[];
   selRun: boolean; // top undo entry already captures the state before this run of selection-only changes
   nextSid: number;
   nextMid: number;
@@ -576,9 +577,26 @@ function idsBetween(gs: Group[], i: number, j: number): number[] {
 // selection" BACK to one: the entry was consumed, nothing changed on screen, and
 // savedSelections still held the selection it was supposed to remove -- which then
 // resurrected itself the next time you opened that tab, with no undo left to kill it.
-// Set isn't JSON, so the line ids go as an array.
-function snapshot(s: State): string {
-  return JSON.stringify({
+// The selection's Set is copied to an array (it's the one thing callers mutate a
+// copy of); everything else is held BY REFERENCE — every store action already
+// replaces these slices copy-on-write, so a snapshot is structural sharing, not a
+// serialization. (The stacks used to hold JSON strings: at a few thousand
+// segments that was ~half a megabyte of stringify per click, times a cap of 80.)
+export interface Snap {
+  kind?: undefined;
+  segments: Segment[]; codebook: State["codebook"]; hotbar: State["hotbar"];
+  active: string; markers: Marker[]; aiGrounds: Record<number, GroundRec>;
+  markerColors: Record<string, string>;
+  codeGroups: CodeGroup[]; codeAreas: CodeGroup[]; codeAreasFp: string;
+  codePlan: CodePlanAction[]; codeClusters: CodeCluster[];
+  mapPositions: StageLayout; mapIslandPos: StageLayout; stretches: Stretch[];
+  ledgerLen: number;
+  sel: { pid: string | null; anchor: number | null; head: number | null; lines: number[] };
+}
+export interface LineSnap { kind: "line"; pid: string; id: number; line: Line; flags: LineFlags | null }
+export type UndoEntry = Snap | LineSnap;
+function snapshot(s: State): Snap {
+  return {
     segments: s.segments, codebook: s.codebook, hotbar: s.hotbar, active: s.active,
     markers: s.markers,
     // grounding rides with the segments it belongs to: deleting a segment drops
@@ -595,18 +613,18 @@ function snapshot(s: State): string {
     // not the ledger itself — its LENGTH. Undo flags the decisions logged after
     // this point as undone instead of erasing them (see restore).
     ledgerLen: s.ledger.length,
-    sel: { ...s.selection, lines: [...s.selection.lines] },
-  });
+    sel: { pid: s.selection.pid, anchor: s.selection.anchor, head: s.selection.head, lines: [...s.selection.lines] },
+  };
 }
 // Text edits get a TARGETED undo entry (kind:"line") instead of a full snapshot:
 // the snapshot above deliberately omits transcripts/aiFlags, and 80 copies of a
 // whole transcript would not be a stack, it would be a memory leak. The entry
 // holds the one line (with its orig) and the line's AI-flag record, so undoing
 // an applyFix brings back both the wording and the mark it consumed.
-function lineEntry(s: State, pid: string, id: number): string | null {
+function lineEntry(s: State, pid: string, id: number): LineSnap | null {
   const line = s.transcripts[pid]?.lines.find((l) => l.id === id);
   if (!line) return null;
-  return JSON.stringify({ kind: "line", pid, id, line, flags: s.aiFlags[`${pid}:${id}`] ?? null });
+  return { kind: "line", pid, id, line, flags: s.aiFlags[`${pid}:${id}`] ?? null };
 }
 function restoreLine(get: () => State, set: (p: Partial<State>) => void,
   o: { pid: string; id: number; line: Line; flags: LineFlags | null }) {
@@ -751,8 +769,7 @@ function renameInto(get: () => State, set: (p: Partial<State>) => void, code: st
   });
 }
 
-function restore(get: () => State, set: (p: Partial<State>) => void, json: string) {
-  const o = JSON.parse(json);
+function restore(get: () => State, set: (p: Partial<State>) => void, o: Snap) {
   const cur = get();
   const next = { ...cur, segments: o.segments, codebook: o.codebook, hotbar: o.hotbar };
   let sel: Selection = o.sel
@@ -1378,12 +1395,9 @@ export const useStore = create<State>()(
         // Undo entries for text edits carry the whole Line, speaker included, so
         // an untouched stack would put the old name back on one line the next time
         // someone undid an edit. Rewrite them instead of clearing the history.
-        const fixStack = (stack: string[]) => stack.map((j) => {
-          const o = JSON.parse(j) as { kind?: string; line?: Line };
-          if (o.kind !== "line" || o.line?.speaker.trim() !== from) return j;
-          o.line = { ...o.line, speaker: to };
-          return JSON.stringify(o);
-        });
+        const fixStack = (stack: UndoEntry[]) => stack.map((o) =>
+          o.kind === "line" && o.line.speaker.trim() === from
+            ? { ...o, line: { ...o.line, speaker: to } } : o);
         set({
           transcripts,
           ui: { ...s.ui, speakerColors: move(s.ui.speakerColors), speakerWeight: move(s.ui.speakerWeight), speakerFocus },
@@ -2455,22 +2469,20 @@ export const useStore = create<State>()(
         // the edge of the history is a real answer, not a no-op: say so, or a
         // silent nothing reads as "the undo worked and changed nothing"
         if (!s.undoStack.length) { earcon.nothing(); announce("Nothing left to undo"); return; }
-        const raw = s.undoStack[s.undoStack.length - 1];
-        const o = JSON.parse(raw);
-        const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? raw : snapshot(s);
+        const o = s.undoStack[s.undoStack.length - 1];
+        const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? o : snapshot(s);
         set({ redoStack: [...s.redoStack, back], undoStack: s.undoStack.slice(0, -1) });
-        if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, raw);
+        if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, o);
         earcon.undo();
         announce("Undone");
       },
       redo: () => {
         const s = get();
         if (!s.redoStack.length) { earcon.nothing(); announce("Nothing left to redo"); return; }
-        const raw = s.redoStack[s.redoStack.length - 1];
-        const o = JSON.parse(raw);
-        const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? raw : snapshot(s);
+        const o = s.redoStack[s.redoStack.length - 1];
+        const back = o.kind === "line" ? lineEntry(s, o.pid, o.id) ?? o : snapshot(s);
         set({ undoStack: [...s.undoStack, back], redoStack: s.redoStack.slice(0, -1) });
-        if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, raw);
+        if (o.kind === "line") restoreLine(get, set, o); else restore(get, set, o);
         earcon.redo();
         announce("Redone");
       },
@@ -2523,22 +2535,10 @@ export const useStore = create<State>()(
     }),
     {
       name: "coding-app-state",
-      // A full localStorage makes setItem THROW; zustand would log it and move on,
-      // and autosave silently stops while the user keeps coding. Surface it instead
-      // (saveFailed drives the App banner). setState is deferred a microtask so the
-      // flag's own persist attempt can't recurse into this handler mid-write.
-      storage: createJSONStorage(() => ({
-        getItem: (k) => localStorage.getItem(k),
-        removeItem: (k) => localStorage.removeItem(k),
-        setItem: (k, v) => {
-          try {
-            localStorage.setItem(k, v);
-            if (useStore.getState().saveFailed) queueMicrotask(() => useStore.setState({ saveFailed: false }));
-          } catch {
-            if (!useStore.getState().saveFailed) queueMicrotask(() => useStore.setState({ saveFailed: true }));
-          }
-        },
-      })),
+      // Debounced IndexedDB (see persistence.ts for why localStorage lost the
+      // job). A refused write still surfaces: persistence.ts reports save
+      // health and the callback below drives saveFailed / the App banner.
+      storage: projectStorage as PersistStorage<Partial<State>>,
       partialize: (s) => ({
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
@@ -2547,6 +2547,10 @@ export const useStore = create<State>()(
         markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp, stretches: s.stretches, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
       }),
       onRehydrateStorage: () => (s) => {
+        // writes are dropped until hydration lands (a boot-time set() must not
+        // clobber the saved project) — open the gate even on an empty/failed
+        // hydration, or a fresh workspace would never save at all
+        markHydrated();
         if (!s) return;
         s.nextSid = Math.max(0, ...s.segments.map((x) => x.sid)) + 1;
         // Ascending line ids are an assumption everything downstream makes (see
@@ -2635,6 +2639,14 @@ export const useStore = create<State>()(
     }
   )
 );
+
+// Save health → the App's autosave-failing banner. Deferred a microtask so the
+// flag's own persist attempt can't recurse into the write path mid-flush.
+setOnSaveResult((ok) => {
+  const failed = !ok;
+  if (useStore.getState().saveFailed === failed) return;
+  queueMicrotask(() => useStore.setState({ saveFailed: failed }));
+});
 
 // ── import helpers (module-scope so they can call ensureCode/addSegment) ──
 type Get = () => State;
