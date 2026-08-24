@@ -149,6 +149,14 @@ const ROW_RATIO = 2.2; // one unwrapped row ≈ 2.2 × fontSize (row line-height
 // per-tab scroll anchors — shared with the store, which must forget them on a
 // re-import or project swap (a pid is not stable identity). See scrollMemory.ts.
 
+// min/max of a selection without spreading it: `Math.min(...set)` pushes every id
+// onto the call stack and throws RangeError once a selection gets big enough
+const boundsOf = (lines: Set<number>) => {
+  let first = Infinity, last = -Infinity;
+  for (const id of lines) { if (id < first) first = id; if (id > last) last = id; }
+  return { first, last };
+};
+
 export function TranscriptView() {
   const active = useStore((s) => s.active);
   const transcript = useStore((s) => s.transcripts[s.active]);
@@ -549,9 +557,7 @@ export function TranscriptView() {
   // min/max of the selection, walked ONCE when it changes rather than on every scroll
   useEffect(() => {
     if (!selLines?.size) { selBounds.current = null; setSelOff(null); return; }
-    let first = Infinity, last = -Infinity;
-    for (const id of selLines) { if (id < first) first = id; if (id > last) last = id; }
-    selBounds.current = { first, last };
+    selBounds.current = boundsOf(selLines);
     const v = vref.current;
     // the selection may already be off-screen (e.g. a tab switch restored an offset that
     // doesn't include it). But when keep-in-view owns the head — positioned, no pending
@@ -571,8 +577,8 @@ export function TranscriptView() {
   const backToSelection = () => {
     const st = useStore.getState();
     if (st.selection.pid !== active || !st.selection.lines.size) return;
-    const first = Math.min(...st.selection.lines);
-    const gi = itemIdx.get(first);
+    // walked, not spread: same call-stack hazard as everywhere else here
+    const gi = itemIdx.get(boundsOf(st.selection.lines).first);
     if (gi === undefined) return;
     stopAnims();
     vref.current?.scrollToIndex(gi + 1, { align: "center" }); // +1 for the top vpad
@@ -745,11 +751,16 @@ export function TranscriptView() {
       if (cycleMarkPopover()) e.preventDefault();
       return;
     }
-    // E: add an event after the selected line — the keyboard twin of right-click
+    // E: add an event after the selection — the keyboard twin of the menu's row,
+    // so it targets the same line the menu names. NOT the head: that is the end
+    // you dragged TO, so selecting upwards put the event above the selection.
     if (e.key === "e" || e.key === "E") {
       const sel = useStore.getState().selection;
-      if (sel.pid !== active || sel.head === null) return;
-      const g = groups.find((x) => sel.head! >= x.startId && sel.head! <= x.endId);
+      if (sel.pid !== active || !sel.lines.size) return;
+      // walked fresh: a one-shot keypress can afford the O(n) walk, and the
+      // selBounds ref is only guaranteed current between events, not within one
+      const { last } = boundsOf(sel.lines);
+      const g = groups.find((x) => last >= x.startId && last <= x.endId);
       if (g) { e.preventDefault(); openAddEvent(g); }
       return;
     }
@@ -1046,8 +1057,17 @@ export function TranscriptView() {
                 const st = useStore.getState();
                 const sel = st.selection.pid === active ? st.selection.lines : null;
                 if (sel?.size && it.g.ids.some((id) => sel.has(id))) {
+                  // Both rows of this menu speak about the SELECTION, not about
+                  // the row the cursor happened to land on: marking covers the
+                  // whole span, so an event lands after its last line. A menu
+                  // whose two actions meant different things by "these lines"
+                  // was a coin toss the label never admitted to.
+                  // (walked, not spread — Math.max(...sel) blows the call
+                  // stack on a big selection, see boundsOf)
+                  const b = boundsOf(sel);
+                  const lastG = groups.find((g) => b.last >= g.startId && b.last <= g.endId) ?? it.g;
                   setStretchMenu({ x: e.clientX, y: e.clientY,
-                    start: Math.min(...sel), end: Math.max(...sel), addAfter: it.g });
+                    start: b.first, end: b.last, addAfter: lastG });
                 } else openAddEvent(it.g);
               }}
               onLaneClick={(seg, e) =>
@@ -1122,6 +1142,7 @@ export function TranscriptView() {
       <div className="stretchLabels" ref={stretchOvRef} aria-hidden="true" />
       {stretchMenu && (
         <StretchMenu x={stretchMenu.x} y={stretchMenu.y} start={stretchMenu.start} end={stretchMenu.end}
+          after={stretchMenu.addAfter.endId}
           pid={active} onAddEvent={() => openAddEvent(stretchMenu.addAfter)}
           onClose={() => setStretchMenu(null)} />
       )}
@@ -1322,8 +1343,12 @@ function StretchCombobox({ value, onChange, options, placeholder, ariaLabel, aut
 // The mark-stretch menu: right-click on a selection. One form, two lists —
 // what to mark these lines as (dimension + value, both remembering what the
 // project already uses), and what already covers them, unmarkable in place.
-function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
-  x: number; y: number; start: number; end: number; pid: string;
+function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
+  // `after` is where the event actually lands (the containing group's last
+  // line) — usually === end, but a selection can outlive a merge-settings
+  // change and end mid-group, and the label must not name a line the event
+  // won't follow
+  x: number; y: number; start: number; end: number; after: number; pid: string;
   onAddEvent: () => void; onClose: () => void;
 }) {
   const fs = useStore((s) => s.ui.sidebarFontSize);
@@ -1396,7 +1421,7 @@ function StretchMenu({ x, y, start, end, pid, onAddEvent, onClose }: {
       {mode === "menu" ? (<>
         <button onClick={() => { onAddEvent(); onClose(); }}>
           <span className="stLead"><Icon name="file-plus" size={15} /></span>
-          Add event after this line
+          Add event after line {after}…
         </button>
         <button onClick={() => setMode("mark")}>
           <span className="stLead"><Icon name="bookmark" size={15} /></span>

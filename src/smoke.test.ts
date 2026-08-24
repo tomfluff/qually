@@ -529,3 +529,20 @@ test("re-importing over a transcript prunes the grounding of the segments it dro
   expect(useStore.getState().segments.some((x) => x.pid === "GRD")).toBe(false);
   expect(useStore.getState().aiGrounds[sid]).toBeUndefined();
 });
+
+test("with merge on, selections built by the store cover whole display units", async () => {
+  // the stretch menu's "Add event after line N" names the selection's last
+  // line and inserts after its group — they only agree because selectLine
+  // always selects whole units under the current merge settings
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text\n1,00:00:01,P,first half\n2,00:00:03,P,second half.\n3,00:00:08,P,another thought.\n",
+  ], "MRG.csv")]);
+  useStore.getState().setActive("MRG");
+  useStore.getState().setUi({ mergeLines: true });
+  useStore.getState().setActive("MRG"); // groupsOf reads the ACTIVE transcript
+  useStore.getState().selectLine(1); // line 1 is unterminated, so its unit is [1,2]
+  expect([...useStore.getState().selection.lines].sort((a, b) => a - b)).toEqual([1, 2]);
+  useStore.getState().selectLine(3, { extend: true });
+  expect([...useStore.getState().selection.lines].sort((a, b) => a - b)).toEqual([1, 2, 3]);
+  useStore.getState().setUi({ mergeLines: false });
+});
