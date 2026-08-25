@@ -13,7 +13,8 @@ import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, spanLens, type Flag } from "../ai/flag";
 import type { GroundRec } from "../ai/ground";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
-import type { Stretch } from "../stretches";
+import type { Stretch, StretchStatus } from "../stretches";
+import type { SectionProposal } from "../sections";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
 import { forgetScroll, renameScroll } from "../scrollMemory";
@@ -336,6 +337,13 @@ export interface State {
   /** labelled spans of transcript — "these lines are the baseline condition";
       dimension:value pairs, overlapping freely (see stretches.ts) */
   stretches: Stretch[];
+  /** The study brief, per F7: prose about how the session ran plus the bulleted
+      axes a section may be labelled with (see sections.ts). `""` holds the
+      project default; a pid key overrides it for that transcript alone. Study
+      data — it describes the study, so it travels with the project file.
+      An override is REMOVED by deleting its key: storing "" would read as a
+      deliberate empty override and suppress the default. */
+  studyBrief: Record<string, string>;
   // the pending revision plan from the last reconcile run — study data too:
   // the review can continue in a later session
   codePlan: CodePlanAction[];
@@ -460,6 +468,16 @@ export interface State {
   markStretch: (st: Stretch) => void;
   unmarkStretch: (i: number) => void;
   editStretch: (i: number, dim: string, value: string) => void;
+  setStudyBrief: (pid: string, text: string) => void;
+  clearStudyBrief: (pid: string) => void;
+  /** a whole run's proposals, as ONE undoable gesture. Returns how many landed. */
+  landSections: (pid: string, proposals: SectionProposal[], proposedBy: string) => number;
+  setStretchStatus: (i: number, status: StretchStatus) => void;
+  /** every candidate on this transcript accepted at once — one gesture */
+  acceptSections: (pid: string) => number;
+  /** the way out of a run nobody wanted (cf. deleteSegmentsBy). Deleting a
+      REJECTED stretch also forgets it, so a re-run may propose it again. */
+  deleteStretchesBy: (opts: { pid?: string; status: StretchStatus }) => number;
   setStretchColor: (value: string, color: string) => void;
   setCodePlan: (plan: CodePlanAction[]) => void;
   setCodeClusters: (clusters: CodeCluster[]) => void;
@@ -925,7 +943,7 @@ export const useStore = create<State>()(
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, stretchColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: NO_SEARCH,
@@ -939,7 +957,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1834,6 +1852,7 @@ export const useStore = create<State>()(
           codeAreas: s.codeAreas,         // the AI areas view — an AI pass, worth keeping
           codeAreasFp: s.codeAreasFp,
           stretches: s.stretches,         // what each span of talk belongs to — study data
+          studyBrief: s.studyBrief,       // the study's shape, in the researcher's words — study data
           codePlan: s.codePlan,           // pending reconciliation verdicts — ditto
           codeClusters: s.codeClusters,   // pending merge-clusters — ditto
           answers: s.answers,     // …and so are the questions asked of the material
@@ -1883,6 +1902,7 @@ export const useStore = create<State>()(
           codeGroups: p.codeGroups ?? [],
           codeAreas: p.codeAreas ?? [],
           stretches: p.stretches ?? [],
+          studyBrief: p.studyBrief ?? {},
           codeAreasFp: p.codeAreasFp ?? "",
           codePlan: (p.codePlan ?? []).filter((a) => a.action !== "merge"),
           // emit-never, load-always: pairwise merges from older files become
@@ -1997,6 +2017,62 @@ export const useStore = create<State>()(
           && x.dim === st.dim && x.value === st.value)) return;
         get().pushUndo();
         set({ stretches: [...cur, st] });
+      },
+      // The brief is not project-shaped state that a run may quietly rewrite:
+      // it is something the researcher wrote. Only these two, both behind an
+      // explicit button, change it.
+      setStudyBrief: (pid, text) => set({ studyBrief: { ...get().studyBrief, [pid]: text } }),
+      clearStudyBrief: (pid) => {
+        const next = { ...get().studyBrief };
+        delete next[pid]; // DELETE, not "": an empty string is a real override
+        set({ studyBrief: next });
+      },
+
+      // A run's proposals land in ONE store gesture. markStretch owns its own
+      // pushUndo, so looping it over thirty proposals would leave thirty undo
+      // entries and thirty presses of Ctrl+Z to take a run back — F3 settled
+      // this shape already (one push per run; addSegment pushes nothing).
+      landSections: (pid, proposals, proposedBy) => {
+        if (!proposals.length) return 0;
+        get().pushUndo();
+        set({ stretches: [...get().stretches, ...proposals.map((p) => ({
+          pid, start: p.start, end: p.end, dim: p.dim, value: p.value,
+          status: "candidate" as const, proposedBy, why: p.why,
+        }))] });
+        return proposals.length;
+      },
+      setStretchStatus: (i, status) => {
+        const cur = get().stretches;
+        if (!cur[i] || cur[i].status === status) return;
+        get().pushUndo();
+        set({ stretches: cur.map((x, k) => k === i ? { ...x, status } : x) });
+        if (status === "accepted") earcon.accept();
+        else if (status === "rejected") earcon.reject();
+        announce(`Section ${status}`);
+      },
+      acceptSections: (pid) => {
+        const cur = get().stretches;
+        const n = cur.filter((x) => x.pid === pid && x.status === "candidate").length;
+        if (!n) return 0;
+        get().pushUndo();
+        set({ stretches: cur.map((x) =>
+          x.pid === pid && x.status === "candidate" ? { ...x, status: "accepted" as const } : x) });
+        earcon.accept();
+        announce(`${n} section${n === 1 ? "" : "s"} accepted`);
+        return n;
+      },
+      // Discarding is not rejecting: a rejected stretch is KEPT as memory so a
+      // re-run does not propose it again, while a deleted one is forgotten and
+      // may come back. Both are offered; the buttons say which is which.
+      deleteStretchesBy: ({ pid, status }) => {
+        const cur = get().stretches;
+        const doomed = cur.filter((x) => x.status === status && (!pid || x.pid === pid));
+        if (!doomed.length) return 0;
+        get().pushUndo();
+        const gone = new Set(doomed);
+        set({ stretches: cur.filter((x) => !gone.has(x)) });
+        announce(`${doomed.length} ${status} section${doomed.length === 1 ? "" : "s"} discarded`);
+        return doomed.length;
       },
       unmarkStretch: (i) => {
         get().pushUndo();
@@ -2634,7 +2710,7 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, ledger: s.ledger, // NB: the API key is not in the store (ai/key.ts)
-        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp, stretches: s.stretches, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
+        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp, stretches: s.stretches, studyBrief: s.studyBrief, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
       }),
       onRehydrateStorage: () => (s) => {
         // writes are dropped until hydration lands (a boot-time set() must not
@@ -2660,6 +2736,7 @@ export const useStore = create<State>()(
         s.ledger ??= [];
         s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
         s.ui.assistPanel ??= "observations";
+        s.studyBrief ??= {}; // added with F7; a workspace saved before it has none
         s.ui.tailLimit ??= 1;
         s.ui.stretchBand ??= "sm";
         s.ui.stretchLabel ??= "md";

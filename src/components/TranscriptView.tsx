@@ -15,7 +15,7 @@ import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
 import { useDismiss, useClampToViewport, useMenuArrows, useMenuFocus } from "../usePopover";
 import { fuzzy } from "./CodeCombobox";
-import { stretchColorOf, stretchDims, type Stretch } from "../stretches";
+import { stretchColorOf, stretchDims, visible, isEvidence, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches, scopeFilter } from "../search";
@@ -194,7 +194,10 @@ export function TranscriptView() {
   // the gutter exists only while this transcript has stretches; every row
   // shares one geometry so the text column stays aligned
   const stretchCtx = useMemo(() => {
-    const list = allStretches.filter((st) => st.pid === active);
+    // everything but the REJECTED: those exist only so a re-run does not
+    // propose them again, and a section nobody agreed to must not be drawn
+    // beside the ones they did. Candidates ride along, striped (see .stCand).
+    const list = visible(allStretches).filter((st) => st.pid === active);
     if (!list.length) return null;
     const dims = stretchDims(list);
     const bandPx = STRETCH_BAND_PX[stretchBand];
@@ -211,7 +214,10 @@ export function TranscriptView() {
     const si = new Map<Stretch, number>();
     allStretches.forEach((st, i) => { if (st.pid === active) si.set(st, i); });
     return { list, dims, bandPx, labelPx, pillW, leadIn, colW, width: `${widthPx}px`, widthPx,
-      colors: stretchColors, dark, sorted, si };
+      colors: stretchColors, dark, sorted, si,
+      // the minimap paints the SESSION, not the review: a candidate strip there
+      // would be indistinguishable from a section the researcher agreed to
+      evidence: list.filter(isEvidence) };
   }, [allStretches, active, stretchBand, stretchLabel, stretchColors, dark]);
   const [stretchMenu, setStretchMenu] = useState<{ x: number; y: number; start: number; end: number; addAfter: Group } | null>(null);
   // right-click on a label pill: edit/recolour/remove THAT stretch. Delegated
@@ -1123,7 +1129,7 @@ export function TranscriptView() {
       <Minimap ref={mmRef} items={items} laned={laned} cols={cols} codebook={codebook}
         closeCallSids={closeCallSids} flagsByLine={flagsByLine}
         detail={minimapDetail} ui={uiSlim} vref={vref} onNav={stopAnims}
-        stretches={stretchCtx?.list ?? []} stretchDimList={stretchCtx?.dims ?? []} />
+        stretches={stretchCtx?.evidence ?? []} stretchDimList={stretchCtx?.dims ?? []} />
         {selOff && (
           <button className={`backtosel ${selOff}`} onClick={backToSelection}
             style={{ fontSize: sidebarFontSize }} aria-label="Scroll back to your selected line(s)">

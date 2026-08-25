@@ -44,7 +44,7 @@ import { relaxBoxes } from "../mapRelax";
 import { earcon } from "../earcons";
 import { norm } from "../contract/segments";
 import { cooccurrence, pairOf, companionsOf, type Companion } from "../cooccur";
-import { coverageOf, stretchDims } from "../stretches";
+import { coverageOf, stretchDims, evidence } from "../stretches";
 import { findSimilar } from "../similar";
 import { sweepWording, refusedPairs, familyReason } from "../sweep";
 import { openTailQueue } from "./TailQueue";
@@ -949,7 +949,10 @@ function MapInner() {
   // the comparison axes the compare view divides by — mix and match; a code
   // files under the JOINED values of every ticked dimension it has evidence in
   const [compareOn, setCompareOnState] = useState(remembered.compareDims);
-  const allDims = useMemo(() => stretchDims(stretches), [stretches]);
+  // EVIDENCE only: an unreviewed proposal must not put a new axis on the map,
+  // nor split a code's excerpts under a boundary nobody has agreed to
+  // (coverageOf holds the same line internally — see stretches.ts)
+  const allDims = useMemo(() => stretchDims(evidence(stretches)), [stretches]);
   const activeDims = useMemo(
     () => (compareOn ?? allDims).filter((d) => allDims.includes(d)),
     [compareOn, allDims]);

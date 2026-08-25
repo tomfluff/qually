@@ -73,7 +73,16 @@ export interface Project {
   codeAreasFp?: string;
   // labelled spans of transcript (dimension:value), e.g. which condition a
   // stretch of a within-subject session came from — study data
-  stretches?: { pid: string; start: number; end: number; dim: string; value: string }[];
+  // status/proposedBy/why are set only on a stretch an AI proposed (F7);
+  // absent means the researcher marked it themselves, which is what every
+  // stretch written before F7 is. Declared rather than left to ride along on an
+  // object spread — this file refuses accidental schema coupling on purpose.
+  stretches?: {
+    pid: string; start: number; end: number; dim: string; value: string;
+    status?: "candidate" | "accepted" | "rejected"; proposedBy?: string; why?: string;
+  }[];
+  /** the F7 study brief: "" is the project default, a pid key overrides it */
+  studyBrief?: Record<string, string>;
   codePlan?: { code: string; action: "rename" | "merge" | "remove"; newName?: string; into?: string; rationale: string }[];
   // the full cluster shape, declared: it round-trips verbatim, and a type that
   // lists half the fields tells the next reader the other half is not saved
@@ -192,9 +201,21 @@ export function parseProject(text: string): Project {
               if (end === undefined || l.id > end) end = l.id;
             }
           }
-          return start === undefined || end === undefined ? [] : [{ ...s, start, end }];
+          if (start === undefined || end === undefined) return [];
+          // the AI fields are VALIDATED, not spread through: an unknown status
+          // would sail past every consumer's checks and be drawn as nothing
+          const st: NonNullable<Project["stretches"]>[number] = { ...s, start, end };
+          if (!["candidate", "accepted", "rejected"].includes(st.status ?? "")) delete st.status;
+          if (typeof st.proposedBy !== "string") delete st.proposedBy;
+          if (typeof st.why !== "string") delete st.why;
+          return [st];
         })
       : [],
+    // the brief: a flat string map, keys unvalidated on purpose (a pid is
+    // whatever the transcripts are called) but values must be strings
+    studyBrief: p.studyBrief && typeof p.studyBrief === "object" && !Array.isArray(p.studyBrief)
+      ? Object.fromEntries(Object.entries(p.studyBrief).filter(([, v]) => typeof v === "string"))
+      : {},
     codePlan: Array.isArray(p.codePlan)
       ? p.codePlan.filter((a): a is NonNullable<Project["codePlan"]>[number] =>
           !!a && typeof a.code === "string" && ["rename", "merge", "remove"].includes(a.action))

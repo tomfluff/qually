@@ -18,7 +18,38 @@ export interface Stretch {
   end: number;    // last line id, inclusive
   dim: string;    // the comparison axis, e.g. "condition"
   value: string;  // the label within it, e.g. "baseline"
+  // ── set only on a stretch an AI proposed (F7). Absent = the researcher's
+  // own mark, which is what every stretch written before F7 is.
+  status?: StretchStatus;
+  proposedBy?: string;   // "AI · Terra"
+  /** the model's one sentence of evidence, restored from redaction. KEPT after
+      accepting: a candidate outlives its run (a reload, a project file), and a
+      boundary whose reason has evaporated cannot be judged — nor written up. */
+  why?: string;
 }
+/** candidate: proposed, not yet judged. accepted: the researcher said yes, and
+    it is now as real as one they drew. rejected: they said no — kept ONLY so a
+    re-run does not propose it again, and invisible everywhere else. */
+export type StretchStatus = "candidate" | "accepted" | "rejected";
+
+// The one rule every consumer of `stretches` has to obey, in one place.
+//
+// A section says where in the session something was said, and analysis leans on
+// that: coverageOf splits a code's evidence by the values a segment falls
+// inside, and the Code map groups by it. An unreviewed proposal reaching those
+// would silently reclassify the researcher's own coding — the AI deciding,
+// which is the one thing this app promises it never does. So:
+//
+//   evidence  — theirs, and the proposals they accepted. Counts. Groups. Exports.
+//   candidate — drawn striped in the gutter and listed for review. Counts nowhere.
+//   rejected  — memory, so a re-run does not resurface it. Drawn nowhere, counts nowhere.
+
+/** does this stretch ASSERT something about the session? */
+export const isEvidence = (s: Stretch) => !s.status || s.status === "accepted";
+/** the stretches that assert something — for every count, grouping and summary */
+export const evidence = (list: Stretch[]) => list.filter(isEvidence);
+/** the stretches worth DRAWING: evidence plus what is waiting to be judged */
+export const visible = (list: Stretch[]) => list.filter((s) => s.status !== "rejected");
 
 /** deterministic colour per value: stable across sessions and machines with no
     stored palette — the value IS the identity. Hex, not hsl(), so inkOn() can
@@ -100,9 +131,16 @@ export const stretchColorOf = (value: string, overrides?: Record<string, string>
 export const stretchOverlaps = (s: Stretch, start: number, end: number): boolean =>
   s.start <= end && s.end >= start;
 
-/** the stretches covering any of lines start..end of a transcript */
+/** the stretches covering any of lines start..end of a transcript — EVIDENCE
+    only, because every caller is asking what these lines belong to, not what
+    has been suggested for them. `pending` asks the other question (the review
+    dialog), and is the only place a candidate is listed as a fact about lines. */
 export function stretchesAt(list: Stretch[], pid: string, start: number, end = start): Stretch[] {
-  return list.filter((s) => s.pid === pid && stretchOverlaps(s, start, end));
+  return list.filter((s) => s.pid === pid && isEvidence(s) && stretchOverlaps(s, start, end));
+}
+/** the CANDIDATES covering those lines — what the review dialog offers a verdict on */
+export function pendingAt(list: Stretch[], pid: string, start: number, end = start): Stretch[] {
+  return list.filter((s) => s.pid === pid && s.status === "candidate" && stretchOverlaps(s, start, end));
 }
 
 /** the dims in play, stable order — each gets its own gutter column */
@@ -120,7 +158,9 @@ export function coverageOf(
 ): Map<string, Map<string, number>> {
   const byPid = new Map<string, Stretch[]>();
   for (const s of stretches) {
-    if (s.dim !== dim) continue;
+    // not a call-site filter: this is THE place a proposal could silently
+    // reclassify coded evidence, so the guard lives where it cannot be forgotten
+    if (s.dim !== dim || !isEvidence(s)) continue;
     const arr = byPid.get(s.pid) ?? [];
     arr.push(s);
     byPid.set(s.pid, arr);
