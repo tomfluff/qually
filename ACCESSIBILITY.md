@@ -93,7 +93,7 @@ most valuable thing anyone could do for this project:
 | Mixed-speaker excerpt | amber | a **`!`** badge |
 | AI: likely mis-transcription | amber | **dotted** underline |
 | AI: which noticing lens | lens hue | **underline style** (wavy / double / dashed / thick / boxed) |
-| Section is an unjudged AI proposal | faded hue | **stripes** on its gutter band (its label pill is welded to that band), and **gaps** down its minimap strip |
+| Mark is an unjudged AI proposal | faded hue | **stripes** on its gutter band (its label pill is welded to that band), and on the minimap a **hairline border** around a ghost fill |
 
 **Caveat on code patterns.** These are a **setting, off by default** (Settings → Codes →
 *Code patterns*). Solid bars scan faster for a sighted coder, so the default favours them;
@@ -160,10 +160,12 @@ Listed plainly, worst first. These are real; do not read the README as claiming 
 6. **The minimap still encodes codes — and a section's value — by hue alone** — it is a
    canvas, so the CSS patterns don't reach it. (Speakers *are* now on their own rail there,
    and it follows the quiet/normal/bold weight you set rather than a hardcoded "R". It is now
-   hidden from screen readers as a duplicate view.) *Status* on the minimap is not hue-only:
-   an unjudged section proposal is drawn as a broken strip, and a segment's own status still
-   rides on alpha alone — safe there only because lane assignment guarantees nothing overlaps
-   underneath it, which is not true of the section column.)
+   hidden from screen readers as a duplicate view.) *Status* there is no longer hue-only:
+   agreed-to marks are solid, and a proposal waiting on you is a ghost fill inside a hairline
+   **border** — presence of an edge, not a shade of the same colour. Rejected is the same
+   ghost with no border. One caveat, stated: on a one-line mark there is no room for a border
+   to have an inside, so it degrades to a wash — deliberately toward the lighter reading, so a
+   proposal never passes for something you agreed to.
 7. **The patterns that vary vertically restart at each row boundary** within a multi-line
    segment. A minor seam, but visible.
 

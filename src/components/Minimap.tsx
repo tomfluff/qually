@@ -16,6 +16,41 @@ const WARN = "#e0a020";
 // spent once so the columns explain themselves — ◆ events · ¶ speech · ✦ AI
 // notices · ▮ code lanes. Every y below maps into the space UNDER it.
 const HDR = 12;
+
+/** The minimap's review-status language, in ONE place because the code lanes and
+    the section strips have to say the same thing — a researcher should not have
+    to learn "unjudged" twice on one 66px view.
+
+    Settled is solid. Pending and dropped share the same ghost fill, and the only
+    thing between them is a hairline border: that border does not encode status so
+    much as OBLIGATION — it marks the one state still waiting on a decision.
+    Tone alone (what this used to be) put the two undecided states on the same
+    axis as the decided one, and at three pixels wide the steps were unreadable. */
+const GHOST = 0.2, WASHED = 0.55, SOLID = 0.9;
+type BarState = "settled" | "pending" | "dropped";
+function statusBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number,
+  color: string, state: BarState) {
+  ctx.fillStyle = color;
+  if (state === "settled") {
+    ctx.globalAlpha = SOLID; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1; return;
+  }
+  ctx.globalAlpha = GHOST; ctx.fillRect(x, y, w, h);
+  if (state === "pending") {
+    ctx.globalAlpha = WASHED;
+    // A border needs an inside. On a one-line mark (the lanes floor at 1.5px)
+    // the two edges meet and the bar fills SOLID — a pending mark would then
+    // read as a settled one, which is the single confusion this language exists
+    // to remove. Wash the whole bar instead: still lighter than settled, so the
+    // degradation falls toward "needs you" rather than toward "already agreed".
+    if (w <= 2 || h <= 2) ctx.fillRect(x, y, w, h);
+    else {
+      ctx.fillRect(x, y, w, 1); ctx.fillRect(x, y + h - 1, w, 1);
+      ctx.fillRect(x, y, 1, h); ctx.fillRect(x + w - 1, y, 1, h);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
 // canvas needs concrete colours: blend `c` over `bg` at `p` (both computed rgb/hex)
 const parseC = (c: string): [number, number, number] => {
   const m = c.match(/\d+(\.\d+)?/g);
@@ -184,15 +219,11 @@ export const Minimap = forwardRef<MinimapHandle, {
           if (gi0 === undefined || gi1 === undefined) continue;
           // same line-id → row math as the code-lane bars below
           const y0 = yOf(gi0), y1 = yOf(gi1 + 1);
-          ctx.fillStyle = stretchColorOf(st.value, ui.stretchColors, ui.dark);
-          // an unjudged proposal reads quieter than a section that was agreed
-          // to — the same alpha the candidate code lanes below use, so the two
-          // kinds of "not decided yet" look alike across the whole map. The
-          // gutter carries the non-colour signal (stripes); at this width a
-          // broken strip was more noise than tell.
-          ctx.globalAlpha = st.status === "candidate" ? 0.55 : 0.9;
-          ctx.fillRect(col * stPitch, y0, sw, Math.max(2, y1 - y0));
-          ctx.globalAlpha = 1;
+          // rejected stretches never reach here (visible() drops them), so a
+          // strip is either agreed to or waiting on a verdict
+          statusBar(ctx, col * stPitch, y0, sw, Math.max(2, y1 - y0),
+            stretchColorOf(st.value, ui.stretchColors, ui.dark),
+            st.status === "candidate" ? "pending" : "settled");
         }
       }
 
@@ -315,9 +346,11 @@ export const Minimap = forwardRef<MinimapHandle, {
         const gi1 = m.get(s.end) ?? gi0;
         const y0 = yOf(gi0);
         const y1 = yOf(gi1 + 1);
-        ctx.globalAlpha = s.status === "rejected" ? 0.3 : s.status !== "accepted" ? 0.55 : 0.9;
-        ctx.fillStyle = codebook[s.code]?.color || "#999";
-        ctx.fillRect(laneX + s.lane * colW, y0, Math.max(1, colW - 1.5), Math.max(codeMinH, y1 - y0));
+        // !== "accepted" rather than === "candidate": an unrecognised status
+        // fails toward "still waiting on you", never toward agreed-to
+        statusBar(ctx, laneX + s.lane * colW, y0, Math.max(1, colW - 1.5), Math.max(codeMinH, y1 - y0),
+          codebook[s.code]?.color || "#999",
+          s.status === "rejected" ? "dropped" : s.status !== "accepted" ? "pending" : "settled");
         if (s.status !== "rejected" && closeCallSids.has(s.sid)) {
           ctx.globalAlpha = 1; ctx.fillStyle = WARN;
           ctx.fillRect(stColW, y0, warnW, Math.max(warnMinH, y1 - y0));
