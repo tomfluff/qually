@@ -314,3 +314,27 @@ test("a CJK transcript is not under-estimated into a request the API would refus
   // Latin text is unchanged — the old ratio still holds where it was right
   expect(estimateTokens("abcdefgh")).toBe(2);
 });
+
+// ── the export ─────────────────────────────────────────────────────────────
+
+test("sections.csv carries the provenance, and a blank status means you drew it", () => {
+  const st = useStore.getState();
+  st.markStretch({ pid: "P09", start: 1, end: 2, dim: "phase", value: "warm-up" });
+  st.landSections("P09", sanitizeSections(VOCAB, IDS, [
+    { dim: "phase", value: "task 1", line_start: 3, line_end: 4, why: "the second task begins" },
+  ]), "AI · Terra");
+  const csv = useStore.getState().exportSections();
+  const [head, ...rows] = csv.trim().split(/\r?\n/); // toCSV writes CRLF
+  expect(head).toBe("pid,line_start,line_end,dim,value,status,proposed_by,why");
+  // the researcher's own mark: both provenance columns blank, and they mean
+  // the same thing — nobody proposed it
+  expect(rows[0]).toBe("P09,1,2,phase,warm-up,,,");
+  expect(rows[1]).toContain("P09,3,4,phase,task 1,candidate,AI · Terra,");
+  expect(rows[1]).toContain("the second task begins");
+});
+
+test("a rejected section still exports — it is the memory a re-run consults", () => {
+  const i = useStore.getState().stretches.findIndex((x) => x.status === "candidate");
+  useStore.getState().setStretchStatus(i, "rejected");
+  expect(useStore.getState().exportSections()).toContain("rejected");
+});

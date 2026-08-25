@@ -42,6 +42,7 @@ export function ExportMenu() {
   const aiCalls = useStore((s) => s.aiLog.length);
   const decisions = useStore((s) => s.ledger.length);
   const answerCount = useStore((s) => s.answers.length);
+  const sectionCount = useStore((s) => s.stretches.length);
   const noticeCount = useStore((s) => Object.values(s.aiFlags)
     .reduce((n, f) => n + f.spans.filter((x) => (x.lens ?? "transcription") !== "transcription").length, 0));
   const eventCount = useStore((s) => s.markers.length);
@@ -119,6 +120,8 @@ events.csv            session events and field notes, as loaded (with your edits
 ai-observations.csv   instances the AI marked for review (not codes)
 ai-provenance.csv     every AI request made: model, lines sent, cost
 decisions.csv         every codebook decision: what, why, whose idea
+sections.csv          which part of the study each stretch of talk belongs to
+                      (blank status = you marked it; otherwise the AI proposed it)
 
 These CSVs are for pipelines, co-authors, and appendices.
 To CONTINUE this work in QuAlly, use the project file (.qually.json) —
@@ -143,6 +146,7 @@ it round-trips everything, including corrections and AI observations.
     if (aiCalls) files.push({ name: "ai-provenance.csv", text: st.exportAiLog() });
     if (st.ledger.length) files.push({ name: "decisions.csv", text: st.exportLedger() });
     if (answerCount) files.push({ name: "answers.csv", text: st.exportAnswers() });
+    if (st.stretches.length) files.push({ name: "sections.csv", text: st.exportSections() });
     save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
       new Date()), `${b}-csv.zip`);
     setOpen(false);
@@ -178,6 +182,8 @@ it round-trips everything, including corrections and AI observations.
             withBase((b) => { saveText(s().exportNotices(), `${b}-ai-observations.csv`); setOpen(false); }))}
           {answerCount > 0 && item(`Answers (.csv) · ${answerCount}`, "One row per citation; joins to coded segments on the ref.",
             withBase((b) => { saveText(s().exportAnswers(), `${b}-answers.csv`); setOpen(false); }))}
+          {sectionCount > 0 && item(`Sections (.csv) · ${sectionCount}`, "Which part of the study each stretch of talk belongs to.",
+            withBase((b) => { saveText(s().exportSections(), `${b}-sections.csv`); setOpen(false); }))}
           {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost. Your methods appendix.",
             withBase((b) => { saveText(s().exportAiLog(), `${b}-ai-provenance.csv`); setOpen(false); }))}
           {decisions > 0 && item(`Decisions (.csv) · ${decisions}`, "Every merge, rename and removal: the reason, and whose idea it was.",

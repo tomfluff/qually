@@ -87,6 +87,9 @@ button.bCtxChip:hover { color:var(--fg); border-color:var(--muted); }
 .nLens .nDot { margin-top:calc((1lh - .75em) / 2); }
 .nLens:hover { background:var(--panel); }
 .nLens.sel { background:color-mix(in srgb, var(--accent) 14%, transparent); }
+/* a row that only reads out (Sections' rail) — no pointer, no hover invite */
+.nLens.still { cursor:default; }
+.nLens.still:hover { background:transparent; }
 .nLens.none { color:var(--muted); } /* quiet empty lenses by colour, not opacity */
 /* inline-block, not inline: outside a flex row (the lens group header in the
    worklist) width/height on an inline box collapse to nothing */

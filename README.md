@@ -45,8 +45,11 @@ support in particular is **not** there yet.
   it can flag likely mis-transcriptions (each dismissable, often with a suggested fix
   you can apply in one click), mark observations for your review (emotions,
   likes/dislikes, desires…, each mapped to a first-cycle coding method), ground your codes
-  (which words carry each one), and propose near-duplicate codes to merge. Every one is a
-  proposal — it applies nothing without your decision.
+  (which words carry each one), propose candidate codings from your own codebook, propose
+  near-duplicate codes to merge, and mark up the shape of a session — which stretch is the
+  warm-up, which the second task — against labels you declare yourself. Every one is a
+  proposal — it applies nothing without your decision, and it never invents a code or a
+  label you did not write.
 - **Merge partial lines**, line numbers, full/short speaker names, a resizable transcript
   minimap, and "near-balance" speaker warnings on mixed excerpts.
 - **Save & continue** — export a `.qually.json` project (transcripts + codebook + corrections)

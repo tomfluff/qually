@@ -451,6 +451,7 @@ export interface State {
   exportAiLog: () => string;
   logDecision: (d: Omit<Decision, "at" | "undone"> & { at?: string }) => void;
   exportLedger: () => string;
+  exportSections: () => string;
   exportCodebook: () => string;
   exportTranscript: (pid: string) => string;
   // events: imported against ONE transcript (the tab you right-clicked), never guessed
@@ -1680,9 +1681,29 @@ export const useStore = create<State>()(
         })),
         ["at", "kind", "codes", "why", "source", "model", "excerpts_moved", "excerpts_after", "blind", "undone"]
       ),
+      // Sections had no CSV of their own until F7 gave the AI a way to propose
+      // them — which also gave the bundle a way to be wrong: it calls itself
+      // "the whole bundle", and a co-author reading it would have found every
+      // section missing. Rejected rows go too: they are the memory a re-run
+      // consults, and an appendix that says which boundaries were turned down
+      // is saying something about how the analysis was made.
+      exportSections: () => toCSV(
+        [...get().stretches]
+          .sort((a, b) => a.pid.localeCompare(b.pid) || a.start - b.start || a.end - b.end
+            || a.dim.localeCompare(b.dim) || a.value.localeCompare(b.value))
+          .map((x) => ({
+            pid: x.pid, line_start: x.start, line_end: x.end, dim: x.dim, value: x.value,
+            // blank means the researcher marked it themselves — the same thing
+            // an absent status has always meant in the store (see Stretch)
+            status: x.status ?? "", proposed_by: x.proposedBy ?? "", why: x.why ?? "",
+          })) as unknown as Record<string, unknown>[],
+        ["pid", "line_start", "line_end", "dim", "value", "status", "proposed_by", "why"]
+      ),
       exportAiLog: () => toCSV(
         get().aiLog as unknown as Record<string, unknown>[],
-        ["at", "model", "task", "pid", "lines", "redactions", "inTok", "outTok", "costUsd"]
+        // outcome: blank for a run that completed, which is what every row
+        // written before the field existed was (see AiCall)
+        ["at", "model", "task", "pid", "lines", "redactions", "inTok", "outTok", "costUsd", "outcome"]
       ),
 
       // The other half of the CSV interchange story: importCodebook has always

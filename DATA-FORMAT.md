@@ -77,6 +77,34 @@ marker,MAKE_PROGRESS,Progress,1207.793,1206.767,00:20:06.767,P01,slot=1;via=hotk
 marker,custom,"Clicks the chart to see what each colour means",1473.218,1472.195,00:24:32.195,P01,slot=custom;via=hotkey
 ```
 
+## Sections (optional)
+
+A **section** says which part of the study a stretch of transcript belongs to —
+"these lines are the warm-up", "these are the baseline condition". They are
+`dimension: value` pairs (the axis, and the label within it), they may overlap
+freely, and several axes can run at once. Mark them by selecting lines and
+right-clicking, or let the AI propose them against labels you declare yourself
+(Assist → Sections).
+
+They ride in the project file and export as `sections.csv`, alone or in the CSV
+bundle:
+
+| column | what it holds |
+| --- | --- |
+| `pid` | the transcript |
+| `line_start`, `line_end` | the line ids the section covers, inclusive |
+| `dim` | the axis, e.g. `phase` |
+| `value` | the label within it, e.g. `task 1` |
+| `status` | blank for a section you marked yourself; otherwise `candidate` (proposed, not yet judged), `accepted`, or `rejected` |
+| `proposed_by` | blank for your own; otherwise the model, e.g. `AI · Terra` |
+| `why` | for a proposal, the model's one sentence naming what marks the boundary — kept after you accept, so the reason is still there when you write up |
+
+A blank `status` and a blank `proposed_by` mean the same thing and always will:
+you drew it. Only the AI-proposed rows carry either.
+
+Rejected sections are exported too. They are kept so a re-run does not propose
+the same span again, and they count towards nothing.
+
 ## Working with your data
 
 - **Autosave:** transcripts, codes, and segments are stored in the browser
@@ -94,6 +122,9 @@ marker,custom,"Clicks the chart to see what each colour means",1473.218,1472.195
   is a no-op — events already loaded are recognised and skipped.
 - **Session summaries:** the Summary tab's per-transcript text rides in the
   project file (`summaries`), alongside everything else the file carries.
+- **Sections:** ride in the project file, and export as `sections.csv` (alone or
+  in the CSV bundle) — see above. The study brief that AI proposals were made
+  against rides in the project file too (`studyBrief`).
 
 ## Convert any transcript with AI
 

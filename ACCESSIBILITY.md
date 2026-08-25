@@ -124,8 +124,15 @@ Listed plainly, worst first. These are real; do not read the README as claiming 
    sees a window, not the whole transcript. Treat "supported" as unearned until someone
    who relies on a screen reader has coded a real transcript with it.
 2. **Mouse-only interactions with no keyboard equivalent:** dragging a segment's edge to
-   resize it (the popover has no range editor yet) and the minimap (navigation duplicate;
-   keyboard has Home/End/PageUp and back-to-selection). `Alt`-click dismissal of an AI
+   resize it (the popover has no range editor yet), dragging a **section**'s endpoint grips
+   in the gutter (the same gap, for the same reason — and the gutter overlay itself is
+   `aria-hidden`, so its label pills are decoration, not controls), and the minimap
+   (navigation duplicate; keyboard has Home/End/PageUp and back-to-selection).
+   A section's *verdict* is deliberately not in that list: an AI-proposed section is
+   accepted or rejected from the line-row dialog (right-click, or the keyboard route into
+   it) and from the Assist tab's Sections panel — both ordinary buttons in the tab order,
+   because a verdict reachable only through an aria-hidden overlay would be reachable only
+   by mouse. `Alt`-click dismissal of an AI
    mark left this list: `M` now opens the selected line's mark popover, which carries
    the dismiss (and apply-fix) buttons.
 3. **Lane bars and the close-call badge do not scale with the transcript font size.** Set the

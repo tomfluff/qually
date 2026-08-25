@@ -1131,14 +1131,17 @@ function SectionsSide({ onRun }: { onRun: (pid: string) => void }) {
       {pids.length === 0 ? (
         <div className="bSideNote">No transcripts yet. Import one and its sections can be proposed.</div>
       ) : pids.map((p) => (
-        <div key={p} className="nLens">
+        // "still": these rows are readouts with a launcher, not filters like
+        // their Suggest siblings — the class's pointer cursor and hover wash
+        // would promise a click that does nothing
+        <div key={p} className="nLens still">
           <span className="nName">{p}</span>
           {/* an em dash, not 0: the row is a launcher too, and "0 waiting" reads
               as a result where "never run" is the actual state */}
           <span className="cnt">{n(p, "candidate") || "—"}</span>
           <button className="rowRun" aria-label={`AI section marking for ${p}`}
             title={`AI section marking for ${p}${n(p) ? ` · ${n(p)} section${n(p) === 1 ? "" : "s"} already marked` : ""}`}
-            onClick={(e) => { e.stopPropagation(); onRun(p); }}>
+            onClick={() => onRun(p)}>
             <Icon name="sparkle" size={14} />
           </button>
         </div>
@@ -1215,6 +1218,22 @@ function SectionList({ onRun }: { onRun: (pid: string) => void }) {
   }
   const groups = [...tabs, ...new Set(cands.map((c) => c.st.pid))]
     .filter((p, k, a) => a.indexOf(p) === k && cands.some((c) => c.st.pid === p));
+  // A verdict unmounts the row under the keyboard, and focus would otherwise
+  // fall to <body> — the next Tab restarts from the top of the page, which
+  // reads as the panel throwing you out. The neighbouring rows survive the
+  // re-render, so aim for the same button on one of them; once React has
+  // committed, settle for whatever the list (or the rail) still offers.
+  const refocus = (from: HTMLElement) => {
+    const row = from.closest(".nInst");
+    const kin = [row?.nextElementSibling, row?.previousElementSibling]
+      .find((el) => el?.classList.contains("nInst"));
+    const target = kin?.querySelector<HTMLElement>(".nActs button");
+    requestAnimationFrame(() => {
+      if (document.activeElement !== document.body) return; // the user already moved on
+      (target?.isConnected ? target
+        : document.querySelector<HTMLElement>(".mList button, .groundBtn"))?.focus();
+    });
+  };
   return (
     <div className="mList">
       {groups.map((pid) => (
@@ -1227,12 +1246,17 @@ function SectionList({ onRun }: { onRun: (pid: string) => void }) {
                 can truthfully say about one session, not about six. */}
             <button className="nBtn" style={{ marginLeft: "auto" }}
               title={`Accept every proposed section in ${pid} — one Ctrl+Z takes it back`}
-              onClick={() => useStore.getState().acceptSections(pid)}>
+              onClick={(e) => { refocus(e.currentTarget); useStore.getState().acceptSections(pid); }}>
               Accept all {cands.filter((c) => c.st.pid === pid).length}
             </button>
           </div>
+          {/* keyed by WHAT the row is, not where it sits in the store: another
+              surface deleting a stretch (undo, the transcript's card, Clear)
+              shifts every later index, and index keys would quietly hand this
+              row's DOM — and the keyboard focus on it — to a different section.
+              NUL-joined like pairKey, because a label may contain spaces */}
           {cands.filter((c) => c.st.pid === pid).map(({ st, i }) => (
-            <div key={i} className="nInst"
+            <div key={`${st.dim}\u0000${st.value}\u0000${st.start}\u0000${st.end}`} className="nInst"
               style={{ "--lens-c": stretchColorOf(st.value, stColors, dark) } as CSSProperties}>
               <div className="mPair" style={{ marginBottom: 4 }}>
                 <span className="mCode">
@@ -1245,9 +1269,10 @@ function SectionList({ onRun }: { onRun: (pid: string) => void }) {
               <div className="nFoot">
                 <span className="nRef">{st.pid}:{st.start}–{st.end}</span>
                 <span className="nActs">
-                  <button className="nBtn pri" onClick={() => useStore.getState().setStretchStatus(i, "accepted")}>Accept</button>
+                  <button className="nBtn pri"
+                    onClick={(e) => { refocus(e.currentTarget); useStore.getState().setStretchStatus(i, "accepted"); }}>Accept</button>
                   <button className="nBtn" title="Not this — and do not propose it again"
-                    onClick={() => useStore.getState().setStretchStatus(i, "rejected")}>Reject</button>
+                    onClick={(e) => { refocus(e.currentTarget); useStore.getState().setStretchStatus(i, "rejected"); }}>Reject</button>
                   <button className="nBtn" onClick={() => jumpTo(st.pid, st.start)}>Open</button>
                 </span>
               </div>
