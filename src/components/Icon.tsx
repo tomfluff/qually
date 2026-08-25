@@ -17,6 +17,8 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   undo: { d: ["M9 14l-4 -4l4 -4", "M5 10h11a4 4 0 1 1 0 8h-1"] },
   redo: { d: ["M15 14l4 -4l-4 -4", "M19 10h-11a4 4 0 1 0 0 8h1"] },
   pencil: { d: ["M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4z", "M13.5 6.5l4 4"] },
+  // tabler "brackets" — the substitution toggle: square brackets, the mark itself
+  brackets: { d: ["M8 4h-3v16h3", "M16 4h3v16h-3"] },
   text: { d: ["M4 6h16", "M4 12h10", "M4 18h14"] },
   droplet: { d: ["M6.8 11a6 6 0 1 0 10.4 0l-5.2 -9l-5.2 9"] },
   pin: { d: ["M9 4v6l-2 4v2h10v-2l-2 -4v-6", "M12 16v5", "M8 4h8"] },
