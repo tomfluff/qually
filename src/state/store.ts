@@ -1331,6 +1331,10 @@ export const useStore = create<State>()(
         const saved = { ...s.savedSelections }; delete saved[pid];
         const video = { ...s.video }; delete video[pid];
         const summaries = { ...s.summaries }; delete summaries[pid];
+        // the per-transcript brief override goes too: left behind, a LATER
+        // transcript imported under this name would silently inherit a brief
+        // written for the deleted one
+        const studyBrief = { ...s.studyBrief }; delete studyBrief[pid];
         const speakerFocus = { ...s.ui.speakerFocus }; delete speakerFocus[pid];
         const tabs = s.tabs.filter((p) => p !== pid);
         const active = s.active === pid ? (tabs[0] || "browse") : s.active;
@@ -1352,7 +1356,7 @@ export const useStore = create<State>()(
           extSegRows: s.extSegRows.filter((r) => r.pid !== pid),
           aiFlags: Object.fromEntries(Object.entries(s.aiFlags).filter(([k]) => !k.startsWith(`${pid}:`))),
           aiGrounds: Object.fromEntries(Object.entries(s.aiGrounds).filter(([sid]) => !dead.has(sid))),
-          summaries, video, savedSelections: saved,
+          summaries, studyBrief, video, savedSelections: saved,
           tabs, pinnedTabs: s.pinnedTabs.filter((p) => p !== pid),
           active,
           selection: s.selection.pid === pid ? emptySel() : (saved[active] ?? s.selection),
@@ -1496,13 +1500,17 @@ export const useStore = create<State>()(
         if (from in speakerFocus) { speakerFocus[to] = speakerFocus[from]; delete speakerFocus[from]; }
         const summaries = { ...s.summaries };
         if (from in summaries) { summaries[to] = summaries[from]; delete summaries[from]; }
+        // the per-transcript brief override follows its transcript — left keyed
+        // to the old name it would silently fall back to the study default
+        const studyBrief = { ...s.studyBrief };
+        if (from in studyBrief) { studyBrief[to] = studyBrief[from]; delete studyBrief[from]; }
         set({
           transcripts,
           segments: s.segments.map((x) => x.pid === from ? { ...x, pid: to } : x),
           markers: s.markers.map((x) => x.pid === from ? { ...x, pid: to } : x),
           stretches: s.stretches.map((x) => x.pid === from ? { ...x, pid: to } : x),
           lastPid: s.lastPid === from ? to : s.lastPid,
-          summaries,
+          summaries, studyBrief,
           extSegRows: s.extSegRows.map((r) => r.pid === from
             ? { ...r, pid: to, segment_ref: r.segment_ref.startsWith(`${from}:`) ? to + r.segment_ref.slice(from.length) : r.segment_ref }
             : r),

@@ -39,16 +39,25 @@ export interface Vocab {
 // in the brief, so the prose can lead.
 const DECL = /^\s*[-*•]\s*([^:\n]+?)\s*:\s*(.+?)\s*$/;
 
-/** the key two spellings of the same label share: NFC (so "é" typed two ways is
-    one label), casefolded, inner whitespace collapsed */
+/** The key two spellings of the same label share: NFC (so "é" typed two ways is
+    one label), lowercased, inner whitespace collapsed, control characters
+    stripped — that last one is what makes pairKey's separator trustworthy, and
+    no section label contains a control character anyway.
+    NB lowercase, not full case folding: "STRASSE" and "straße" stay different
+    keys. That fails SAFE — the pair is not found, so the proposal is dropped —
+    which is the only direction this guard is allowed to be wrong in. */
 export const canonKey = (s: string) =>
-  s.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
+  s.normalize("NFC").replace(/\p{Cc}/gu, "").trim().replace(/\s+/g, " ").toLowerCase();
 
 /** The key an axis:label pair is looked up by. NUL is the separator BECAUSE a
     label may contain spaces: joined with one, "chart type"+"bar" and
     "chart"+"type bar" would be the same key, and a proposal could then arrive
     under a label nobody declared. Written as an escape, never as an invisible
-    character in the source. */
+    character in the source.
+    A separator only separates if it cannot appear in what it joins, which is
+    why canonKey strips control characters: otherwise a declared "a"+"b\u0000c"
+    and a reply "a\u0000b"+"c" build the same key, and the reply's undeclared
+    pair is handed back the declared pair's spelling. */
 const pairKey = (dim: string, value: string) => `${canonKey(dim)}\u0000${canonKey(value)}`;
 
 /** Read the brief. `existing` is the project's stretches: where a label is
@@ -59,28 +68,36 @@ const pairKey = (dim: string, value: string) => `${canonKey(dim)}\u0000${canonKe
     that are the same colour and mean the same thing. */
 export function parseBrief(text: string, existing: Pick<Stretch, "dim" | "value">[] = []): Vocab {
   // what the project already calls things, first spelling wins (the list is in
-  // marking order, so the earliest mark is the established one)
-  const known = new Map<string, string>();
+  // marking order, so the earliest mark is the established one). Dims and
+  // values keep SEPARATE maps: one shared map let a dim named like some other
+  // axis's value borrow that value's spelling (or vice versa), forking the very
+  // column this precedence exists to keep whole.
+  const knownDims = new Map<string, string>();
+  const knownValues = new Map<string, string>();
   for (const s of existing) {
-    for (const part of [s.dim, s.value]) {
+    for (const [map, part] of [[knownDims, s.dim], [knownValues, s.value]] as const) {
       const k = canonKey(part);
-      if (k && !known.has(k)) known.set(k, part.trim());
+      if (k && !map.has(k)) map.set(k, part.trim());
     }
   }
-  const spell = (raw: string) => known.get(canonKey(raw)) ?? raw.normalize("NFC").trim().replace(/\s+/g, " ");
+  // the spelling to STORE: the project's own if it already has one, otherwise
+  // the declared text tidied the same way canonKey reads it — control
+  // characters included, so a stored label can never break pairKey's separator
+  const spell = (raw: string, known: Map<string, string>) =>
+    known.get(canonKey(raw)) ?? raw.normalize("NFC").replace(/\p{Cc}/gu, "").trim().replace(/\s+/g, " ");
 
   const byDim = new Map<string, { dim: string; values: Map<string, string> }>();
   for (const line of text.split("\n")) {
     const m = DECL.exec(line);
     if (!m) continue;
-    const dim = spell(m[1]);
+    const dim = spell(m[1], knownDims);
     if (!dim) continue;
     const dk = canonKey(dim);
     const axis = byDim.get(dk) ?? { dim, values: new Map<string, string>() };
     // a repeated axis MERGES rather than replacing: two lines naming the same
     // dimension are one researcher adding to their own list, not contradicting it
     for (const raw of m[2].split(",")) {
-      const v = spell(raw);
+      const v = spell(raw, knownValues);
       if (!v) continue;
       const vk = canonKey(v);
       if (!axis.values.has(vk)) axis.values.set(vk, v);
@@ -104,8 +121,14 @@ export const vocabSays = (v: Vocab) =>
 export const briefProse = (text: string) =>
   text.split("\n").filter((l) => !DECL.test(l)).join("\n").trim();
 
+// A proposal that has been through the trust boundary — and the type system
+// says so. The brand is unforgeable outside this module, so `landSections`
+// cannot be handed a raw model reply by a future caller who did not know the
+// vocabulary check was the point of the whole feature.
+declare const CHECKED: unique symbol;
 export interface SectionProposal {
   dim: string; value: string; start: number; end: number; why: string;
+  readonly [CHECKED]: true;
 }
 
 /** The trust boundary, testable without the network (cf. sanitizeSuggestReply).
@@ -144,7 +167,9 @@ export function sanitizeSections(
     seen.add(key);
     // a reason is not optional to us even where the model skipped it: the
     // review dialog reads it aloud, and "" is at least an honest blank
-    out.push({ dim: hit.dim, value: hit.value, start, end, why: (p.why ?? "").trim() });
+    // the one place the brand is applied: this line IS the trust boundary
+    out.push({ dim: hit.dim, value: hit.value, start, end,
+      why: (p.why ?? "").trim() } as SectionProposal);
   }
   return out;
 }

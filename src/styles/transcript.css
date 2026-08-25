@@ -322,6 +322,15 @@
    the sticky label pill keeps the hover tooltip */
 .stretchLabels .stFloatBand { position:absolute; pointer-events:none; }
 .stretchLabels .stFloatBand.stStart { border-top-left-radius:3px; border-top-right-radius:3px; }
+/* a CANDIDATE — an AI proposal nobody has judged — is striped, never solid:
+   in the gutter it must be tellable at a glance from a section the researcher
+   agreed to. An ::after overlay rather than background-image, because the
+   band's colour arrives as an inline `background`, which resets any image a
+   class could set. The pill goes dashed for the same reason it exists at all:
+   colour alone must not be the only signal. */
+.stretchLabels .stFloatBand.stCand::after { content:""; position:absolute; inset:0;
+  background:repeating-linear-gradient(135deg, transparent 0 5px, var(--bg) 5px 9px); opacity:.6; }
+.stretchLabels .stFloatLabel.stCand { outline:2px dashed var(--fg); outline-offset:-3px; opacity:.85; }
 /* the endpoint grips: invisible grab zones at the band's real ends — the one
    part of the overlay that DOES take the pointer, so it must stay small.
    Hover shows a thin handle bar in the section's own ink. */

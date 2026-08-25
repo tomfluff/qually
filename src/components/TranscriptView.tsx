@@ -15,7 +15,7 @@ import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
 import { useDismiss, useClampToViewport, useMenuArrows, useMenuFocus } from "../usePopover";
 import { fuzzy } from "./CodeCombobox";
-import { stretchColorOf, stretchDims, visible, isEvidence, type Stretch } from "../stretches";
+import { stretchColorOf, stretchDims, visible, evidence, isEvidence, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches, scopeFilter } from "../search";
@@ -321,7 +321,7 @@ export function TranscriptView() {
       if (y1 <= 0 || y0 >= vp) continue;
       const top = Math.max(y0, -20), bottom = Math.min(y1, vp + 20);
       const band = document.createElement("span");
-      band.className = "stFloatBand" + (y0 >= -20 ? " stStart" : "");
+      band.className = "stFloatBand" + (st.status === "candidate" ? " stCand" : "") + (y0 >= -20 ? " stStart" : "");
       band.title = `${st.dim}: ${st.value} · lines ${st.start}–${st.end}`;
       band.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW + ctx.pillW}px;` +
         `top:${top}px;height:${bottom - top}px;width:${ctx.bandPx}px;background:${stretchColorOf(st.value, ctx.colors, ctx.dark)};`;
@@ -372,7 +372,7 @@ export function TranscriptView() {
       const len = stMeasure.measureText(st.value.toUpperCase()).width + 18;
       const top = Math.min(Math.max(y0 + 2, 4), Math.max(y1 - len, y0 + 2));
       const el = document.createElement("span");
-      el.className = "stFloatLabel";
+      el.className = "stFloatLabel" + (st.status === "candidate" ? " stCand" : "");
       el.textContent = st.value;
       el.title = `${st.dim}: ${st.value} · lines ${st.start}–${st.end}`;
       const c = stretchColorOf(st.value, ctx.colors, ctx.dark);
@@ -1373,9 +1373,12 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
   const stColors = useStore((s) => s.ui.stretchColors);
   const dark = useStore((s) => s.ui.dark);
   // the dimension list offers THIS transcript's axes first — the gutter the menu
-  // is standing in — and falls back to the study's; it only ever suggests
-  const dims = stretchDims(stretches.filter((s2) => s2.pid === pid));
-  const allDims = stretchDims(stretches);
+  // is standing in — and falls back to the study's; it only ever suggests.
+  // EVIDENCE only: the suggestions say what the project already uses, and an
+  // unreviewed proposal is not that — a rejected one even less so
+  const marked = evidence(stretches);
+  const dims = stretchDims(marked.filter((s2) => s2.pid === pid));
+  const allDims = stretchDims(marked);
   // the menu opens as a MENU; the mark form is one of its answers (see below)
   const [mode, setMode] = useState<"menu" | "mark">("menu");
   // both fields start EMPTY and the dimension takes focus: a prefilled axis is
@@ -1408,17 +1411,20 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
     for (const k of list) n.set(k, (n.get(k) ?? 0) + 1);
     return n;
   };
-  const dimCounts = countBy(stretches.map((s2) => s2.dim));
+  const dimCounts = countBy(marked.map((s2) => s2.dim));
   const dimOptions = (dims.length ? dims : allDims)
     .map((d) => ({ name: d, count: dimCounts.get(d) ?? 0 }));
   const valueOptions = (() => {
-    const vals = countBy(stretches.filter((s2) => s2.dim === dim.trim()).map((s2) => s2.value));
+    const vals = countBy(marked.filter((s2) => s2.dim === dim.trim()).map((s2) => s2.value));
     return [...vals.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([name, count]) => ({ name, count, color: stretchColorOf(name, stColors, dark) }));
   })();
+  // mapped over the FULL store array first — `i` is the store index unmarkStretch
+  // wants — then filtered like the gutter: a rejected stretch is drawn nowhere,
+  // so it must not surface here as a mark to remove either
   const here = stretches.map((st, i) => ({ st, i }))
-    .filter(({ st }) => st.pid === pid && st.start <= end && st.end >= start);
+    .filter(({ st }) => st.pid === pid && st.status !== "rejected" && st.start <= end && st.end >= start);
   // "lines 4–4" is not how anyone says it
   const span = start === end ? `line ${start}` : `lines ${start}–${end}`;
   const mark = () => {
@@ -1501,9 +1507,12 @@ function StretchPillMenu({ x, y, si, onClose }: {
     for (const k of list) n.set(k, (n.get(k) ?? 0) + 1);
     return n;
   };
-  const dimCounts = countBy(stretches.map((s2) => s2.dim));
-  const dimOptions = stretchDims(stretches).map((d) => ({ name: d, count: dimCounts.get(d) ?? 0 }));
-  const valueOptions = [...countBy(stretches.filter((s2) => s2.dim === dim.trim()).map((s2) => s2.value)).entries()]
+  // EVIDENCE only, as in StretchMenu: suggestions and their counts describe
+  // what the project uses, which a candidate is not yet and a rejected never was
+  const marked = evidence(stretches);
+  const dimCounts = countBy(marked.map((s2) => s2.dim));
+  const dimOptions = stretchDims(marked).map((d) => ({ name: d, count: dimCounts.get(d) ?? 0 }));
+  const valueOptions = [...countBy(marked.filter((s2) => s2.dim === dim.trim()).map((s2) => s2.value)).entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([name, count]) => ({ name, count, color: stretchColorOf(name, stColors, dark) }));
   const changed = dim.trim() !== st.dim || value.trim() !== st.value;

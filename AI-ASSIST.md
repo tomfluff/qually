@@ -212,7 +212,18 @@ Grammar decisions (all previously unspecified — **[review]**):
 - A comma cannot appear inside a label; a colon may (only the first splits).
   Pairs are keyed `dim\u0000value`, never joined by a space — a label may
   contain spaces, and `"chart type"+"bar"` must not collide with
-  `"chart"+"type bar"`.
+  `"chart"+"type bar"`. Control characters are stripped from every label first:
+  a separator only separates if it cannot appear in what it joins, or a declared
+  `a`+`b\u0000c` and a replied `a\u0000b`+`c` build the same key.
+- Matching is lowercase, not full Unicode case folding, so `STRASSE` and
+  `straße` are different labels. That fails safe — the pair is not found and the
+  proposal is dropped — which is the only direction this guard may be wrong in.
+- An unrecognised `status` read from a project file becomes `candidate`, never
+  absent: absent means "the researcher marked this", so deleting a typo'd status
+  would launder an unjudged proposal into evidence that counts.
+- `SectionProposal` is a **branded** type minted only by `sanitizeSections`, so
+  `landSections` cannot be handed a raw model reply by a later caller who did
+  not know the vocabulary check was the point.
 - **Labels are never redacted.** They are the researcher's structural
   vocabulary, not participant speech — and a redacted label would come back as
   `[REDACTED_n]` and match nothing. Same split F3 already makes between code

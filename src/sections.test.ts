@@ -110,6 +110,33 @@ test("endpoints must be real lines of this transcript; ranges normalise; dupes d
   expect(out[0]).toMatchObject({ start: 3, end: 4 });
 });
 
+test("a control character cannot smuggle an undeclared pair past the guard", () => {
+  // "a" + "b\u0000c" declared, "a\u0000b" + "c" replied: joined with a bare NUL
+  // both build the same key, and the undeclared pair would be handed back the
+  // declared pair's spelling. canonKey strips the controls, so neither exists.
+  const v = parseBrief("- a: b\u0000c");
+  expect(v.axes[0].values).toEqual(["bc"]); // stored clean, too
+  const out = sanitizeSections(v, IDS, [
+    { dim: "a\u0000b", value: "c", line_start: 1, line_end: 2, why: "" }]);
+  expect(out).toHaveLength(0);
+});
+
+test("an unrecognised status in a file reads as a CANDIDATE, never as a hand mark", async () => {
+  const { parseProject } = await import("./project");
+  const p = parseProject(JSON.stringify({
+    format: "qually-project", version: 1,
+    transcripts: { P09: { lines: [{ id: 1, ts: "", speaker: "P", text: "x" }] } },
+    segments: [], codebook: {},
+    stretches: [
+      { pid: "P09", start: 1, end: 1, dim: "phase", value: "task 1", status: "candidte" },
+      { pid: "P09", start: 1, end: 1, dim: "phase", value: "warm-up" },
+    ],
+  }));
+  // deleting the bad status would launder an unjudged proposal into evidence
+  expect(p!.stretches![0].status).toBe("candidate");
+  expect(p!.stretches![1].status).toBeUndefined(); // a real hand mark stays one
+});
+
 test("rejection memory is EXACT — a boundary one line off may be proposed again", () => {
   const rejected: Stretch[] = [
     { pid: "P09", start: 3, end: 4, dim: "phase", value: "task 1", status: "rejected" },
@@ -157,10 +184,12 @@ test("evidence, visible and pending each answer a different question", () => {
 test("a whole run lands as ONE undo entry, and one Ctrl+Z takes it back", () => {
   const st = useStore.getState();
   const depth = st.undoStack.length;
-  const n = st.landSections("P09", [
-    { dim: "phase", value: "warm-up", start: 1, end: 2, why: "greetings" },
-    { dim: "phase", value: "task 1", start: 3, end: 4, why: "the second task" },
-  ], "AI · Terra");
+  // built through the sanitizer, because that is the ONLY way to build one:
+  // SectionProposal is branded, so landSections cannot be handed a raw reply
+  const n = st.landSections("P09", sanitizeSections(VOCAB, IDS, [
+    { dim: "phase", value: "warm-up", line_start: 1, line_end: 2, why: "greetings" },
+    { dim: "phase", value: "task 1", line_start: 3, line_end: 4, why: "the second task" },
+  ]), "AI · Terra");
   expect(n).toBe(2);
   expect(useStore.getState().undoStack.length).toBe(depth + 1); // not depth + 2
   expect(useStore.getState().stretches).toHaveLength(2);
@@ -204,4 +233,24 @@ test("the brief remembers per project and per transcript, and an override is REM
   // "" is a real override, not an absence — it must not fall back
   useStore.getState().setStudyBrief("P09", "");
   expect(brief("P09")).toBe("");
+});
+
+test("a dim's spelling never captures a same-named value, nor the reverse", () => {
+  // one shared spelling map let the dim "task" claim the value "Task" of some
+  // other axis, storing a spelling that forks the existing value's column
+  const existing = [{ dim: "task", value: "hard" }, { dim: "phase", value: "Task" }];
+  const v = parseBrief("- phase: task", existing);
+  expect(v.axes[0].values).toEqual(["Task"]); // the VALUE's spelling, not the dim's
+});
+
+test("a per-transcript brief override follows a rename and dies with a delete", () => {
+  const st = useStore.getState();
+  expect(st.studyBrief["P09"]).toBe(""); // the deliberate empty override from above
+  st.renameTranscript("P09", "P10");
+  expect(useStore.getState().studyBrief["P10"]).toBe("");
+  expect("P09" in useStore.getState().studyBrief).toBe(false);
+  useStore.getState().deleteTranscript("P10");
+  // left behind, a later transcript imported under this name would silently
+  // inherit a brief written for the deleted one
+  expect("P10" in useStore.getState().studyBrief).toBe(false);
 });

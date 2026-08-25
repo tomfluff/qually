@@ -205,7 +205,13 @@ export function parseProject(text: string): Project {
           // the AI fields are VALIDATED, not spread through: an unknown status
           // would sail past every consumer's checks and be drawn as nothing
           const st: NonNullable<Project["stretches"]>[number] = { ...s, start, end };
-          if (!["candidate", "accepted", "rejected"].includes(st.status ?? "")) delete st.status;
+          // An UNRECOGNISED status is coerced to "candidate", never deleted:
+          // absent means "the researcher marked this themselves", so dropping a
+          // typo'd or future status would launder a proposal nobody judged into
+          // hand-made evidence that counts. Candidate is the safe reading — it
+          // is visible, reviewable, and counts nowhere.
+          if (st.status !== undefined && !["candidate", "accepted", "rejected"].includes(st.status))
+            st.status = "candidate";
           if (typeof st.proposedBy !== "string") delete st.proposedBy;
           if (typeof st.why !== "string") delete st.why;
           return [st];
