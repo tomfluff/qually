@@ -1930,7 +1930,7 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
     () => evidence(stretches).some((x) => x.pid === active), [stretches, active]);
   if (speakers.length < 2 && !hasSections) return null;
   return (
-    <div className="focuswrap" ref={ref}>
+    <div className={"focuswrap" + (menu ? " open" : "")} ref={ref}>
       {menu && (
         <div className="focusmenu" role="group" aria-label="Focus what you are reading"
           style={{ fontSize: ui.sidebarFontSize }}>
@@ -1946,6 +1946,21 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
                 <span className="focusname">{sp}</span>{focus === sp && " ✓"}
               </button>
             ))}
+            {/* What focusing DOES to everyone else — so it sits under the names
+                it acts on, not in a footer under the whole menu (where the video
+                dock, a panel the researcher positioned, could park on top of it).
+                role=switch, not the rows' ✓: these two are independent and
+                combinable, and reading them as another exclusive pick would be
+                a lie the tick mark tells. */}
+            {focus && <>
+              {([["focusDim", "Dim"], ["focusCollapse", "Collapse"]] as const).map(([k, label]) => (
+                <button key={k} className="focusitem focusswitchrow" role="switch"
+                  aria-checked={ui[k]} onClick={() => setUi({ [k]: !ui[k] })}>
+                  <span className="focusname">{label} the rest</span>
+                  <span className="focusswitch" aria-hidden="true"><span /></span>
+                </button>
+              ))}
+            </>}
           </>}
           {/* How loudly the section gutter reads. Beside the speaker lens
               because it answers the same question — what am I reading right
@@ -1961,18 +1976,6 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
               </button>
             ))}
           </>}
-          {/* independent, combinable effects — dim only, collapse only, or both */}
-          <div className="focusmode">
-            <span>Others:</span>
-            <label className="focuscheck">
-              <input type="checkbox" checked={ui.focusDim}
-                onChange={() => setUi({ focusDim: !ui.focusDim })} /> dim
-            </label>
-            <label className="focuscheck">
-              <input type="checkbox" checked={ui.focusCollapse}
-                onChange={() => setUi({ focusCollapse: !ui.focusCollapse })} /> collapse
-            </label>
-          </div>
         </div>
       )}
       <button className={"focustoggle" + (focus ? " on" : "")} onClick={() => setMenu((m) => !m)}
