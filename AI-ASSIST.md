@@ -142,3 +142,129 @@ Copy note: the Welcome/README reframe promised above still says "proposes —
 marks, merges and candidate codings — and applies nothing without your
 decision". That remains true of every surface here, and the Decisions panel is
 now the place a reader can check it.
+
+---
+
+## F7 — Propose sections (stretches) from a study brief — SCOPED 2026-08-25
+
+Same line, once more: **the AI proposes, the researcher decides** — and here the
+researcher also decides, in advance, what the AI is *allowed to say*.
+
+A within-subject session has a shape: warm-up, task 1, condition switch, task 2,
+debrief. Today that shape is marked by hand, span by span, on every transcript.
+The researcher already knows the shape before they open the file — they designed
+the study. F7 lets them state it once and have each transcript marked up against
+it.
+
+Sections are **stretches**, not segments: `{pid, start, end, dim, value}` — the
+axis and the label within it, overlapping freely (see `stretches.ts`). A code is
+an interpretation of what was said; a section is a fact about where in the
+session it was said. Nothing else in the model fits — a `Marker` is a moment,
+a `Segment` belongs to the codebook.
+
+### The closed vocabulary (the decision that shapes everything else)
+
+The model may **never invent a label**. This is the same rule F3 holds for codes,
+and for the same reason: a vocabulary that grows by itself is not the
+researcher's vocabulary any more. But sections differ from codes in where the
+list comes from — a codebook already exists in the project, whereas the study
+design lives in the researcher's head until they write it down.
+
+So the brief carries it. The brief is prose *plus* one or more declaration
+lines in a deliberately tiny grammar:
+
+```
+phase: warm-up, task 1, task 2, debrief
+condition: baseline, beacon
+```
+
+Everything else in the brief is free prose about the study — how the session was
+run, what the switch sounds like, what to ignore — and rides along as context.
+Two properties make the tiny grammar worth its own parser:
+
+- **It is the guard.** Whatever parses out of it is exactly the set the
+  sanitizer will accept back; anything else the model returns is dropped, not
+  negotiated. Parsed once, used twice — in the prompt and at the trust boundary.
+- **It is visible before sending.** The gate echoes what it parsed ("I will
+  accept exactly these: phase → warm-up / task 1 / task 2 / debrief") next to
+  the payload preview. A misparsed line is then something the researcher SEES,
+  rather than something they discover as a silently empty result.
+
+A brief that declares nothing blocks the run, with that sentence as the reason.
+With no declared vocabulary there is no guard, and the premise of the feature is
+that there is one.
+
+### The remembered brief
+
+```ts
+studyBrief: Record<string, string>   // "" = the project default, [pid] = an override
+```
+
+Project data — it describes the study, so it travels with the project file and
+exports with it. One field covers all three things asked for: remembered,
+reused across transcripts, and adaptable per transcript. The gate opens on
+`studyBrief[pid] ?? studyBrief[""]`, edits apply to that run alone, and two
+explicit buttons — *Save as the study default* / *Save for this transcript* —
+are the only ways an edit persists. A run never silently rewrites the brief.
+
+### The call
+
+- **Whole transcript, one call.** Not chunked. A 40-line window (F3's shape)
+  cannot see a boundary, let alone the arc of a session; the question "where
+  does task 1 end" is only answerable from the whole. ~1,500 lines is ~31k
+  tokens — pennies on Luna, and the cheapest thing about this feature.
+- **Fallback for the long ones:** overlapping windows (~400 lines, ~40 overlap)
+  above a size threshold, stitching adjacent runs of the same `dim:value`.
+  Written only when a real transcript needs it — not up front.
+- **Payload:** the brief (prose + declarations) + the numbered lines, redacted
+  as everywhere else, `id<TAB>speaker<TAB>text`.
+- **Reply:** `{ sections: [{ dim, value, line_start, line_end, why }] }`, strict
+  JSON schema. `why` is one sentence of evidence — it is what makes a verdict
+  fast, and it is shown in review rather than stored.
+- **Model:** the researcher's, from the gate's `ModelPicker` starting at the
+  Settings default — as every other run in the app.
+
+### Landing and review
+
+Proposals land as stretches carrying the same two fields segments already use:
+
+```ts
+status?: "candidate" | "accepted" | "rejected";   // absent = the researcher's own
+proposedBy?: string;                              // "AI · Terra"
+```
+
+Both optional, so every project file written before F7 still loads and every
+hand-marked stretch stays exactly what it is. Exports gain `proposed_by`, the
+column segments already carry, which is what makes intercoder work against a
+machine second coder possible for sections too.
+
+Review happens **in the gutter**, not in a list: a boundary cannot be judged
+without the lines on either side of it. Candidate bands render striped (the
+existing candidate language), the pill menu gains Accept/Reject, and a summary
+bar offers *Accept all* / *Discard all* — with `deleteStretchesBy({pid, status})`
+mirroring `deleteSegmentsBy` as the escape hatch from a run nobody wanted.
+
+### The trust boundary
+
+`sanitizeSectionsReply`, testable without the network, by analogy with
+`sanitizeSuggestReply`:
+
+- `dim:value` must be in the declared vocabulary — matched case-insensitively,
+  stored in the **declared** spelling, so a project never accumulates both
+  `Task 1` and `task 1`.
+- Both endpoints must be real line ids of THIS transcript; ranges normalised
+  low→high; exact duplicates dropped.
+- A proposal identical to an existing stretch is skipped (`markStretch` is
+  already a no-op on exact duplicates); one that overlaps a *rejected* stretch
+  with the same label is skipped too — rejection memory, as F3 has.
+- Two candidate values overlapping **within one dim** are surfaced in review as
+  a conflict rather than dropped: a session cannot be in two phases at once, and
+  that is a judgement about which one is wrong, not a parse error.
+
+### What this does not do
+
+- No new-label invention (above) — the whole point.
+- No timestamp reasoning: sections are line ranges, like every stretch. The
+  time filter in search already covers "the second task, after 12 minutes".
+- No automatic re-run on re-import. Stretches are remapped to new line ids by
+  the existing import path; a re-run is the researcher's call.
