@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// Segment identity + run-collapse, parity with sync_coding.py.
+// Segment identity + run-collapse.
 // segment_ref = "PID:start" or "PID:start-end" (contiguous ranges only).
 
 export function norm(code: string): string {
@@ -12,8 +12,8 @@ export interface CodedLine {
   codes: Set<string>;
 }
 
-// Mirror of sync_coding.py collapse_runs: per-code independent contiguous runs,
-// overlaps legal. INPUT MUST BE SORTED by n ascending (Python sorts before calling).
+// Per-code independent contiguous runs; overlaps are legal.
+// INPUT MUST BE SORTED by n ascending.
 export function collapseRuns(lines: CodedLine[]): Map<string, [number, number][]> {
   const runs = new Map<string, [number, number][]>();
   const allCodes = new Set<string>();
@@ -35,44 +35,6 @@ export function collapseRuns(lines: CodedLine[]): Map<string, [number, number][]
   return runs;
 }
 
-export function parseSegRef(ref: string): { pid: string; start: number; end: number } | null {
-  const m = /^(.+?):(\d+)(?:-(\d+))?$/.exec(ref || "");
-  if (!m) return null;
-  return { pid: m[1], start: +m[2], end: +(m[3] || m[2]) };
-}
-
 export function formatSegRef(pid: string, start: number, end: number): string {
   return pid + ":" + (start === end ? start : start + "-" + end);
-}
-
-// Dedup key uses the alias-RESOLVED code name (see resolveAliases), matching
-// sync_coding.py's existing_keys so re-sync is idempotent across consolidations.
-export function dedupKey(ref: string, code: string): string {
-  return ref + String.fromCharCode(0) + norm(code);
-}
-
-export interface CodebookRow {
-  code: string;
-  status?: string;
-}
-
-// norm(name) -> canonical display name, following "merged-into:<target>" chains.
-// Mirror of sync_coding.py load_codebook.resolve.
-export function resolveAliases(rows: CodebookRow[]): Map<string, string> {
-  const byKey = new Map<string, CodebookRow>();
-  for (const r of rows) if (r.code) byKey.set(norm(r.code), r);
-  const resolve = (key: string, seen: Set<string>): string => {
-    const r = byKey.get(key)!;
-    const status = (r.status || "").trim();
-    if (status.startsWith("merged-into:")) {
-      const target = norm(status.slice("merged-into:".length));
-      if (byKey.has(target) && !seen.has(target)) {
-        return resolve(target, new Set(seen).add(key));
-      }
-    }
-    return r.code;
-  };
-  const out = new Map<string, string>();
-  for (const key of byKey.keys()) out.set(key, resolve(key, new Set()));
-  return out;
 }

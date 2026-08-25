@@ -2,10 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { test, expect } from "vitest";
 import { parseCSV, toCSV } from "../csv";
-import {
-  norm, collapseRuns, parseSegRef, formatSegRef, dedupKey, resolveAliases,
-  type CodedLine,
-} from "../segments";
+import { collapseRuns, formatSegRef, type CodedLine } from "../segments";
 import { excerptOf, type ExLine } from "../excerpt";
 
 // ── CSV round-trip with hostile content ─────────────────────────────
@@ -43,26 +40,9 @@ test("collapseRuns: spans, one-line overlap, non-contiguous same code", () => {
   expect(runs.get("B")).toEqual([[45, 46]]);
 });
 
-// ── segment_ref parse/format ────────────────────────────────────────
-test("segment_ref parse + format", () => {
-  expect(parseSegRef("P07:44-47")).toEqual({ pid: "P07", start: 44, end: 47 });
-  expect(parseSegRef("P01:3")).toEqual({ pid: "P01", start: 3, end: 3 });
-  expect(parseSegRef("garbage")).toBeNull();
+test("segment_ref format", () => {
   expect(formatSegRef("P07", 44, 47)).toBe("P07:44-47");
   expect(formatSegRef("P01", 3, 3)).toBe("P01:3");
-});
-
-// ── alias-resolved dedup ────────────────────────────────────────────
-test("resolveAliases follows merged-into chains; dedup key uses canonical", () => {
-  const aliases = resolveAliases([
-    { code: "Visual strain", status: "candidate" },
-    { code: "eye fatigue", status: "merged-into: Visual strain" },
-    { code: "tired eyes", status: "merged-into: eye fatigue" },
-  ]);
-  expect(aliases.get(norm("tired eyes"))).toBe("Visual strain");
-  expect(aliases.get(norm("eye fatigue"))).toBe("Visual strain");
-  // two refs that resolve to the same canonical code collide on dedup key
-  expect(dedupKey("P07:44-47", "eye fatigue")).toBe(dedupKey("P07:44-47", "Eye  Fatigue"));
 });
 
 // ── excerpt rule v2: the five W7#18 cases ───────────────────────────

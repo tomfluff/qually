@@ -66,7 +66,7 @@ export function TellApartModal({ codes, survivor, newName, source, model, onClos
   const keepBoth = () => {
     // one act: the sentence is the line between them, and it only means
     // anything read from either side
-    useStore.getState().defineBoth(a, b, written, undefined, source, model);
+    useStore.getState().defineBoth(a, b, written, source, model);
     earcon.accept();
     onDecided?.("kept");
     setDone("Saved as the definition of both codes. The next pass — yours or a model's — now reasons from your sentence instead of guessing from the names.");

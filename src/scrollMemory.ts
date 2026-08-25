@@ -19,7 +19,7 @@
 // you had read up to. Kept in their own localStorage key rather than the main
 // store: they are view state, they change on every scroll frame, and they must
 // not ride the project file to another machine (see project.ts).
-export interface ScrollAnchor { index: number; delta: number }
+interface ScrollAnchor { index: number; delta: number }
 
 const KEY = "coding-app-scroll";
 

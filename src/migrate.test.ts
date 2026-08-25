@@ -5,9 +5,9 @@
 import { beforeAll, test, expect } from "vitest";
 
 let useStore: typeof import("./state/store").useStore;
+const mem: Record<string, string> = {};
 
 beforeAll(async () => {
-  const mem: Record<string, string> = {};
   (globalThis as unknown as { localStorage: Storage }).localStorage = {
     getItem: (k: string) => (k in mem ? mem[k] : null),
     setItem: (k: string, v: string) => { mem[k] = v; },
@@ -29,6 +29,9 @@ beforeAll(async () => {
         speakerNames: "full", warnCorner: "right", warnSize: "sm", laneWidth: "md",
         minimapWidth: 44, minimapDetail: "detailed", showNotices: true,
         codeSort: "recency", // a value no build ever wrote — must normalize, not crash
+        sectionFocus: "results",
+        blindVerdict: true,
+        speakerFocusMode: "collapse",
       },
       ai: { model: "gpt-5", redactTerms: [] },
       aiFlags: {}, aiLog: [],
@@ -46,9 +49,18 @@ test("old persisted state rehydrates into today's shape", () => {
   expect(ui.loopSpeed).toBe(0.75);
   expect(ui.speakerFocus).toEqual({});  // pre-per-transcript scalar resets to everyone
   expect(ui.focusDim).toBe(true);
-  expect(ui.focusCollapse).toBe(false);
+  expect(ui.focusCollapse).toBe(true); // legacy mode is consumed before stale keys are pruned
   expect(ui.speakerColors).toEqual({});
   expect(ui.codeSort).toBe("name");     // bogus persisted value normalized, not crashed on
   expect(ui.eventSort).toBe("type");    // same guard family, previously unasserted
+  expect(ui).not.toHaveProperty("sectionFocus");
+  expect(ui).not.toHaveProperty("blindVerdict");
+  expect(ui).not.toHaveProperty("speakerFocusMode");
   expect(useStore.getState().ai.lenses).toEqual(["transcription"]);
+
+  useStore.getState().setUi({ fontSize: 17 });
+  const savedUi = JSON.parse(mem["coding-app-state"]).state.ui;
+  expect(savedUi).not.toHaveProperty("sectionFocus");
+  expect(savedUi).not.toHaveProperty("blindVerdict");
+  expect(savedUi).not.toHaveProperty("speakerFocusMode");
 });

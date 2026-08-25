@@ -134,10 +134,6 @@ record says which was which.
 - **Argue against this merge** (`ai/reconcile.ts: argueAgainst`). Same model,
   opposite job: the strongest case that a proposed merge is wrong, with "no
   real case" a first-class answer drawn as a shrug.
-- **Your call before the model's** (`ui.blindVerdict`, on by default). An AI
-  capsule withholds its reasoning until the researcher has called it; the
-  agreement rate lands in the ledger and in the methods paragraph.
-
 Copy note: the Welcome/README reframe promised above still says "proposes —
 marks, merges and candidate codings — and applies nothing without your
 decision". That remains true of every surface here, and the Decisions panel is

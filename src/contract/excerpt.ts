@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// Excerpt rule v2 (dominant speaker) — CODING-APP-DEV.md W7 item 18, PROVISIONAL.
-// MUST stay identical to excerpt_for() in sync_coding.py (mirror in same change).
-//
+// Dominant-speaker excerpts keep brief interviewer backchannels from drowning
+// out the participant's words while still allowing researcher-led excerpts.
 //  - excerpt = lines of the speaker with the most total (trimmed) characters
 //    in the range; ties -> the participant (non-R).
 //  - if the winning speaker is R, prefix the excerpt once with "[R:] ".
-//  - closeCall (report-only warning): a losing speaker held >= 40% of chars.
+//  - closeCall warns when a losing speaker held >= 40% of the characters.
 
 export interface ExLine {
   text: string;
   speaker: string;
 }
 
-export interface ExcerptResult {
+interface ExcerptResult {
   excerpt: string;
   closeCall: boolean;
   speaker: string; // the dominant speaker whose lines the excerpt keeps ("" if empty)
@@ -34,7 +33,7 @@ const isR = (speaker: string) => RESEARCHER.test(speaker.trim());
 // other surface dropped it, silently showing an interviewer's line as the
 // participant's words. One helper, so a surface that wants to label the speaker
 // can, and none of them has to know about the marker at all.
-export interface SegLine { id: number; text: string; speaker: string }
+interface SegLine { id: number; text: string; speaker: string }
 export function segExcerpt(range: { start: number; end: number }, lines: SegLine[]): ExcerptResult {
   const r = excerptOf(lines.filter((l) => l.id >= range.start && l.id <= range.end));
   return { ...r, excerpt: r.excerpt.replace(/^\[R:\] /, "") };

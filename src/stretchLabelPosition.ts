@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 
-export type StretchLabelPlacement = {
+type StretchLabelPlacement = {
   mode: "flowing" | "pinned" | "parked" | "clipped";
   top: number;
   translateY: number;

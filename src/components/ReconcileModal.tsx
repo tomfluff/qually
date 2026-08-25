@@ -18,9 +18,9 @@ import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
 
-export type ReconcileScope = number | "all" | { focus: string[] };
+type ReconcileScope = number | "all" | { focus: string[] };
 /** how much evidence each code carries into the request (see exN below) */
-export const EXCERPTS_PER_CODE = 8;
+const EXCERPTS_PER_CODE = 8;
 export function ReconcileModal({ groups, initialScope = "all", selected = [], onPlan, onClose }: {
   groups: CodeGroup[];
   initialScope?: ReconcileScope;

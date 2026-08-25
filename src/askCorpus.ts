@@ -32,8 +32,8 @@ export interface AskScope {
 // `codes` is a LIST because one span is routinely coded twice — the excerpt is
 // one piece of evidence carrying two codes, not two excerpts. Merging them is
 // what keeps a ref unique, which is the whole contract.
-export interface AskExcerpt { ref: string; pid: string; line: number; codes: string[]; speaker: string; time: string; text: string }
-export interface AskEvent { ref: string; pid: string; line: number; time: string; type: string; text: string }
+interface AskExcerpt { ref: string; pid: string; line: number; codes: string[]; speaker: string; time: string; text: string }
+interface AskEvent { ref: string; pid: string; line: number; time: string; type: string; text: string }
 export interface AskCorpus {
   excerpts: AskExcerpt[];
   events: AskEvent[];

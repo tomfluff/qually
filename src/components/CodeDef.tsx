@@ -71,7 +71,7 @@ export function DefineHost() {
 
 // Definition provenance, wherever a definition shows: AI = the text is untouched
 // model output; edited = a person wrote or reshaped it. No definition, no badge.
-export function DefBadge({ def, ai }: { def: string; ai?: boolean }) {
+function DefBadge({ def, ai }: { def: string; ai?: boolean }) {
   if (!def) return null;
   return ai
     ? <span className="defTag ai" title="AI-generated — not yet edited by a person">AI</span>
@@ -80,7 +80,7 @@ export function DefBadge({ def, ai }: { def: string; ai?: boolean }) {
 
 // A few of a code's excerpts, one per transcript first so a code used across
 // sessions shows its breadth rather than three quotes from one participant.
-export function codeExcerpts(code: string, max = 3): { text: string; ref: string; speaker: string }[] {
+function codeExcerpts(code: string, max = 3): { text: string; ref: string; speaker: string }[] {
   const { segments, transcripts } = useStore.getState();
   const out: { text: string; ref: string; speaker: string }[] = [];
   const seenPid = new Set<string>();

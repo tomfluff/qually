@@ -27,7 +27,7 @@ export interface CodeAction {
   source?: "you" | "wording" | "ai";
   model?: string;
 }
-export interface ClusterProposal {
+interface ClusterProposal {
   survivor: string; codes: string[]; newName?: string; rationale: string;
   source?: "you" | "wording" | "ai"; model?: string; // stamped on landing, as above
 }

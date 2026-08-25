@@ -6,7 +6,7 @@ import { hashLine } from "./flag";
 import { callJson, estimateTokens, type Usage } from "./openai";
 import type { Redaction } from "./redact";
 
-export const GROUND_CHUNK = 12; // excerpts per request — longer than scan lines
+const GROUND_CHUNK = 12; // excerpts per request — longer than scan lines
 
 // A segment's grounding is valid only while its code AND its excerpt text are
 // what the model saw — recode, merge, resize, or a line edit all change the

@@ -21,7 +21,7 @@ const STAMP_RE = /^— .*\d{2}:\d{2}/;
 // what you were doing, as one line: last transcript, its selected line, the
 // playhead — each part only when it exists. Local wall-clock leads: memos are
 // diary entries, and "when did I think this" is half the breadcrumb.
-export function stampLine(): string {
+function stampLine(): string {
   const s = useStore.getState();
   const now = new Date();
   const when = `${now.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;

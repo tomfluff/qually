@@ -32,7 +32,7 @@ const dosTime = (d: Date) =>
 const dosDate = (d: Date) =>
   ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
 
-export interface ZipFile { name: string; text: string }
+interface ZipFile { name: string; text: string }
 
 export function zipTextFiles(files: ZipFile[], when: Date): Blob {
   const enc = new TextEncoder();

@@ -107,7 +107,7 @@ export interface Project {
   };
 }
 
-export interface ProjectStats {
+interface ProjectStats {
   transcripts: number; lines: number; segments: number; codes: number;
   edits: number; notices: number; events: number; savedAt: string;
 }

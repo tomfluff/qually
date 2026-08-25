@@ -15,7 +15,7 @@
 // point of the number is that it is visible, not that it is small.
 import type { Decision } from "./state/store";
 
-export type Origin = "untouched" | "you" | "ai";
+type Origin = "untouched" | "you" | "ai";
 
 /** current code name -> how it got that way. Only names still in the book. */
 export function codeOrigins(ledger: Decision[], codes: string[]): Map<string, Origin> {
@@ -83,9 +83,8 @@ export function historyOf(ledger: Decision[], code: string): Decision[] {
 
 // The paragraph a methods section needs, written from the ledger rather than by
 // a model: it is a claim about the researcher's own conduct, so nothing else
-// may author it. Editable wherever it is shown — this is a first draft of a
-// sentence, not an output.
-export function methodsParagraph(ledger: Decision[], codes: string[], coder = "The first author"): string {
+// may author it. The panel shows this draft read-only for copying elsewhere.
+export function methodsParagraph(ledger: Decision[], codes: string[]): string {
   const live = ledger.filter((d) => !d.undone);
   const n = (k: Decision["kind"]) => live.filter((d) => d.kind === k).length;
   const fromAi = live.filter((d) => d.source === "ai").length;
@@ -93,7 +92,7 @@ export function methodsParagraph(ledger: Decision[], codes: string[], coder = "T
   const models = [...new Set(live.filter((d) => d.model).map((d) => d.model!))];
   const undone = ledger.filter((d) => d.undone).length;
   const bits: string[] = [];
-  bits.push(`${coder} consolidated the codebook to ${codes.length} code${codes.length === 1 ? "" : "s"}.`);
+  bits.push(`The first author consolidated the codebook to ${codes.length} code${codes.length === 1 ? "" : "s"}.`);
   const acts: string[] = [];
   if (n("merge")) acts.push(`${n("merge")} merge${n("merge") === 1 ? "" : "s"}`);
   if (n("rename")) acts.push(`${n("rename")} rename${n("rename") === 1 ? "" : "s"}`);

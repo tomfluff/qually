@@ -6,6 +6,11 @@ import { beforeAll, test, expect } from "vitest";
 
 let useStore: typeof import("./state/store").useStore;
 let bestSurvivor: typeof import("./state/store").bestSurvivor;
+const placeMap = (id: string, pos: { x: number; y: number }, island: boolean,
+  stage: "reconcile" | "themes" | "areas") => useStore.getState().applyMapDrop({
+    stage,
+    ...(island ? { islands: { [id]: pos } } : { chips: { [id]: pos } }),
+  });
 
 beforeAll(async () => {
   const mem: Record<string, string> = {};
@@ -116,7 +121,7 @@ test("resetMapLayout: no-op on packed map, one undo entry otherwise", () => {
   const depth0 = useStore.getState().undoStack.length;
   st.resetMapLayout("reconcile"); // nothing placed -> no entry
   expect(useStore.getState().undoStack.length).toBe(depth0);
-  st.recordMapPosition("alpha", { x: 5, y: 7 }, false, "reconcile");
+  placeMap("alpha", { x: 5, y: 7 }, false, "reconcile");
   const depth1 = useStore.getState().undoStack.length;
   st.resetMapLayout("reconcile");
   expect(useStore.getState().undoStack.length).toBe(depth1 + 1);
@@ -129,7 +134,7 @@ test("resetMapLayout: no-op on packed map, one undo entry otherwise", () => {
 // of them silently throws away work the researcher did by hand.
 test("normalizeCodeCase carries map placements, glimpse membership and the plan", () => {
   const st = useStore.getState();
-  st.recordMapPosition("alpha", { x: 11, y: 22 }, false, "reconcile");
+  placeMap("alpha", { x: 11, y: 22 }, false, "reconcile");
   st.setCodeClusters([{ survivor: "alpha", codes: ["alpha", "beta"], rationale: "",
     desc: "a glimpse", descCodes: ["alpha", "beta"] }]);
   st.setCodePlan([{ code: "gamma", action: "rename", newName: "gamma clearer", rationale: "" }]);
@@ -184,7 +189,7 @@ test("applyMapDrop files every dragged code: positions and membership, one entry
 test("applyMapDrop moving codes between theme islands keeps one entry and lets the packer refile", () => {
   const st = useStore.getState();
   st.setCodeGroups([{ name: "One", codes: ["alpha", "beta"] }, { name: "Two", codes: ["gamma"] }]);
-  st.recordMapPosition("alpha", { x: 99, y: 99 }, false, "reconcile");
+  placeMap("alpha", { x: 99, y: 99 }, false, "reconcile");
   const depth = useStore.getState().undoStack.length;
   useStore.getState().applyMapDrop({
     stage: "reconcile",
@@ -232,7 +237,7 @@ test("leaving a container to open canvas keeps the exact spot it was dropped at"
 test("dropping on the catch-all takes the code out AND forgets where it was", () => {
   const st = useStore.getState();
   st.setCodeGroups([{ name: "One", codes: ["alpha", "beta"] }]);
-  st.recordMapPosition("alpha", { x: 12, y: 34 }, false, "themes");
+  placeMap("alpha", { x: 12, y: 34 }, false, "themes");
   useStore.getState().applyMapDrop({
     stage: "themes", tidy: ["alpha"], themes: [{ code: "alpha", gi: -1 }],
   });
@@ -307,7 +312,7 @@ test("a drop in the areas view files the code, and out of every area means Unass
 test("filing a code into an area forgets where it was dropped, so the view repacks it", () => {
   const st = useStore.getState();
   st.setCodeAreas([{ name: "Strategies", codes: ["alpha"] }], "sig");
-  st.recordMapPosition("beta", { x: 500, y: 500 }, false, "reconcile");
+  placeMap("beta", { x: 500, y: 500 }, false, "reconcile");
   useStore.getState().applyMapDrop({ stage: "reconcile", tidy: ["beta"], areas: [{ code: "beta", ai: 0 }] });
   expect(useStore.getState().mapPositions.reconcile.beta).toBeUndefined();
   useStore.getState().setCodeAreas([], "");
@@ -317,11 +322,10 @@ test("filing a code into an area forgets where it was dropped, so the view repac
 // Reconcile and Themes show different structures, so they are different pieces
 // of work: laying one out must never disturb the other.
 test("the two stages keep separate layouts", () => {
-  const st = useStore.getState();
-  st.recordMapPosition("alpha", { x: 10, y: 10 }, false, "reconcile");
-  st.recordMapPosition("alpha", { x: 90, y: 90 }, false, "themes");
-  st.recordMapPosition("halo:0", { x: 5, y: 5 }, true, "reconcile");
-  st.recordMapPosition("island:0", { x: 50, y: 50 }, true, "themes");
+  placeMap("alpha", { x: 10, y: 10 }, false, "reconcile");
+  placeMap("alpha", { x: 90, y: 90 }, false, "themes");
+  placeMap("halo:0", { x: 5, y: 5 }, true, "reconcile");
+  placeMap("island:0", { x: 50, y: 50 }, true, "themes");
 
   // resetting one stage leaves the other exactly as it was
   useStore.getState().resetMapLayout("reconcile");
@@ -346,8 +350,8 @@ test("the two stages keep separate layouts", () => {
 // position in Reconcile or Themes — silent loss, plus an undo entry spent.
 test("filing a code in the areas view leaves the other views' layouts alone", () => {
   const st = useStore.getState();
-  st.recordMapPosition("alpha", { x: 11, y: 22 }, false, "reconcile");
-  st.recordMapPosition("alpha", { x: 33, y: 44 }, false, "themes");
+  placeMap("alpha", { x: 11, y: 22 }, false, "reconcile");
+  placeMap("alpha", { x: 33, y: 44 }, false, "themes");
   st.setCodeAreas([{ name: "Strategies", codes: ["beta"] }], "sig");
   useStore.getState().applyMapDrop({ stage: "areas", areas: [{ code: "alpha", ai: 0 }] });
   const s = useStore.getState();
@@ -365,10 +369,9 @@ test("a rename carries positions in EVERY view's layout, including new ones", ()
   // whatever the fixture currently holds — earlier tests rename codes around
   const code = Object.keys(useStore.getState().codebook)[0];
   const to = "a name nothing else uses";
-  const st = useStore.getState();
-  st.recordMapPosition(code, { x: 1, y: 1 }, false, "reconcile");
-  st.recordMapPosition(code, { x: 2, y: 2 }, false, "themes");
-  st.recordMapPosition(code, { x: 3, y: 3 }, false, "areas");
+  placeMap(code, { x: 1, y: 1 }, false, "reconcile");
+  placeMap(code, { x: 2, y: 2 }, false, "themes");
+  placeMap(code, { x: 3, y: 3 }, false, "areas");
   useStore.getState().renameCode(code, to);
   const s = useStore.getState();
   expect(s.mapPositions.reconcile[to]).toEqual({ x: 1, y: 1 });

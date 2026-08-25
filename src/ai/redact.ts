@@ -18,7 +18,7 @@ export interface Redaction {
   hasPlaceholder: (text: string) => boolean; // did the model quote redacted text back at us?
 }
 
-export const PLACEHOLDER_RE = /\[REDACTED_\d+\]/;
+const PLACEHOLDER_RE = /\[REDACTED_\d+\]/;
 
 // Model output that a person reads, or that lands in the codebook, must come
 // back through the map — the placeholder is meaningless to the reader and

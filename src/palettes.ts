@@ -4,7 +4,7 @@
 // swaps to the matching one on theme switch. Everything chromatic in the UI
 // (--sel, --row-sel*, buttons, tabs, highlights) derives from --accent, so
 // changing this recolors the whole app. See index.css :root color-mix tints.
-export interface Palette { id: string; name: string; light: string; dark: string; }
+interface Palette { id: string; name: string; light: string; dark: string; }
 
 // violet is the brand purple and the default — first here so it's also the fallback.
 //

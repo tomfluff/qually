@@ -15,8 +15,8 @@ import { callJson, estimateTokens, type Usage } from "./openai";
 import { restore, type Redaction } from "./redact";
 import type { AskCorpus } from "../askCorpus";
 
-export interface AskPoint { text: string; refs: string[] }
-export interface AskReply { points: AskPoint[]; unsupported: string[] }
+interface AskPoint { text: string; refs: string[] }
+interface AskReply { points: AskPoint[]; unsupported: string[] }
 
 const SYSTEM = `You are helping a qualitative researcher interrogate their own coded material. You are given a codebook (code names with definitions), excerpts the researcher coded, and their session event log. This is ALL you know: you have not read the transcripts, only what was coded and noted.
 

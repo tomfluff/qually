@@ -24,7 +24,7 @@ const isPartial = (text: string) => !TERMINATED.test(text.trim());
 // (~150 wpm). A word count beats characters: "mm" and "encyclopedia" are one
 // beat each.
 const WPS = 2.5;
-export const speechSec = (text: string) => (text.trim().match(/\S+/g)?.length ?? 0) / WPS;
+const speechSec = (text: string) => (text.trim().match(/\S+/g)?.length ?? 0) / WPS;
 const endSec = (l: Line): number | null => {
   if (l.end?.trim()) {
     const e = tsToSec(l.end);

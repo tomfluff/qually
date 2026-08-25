@@ -33,7 +33,7 @@ import { withSubs } from "../markup";
 /** how thin is thin — the researcher's call, not the tool's */
 // The rail is narrow and this ramp scales with the text setting, so the
 // buttons carry the number and the label above them carries the noun.
-export const TAIL_LIMITS = [
+const TAIL_LIMITS = [
   { id: 1, label: "1", said: "One excerpt" },
   { id: 2, label: "2", said: "Two or fewer" },
   { id: 3, label: "3", said: "Three or fewer" },
@@ -393,4 +393,3 @@ export function openTailQueue(limit?: TailLimit) {
   st.setActive("assist");
   announce("The thin tail, one code at a time");
 }
-

@@ -44,7 +44,7 @@ Rules:
 
 Text like [REDACTED_1] is a removed identifier; ignore it as evidence.`;
 
-export type ClusterKind = "usage" | "areas";
+type ClusterKind = "usage" | "areas";
 const promptFor = (kind: ClusterKind) => (kind === "areas" ? AREAS_SYSTEM : SYSTEM);
 
 export const estimateClusterTokens = (codes: MergeCodeInput[], r: Redaction, kind: ClusterKind = "usage") =>

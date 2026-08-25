@@ -28,7 +28,7 @@ const rgb2hex = (r: number, g: number, b: number) =>
 // HSL, so a hue can be kept while lightness moves — the tiers below are the same
 // twelve hues at different lightness, which stays coherent where arbitrary hue
 // rotation would drift into muddy or near-duplicate colours.
-export function rgb2hsl(hex: string): [number, number, number] {
+function rgb2hsl(hex: string): [number, number, number] {
   const [r, g, b] = hex2rgb(hex).map((v) => v / 255);
   const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
   const l = (max + min) / 2;

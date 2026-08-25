@@ -9,7 +9,7 @@ import type { Line } from "../state/store";
 import { callJson, estimateTokens, type Usage } from "./openai";
 import type { Redaction } from "./redact";
 
-export const SUGGEST_CHUNK = 40;    // transcript lines per request (a window, not the corpus)
+const SUGGEST_CHUNK = 40;    // transcript lines per request (a window, not the corpus)
 export const SUGGEST_EXEMPLARS = 2; // sample coded excerpts sent per code, to anchor its meaning
 
 export interface SuggestCode { name: string; def: string; excerpts: string[] }

@@ -26,7 +26,7 @@
 //    map would move every code the researcher never asked to move.
 export interface RBox { id: string; x: number; y: number; w: number; h: number }
 
-export interface RelaxOpts {
+interface RelaxOpts {
   /** breathing space inserted between a pair that actually overlaps */
   pad?: number;
   iterations?: number;

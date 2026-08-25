@@ -118,11 +118,16 @@ test("applyFix replaces only the FIRST occurrence — the one the mark underline
   expect(useStore.getState().transcripts.P01.lines[1].text).toBe("the map broke the zoom");
 });
 
-test("applyFix with no flag record still repairs the line and doesn't resurrect one", () => {
-  useStore.getState().clearFlags("P01");
-  useStore.getState().applyFix("P01", 2, "zoom", "view");
-  expect(useStore.getState().transcripts.P01.lines[1].text).toBe("the map broke the view");
-  expect(useStore.getState().aiFlags["P01:2"]).toBeUndefined();
+test("applyFix with no flag record still repairs the line and doesn't resurrect one", async () => {
+  await useStore.getState().importFiles([new File([
+    `line_id,timestamp,speaker,text,codes
+1,00:00:01,P,the zoom broke,
+`,
+  ], "P02.csv")]);
+  useStore.getState().applyFix("P02", 1, "zoom", "view");
+  expect(useStore.getState().transcripts.P02.lines[0].text).toBe("the view broke");
+  expect(useStore.getState().aiFlags["P02:1"]).toBeUndefined();
+  useStore.getState().deleteTranscript("P02");
 });
 
 test("applyFix drops a span whose quote the repair broke (never orphaned)", () => {

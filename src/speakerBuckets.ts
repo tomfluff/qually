@@ -11,7 +11,7 @@
 import type { Segment, Line } from "./state/store";
 
 /** the share of a code's lines one speaker must hold to own the code */
-export const MAJORITY = 2 / 3;
+const MAJORITY = 2 / 3;
 
 // Derived piles are keyed separately from speaker piles, because a
 // PARTICIPANT MAY BE NAMED "Mixed". Keys are what the map stores positions
@@ -21,7 +21,7 @@ export const MAJORITY = 2 / 3;
 export const MIXED = "x:mixed";
 export const NONE = "x:none";
 
-export interface SpeakerPile { key: string; label: string; codes: string[] }
+interface SpeakerPile { key: string; label: string; codes: string[] }
 
 export function speakerBuckets(
   codes: string[],

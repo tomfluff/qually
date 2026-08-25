@@ -20,7 +20,7 @@ const key = (l: Line) =>
 // caller steers the user to Replace / Import as new.
 const MAX_CELLS = 4_000_000;
 
-export interface Alignment {
+interface Alignment {
   map: Map<number, number>; // old line id -> new line id
   overlap: number;          // share of old lines that found a home in the new file (0..1)
 }

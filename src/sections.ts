@@ -33,7 +33,7 @@ export const SECTION_OUT_TOKENS = 60;
 const WHY_MAX = 600;
 
 /** One axis and the labels allowed within it, in the spelling that will be stored. */
-export interface Axis { dim: string; values: string[] }
+interface Axis { dim: string; values: string[] }
 export interface Vocab {
   axes: Axis[];
   /** the pair key (see pairKey) -> the canonical spelling to store */

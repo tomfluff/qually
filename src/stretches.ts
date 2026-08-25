@@ -128,7 +128,7 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
 export const stretchColorOf = (value: string, overrides?: Record<string, string>, dark = false): string =>
   overrides?.[value.toLowerCase().trim()] ?? stretchColor(value, dark);
 
-export const stretchOverlaps = (s: Stretch, start: number, end: number): boolean =>
+const stretchOverlaps = (s: Stretch, start: number, end: number): boolean =>
   s.start <= end && s.end >= start;
 
 /** the stretches covering any of lines start..end of a transcript — EVIDENCE

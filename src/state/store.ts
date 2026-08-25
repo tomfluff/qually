@@ -41,13 +41,13 @@ export const parkedCodes = (cb: State["codebook"]): string[] =>
 // `active` is a transcript pid or one of these reserved view keys (Codebook / Assist).
 // Both are non-transcript surfaces, so transcript-only chrome and selection bookkeeping
 // gate on isTranscriptView.
-export const RESERVED_VIEWS = ["browse", "assist", "summary", "notes", "map"] as const;
+const RESERVED_VIEWS = ["browse", "assist", "summary", "notes", "map"] as const;
 export const isTranscriptView = (active: string) => !RESERVED_VIEWS.includes(active as typeof RESERVED_VIEWS[number]);
 
 // orig = the imported text, present only while an in-app correction differs from it
 // end (optional end_timestamp column) is when the line stops being spoken —
 // the pause-merge rule prefers it over estimating from the text's length
-export interface AnswerPoint { text: string; refs: string[] }
+interface AnswerPoint { text: string; refs: string[] }
 export interface Answer {
   aid: number;
   at: string;               // ISO, and the sort key
@@ -63,7 +63,7 @@ export interface Line { id: number; ts: string; speaker: string; text: string; e
 // The selection ring's weight is the researcher's call: what reads as clear
 // at one pair of eyes and one screen reads as either invisible or shouting at
 // another, and this map is navigated by selection.
-export type MapRingSize = "xs" | "sm" | "md" | "lg" | "xl";
+type MapRingSize = "xs" | "sm" | "md" | "lg" | "xl";
 export const MAP_RING_PX: Record<MapRingSize, number> = { xs: 1, sm: 2, md: 4, lg: 6, xl: 8 };
 
 export interface Segment {
@@ -72,7 +72,7 @@ export interface Segment {
 }
 export interface CodeGroup { name: string; codes: string[]; rationale?: string }
 // a pending reconciliation proposal (Code map): reviewed one verdict at a time
-export interface CodePlanAction {
+interface CodePlanAction {
   code: string; action: "rename" | "merge" | "remove";
   newName?: string; into?: string; rationale: string;
   // where the proposal came from, so the ledger row it eventually writes can
@@ -91,10 +91,10 @@ export interface CodePlanAction {
 // you code, so a remembered spot inside "2-5 excerpts" is garbage the moment a
 // code becomes a 6-excerpt code. Those keep a session-only overlay instead.
 export type MapStage = "reconcile" | "themes" | "areas";
-export type StageLayout = Record<MapStage, Record<string, { x: number; y: number }>>;
+type StageLayout = Record<MapStage, Record<string, { x: number; y: number }>>;
 const emptyLayout = (): StageLayout => ({ reconcile: {}, themes: {}, areas: {} });
 
-export interface CodeCluster {
+interface CodeCluster {
   // A capsule's IDENTITY, and the only stable thing about it. The map keys a
   // hand-placed capsule's position by this, because the list index is not
   // identity: accept or dismiss one proposal and every later capsule would
@@ -198,6 +198,30 @@ export interface Ui {
   coderName: string; // written as proposed_by on segments created in this browser
 }
 export type SpeakerWeight = "quiet" | "normal" | "bold";
+const DEFAULT_UI: Ui = {
+  fontSize: 16, sidebarFontSize: 13, dark: false, zen: false,
+  sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right",
+  mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md",
+  palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false,
+  mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT,
+  speakerNames: "full", fontFamily: "system", warnCorner: "right",
+  warnSize: "sm", laneWidth: "md", minimapWidth: 66,
+  minimapDetail: "detailed", showNotices: true, hiddenLenses: [],
+  lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75,
+  speakerFocus: {}, stretchView: "show", focusDim: true,
+  focusCollapse: false, assistPanel: "observations", tailLimit: 1,
+  stretchBand: "sm", stretchLabel: "md", eventListHeight: 200,
+  eventSort: "type", codeSort: "name", markerColors: {}, stretchColors: {},
+  summaryLayout: "side", summarySplit: 0.5, groundBold: true,
+  groundWash: true, groundUnderline: false, speakerColors: {},
+  speakerWeight: {}, coderName: "",
+};
+
+// Persist only keys in today's schema. Deriving the allowlist from the defaults
+// means deleting the next Ui field also deletes its stale persisted value.
+const currentUi = (ui: Ui): Ui => Object.fromEntries(
+  (Object.keys(DEFAULT_UI) as (keyof Ui)[]).map((key) => [key, ui[key] ?? DEFAULT_UI[key]]),
+) as unknown as Ui;
 // the loop-speed stops (Settings seg + the edit bar's cycler) — one list, two UIs
 export const LOOP_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
 const UNDO_CAP = 80; // one cap for BOTH push sites (pushUndo and editLine)
@@ -221,13 +245,13 @@ export interface Search extends LineScope {
 // quietly hide hits the researcher never asked to hide.
 export const NO_SEARCH: Search = { open: false, query: "", scope: "tab", current: null, speaker: "", range: "" };
 // A re-import of an already-coded transcript, held until the user picks what to do.
-export interface PendingImport {
+interface PendingImport {
   pid: string;
   lines: Line[];
   rows: Record<string, string>[]; // kept for the inline `codes` column
   preview: ImportPreview;
 }
-export type ImportChoice = "update" | "replace" | "new" | "cancel";
+type ImportChoice = "update" | "replace" | "new" | "cancel";
 
 // A re-imported segment row that would OVERWRITE an existing segment's status or
 // notes — held for consent (the transcript re-import modal is the same idea).
@@ -271,7 +295,7 @@ export interface AiCall {
 // rather than dropped (see snapshot/restore): "I merged these and then thought
 // better of it" is itself part of the record, and silently deleting the row
 // would make the ledger a story about a researcher who never changed their mind.
-export type DecisionKind =
+type DecisionKind =
   | "merge" | "rename" | "remove" | "delete"   // wired today
   | "keep" | "park" | "unpark" | "dismiss" // the tail queue's outcomes
   | "define"; // tell-apart's "that is the difference" — it WRITES definitions
@@ -450,7 +474,6 @@ export interface State {
   setAi: (patch: Partial<Ai>) => void;
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
   addGrounds: (recs: Record<number, GroundRec>) => void;
-  clearFlags: (pid: string) => void;
   dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
   applyFix: (pid: string, id: number, quote: string, fix: string) => void;
   logAiCall: (call: AiCall) => void;
@@ -500,9 +523,7 @@ export interface State {
   setCodePlan: (plan: CodePlanAction[]) => void;
   setCodeClusters: (clusters: CodeCluster[]) => void;
   /** turn a merge proposal down — the record wants the noes as much as the yeses */
-  dismissCluster: (ci: number, blind?: "agreed" | "differed") => void;
-  // one undoable entry per completed map gesture
-  recordMapPosition: (id: string, pos: { x: number; y: number }, island: boolean, stage: MapStage) => void;
+  dismissCluster: (ci: number) => void;
   // a whole-map nudge (Adjust to zoom): every moved thing, ONE entry
   applyMapLayout: (chips: Record<string, { x: number; y: number }>,
     islands: Record<string, { x: number; y: number }>, moved: number, stage: MapStage) => void;
@@ -536,7 +557,7 @@ export interface State {
   // wipe every hand-placed position: the packer lays the stage out fresh (one entry)
   resetMapLayout: (stage: MapStage) => boolean;
   // the whole cluster is applied as ONE undoable step
-  applyCluster: (ci: number, blind?: "agreed" | "differed") => void;
+  applyCluster: (ci: number) => void;
   setLastPid: (pid: string) => void;
   addAnswer: (a: Omit<Answer, "aid" | "at">) => void;
   deleteAnswer: (aid: number) => void;
@@ -573,8 +594,7 @@ export interface State {
     undoable?: boolean) => void;
   normalizeCodeCase: (style: "lower" | "capital") => string;
   deleteCode: (code: string, why?: string) => void;
-  mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string,
-    blind?: "agreed" | "differed") => void;
+  mergeCode: (from: string, into: string, why?: string, source?: DecisionSource, model?: string) => void;
   /** set a code aside (or bring it back) without touching its excerpts */
   setParked: (code: string, parked: boolean, why?: string) => void;
   /** the tail queue's verdict that changes nothing: I read this code and it stands */
@@ -582,8 +602,7 @@ export interface State {
   /** take one of those back — they changed nothing, so the history stack has nothing to give */
   retractVerdict: (at: number) => void;
   /** the distinguishing sentence: it defines BOTH codes, in one step */
-  defineBoth: (a: string, b: string, def: string, blind?: "agreed" | "differed",
-    source?: DecisionSource, model?: string) => void;
+  defineBoth: (a: string, b: string, def: string, source?: DecisionSource, model?: string) => void;
   setDef: (code: string, def: string, ai?: boolean) => void;
   // returns the codes it actually wrote — a draft that echoes what is already
   // stored changes nothing, and the receipt must not claim it did
@@ -637,7 +656,7 @@ function idsBetween(gs: Group[], i: number, j: number): number[] {
 // replaces these slices copy-on-write, so a snapshot is structural sharing, not a
 // serialization. (The stacks used to hold JSON strings: at a few thousand
 // segments that was ~half a megabyte of stringify per click, times a cap of 80.)
-export interface Snap {
+interface Snap {
   kind?: undefined;
   segments: Segment[]; codebook: State["codebook"]; hotbar: State["hotbar"];
   active: string; markers: Marker[]; aiGrounds: Record<number, GroundRec>;
@@ -648,13 +667,13 @@ export interface Snap {
   ledgerLen: number;
   sel: { pid: string | null; anchor: number | null; head: number | null; lines: number[] };
 }
-export interface LineSnap { kind: "line"; pid: string; id: number; line: Line; flags: LineFlags | null }
+interface LineSnap { kind: "line"; pid: string; id: number; line: Line; flags: LineFlags | null }
 // A gesture that rewrote SEVERAL lines at once (find-and-replace across a
 // transcript) is ONE thing the researcher did, so it is one thing to undo.
 // Same payload as a line entry, a list of them — the full snapshot cannot
 // serve here, because it deliberately does not carry transcripts.
-export interface LinesSnap { kind: "lines"; pid: string; entries: LineSnap[] }
-export type UndoEntry = Snap | LineSnap | LinesSnap;
+interface LinesSnap { kind: "lines"; pid: string; entries: LineSnap[] }
+type UndoEntry = Snap | LineSnap | LinesSnap;
 function snapshot(s: State): Snap {
   return {
     segments: s.segments, codebook: s.codebook, hotbar: s.hotbar, active: s.active,
@@ -958,8 +977,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, stretchView: "show", focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, stretchColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
-        speakerColors: {}, speakerWeight: {}, coderName: "" },
+      video: {}, ui: { ...DEFAULT_UI },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
@@ -1635,11 +1653,6 @@ export const useStore = create<State>()(
       },
       // grounding results merge in; a deleted segment's record goes with it (below)
       addGrounds: (recs) => set({ aiGrounds: { ...get().aiGrounds, ...recs } }),
-      clearFlags: (pid) => {
-        const next: Record<string, LineFlags> = {};
-        for (const [k, v] of Object.entries(get().aiFlags)) if (!k.startsWith(`${pid}:`)) next[k] = v;
-        set({ aiFlags: next, redoStack: [] }); // ditto — see addFlags
-      },
       // "I disagree with this mark": the span goes, but the line stays recorded as
       // scanned under that lens, so dismissing doesn't cause a re-fetch of the same mark.
       dismissNotice: (pid, id, lens, quote) => {
@@ -2304,14 +2317,7 @@ export const useStore = create<State>()(
         });
         announce(`Adjusted ${moved} position${moved === 1 ? "" : "s"} so nothing overlaps at this zoom`);
       },
-      recordMapPosition: (id, pos, island, stage) => {
-        get().pushUndo();
-        const s = get();
-        set(island
-          ? { mapIslandPos: { ...s.mapIslandPos, [stage]: { ...s.mapIslandPos[stage], [id]: pos } } }
-          : { mapPositions: { ...s.mapPositions, [stage]: { ...s.mapPositions[stage], [id]: pos } } });
-      },
-      applyCluster: (ci, blind) => {
+      applyCluster: (ci) => {
         const s0 = get();
         const c = s0.codeClusters[ci];
         if (!c || c.codes.length < 2) return;
@@ -2350,13 +2356,12 @@ export const useStore = create<State>()(
           ...(c.model ? { model: c.model } : {}),
           why: c.rationale || `Merged ${c.codes.length} codes into “${kept}”`,
           moved, now: countCode(get(), kept),
-          ...(blind ? { blind } : {}),
         });
         announce(`Merged ${c.codes.length} codes into ${kept}`);
       },
       // A rejected proposal is evidence: "the model suggested 41 merges and the
       // researcher took 34" is only sayable if the sevens are written down too.
-      dismissCluster: (ci, blind) => {
+      dismissCluster: (ci) => {
         const c = get().codeClusters[ci];
         if (!c) return;
         get().pushUndo();
@@ -2371,7 +2376,6 @@ export const useStore = create<State>()(
           source: c.source ?? "you",
           ...(c.model ? { model: c.model } : {}),
           why: c.rationale || "No reason recorded",
-          ...(blind ? { blind } : {}),
         });
       },
       setCodeClusters: (clusters) => { get().pushUndo(); set({ codeClusters: stampCids(clusters)
@@ -2568,7 +2572,7 @@ export const useStore = create<State>()(
         get().logDecision({ kind: "delete", codes: [code], source: "you",
           why: why || `Deleted the code and its ${lost} coding${lost === 1 ? "" : "s"}`, moved: lost });
       },
-      mergeCode: (from, into, why, source, model, blind) => {
+      mergeCode: (from, into, why, source, model) => {
         if (norm(from) === norm(into)) return;
         get().pushUndo();
         const moved = countCode(get(), from);
@@ -2580,7 +2584,7 @@ export const useStore = create<State>()(
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
         get().logDecision({ kind: "merge", codes: [into, from], source: source ?? "you",
           why: why || `Merged “${from}” into “${into}”`, ...(model ? { model } : {}),
-          moved, now: countCode(get(), into), ...(blind ? { blind } : {}) });
+          moved, now: countCode(get(), into) });
       },
       // Parking never touches segments — that is the whole point of it existing
       // beside rejectCode. hotbarCache is rebuilt because a parked code must
@@ -2613,7 +2617,7 @@ export const useStore = create<State>()(
       // lands as ONE act: two setDefs would be two undo steps with a state in
       // between where one code is defined and the other is not, which is not a
       // state the researcher ever chose.
-      defineBoth: (a, b, def, blind, source, model) => {
+      defineBoth: (a, b, def, source, model) => {
         const s = get();
         const text = def.trim();
         if (!text || !s.codebook[a] || !s.codebook[b] || a === b) return;
@@ -2626,7 +2630,7 @@ export const useStore = create<State>()(
         // source/model: keeping apart an AI-proposed pair answers the AI's
         // question, with the same provenance merging it would have carried
         get().logDecision({ kind: "define", codes: [a, b], source: source ?? "you", why: text,
-          ...(model ? { model } : {}), ...(blind ? { blind } : {}) });
+          ...(model ? { model } : {}) });
         announce(`${a} and ${b} kept apart, and that sentence is now the definition of both`);
       },
       // The counterpart to noteVerdict. These rows are invisible to undo by
@@ -2761,7 +2765,7 @@ export const useStore = create<State>()(
       partialize: (s) => ({
         transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
-        hotbar: s.hotbar, video: s.video, ui: { ...s.ui, zen: false }, // zen is per-session view state
+        hotbar: s.hotbar, video: s.video, ui: { ...currentUi(s.ui), zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, ledger: s.ledger, // NB: the API key is not in the store (ai/key.ts)
         markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp, stretches: s.stretches, studyBrief: s.studyBrief, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
       }),
@@ -2854,6 +2858,7 @@ export const useStore = create<State>()(
         s.ui.coderName ??= "";
         s.ui.mergeGapOn ??= false;
         s.ui.mergeGap ??= 3;
+        s.ui = currentUi(s.ui);
         // never-empty invariant: rows written empty by an earlier build become "(default)"
         s.segments = s.segments.map((x) => (x.proposedBy?.trim() ? x : { ...x, proposedBy: "(default)" }));
       },
@@ -2891,7 +2896,7 @@ function ensureCode(get: Get, set: Set_, code: string): string {
 
 // Import gate for transcript CSVs: every row needs a unique, numeric line_id.
 // Returns a message naming the offending rows (header = row 1), or null when clean.
-export function badLineIds(rows: Record<string, string>[]): string | null {
+function badLineIds(rows: Record<string, string>[]): string | null {
   const bad: number[] = [], dup: number[] = [];
   const seen = new Set<string>();
   rows.forEach((r, i) => {
@@ -2908,7 +2913,7 @@ export function badLineIds(rows: Record<string, string>[]): string | null {
   return null;
 }
 
-export function rowsToLines(rows: Record<string, string>[]): Line[] {
+function rowsToLines(rows: Record<string, string>[]): Line[] {
   return rows
     .map((r) => {
       const l: Line = { id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" };
@@ -2970,7 +2975,7 @@ function importTranscript(get: Get, set: Set_, pid: string, rows: Record<string,
     for (const sp of guessed) w[sp] = "quiet";
     set({ ui: { ...get().ui, speakerWeight: w } });
   }
-  // inline codes column -> segments (contract run-collapse, same as sync_coding.py)
+  // Inline codes become independent contiguous runs per code, so overlaps stay legal.
   const coded: CodedLine[] = rows.map((r) => ({
     n: +r.line_id,
     codes: new Set((r.codes || "").split(";").map((c) => c.trim()).filter(Boolean)),

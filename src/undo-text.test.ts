@@ -96,7 +96,6 @@ test("a flag mutation after undo invalidates the redo branch (no resurrected mar
   expect(useStore.getState().redoStack).toHaveLength(0);
   useStore.getState().redo(); // no-op
   expect(useStore.getState().aiFlags["P01:1"].spans).toEqual([]);
-  useStore.getState().clearFlags("P01");
 });
 
 test("a fresh edit after undo invalidates the redo branch", () => {

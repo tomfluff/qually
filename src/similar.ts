@@ -13,7 +13,7 @@
 // words it matched on, so the researcher can judge it.
 
 export interface SimilarInput { name: string; def?: string }
-export interface SimilarMatch {
+interface SimilarMatch {
   name: string;
   score: number;      // 0..1
   why: string;        // what it matched on, in the researcher's own words

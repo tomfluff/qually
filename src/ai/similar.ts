@@ -63,7 +63,7 @@ export const similarPayload = (
   return { text, redactions };
 };
 
-export const renderSimilarPayload = (
+const renderSimilarPayload = (
   focus: MergeCodeInput, book: { name: string; def: string }[], r: Redaction,
 ): string => similarPayload(focus, book, r).text;
 

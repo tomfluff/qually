@@ -55,7 +55,7 @@ const secOf = (ts: string | undefined): number | null => {
   return s ? tsToSec(s) : null;
 };
 
-export function rowTime(r: Record<string, string>): number | null {
+function rowTime(r: Record<string, string>): number | null {
   for (const c of TIME_COLS) { const n = num(r[c]); if (n !== null) return n; }
   return secOf(r.video_time_hms);
 }
@@ -68,7 +68,7 @@ export const markerKey = (m: Pick<Marker, "code" | "event">): string =>
 // A palette of its own, NOT the codebook's: an event is not a code, and sharing
 // the twelve code colours would make "MAKE_PROGRESS" look like somebody's coding.
 // Cooler and darker than COLORS, and stable per key (FNV-1a, as elsewhere).
-export const MARKER_COLORS = ["#7c5cd6", "#2f8f8f", "#c2703c", "#3d7fd6",
+const MARKER_COLORS = ["#7c5cd6", "#2f8f8f", "#c2703c", "#3d7fd6",
   "#a8478f", "#5f8c37", "#c0603f", "#4a6fb5"];
 // A chosen colour (ui.markerColors, set by right-clicking the type) always wins;
 // otherwise the hash gives every kind of event a stable one with nothing to store.
@@ -144,7 +144,7 @@ export const markerIdent = (m: Marker): string =>
 // increase. Markers after the last line become `tail`; a transcript with no
 // timecodes at all collects them all at the top rather than dropping them — an
 // unplaceable note must still be visible and clickable.
-export interface Placed {
+interface Placed {
   before: Map<number, Marker[]>; // line id -> markers rendered immediately above it
   tail: Marker[];                // markers later than every line
 }

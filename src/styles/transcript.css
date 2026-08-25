@@ -149,7 +149,7 @@
 .lineRow .txt { flex:1; line-height:1.45; font-family:var(--read-font); }
 /* capacity for 5 lanes; grows past 5 (contracting text), never scrolls (W1 item 2) */
 .lineRow .lanes { display:flex; gap:3px; flex-shrink:0; align-self:stretch;
-  justify-content:flex-start;
+  justify-content:flex-start; cursor:default;
   /* a persistent divider marks the lane strip as a zone apart from the readable line
      — the lanes aren't click-to-select. 1rem of air on each side: the row's own 8px
      flex gap covers part of the left half, so the margin only adds the remainder. */
