@@ -909,12 +909,15 @@ function useKeepOnScreen<T extends HTMLElement>(deps: unknown[]) {
 function FindMarks({ canvas, hits, cur }: {
   canvas: { current: HTMLDivElement | null }; hits: string[]; cur?: string;
 }) {
-  // Subscribed to the node IDS, joined — not the nodes array. A drag rewrites
-  // that array every frame, and re-running a full DOM pass per frame is the
-  // one thing this component must not cost; the ids change only when the set
-  // of nodes does, which is exactly when the marks need re-asserting. (Same
-  // string-identity trick SelectionHud uses above, for the same reason.)
-  useFlowStore((s: { nodes: Node[] }) => s.nodes.map((n) => n.id).join("\n"));
+  // Subscribed to the node ids PLUS their selected/dragging bits, joined —
+  // not the nodes array. A drag rewrites that array every frame, and a full
+  // DOM pass per frame is the one thing this component must not cost; but
+  // React Flow rewrites a wrapper's className when selection or dragging
+  // flips, wiping the imperative marks with the id string unchanged — so
+  // those two bits are exactly the extra edges that must retrigger it.
+  // (Same string-identity trick SelectionHud uses above.)
+  useFlowStore((s: { nodes: Node[] }) =>
+    s.nodes.map((n) => n.id + (n.selected ? "+s" : "") + (n.dragging ? "+d" : "")).join("\n"));
   useEffect(() => {           // deliberately undepped: reconcile after EVERY render
     const el = canvas.current;
     if (!el) return;
@@ -1673,9 +1676,12 @@ function MapInner() {
   // (The marks themselves are FindMarks' job, rendered with the strip below.)
   const flown = useRef("");
   // the zoom the researcher chose (see the flight below); a flight of OURS
-  // ending must not be mistaken for them choosing a new one
+  // ending must not be mistaken for them choosing a new one. A timestamp, not
+  // a boolean: rapid steps overlap flights, and d3 fires no end event for the
+  // interrupted one — a flag would come out of step and stay wrong, where a
+  // stale deadline heals itself the moment the last flight lands.
   const findWantZoom = useRef<number | null>(null);
-  const findFlying = useRef(false);
+  const findFlightUntil = useRef(0);
   useEffect(() => {
     const cur = hits[at];
     const trip = cur ? (find?.q.trim() ?? "") + "\u0000" + cur : ""; // NUL: never in a code name
@@ -1706,10 +1712,13 @@ function MapInner() {
       findWantZoom.current = z0;
       const zFit = Math.min((vw * 0.85) / Math.max(w, 1), (vh * 0.85) / Math.max(h, 1));
       const z = Math.max(0.1, Math.min(z0, zFit)); // never zoom IN uninvited
-      findFlying.current = true;
+      // reduced motion: the CSS kill-switch cannot reach a d3 transition, so
+      // the trip itself asks — an instant cut says the same thing motionless
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      findFlightUntil.current = performance.now() + (still ? 0 : 320) + 120;
       void setViewport(
         { x: vw / 2 - (x + w / 2) * z, y: vh / 2 - (y + h / 2) * z, zoom: z },
-        { duration: 320, interpolate: "linear" });
+        { duration: still ? 0 : 320, interpolate: "linear" });
     });
   }, [hits, at, find?.q, getInternalNode, setViewport, getZoom]);
   const closeFind = useCallback(() => {
@@ -2425,9 +2434,11 @@ function MapInner() {
   const [initialViewport] = useState(() => useStore.getState().ui.mapViewport);
   const onMoveEnd = useCallback((_: unknown, vp: Viewport) => {
     // a move WE animated (a find flight) ending is not the researcher picking
-    // a zoom; any other move is, and resets what "their zoom" means
-    if (findFlying.current) findFlying.current = false;
-    else findWantZoom.current = null;
+    // a zoom; any other move is, and resets what "their zoom" means. (A wheel
+    // inside the flight window is misread as ours — the cost is one hop at the
+    // old zoom, self-corrected by their next touch; the stuck flag this
+    // replaces made a wide hit's zoom-out the permanent baseline.)
+    if (performance.now() > findFlightUntil.current) findWantZoom.current = null;
     setUi({ mapViewport: vp });
   }, [setUi]);
   // While you hold a chip, the container it would join is tracked — in

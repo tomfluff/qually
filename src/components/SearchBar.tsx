@@ -131,7 +131,10 @@ export function SearchBar() {
     // them or Replace would sit here rewriting its own output
     const self = findMatches(replText, query).length;
     const left = tabMatches.length - 1 + self;
-    if (self) setIdx(Math.min(at + self, Math.max(0, left - 1)));
+    // the list is about to rebuild: the same index is already the next match,
+    // self-matches are stepped past, and stepping off the END wraps to the
+    // first — clamping there walked BACKWARD onto the previous match instead
+    if (left > 0) setIdx((at + self) % left);
     // replacing the LAST occurrence disables the pressed button, and the
     // browser drops focus from a disabled button onto <body> — park it on the
     // field first, so the keyboard flow survives the list emptying
