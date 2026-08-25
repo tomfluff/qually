@@ -39,7 +39,8 @@ Each transcript line is three tab-separated fields: line_id<TAB>speaker<TAB>text
 Rules:
 - Use ONLY the labels listed under LABELS, by their exact dimension and value. Never invent a dimension or a value, never adapt one, never combine two. A label that is not on the list does not exist.
 - A section is a contiguous range of line ids (start to end, inclusive) carrying ONE dimension and ONE value. Give the range the lines that actually belong to that part of the session.
-- Dimensions are independent: the same lines may carry a value from each dimension. Within ONE dimension, give a line one value — do not label the same lines "task 1" and "task 2".
+- Dimensions are independent: the same lines may carry a value from each dimension — a stretch can be "phase: task 1" and "condition: baseline" at once.
+- Within ONE dimension, sections must NOT overlap. Two values of the same dimension cannot cover the same line: if "condition: baseline" ends at line 240, "condition: beacon" starts at 241 or later, never at 200. Every line carries at most one value per dimension. Where a boundary is genuinely unclear, pick one line and commit to it — overlapping the two ranges to hedge is wrong, and a gap between them is better than an overlap.
 - Sections need not tile the transcript. Lines that belong to no part of the study — setup chatter, an interruption, small talk — are simply left out. Leaving a gap is better than stretching a neighbour across it.
 - Prefer few, long sections over many short ones. You are finding the shape of the session, not annotating turns.
 - Every section carries a "why": ONE short sentence naming what in those lines marks the boundary — what the moderator says, what the participant starts doing. Quote a few words where that is the clearest answer. This is what the researcher reads to accept or reject you, so make it specific to these lines rather than restating the label.
