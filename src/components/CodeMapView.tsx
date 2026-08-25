@@ -2925,7 +2925,10 @@ function MapInner() {
             {/* the MiniMap re-scans the store on every write; unmounting it for
                 the duration of a box-drag costs one render at gesture start/end
                 instead of aggregate scans per membership change (codex consult) */}
-            {!selecting && <MiniMap pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
+            {/* key: a corner change REMOUNTS the minimap rather than restyling it in
+                place — Firefox painted the in-place move as two steps (side, then
+                down), and a node created at its final spot has no way to travel */}
+            {!selecting && <MiniMap key={mapMinimap} pannable zoomable position={mapMinimap} nodeColor={nodeColor} />}
             {(focusBusy || focusNote) && (
               <Panel position="top-center" className="mapFocusNote">
                 {focusBusy
