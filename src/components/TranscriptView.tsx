@@ -30,6 +30,7 @@ import { openColorPicker } from "../colorPicker";
 import { AddEventModal } from "./AddEventModal";
 import { tsToSec } from "../video/seek";
 import type { ReactNode } from "react";
+import { stretchLabelPlacement } from "../stretchLabelPosition";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 
@@ -136,8 +137,6 @@ const LANE_W = { xs: 10, sm: 14, md: 18, lg: 24 } as const; // lane bar width px
 // band plus one letter-height, not a column of prose
 const STRETCH_BAND_PX = { xs: 3, sm: 5, md: 8, lg: 12 } as const;
 const STRETCH_LABEL_PX = { sm: 10, md: 13, lg: 16 } as const;
-// lazy: this module is imported by node-side tests where document is absent
-let stMeasure: CanvasRenderingContext2D | null = null;
 // the body font never changes at runtime — read it once, not per scroll frame
 let bodyFont: string | null = null;
 
@@ -314,6 +313,7 @@ export function TranscriptView() {
   // the first visible one), same rhythm as the minimap sync.
   const stretchOvRef = useRef<HTMLDivElement>(null);
   const stretchCtxRef = useRef<StretchCtx | null>(null);
+  const stretchLabelHeights = useRef(new Map<string, number>());
   stretchCtxRef.current = stretchCtx;
   const syncStretchLabels = useCallback(() => {
     const ov = stretchOvRef.current, v = vref.current, ctx = stretchCtxRef.current;
@@ -386,28 +386,33 @@ export function TranscriptView() {
         frag.appendChild(g);
       }
     }
+    const missingHeights: { el: HTMLElement; key: string; start: number; end: number }[] = [];
+    const placeLabel = (el: HTMLElement, start: number, end: number, height: number) => {
+      const p = stretchLabelPlacement(start, end, v.scrollOffset, height);
+      el.style.top = `${p.top}px`;
+      el.style.transform = p.translateY ? `translateY(${p.translateY}px)` : "";
+      el.dataset.mode = p.mode;
+      if (p.clipHeight !== undefined) {
+        el.style.height = `${p.clipHeight}px`;
+        el.style.overflow = "hidden";
+      }
+    };
     for (const st of ctx.list) {
       const gi0 = idx?.get(st.start), gi1 = idx?.get(st.end);
       if (gi0 === undefined || gi1 === undefined) continue;
       // virtua child indices carry the vpad at 0, so items shift by one; the
       // stretch's end is the start of whatever follows its last row
-      const y0 = v.getItemOffset(gi0 + 1) - v.scrollOffset;
-      const y1 = v.getItemOffset(gi1 + 2) - v.scrollOffset;
+      const start = v.getItemOffset(gi0 + 1), end = v.getItemOffset(gi1 + 2);
+      const y0 = start - v.scrollOffset, y1 = end - v.scrollOffset;
       if (y1 <= 0 || y0 >= v.viewportSize) continue;
       const col = ctx.dims.indexOf(st.dim);
       if (col < 0) continue;
-      // measured, not guessed: a vertical label's height is its horizontal
-      // text advance — canvas measure, no layout read (wide glyphs, CJK)
-      stMeasure ??= document.createElement("canvas").getContext("2d")!;
-      // the font is per-sync, not per-stretch: getComputedStyle here cost a
-      // style read per stretch on every scroll frame
+      // The cache key includes every input that can change the vertical box.
+      // Measuring the newly rendered value once preserves exact CJK/tracking
+      // metrics without letting sub-pixel placement alter the next frame.
       bodyFont ??= getComputedStyle(document.body).fontFamily;
-      stMeasure.font = `700 ${ctx.labelPx}px ${bodyFont}`;
-      // a first ESTIMATE for placement; the real rendered height is read back
-      // below and re-clamped — letter-spacing and font metrics drift enough
-      // that an estimated pill poked past its band's end
-      const len = stMeasure.measureText(st.value.toUpperCase()).width + 18;
-      const top = Math.min(Math.max(y0 + 2, 4), Math.max(y1 - len, y0 + 2));
+      const heightKey = `${ctx.labelPx}\u0000${bodyFont}\u0000${st.value}`;
+      const height = stretchLabelHeights.current.get(heightKey);
       const el = document.createElement("span");
       el.className = "stFloatLabel" + (st.status === "candidate" ? " stCand" : "");
       el.textContent = st.value;
@@ -415,34 +420,36 @@ export function TranscriptView() {
         ? `Proposed: ${st.dim}: ${st.value} · lines ${st.start}–${st.end} — click to accept or reject`
         : `${st.dim}: ${st.value} · lines ${st.start}–${st.end} — click to edit`;
       const c = stretchColorOf(st.value, ctx.colors, ctx.dark);
-      el.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW}px;top:${top}px;` +
+      el.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW}px;` +
         `font-size:${ctx.labelPx}px;background:${c};color:${inkOn(c)};width:${ctx.pillW}px;`;
-      el.dataset.y0 = String(y0); el.dataset.y1 = String(y1);
       // the pill is a right-click target: it must know WHICH stretch it is —
       // the store index, since ctx.list holds references into the store array
       el.dataset.si = String(ctx.si.get(st) ?? -1);
+      if (height === undefined) missingHeights.push({ el, key: heightKey, start, end });
+      else placeLabel(el, start, end, height);
       frag.appendChild(el);
     }
     ov.replaceChildren(frag);
-    // second pass with REAL heights: the pill must never pass its stretch's
-    // end. Re-clamp against the measured box; when the visible span is
-    // shorter than the label, clip the pill to the span instead of letting
-    // it overhang rows the stretch does not cover. All heights are read
-    // before any top is written — one forced layout per sync, not one per
-    // label (this runs on every scroll frame).
-    const labels = Array.from(ov.children).filter(
-      (el): el is HTMLElement => el.classList.contains("stFloatLabel"));
-    const heights = labels.map((el) => el.offsetHeight);
-    labels.forEach((el, i) => {
-      const y0 = Number(el.dataset.y0), y1 = Number(el.dataset.y1);
-      const h = heights[i];
-      let top = Math.min(Math.max(y0 + 2, 4), y1 - h);
-      if (top < y0 + 2) top = y0 + 2; // span shorter than the label
-      el.style.top = `${top}px`;
-      if (top + h > y1) { el.style.height = `${Math.max(0, y1 - top)}px`; el.style.overflow = "hidden"; }
+    // A cache miss is the only layout read. Reads stay batched, and the result
+    // is never re-derived from a pill whose fractional position we just wrote.
+    const measured = missingHeights.map((m) => ({ ...m, height: m.el.getBoundingClientRect().height }));
+    measured.forEach((m) => {
+      stretchLabelHeights.current.set(m.key, m.height);
+      placeLabel(m.el, m.start, m.end, m.height);
     });
   }, []);
   useEffect(() => { syncStretchLabels(); });
+  useEffect(() => {
+    let live = true;
+    void document.fonts.ready.then(() => {
+      if (!live) return;
+      // A fallback face can have different advance widths. Re-measure once
+      // after fonts settle rather than carrying that stale geometry forever.
+      stretchLabelHeights.current.clear();
+      requestAnimationFrame(syncStretchLabels);
+    });
+    return () => { live = false; };
+  }, [syncStretchLabels]);
   // a window resize re-wraps rows (offsets shift) without a re-render or scroll;
   // rAF so virtua has remeasured before we read offsets
   useEffect(() => {
