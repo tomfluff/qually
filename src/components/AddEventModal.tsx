@@ -13,11 +13,11 @@
 // The time field is on the TRANSCRIPT clock — the one every chip on screen shows —
 // and converts to the video clock (+ offset) only at save, mirroring how imported
 // times convert the other way for display.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } from "react";
 import { useStore } from "../state/store";
 import { fmtLike, markerColor, markerKey, type Marker } from "../markers";
 import { tsToSec } from "../video/seek";
-import { fuzzy } from "./CodeCombobox";
+import { CreatableCombobox } from "./CreatableCombobox";
 
 import { GAP, widthFor } from "./CommandPalette"; // the palette's sizing — one anchored-card family
 const chromeFor = (fs: number) => Math.round(fs * 14.5); // hint + note + meta row + button
@@ -147,16 +147,10 @@ export function AddEventModal({ pid, defaultT, marker, tsSample, anchorSel, onCl
   );
 }
 
-// The type field, in the code combobox's clothes: same fuzzy match, same list
-// markup (swatch · name · count), same keyboard loop — one autocomplete design
-// across the app, not two. Differences are only in the data: types instead of
-// codes, and picking fills the field rather than applying anything.
+// Event-specific evidence stays here; interaction belongs to the shared control.
 function TypeCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const markers = useStore((s) => s.markers);
   const colors = useStore((s) => s.ui.markerColors);
-  const [open, setOpen] = useState(false);
-  const [hl, setHl] = useState(0);
-  const lastPt = useRef({ x: -1, y: -1 });
 
   // every type in use, with its count — most-used first, like the hotbar thinks
   const types = useMemo(() => {
@@ -165,59 +159,18 @@ function TypeCombobox({ value, onChange }: { value: string; onChange: (v: string
     return [...n.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [markers]);
 
-  const query = value.trim();
-  const matches = types.filter(([t]) => fuzzy(query, t));
-  const exact = types.some(([t]) => t.toLowerCase() === query.toLowerCase());
-  const entries = [
-    ...matches.map(([name, count]) => ({ type: "pick" as const, name, count })),
-    ...(query && !exact ? [{ type: "create" as const, name: query, count: 0 }] : []),
-  ];
-  const showList = open && entries.length > 0;
-
-  const choose = (name: string) => { onChange(name); setOpen(false); setHl(0); };
-  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.nativeEvent.isComposing) return; // an IME's confirm-Enter is not a pick
-    if (!showList) return; // nothing open: let Enter save the modal, Esc close it
-    if (e.key === "ArrowDown") { e.preventDefault(); setHl((h) => Math.min(h + 1, entries.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
-    else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); const en = entries[Math.min(hl, entries.length - 1)]; if (en) choose(en.name); }
-    else if (e.key === "Escape") { e.stopPropagation(); setOpen(false); }
-  };
-
   return (
-    <div className="newCodeWrap addev-typewrap">
-      <input className="signinput" value={value} placeholder="Custom" autoComplete="off"
-        role="combobox" aria-expanded={showList} aria-controls="addev-types" aria-autocomplete="list"
-        aria-label="Event type — pick an existing one or write a new one"
-        aria-activedescendant={showList ? `addev-types-${hl}` : undefined}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); setHl(0); }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={onKey} />
-      {showList && (
-        <div className="acList nicescroll" role="listbox" id="addev-types">
-          {entries.map((en, i) => (
-            <div key={en.type + en.name} className={"acItem" + (i === hl ? " hl" : "")}
-              role="option" id={`addev-types-${i}`} aria-selected={i === hl}
-              onMouseDown={(e) => { e.preventDefault(); choose(en.name); }}
-              onMouseMove={(e) => {
-                if (e.clientX === lastPt.current.x && e.clientY === lastPt.current.y) return;
-                lastPt.current = { x: e.clientX, y: e.clientY };
-                setHl(i);
-              }}>
-              {en.type === "pick" ? (
-                <>
-                  <span className="swatch" style={{ background: markerColor(en.name, colors) }} />
-                  <span className="acName">{en.name}</span>
-                  <span className="cnt">{en.count}</span>
-                </>
-              ) : (
-                <span className="acCreate">New type “{en.name}”</span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <CreatableCombobox
+      value={value}
+      onChange={onChange}
+      options={types.map(([name, count]) => ({ name, count, color: markerColor(name, colors) }))}
+      placeholder="Custom"
+      ariaLabel="Event type — pick an existing one or write a new one"
+      listId="addev-types"
+      className="addev-typewrap"
+      openOn="focus"
+      stopPickEnterPropagation
+      createLabel={(name) => `New type “${name}”`}
+    />
   );
 }

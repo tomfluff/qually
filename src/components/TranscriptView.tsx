@@ -14,7 +14,7 @@ import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
 import { useDismiss, useClampToViewport, useMenuArrows, useMenuFocus, useMenuToggleFocus } from "../usePopover";
-import { fuzzy } from "./CodeCombobox";
+import { CreatableCombobox } from "./CreatableCombobox";
 import { stretchColorOf, stretchDims, visible, evidence, pendingAt, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
@@ -1339,82 +1339,6 @@ function MarkerRow({ marker, offset, tsSample, colors, showLid, stretchW, onEdit
 }
 
 
-// The stretch menu's dimension/value fields, in the type combobox's clothes:
-// same fuzzy match, same list markup (swatch · name · count), same keyboard
-// loop — one autocomplete design across the app (see AddEventModal).
-function StretchCombobox({ value, onChange, options, placeholder, ariaLabel, autoFocus, onCommit, listId }: {
-  value: string; onChange: (v: string) => void;
-  options: { name: string; count: number; color?: string }[];
-  placeholder: string; ariaLabel: string; autoFocus?: boolean;
-  /** Enter with the list closed — the form's own submit */
-  onCommit?: () => void;
-  listId: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [hl, setHl] = useState(0);
-  const lastPt = useRef({ x: -1, y: -1 });
-  const query = value.trim();
-  const matches = options.filter((o) => fuzzy(query, o.name));
-  const exact = options.some((o) => o.name.toLowerCase() === query.toLowerCase());
-  const entries = [
-    ...matches.map((o) => ({ kind: "pick" as const, ...o })),
-    ...(query && !exact ? [{ kind: "create" as const, name: query, count: 0, color: undefined }] : []),
-  ];
-  const showList = open && entries.length > 0;
-  const choose = (name: string) => { onChange(name); setOpen(false); setHl(0); };
-  const onKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (e.nativeEvent.isComposing) return; // an IME's confirm-Enter is not a pick
-    if (!showList) {
-      // Down is the ARIA combobox gesture for "show me what there is"
-      if (e.key === "ArrowDown" && entries.length) { e.preventDefault(); setOpen(true); setHl(0); return; }
-      if (e.key === "Enter" && onCommit) { e.preventDefault(); onCommit(); }
-      return;
-    }
-    if (e.key === "ArrowDown") { e.preventDefault(); setHl((h) => Math.min(h + 1, entries.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
-    else if (e.key === "Enter") { e.preventDefault(); const en = entries[Math.min(hl, entries.length - 1)]; if (en) choose(en.name); }
-    else if (e.key === "Escape") { e.stopPropagation(); setOpen(false); }
-  };
-  return (
-    <div className="newCodeWrap stComboWrap">
-      <input className="signinput" value={value} placeholder={placeholder} autoComplete="off" autoFocus={autoFocus}
-        role="combobox" aria-expanded={showList} aria-controls={listId} aria-autocomplete="list"
-        aria-label={ariaLabel}
-        aria-activedescendant={showList ? `${listId}-${hl}` : undefined}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); setHl(0); }}
-        // NOT on focus: this field is autofocused inside a menu, and a list that
-        // unfurls the moment the menu opens covers the menu's own rows before
-        // the researcher has asked for anything. Typing, clicking the field, or
-        // pressing Down asks; arriving does not.
-        onClick={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={onKey} />
-      {showList && (
-        <div className="acList nicescroll" role="listbox" id={listId}>
-          {entries.map((en, i) => (
-            <div key={en.kind + en.name} className={"acItem" + (i === hl ? " hl" : "")}
-              role="option" id={`${listId}-${i}`} aria-selected={i === hl}
-              onMouseDown={(e) => { e.preventDefault(); choose(en.name); }}
-              onMouseMove={(e) => {
-                if (e.clientX === lastPt.current.x && e.clientY === lastPt.current.y) return;
-                lastPt.current = { x: e.clientX, y: e.clientY };
-                setHl(i);
-              }}>
-              {en.kind === "pick" ? (<>
-                {en.color && <span className="swatch" style={{ background: en.color }} />}
-                <span className="acName">{en.name}</span>
-                <span className="cnt">{en.count}</span>
-              </>) : (
-                <span className="acCreate">New “{en.name}”</span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // The mark-stretch menu: right-click on a selection. One form, two lists —
 // what to mark these lines as (dimension + value, both remembering what the
 // project already uses), and what already covers them, unmarkable in place.
@@ -1517,12 +1441,17 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
         <div className="ctxhead">Mark {span} as
           <span className="stHint">Enter to save · Esc to cancel</span></div>
         <div className="stForm">
-          <StretchCombobox value={dim} onChange={setDim} options={dimOptions} listId="stretch-dims"
+          {/* Autofocus must not unfurl a list over the menu before it is asked
+              for; typing, clicking, or Down is the explicit request. */}
+          <CreatableCombobox value={dim} onChange={setDim} options={dimOptions} listId="stretch-dims"
             placeholder="condition" ariaLabel="Dimension — pick an existing one or write a new one"
+            className="stComboWrap" openOn="click" openOnArrowDown
+            createLabel={(name) => `New “${name}”`}
             autoFocus onCommit={() => ref.current?.querySelectorAll("input")[1]?.focus()} />
-          <StretchCombobox value={value} onChange={setValue} options={valueOptions} listId="stretch-values"
+          <CreatableCombobox value={value} onChange={setValue} options={valueOptions} listId="stretch-values"
             placeholder="baseline" ariaLabel="Value — pick an existing one or write a new one"
-            onCommit={mark} />
+            className="stComboWrap" openOn="click" openOnArrowDown
+            createLabel={(name) => `New “${name}”`} onCommit={mark} />
           <button className="btn primary" disabled={!dim.trim() || !value.trim()} onClick={mark}>Mark</button>
         </div>
       </>)}
@@ -1650,10 +1579,13 @@ function StretchPillMenu({ x, y, si, onClose }: {
       onKeyDown={arrows} style={{ left: x, top: y, fontSize: fs }}>
       <div className="ctxhead">{st.dim}: {st.value} <span className="stRange">{st.start}–{st.end}</span></div>
       <div className="stForm">
-        <StretchCombobox value={dim} onChange={setDim} options={dimOptions} listId="stretch-pill-dims"
-          placeholder="condition" ariaLabel="Dimension" />
-        <StretchCombobox value={value} onChange={setValue} options={valueOptions} listId="stretch-pill-values"
-          placeholder="baseline" ariaLabel="Value" onCommit={save} />
+        {/* Focus lands in this menu without opening suggestions over its rows. */}
+        <CreatableCombobox value={dim} onChange={setDim} options={dimOptions} listId="stretch-pill-dims"
+          placeholder="condition" ariaLabel="Dimension" className="stComboWrap"
+          openOn="click" openOnArrowDown createLabel={(name) => `New “${name}”`} />
+        <CreatableCombobox value={value} onChange={setValue} options={valueOptions} listId="stretch-pill-values"
+          placeholder="baseline" ariaLabel="Value" className="stComboWrap"
+          openOn="click" openOnArrowDown createLabel={(name) => `New “${name}”`} onCommit={save} />
         <button className="btn primary" disabled={!changed || !dim.trim() || !value.trim()} onClick={save}>Save</button>
       </div>
       <div className="ctxdiv" />
