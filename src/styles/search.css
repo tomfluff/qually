@@ -92,6 +92,9 @@
    field so the two read as one instrument */
 .searchrep { border-top:1px solid var(--line); }
 .searchrep .btn { padding:0 12px; white-space:nowrap; }
+/* ...except the icon button: 12px side padding in a 34px box squeezed the
+   svg to 8px wide — the icon needs the box, not the padding */
+.searchrep .btn.iconbtn { padding:0; }
 /* the bracket toggle says what it does by BEING the thing it inserts — the
    tabler brackets icon, not text glyphs: an icon centres like every other
    icon in the app, where Segoe's font metrics hung the typed "[ ]" low */
