@@ -50,9 +50,10 @@ import { sweepWording, refusedPairs, familyReason } from "../sweep";
 import { openTailQueue } from "./TailQueue";
 import { TellApartModal } from "./TellApartModal";
 import { DescribeModal } from "./DescribeModal";
-import { findSimilarWithAi, estimateSimilarTokens } from "../ai/similar";
+import { estimateSimilarTokens, type SemanticMatch } from "../ai/similar";
 import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, argueAgainst, estimateAgainstTokens, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, nameArea, estimateNameAreaTokens, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 import { useMenuArrows, useMenuToggleFocus } from "../usePopover";
+import { SimilarModal } from "./SimilarModal";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -968,6 +969,7 @@ function MapInner() {
   };
   const [compareMenu, setCompareMenu] = useState<{ left: number; y: number } | null>(null);
   const transcripts = useStore((s) => s.transcripts);
+  const ai = useStore((s) => s.ai);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const dark = useStore((s) => s.ui.dark);
   const mapMinimap = useStore((s) => s.ui.mapMinimap);
@@ -1022,17 +1024,33 @@ function MapInner() {
     source: string; rows: SimilarRow[]; companions: Companion[];
     ticked: Set<string>; ai: "idle" | "busy" | "done"; cost?: number;
   }>(null);
-  // the quote for the optional AI pass, computed when the panel opens
+  const similarSource = similar?.source ?? "";
+  // One request snapshot feeds the map's quote and, if approved, the modal's
+  // preview, accounting and dispatch. The focus excerpts were once assembled
+  // only after the quote, which made the consent price describe a smaller call.
+  const similarRequest = useMemo(() => {
+    if (!similarSource) return null;
+    const book = liveCodes(codebook).filter((name) => name !== similarSource)
+      .map((name) => ({ name, def: codebook[name]?.def ?? "" }));
+    const focus: MergeCodeInput = {
+      name: similarSource, def: codebook[similarSource]?.def ?? "", excerpts: [],
+    };
+    for (const seg of segments) {
+      if (seg.status !== "accepted" || seg.code !== similarSource || !transcripts[seg.pid]) continue;
+      if (focus.excerpts.length >= 4) break;
+      const ex = segExcerpt(seg, transcripts[seg.pid].lines).excerpt;
+      if (ex) focus.excerpts.push(ex);
+    }
+    return { source: similarSource, focus, book };
+  }, [similarSource, codebook, segments, transcripts]);
+  const [similarGate, setSimilarGate] = useState<typeof similarRequest>(null);
+  // the quote for the optional AI pass, using the request the gate will show
   const simTokens = useMemo(() => {
-    const st = useStore.getState();
-    if (!similar) return { inTok: 0, cost: 0 };
-    const red = redactor(st.ai.redactTerms);
-    const book = liveCodes(st.codebook).filter((n) => n !== similar.source)
-      .map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
-    const inTok = estimateSimilarTokens(
-      { name: similar.source, def: st.codebook[similar.source]?.def ?? "", excerpts: [] }, book, red);
-    return { inTok, cost: costOf(modelOf(st.ai.model), inTok, estimateTokens(" ".repeat(240))) };
-  }, [similar]);
+    if (!similarRequest) return { inTok: 0, cost: 0 };
+    const red = redactor(ai.redactTerms);
+    const inTok = estimateSimilarTokens(similarRequest.focus, similarRequest.book, red);
+    return { inTok, cost: costOf(modelOf(ai.model), inTok, estimateTokens(" ".repeat(240))) };
+  }, [similarRequest, ai]);
   // the areas view is project data: it survives a reload and travels in the file
   const topicGroups = useStore((s) => s.codeAreas);
   const topicFp = useStore((s) => s.codeAreasFp);
@@ -1096,7 +1114,7 @@ function MapInner() {
       });
     };
     const onClose = () => setSimilar(null);
-    const onAi = () => void runSimilarAiRef.current?.();
+    const onAi = () => openSimilarAiRef.current?.();
     const onTake = (e: Event) => takeSimilarRef.current?.((e as CustomEvent<"merge" | "group" | "area">).detail);
     const onSelect = () => selectSimilarRef.current?.();
     window.addEventListener("qually:simtoggle", onToggleRow);
@@ -1114,7 +1132,7 @@ function MapInner() {
   }, []);
   // the handlers close over changing state, so the listeners reach them
   // through refs rather than re-subscribing on every keystroke
-  const runSimilarAiRef = useRef<() => void>(null);
+  const openSimilarAiRef = useRef<() => void>(null);
   const takeSimilarRef = useRef<(m: "merge" | "group" | "area") => void>(null);
   const selectSimilarRef = useRef<() => void>(null);
   // the pending revision plan is PROJECT data — it survives reloads and travels
@@ -1824,6 +1842,10 @@ function MapInner() {
     if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
     const red = redactor(st.ai.redactTerms);
     const inputs = glimpseInputs(ci);
+    const call = {
+      model: st.ai.model, task: "glimpse", pid: "(codebook)",
+      lines: inputs.length, redactions: countRed(inputs, red),
+    };
     // the capsule's id, taken NOW: the answer lands seconds later, and an
     // index held across that gap names whatever proposal slid into its place
     // if a merge or a dismissal reordered the list in between
@@ -1843,13 +1865,13 @@ function MapInner() {
         s2.setCodeClusters(s2.codeClusters.map((c) =>
           (c.cid === cid ? { ...c, desc: glimpse, descCodes: [...c.codes] } : c)));
       s2.logAiCall({
-        at: new Date().toISOString(), model: st.ai.model, task: "glimpse", pid: "(codebook)",
-        lines: inputs.length, redactions: countRed(inputs, red),
+        at: new Date().toISOString(), ...call,
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
       announce("Group description ready.");
       earcon.aiDone();
     } catch (e) {
+      useStore.getState().logAiIncomplete(e, call);
       const msg = e instanceof AiError ? e.message : (e as Error).message;
       announce(`Describe failed: ${msg}`, { assertive: true });
       earcon.error();
@@ -1869,6 +1891,10 @@ function MapInner() {
     if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
     const red = redactor(st.ai.redactTerms);
     const inputs = glimpseInputs(ci);
+    const call = {
+      model: st.ai.model, task: "against", pid: "(codebook)",
+      lines: inputs.length, redactions: countRed(inputs, red),
+    };
     // same id-not-index discipline as the glimpse: see runGlimpse
     const cid = st.codeClusters[ci]?.cid;
     setOpenCards((old) => new Set(old).add(ci));
@@ -1883,13 +1909,13 @@ function MapInner() {
         s2.setCodeClusters(s2.codeClusters.map((c) =>
           (c.cid === cid ? { ...c, against, againstWeak: weak, againstCodes: [...c.codes] } : c)));
       s2.logAiCall({
-        at: new Date().toISOString(), model: st.ai.model, task: "against", pid: "(codebook)",
-        lines: inputs.length, redactions: countRed(inputs, red),
+        at: new Date().toISOString(), ...call,
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
       announce(weak ? "No real case against this merge." : "The case against this merge is on the card.");
       earcon.aiDone();
     } catch (e) {
+      useStore.getState().logAiIncomplete(e, call);
       const msg = e instanceof AiError ? e.message : (e as Error).message;
       announce(`Could not argue: ${msg}`, { assertive: true });
       earcon.error();
@@ -1924,61 +1950,26 @@ function MapInner() {
       ? `${rows.length} code${rows.length === 1 ? "" : "s"} with similar wording to ${source}`
       : `No codes share wording with ${source}. Ask the AI for semantic matches.`);
   }, [homeOf]);
-  // the paid second look: names and definitions only, one small request
-  const runSimilarAi = useCallback(async () => {
-    const cur = similar;
-    if (!cur) return;
-    const st = useStore.getState();
-    const key = getKey();
-    if (!key) { announce("No API key set. Add one in Settings → AI.", { assertive: true }); return; }
-    const red = redactor(st.ai.redactTerms);
-    const book = liveCodes(st.codebook)
-      .filter((n) => n !== cur.source)
-      .map((name) => ({ name, def: st.codebook[name]?.def ?? "" }));
-    // a few excerpts of the focus code sharpen the judgement; the rest of the
-    // book rides on names and definitions alone
-    const focus = { name: cur.source, def: st.codebook[cur.source]?.def ?? "", excerpts: [] as string[] };
-    const byCode: string[] = [];
-    for (const seg of st.segments) {
-      if (seg.status !== "accepted" || seg.code !== cur.source || !st.transcripts[seg.pid]) continue;
-      if (byCode.length >= 4) break;
-      const ex = segExcerpt(seg, st.transcripts[seg.pid].lines).excerpt;
-      if (ex) byCode.push(ex);
-    }
-    focus.excerpts = byCode;
-    setSimilar((s) => s && { ...s, ai: "busy" });
-    earcon.aiStart();
-    try {
-      const { matches, usage } = await findSimilarWithAi({
-        key, model: st.ai.model, focus, book, redaction: red,
-      });
-      st.logAiCall({
-        at: new Date().toISOString(), model: st.ai.model, task: "similar",
-        pid: `(similar to: ${cur.source})`, lines: book.length + 1,
-        redactions: red.count(focus.def) + focus.excerpts.reduce((n, e) => n + red.count(e), 0),
-        inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
-      });
-      setSimilar((s) => {
-        if (!s) return s;
-        // the AI's list leads; a local-only match keeps its place below
-        const seen = new Set(matches.map((m) => m.name));
-        const merged = [
-          ...matches.map((m) => ({ name: m.name, score: m.band === "very" ? 0.95 : 0.6, why: m.why, band: m.band })),
-          ...s.rows.filter((r) => !seen.has(r.name)),
-        ];
-        const ticked = new Set(s.ticked);
-        for (const m of matches) if (m.band === "very" && !homeOf(m.name)) ticked.add(m.name);
-        return { ...s, rows: merged, ticked, ai: "done", cost: usage.costUsd };
-      });
-      earcon.aiDone();
-      announce(`${matches.length} semantic match${matches.length === 1 ? "" : "es"} for ${cur.source}`);
-    } catch (e) {
-      const msg = e instanceof AiError ? e.message : (e as Error).message;
-      setSimilar((s) => s && { ...s, ai: "idle" });
-      earcon.error();
-      announce(`Find similar failed: ${msg}`, { assertive: true });
-    }
-  }, [similar, homeOf]);
+  // The paid second look is protected by the same full disclosure gate as the
+  // other AI assists. Its result still lands in the tethered map panel, where
+  // the researcher decides what (if anything) to do with it.
+  const openSimilarAi = useCallback(() => {
+    if (similarRequest) setSimilarGate(similarRequest);
+  }, [similarRequest]);
+  const landSimilarAi = useCallback((source: string, matches: SemanticMatch[], cost: number) => {
+    setSimilar((s) => {
+      if (!s || s.source !== source) return s;
+      // the AI's list leads; a local-only match keeps its place below
+      const seen = new Set(matches.map((m) => m.name));
+      const merged = [
+        ...matches.map((m) => ({ name: m.name, score: m.band === "very" ? 0.95 : 0.6, why: m.why, band: m.band })),
+        ...s.rows.filter((r) => !seen.has(r.name)),
+      ];
+      const ticked = new Set(s.ticked);
+      for (const m of matches) if (m.band === "very" && !homeOf(m.name)) ticked.add(m.name);
+      return { ...s, rows: merged, ticked, ai: "done", cost };
+    });
+  }, [homeOf]);
   // acting on the ticked rows: the source code always rides along, and any
   // code taken from another group or merge leaves it (one entry, undoable)
   const takeSimilar = useCallback((mode: "merge" | "group" | "area") => {
@@ -2122,20 +2113,23 @@ function MapInner() {
     const codes = focusInputs(sel).focus;
     if (!codes.length) return;
     const red = redactor(st.ai.redactTerms);
+    const call = {
+      model: st.ai.model, task: "areas", pid: `(name area: ${codes.length} codes)`,
+      lines: codes.length, redactions: countRed(codes, red),
+    };
     setAreaBusy(true);
     earcon.aiStart();
     announce("Asking for a name for this area…");
     try {
       const r = await nameArea({ key, model: st.ai.model, codes, redaction: red });
       st.logAiCall({
-        at: new Date().toISOString(), model: st.ai.model, task: "areas",
-        pid: `(name area: ${codes.length} codes)`, lines: codes.length,
-        redactions: codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
+        at: new Date().toISOString(), ...call,
         inTok: r.usage.inTok, outTok: r.usage.outTok, costUsd: +r.usage.costUsd.toFixed(5),
       });
       earcon.aiDone();
       makeArea(sel, r.name, r.about);
     } catch (e) {
+      useStore.getState().logAiIncomplete(e, call);
       earcon.error();
       announce(`Could not name the area: ${e instanceof Error ? e.message : String(e)}`, { assertive: true });
     } finally {
@@ -2150,6 +2144,11 @@ function MapInner() {
     const { focus, context } = focusInputs(codes);
     if (!focus.length || !context.length) { announce("Nothing to compare these against.", { assertive: true }); return; }
     const red = redactor(st.ai.redactTerms);
+    const inputs = [...focus, ...context];
+    const call = {
+      model: st.ai.model, task: "reconcile", pid: `(focus: ${focus.length} codes)`,
+      lines: inputs.length, redactions: countRed(inputs, red),
+    };
     setFocusBusy(true);
     earcon.aiStart();
     announce(`Asking where ${focus.length} code${focus.length === 1 ? "" : "s"} belong…`);
@@ -2159,10 +2158,7 @@ function MapInner() {
       const merged = mergeFocusResults(s2.codeClusters, s2.codePlan, r.plan, new Set(r.reviewed));
       s2.applyReconcilePlan(merged.clusters, merged.actions, false, "ai", st.ai.model);
       s2.logAiCall({
-        at: new Date().toISOString(), model: st.ai.model, task: "reconcile",
-        pid: `(focus: ${focus.length} codes)`, lines: focus.length + context.length,
-        redactions: [...focus, ...context].reduce((n, c) =>
-          n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
+        at: new Date().toISOString(), ...call,
         inTok: r.usage.inTok, outTok: r.usage.outTok, costUsd: +r.usage.costUsd.toFixed(5),
       });
       earcon.aiDone();
@@ -2189,6 +2185,7 @@ function MapInner() {
       announce(verdict + missed);
       if (nC) setViewOverride("reconcile");
     } catch (e) {
+      useStore.getState().logAiIncomplete(e, call);
       const msg = e instanceof AiError ? e.message : (e as Error).message;
       earcon.error();
       setFocusNote({ text: `That request failed: ${msg}`, cost: 0 });
@@ -2418,7 +2415,7 @@ function MapInner() {
     setSimilar(null);
     announce(`${pick.size} codes selected on the map`);
   }, [similar, rfSetNodes]);
-  runSimilarAiRef.current = runSimilarAi;
+  openSimilarAiRef.current = openSimilarAi;
   takeSimilarRef.current = takeSimilar;
   selectSimilarRef.current = selectSimilar;
 
@@ -2776,7 +2773,12 @@ function MapInner() {
       // clicking around the map must not dismiss them. Escape and its own ×
       // close it, like the halo's card.
     };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); setSimilar(null); } };
+    const key = (e: KeyboardEvent) => {
+      // A consent modal owns Escape while it is in front; closing the map panel
+      // underneath it would also throw away the result the approved run lands in.
+      if ((e.target as Element | null)?.closest?.(".about-backdrop")) return;
+      if (e.key === "Escape") { e.stopPropagation(); close(); setSimilar(null); }
+    };
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key, true); };
@@ -2991,6 +2993,11 @@ function MapInner() {
           </ReactFlow>
         )}
       </div>
+      {similarGate && (
+        <SimilarModal focus={similarGate.focus} book={similarGate.book}
+          onClose={() => setSimilarGate(null)}
+          onMatches={(matches, cost) => landSimilarAi(similarGate.source, matches, cost)} />
+      )}
       {topicAiOpen && (
         <GroupModal transient
           onClose={() => setTopicAiOpen(false)}

@@ -58,8 +58,9 @@ support in particular is **not** there yet.
   minimap, and "near-balance" speaker warnings on mixed excerpts.
 - **Save & continue** — export a `.qually.json` project (transcripts + codebook + corrections)
   and reopen it later, or export everything as CSVs in a zip.
-- **Private by default** — everything lives in your browser (localStorage). Nothing is
-  uploaded unless you add your own OpenAI key and approve a request, and each gate shows
+- **Private by default** — everything lives in your browser (project autosave uses
+  IndexedDB when available). Nothing is uploaded unless you add your own OpenAI key and
+  approve a request, and each gate shows
   you what is being sent before it goes.
 
 ## Input format

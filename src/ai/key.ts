@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-// The API key is deliberately NOT in the zustand store: the store is persisted
-// wholesale to localStorage and gets exported/inspected. Default is session-only
+// The API key is deliberately NOT in the zustand store: the store is autosaved
+// wholesale and gets exported/inspected. Default is session-only
 // (gone when the tab closes); "remember on this device" is an explicit choice.
 const K = "qually-openai-key";
 

@@ -153,6 +153,7 @@ const idbStorage: PersistStorage<unknown> = {
       // or blocked open) — same blank-forever failure as a rejection
       const v = await Promise.race([idbGet(key),
         new Promise((_, rej) => setTimeout(() => rej(new Error("IndexedDB read timed out")), 3000))]);
+      readFailed = false;
       if (v !== undefined) return v as StorageValue<unknown>;
     } catch {
       readFailed = true;
@@ -165,10 +166,18 @@ const idbStorage: PersistStorage<unknown> = {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as StorageValue<unknown>;
-      readFailed = false; // the legacy copy answered — nothing is hidden from us
+      // A legacy copy can keep the workspace usable, but it cannot prove a
+      // failed authoritative read was empty or older, so it does not reopen
+      // the write gate by itself.
       idbSet(key, parsed).then(() => localStorage.removeItem(key)).catch(() => { /* keep the legacy copy */ });
       return parsed;
-    } catch { readFailed = true; return null; }
+    } catch {
+      // localStorage is only an optional migration source. If the authoritative
+      // IndexedDB read succeeded empty, a blocked legacy probe must not turn a
+      // healthy first run into a session whose write gate never opens. When the
+      // IndexedDB read failed, `readFailed` is already true above.
+      return null;
+    }
   },
   setItem: (key, value) => {
     if (!hydrated) return;

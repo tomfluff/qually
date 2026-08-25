@@ -394,6 +394,22 @@ describe("plan strip", () => {
 });
 
 describe("find similar (semantic pass)", () => {
+  it("renders and counts redactions across the whole semantic payload", async () => {
+    const { similarPayload } = await import("./similar");
+    const payload = similarPayload(
+      { name: "hard to read", def: "Small labels", excerpts: ["Ann leaned closer"] },
+      [
+        { name: "needs zoom", def: "Ann enlarges the interface" },
+        { name: "fatigue", def: "Eyes feel tired" },
+      ],
+      redactor(["Ann"]),
+    );
+
+    expect(payload.text).toContain("- [REDACTED_1] leaned closer");
+    expect(payload.text).toContain("- needs zoom: [REDACTED_1] enlarges the interface");
+    expect(payload.redactions).toBe(2);
+  });
+
   it("keeps only real codes, drops the focus code and duplicates, bands unknown values down", async () => {
     const { sanitizeMatches } = await import("./similar");
     const out = sanitizeMatches("difficult to see", ["small text", "needs zoom", "belonging"], [

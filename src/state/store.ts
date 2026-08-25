@@ -237,8 +237,8 @@ export interface SegUpdate {
   to: { status: string; notes: string };
 }
 
-// AI settings. The API key is NOT here — the store is persisted wholesale, so the
-// key lives in ai/key.ts (session-only by default). See docs in that file.
+// AI settings. The API key is NOT here — the project state is autosaved and exported,
+// so the key lives in ai/key.ts (session-only by default). See docs in that file.
 export interface Ai {
   model: string;
   redactTerms: string[]; // participant names / orgs / places, pseudonymized before sending
@@ -399,7 +399,7 @@ export interface State {
   pendingSegUpdates: SegUpdate[];  // status/notes overwrites awaiting consent
   pendingImportSign: { sids: number[] } | null; // just-imported (default) rows: "whose are these?"
   pendingCoderAsk: boolean; // a transcript is loaded but the coder is still (default): "who's coding?"
-  saveFailed: boolean; // localStorage write failed (quota) — autosave is NOT happening
+  saveFailed: boolean; // browser persistence write failed — autosave is NOT happening
 
   importFiles: (files: FileList | File[]) => Promise<void>;
   newProject: () => void;

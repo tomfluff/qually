@@ -43,16 +43,29 @@ const SCHEMA = {
   additionalProperties: false,
 } as const;
 
+/** One construction for the bytes sent and the substitutions they contain.
+    The consent gate and provenance log consume the count beside the rendered
+    text, so adding a field to this request cannot leave its accounting behind. */
+export const similarPayload = (
+  focus: MergeCodeInput, book: { name: string; def: string }[], r: Redaction,
+): { text: string; redactions: number } => {
+  let redactions = 0;
+  const redact = (text: string) => {
+    redactions += r.count(text);
+    return r.redact(text);
+  };
+  const ex = focus.excerpts.length
+    ? `\nExcerpts:\n${focus.excerpts.map((e) => `- ${redact(e)}`).join("\n")}`
+    : "";
+  const text = `FOCUS CODE:\n${focus.name}${focus.def ? `\nDefinition: ${redact(focus.def)}` : ""}${ex}\n\n`
+    + `CODEBOOK (names and definitions only):\n`
+    + book.map((c) => `- ${c.name}${c.def ? `: ${redact(c.def)}` : ""}`).join("\n");
+  return { text, redactions };
+};
+
 export const renderSimilarPayload = (
   focus: MergeCodeInput, book: { name: string; def: string }[], r: Redaction,
-): string => {
-  const ex = focus.excerpts.length
-    ? `\nExcerpts:\n${focus.excerpts.map((e) => `- ${r.redact(e)}`).join("\n")}`
-    : "";
-  return `FOCUS CODE:\n${focus.name}${focus.def ? `\nDefinition: ${r.redact(focus.def)}` : ""}${ex}\n\n`
-    + `CODEBOOK (names and definitions only):\n`
-    + book.map((c) => `- ${c.name}${c.def ? `: ${r.redact(c.def)}` : ""}`).join("\n");
-};
+): string => similarPayload(focus, book, r).text;
 
 export const estimateSimilarTokens = (
   focus: MergeCodeInput, book: { name: string; def: string }[], r: Redaction,
@@ -67,7 +80,7 @@ export async function findSimilarWithAi(opts: {
     key: opts.key,
     model: opts.model,
     system: SYSTEM,
-    user: renderSimilarPayload(opts.focus, opts.book, opts.redaction),
+    user: similarPayload(opts.focus, opts.book, opts.redaction).text,
     schemaName: "find_similar",
     schema: SCHEMA,
     signal: opts.signal,
