@@ -344,6 +344,9 @@
 .stretchLabels .stFloatLabel { position:absolute; writing-mode:vertical-rl; user-select:none;
   font-weight:700; letter-spacing:.04em; text-transform:uppercase;
   white-space:nowrap; line-height:1; pointer-events:auto;
+  /* it opens a menu on a plain click, so it has to look like something you
+     can click — a tab you can only discover by right-clicking is decoration */
+  cursor:pointer;
   /* the booklet tab: solid pill in the lane's colour, rounded on the left,
      SQUARE on the right where it welds to its band */
   border-radius:99px 0 0 99px; padding:9px 0; text-align:center;
@@ -393,3 +396,8 @@
 .stretchMenu .stCandBtns { display:flex; gap:6px; }
 .stretchMenu .stCandBtns .btn { flex:1; justify-content:center; }
 .stretchMenu .stBy { color:var(--muted); font-size:.85em; }
+/* the focus menu carries two lenses now (speaker, section) — a quiet head
+   apiece, so a list of names and a list of sections cannot be read as one list */
+.focusmenu .focushead { font-size:.72em; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); font-weight:700; padding:6px 8px 3px; }
+.focusmenu .focushead:not(:first-child) { border-top:1px solid var(--line); margin-top:4px; }

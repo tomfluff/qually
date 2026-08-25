@@ -351,3 +351,49 @@ test("a project holding only a study brief is still stamped for the build that u
   expect(p.version).toBe(2);
   expect(p.studyBrief[""]).toContain("phase");
 });
+
+test("session events ride with the transcript, anchored to the line they followed", async () => {
+  const { renderSections } = await import("./ai/sections");
+  const { redactor } = await import("./ai/redact");
+  const red = redactor(["Ann Lee"]);
+  const lines = [
+    { id: 1, ts: "00:00:00", speaker: "R", text: "hello" },
+    { id: 2, ts: "00:05:00", speaker: "P", text: "mid" },
+    { id: 3, ts: "00:09:00", speaker: "P", text: "later" },
+  ];
+  const brief = "- phase: task 1";
+  const mk = (mid: number, t: number, code: string, label: string) =>
+    ({ mid, pid: "P09", event: "marker", code, label, t, detail: "", raw: {} });
+  const out = renderSections(lines, parseBrief(brief), brief, red, [
+    mk(1, 320, "TASK_START", "Ann Lee starts task 1"),  // 5:20 → after line 2
+    mk(2, 10, "recording_start", ""),                   // 0:10 → after line 1
+  ]);
+  // sorted by time, each placed on the last line that had started
+  const events = out.split("EVENTS")[1].split("TRANSCRIPT")[0];
+  expect(events).toContain("after line 1\trecording_start");
+  expect(events).toContain("after line 2\tTASK_START — [REDACTED_1] starts task 1");
+  expect(events).not.toContain("Ann Lee"); // the researcher's note is prose, and prose names people
+});
+
+test("no events, no EVENTS block — the payload says only what there is", async () => {
+  const { renderSections } = await import("./ai/sections");
+  const { redactor } = await import("./ai/redact");
+  const brief = "- phase: task 1";
+  const out = renderSections([{ id: 1, ts: "", speaker: "P", text: "x" }],
+    parseBrief(brief), brief, redactor([]), []);
+  expect(out).not.toContain("EVENTS");
+});
+
+test("a run that was dispatched and abandoned is in the log, and says which", () => {
+  const st = useStore.getState();
+  const before = st.aiLog.length;
+  st.logAiIncomplete(Object.assign(new Error("x"), { name: "AbortError" }),
+    { model: "gpt-5.6-luna", task: "sections", pid: "P09", lines: 4, redactions: 0 });
+  st.logAiIncomplete(new Error("500"),
+    { model: "gpt-5.6-luna", task: "scan", pid: "P09", lines: 4, redactions: 0 });
+  const log = useStore.getState().aiLog.slice(before);
+  expect(log.map((c) => c.outcome)).toEqual(["aborted", "failed"]);
+  // the API reported no usage; the lines left anyway, which is the point
+  expect(log.every((c) => c.inTok === 0 && c.costUsd === 0 && c.lines === 4)).toBe(true);
+  expect(useStore.getState().exportAiLog()).toContain("aborted");
+});

@@ -223,3 +223,7 @@
 .ai-vocab svg { flex:none; color:var(--accent); }
 .ai-briefsave { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 2px; }
 .ai-briefsave .btn { font-size:.9em; }
+/* the gate saying it changed a label's spelling to match the project's own —
+   a note under the echo, not a warning: nothing is wrong, but the researcher
+   typed one thing and will see another, and that is owed an explanation */
+.ai-respell { margin-top:5px; color:var(--fg-dim); font-size:.9em; line-height:1.45; }

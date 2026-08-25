@@ -86,6 +86,9 @@ export function MergeModal({ onProposals, onClose }: {
         ? `${proposals.length} possible duplicate${proposals.length === 1 ? "" : "s"} to review.`
         : "No near-duplicate codes found.");
     } catch (e) {
+      // the request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete)
+      useStore.getState().logAiIncomplete(e, { model: model.id, task: "merge", pid: "(codebook)", lines: codes.length, redactions });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

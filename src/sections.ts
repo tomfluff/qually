@@ -116,6 +116,25 @@ export function parseBrief(text: string, existing: Pick<Stretch, "dim" | "value"
 export const vocabSays = (v: Vocab) =>
   v.axes.map((a) => `${a.dim} → ${a.values.join(" / ")}`).join(" · ");
 
+/** Where the stored spelling differs from what was typed, because the project
+    already uses that label another way. The gate says this out loud: a
+    researcher who typed "Condition: Baseline" and sees "condition → baseline"
+    is owed the reason, which is that their project already has a `condition`
+    axis and a second one differing only in case would be a separate gutter
+    column of the same colour meaning the same thing. */
+export function vocabRespelled(text: string, existing: Pick<Stretch, "dim" | "value">[] = []): string[] {
+  const bare = parseBrief(text);          // what the brief says on its own
+  const real = parseBrief(text, existing); // what the project makes of it
+  const out: string[] = [];
+  bare.axes.forEach((a, i) => {
+    const b = real.axes[i];
+    if (!b) return;
+    if (a.dim !== b.dim) out.push(`${a.dim} → ${b.dim}`);
+    a.values.forEach((v, k) => { if (b.values[k] && v !== b.values[k]) out.push(`${v} → ${b.values[k]}`); });
+  });
+  return out;
+}
+
 /** The prose half: everything that is NOT a declaration, so the brief's
     context reaches the model without the axis list being said twice. */
 export const briefProse = (text: string) =>

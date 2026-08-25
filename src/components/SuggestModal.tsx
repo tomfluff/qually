@@ -180,6 +180,9 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
       earcon.aiDone();
       announce(`Suggestions complete: ${added} candidate coding${added === 1 ? "" : "s"} added.`);
     } catch (e) {
+      // the request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete)
+      useStore.getState().logAiIncomplete(e, { model: model.id, task: "suggest", pid, lines: lines.length, redactions });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

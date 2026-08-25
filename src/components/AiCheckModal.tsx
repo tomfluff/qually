@@ -149,6 +149,10 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
         ? "AI scan complete. Nothing marked."
         : `AI scan complete: ${errors} possible transcription error${errors === 1 ? "" : "s"}, ${notices} observation${notices === 1 ? "" : "s"}.`);
     } catch (e) {
+      // the request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete)
+      useStore.getState().logAiIncomplete(e, { model: model.id, task: `scan:${[...lenses].sort().join("+")}`, pid,
+        lines: lines.length, redactions });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

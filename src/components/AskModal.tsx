@@ -102,6 +102,9 @@ export function AskModal({ question, scope, onAsked, onClose }: {
       onAsked();
       onClose();
     } catch (e) {
+      // the request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete)
+      useStore.getState().logAiIncomplete(e, { model: model.id, task: "ask", pid: "(corpus)", lines: items, redactions });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

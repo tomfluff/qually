@@ -156,6 +156,11 @@ export interface Ui {
   // isolate one speaker's dialogue, PER TRANSCRIPT (focus is a lens on a study
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
+  /** Focus one SECTION, per transcript, the way speakerFocus focuses one
+      speaker — "show me the second task". Independent of it and combinable:
+      a row is dimmed or collapsed if either lens excludes it, so "the
+      participant, during task 2" is two picks rather than a new mode. */
+  sectionFocus: Record<string, { dim: string; value: string }>;
   // which Assist-tab panel is showing — chosen from the tab's own menu
   assistPanel: "observations" | "merge" | "suggest" | "sections" | "summary" | "describe" | "ask" | "decisions" | "tail";
   // what the thin-tail queue counts as thin (1, 2 or 3 excerpts) — the
@@ -448,6 +453,9 @@ export interface State {
   dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
   applyFix: (pid: string, id: number, quote: string, fix: string) => void;
   logAiCall: (call: AiCall) => void;
+  /** A run that reached OpenAI and did not come back — aborted, or failed after
+      dispatch. The transcript went either way, so the log records it. */
+  logAiIncomplete: (e: unknown, c: Pick<AiCall, "model" | "task" | "pid" | "lines" | "redactions">) => void;
   exportAiLog: () => string;
   logDecision: (d: Omit<Decision, "at" | "undone"> & { at?: string }) => void;
   exportLedger: () => string;
@@ -950,7 +958,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, stretchColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, sectionFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, stretchColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
@@ -970,7 +978,7 @@ export const useStore = create<State>()(
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
-          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {}, stretchColors: {} },
+          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, sectionFocus: {}, markerColors: {}, stretchColors: {} },
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
           jump: null, search: NO_SEARCH,
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
@@ -1665,6 +1673,15 @@ export const useStore = create<State>()(
       },
 
       logAiCall: (call) => set({ aiLog: [...get().aiLog, call] }),
+      // One helper for every run's catch block, so "every AI request made" is
+      // true of ai-provenance.csv rather than nearly true. Usage is zero because
+      // the API reported none — the money may still have been spent, and the
+      // data certainly left. An AbortError is a cancelled run, not a failure,
+      // and the two are worth telling apart in an appendix.
+      logAiIncomplete: (e, c) => get().logAiCall({
+        at: new Date().toISOString(), ...c, inTok: 0, outTok: 0, costUsd: 0,
+        outcome: (e as Error)?.name === "AbortError" ? "aborted" : "failed",
+      }),
 
       // Append-only, and deliberately NOT undoable: see Decision. Called from
       // inside the codebook actions themselves rather than from every caller,
@@ -2787,6 +2804,7 @@ export const useStore = create<State>()(
         s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
         s.ui.assistPanel ??= "observations";
         s.studyBrief ??= {}; // added with F7; a workspace saved before it has none
+        s.ui.sectionFocus ??= {};
         s.ui.tailLimit ??= 1;
         s.ui.stretchBand ??= "sm";
         s.ui.stretchLabel ??= "md";

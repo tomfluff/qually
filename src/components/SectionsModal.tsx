@@ -13,7 +13,7 @@ import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { parseBrief, vocabSays, briefProse } from "../sections";
+import { parseBrief, vocabSays, vocabRespelled, briefProse } from "../sections";
 import { proposeSections, estimateSectionsTokens, renderSections, SECTIONS_TOKEN_CAP,
   SECTIONS_MAX, SECTION_OUT_TOKENS } from "../ai/sections";
 import { announce } from "../announce";
@@ -33,6 +33,12 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   const [picked, setPicked] = useState(initial ?? "");
   const pid = picked;
   const lines = useMemo(() => transcripts[pid]?.lines ?? [], [transcripts, pid]);
+  // This transcript's session events ride along: a researcher who logged
+  // "task 2 starts" has already said where a boundary is, more reliably than
+  // the talk around it. Their labels are the researcher's own words, so they
+  // are redacted and counted like any other prose in the payload.
+  const allMarkers = useStore((s) => s.markers);
+  const markers = useMemo(() => allMarkers.filter((m) => m.pid === pid), [allMarkers, pid]);
 
   // The brief this run will use: the transcript's own override if it has one,
   // otherwise the study default. Edits here apply to THIS RUN only — a run must
@@ -78,25 +84,27 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   // gutter column away from a hand-marked "Phase".
   const vocab = useMemo(() => parseBrief(brief, stretches), [brief, stretches]);
   const declared = vocab.axes.reduce((n, a) => n + a.values.length, 0);
+  const respelled = useMemo(() => vocabRespelled(brief, stretches), [brief, stretches]);
 
   const inTok = useMemo(
-    () => (lines.length && declared ? estimateSectionsTokens(lines, vocab, brief, red) : 0),
-    [lines, vocab, brief, red, declared]);
+    () => (lines.length && declared ? estimateSectionsTokens(lines, vocab, brief, red, markers) : 0),
+    [lines, vocab, brief, red, declared, markers]);
   const tooBig = inTok > SECTIONS_TOKEN_CAP;
   // the brief's prose is part of the payload and is redacted too (see
   // renderSections), so a name caught there belongs in this count — it is what
   // the facts row and the AI log claim was substituted
   const redactions = useMemo(
     () => lines.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
-      + red.count(briefProse(brief)),
-    [lines, red, brief]);
+      + red.count(briefProse(brief))
+      + markers.reduce((n, m) => n + red.count(m.label) + red.count(m.code) + red.count(m.event), 0),
+    [lines, red, brief, markers]);
   // Priced against the schema's OWN ceiling, not against a guess at how many
   // sections the model will find: the reply is capped at SECTIONS_MAX, so this
   // is the worst the output can cost rather than the likely case. A pre-flight
   // price may overstate; it must never understate.
   const estCost = costOf(model, inTok, SECTIONS_MAX * SECTION_OUT_TOKENS);
   const preview = lines.length && declared
-    ? renderSections(lines.slice(0, 6), vocab, brief, red) : "";
+    ? renderSections(lines.slice(0, 6), vocab, brief, red, markers.slice(0, 4)) : "";
 
   const choices = useMemo(() => {
     if (!choose) return [];
@@ -125,7 +133,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
     const by = `AI · ${model.name}`;
     try {
       const { sections, usage } = await proposeSections({
-        key, model: model.id, lines, vocab, brief, redaction: red,
+        key, model: model.id, lines, vocab, brief, redaction: red, markers,
         existing: useStore.getState().stretches, pid, signal: abort.current.signal,
       });
       const added = useStore.getState().landSections(pid, sections, by);
@@ -149,13 +157,10 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
       // being wrong in the one direction that matters — so an aborted or failed
       // run is logged too, with the usage the API never reported (zero) and the
       // outcome that explains why.
-      const aborted = (e as Error).name === "AbortError";
-      useStore.getState().logAiCall({
-        at: new Date().toISOString(), model: model.id, task: "sections", pid,
-        lines: lines.length, redactions, inTok: 0, outTok: 0, costUsd: 0,
-        outcome: aborted ? "aborted" : "failed",
+      useStore.getState().logAiIncomplete(e, {
+        model: model.id, task: "sections", pid, lines: lines.length, redactions,
       });
-      if (aborted) return;
+      if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
       earcon.error();
@@ -194,7 +199,9 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
             </p>
             {ready && (
               <div className="ai-warn">
-                <b>This sends all {lines.length} lines of “{pid}” to OpenAI in one request.</b>{" "}
+                <b>This sends all {lines.length} lines of “{pid}”
+                {markers.length > 0 && <> and its {markers.length} session event{markers.length === 1 ? "" : "s"}</>}
+                {" "}to OpenAI in one request.</b>{" "}
                 Interview transcripts are participant data — make sure this is allowed by your
                 consent form and ethics approval.
               </div>
@@ -237,7 +244,17 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
             {declared > 0 ? (
               <div className="ai-vocab" role="status">
                 <Icon name="check" size={14} />
-                <div><b>These labels, and no others:</b> {vocabSays(vocab)}</div>
+                <div>
+                  <b>These labels, and no others:</b> {vocabSays(vocab)}
+                  {respelled.length > 0 && (
+                    // said, not hidden: silently restyling what the researcher
+                    // just typed is the kind of helpfulness that reads as a bug
+                    <div className="ai-respell">
+                      Written to match the spelling your project already uses: {respelled.join(", ")}.
+                      To keep a new label distinct, give it a name that differs by more than case.
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="ai-warn" role="alert">
@@ -304,6 +321,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
                 </div>
                 <div className="ai-facts">
                   <span>lines <b>{lines.length}</b></span>
+                  {markers.length > 0 && <span>events <b>{markers.length}</b></span>}
                   <span>labels <b>{declared}</b></span>
                   <span>requests <b>1</b></span>
                   <span>redacted <b>{redactions}</b></span>

@@ -13,9 +13,12 @@
 // the guard.
 import type { Line } from "../state/store";
 import { callJson, estimateTokens, type Usage } from "./openai";
+import { tsToSec } from "../video/seek";
 import type { Redaction } from "./redact";
 import { sanitizeSections, briefProse, type SectionProposal, type Vocab } from "../sections";
 import type { Stretch } from "../stretches";
+import type { Marker } from "../markers";
+import { markerKey } from "../markers";
 
 /** The most estimated input tokens one run may send. callJson has no context
     preflight, so without a ceiling an oversized transcript becomes a failed API
@@ -45,24 +48,54 @@ Rules:
 - Prefer few, long sections over many short ones. You are finding the shape of the session, not annotating turns.
 - Every section carries a "why": ONE short sentence naming what in those lines marks the boundary — what the moderator says, what the participant starts doing. Quote a few words where that is the clearest answer. This is what the researcher reads to accept or reject you, so make it specific to these lines rather than restating the label.
 - If the transcript does not support a label, do not use it. An empty list is a fine answer: the session may not have the shape the brief expects, and saying so is more useful than guessing.
-- Text like [REDACTED_1] is a removed identifier; treat it as an opaque token.`;
+- Text like [REDACTED_1] is a removed identifier; treat it as an opaque token.
+- An EVENTS block, when present, lists things the researcher or the recorder logged during the session, each placed after the transcript line it followed. These are the strongest evidence you have about where a part of the session begins or ends — a logged task start says more than the talk around it. Use them; do not treat them as sections in themselves, and do not invent one that is not listed.`;
 
 /** Exactly what one run sends. The declared labels go PLAIN — they are the
     researcher's structural vocabulary, not participant speech, and a redacted
     label would come back as [REDACTED_n] and match nothing (the same split F3
     makes between code names and definitions). The brief's prose IS redacted:
     it is about the study, and study prose names people. */
-export function renderSections(lines: Line[], vocab: Vocab, brief: string, r: Redaction): string {
+export function renderSections(
+  lines: Line[], vocab: Vocab, brief: string, r: Redaction, markers: Marker[] = [],
+): string {
   const labels = vocab.axes.map((a) => `- ${a.dim}: ${a.values.join(", ")}`).join("\n");
   const prose = briefProse(brief);
   const body = lines.map((l) => `${l.id}\t${r.redact(l.speaker)}\t${r.redact(l.text)}`).join("\n");
   return `LABELS (the only ones that exist):\n${labels}\n\n`
     + (prose ? `BRIEF (the researcher's own words about this study):\n${r.redact(prose)}\n\n` : "")
+    + (markers.length ? `EVENTS (logged during the session, each after the line it followed):\n${renderEvents(lines, markers, r)}\n\n` : "")
     + `TRANSCRIPT:\n${body}`;
 }
 
-export const estimateSectionsTokens = (lines: Line[], vocab: Vocab, brief: string, r: Redaction) =>
-  estimateTokens(SYSTEM) + estimateTokens(renderSections(lines, vocab, brief, r));
+/** The session's own log, placed against the transcript. A researcher who
+    marked "task 2 starts" at 12:04 has already told the model where a boundary
+    is — far more reliably than the talk around it — and sending the transcript
+    without it was throwing away the best evidence in the room.
+    Each event is anchored to the LAST line that began at or before it, so the
+    model can name a line id rather than a timestamp; the labels are the
+    researcher's own words, so they go through the redactor like any prose. */
+function renderEvents(lines: Line[], markers: Marker[], r: Redaction): string {
+  // line starts in seconds, ascending — ids are already sorted (rowsToLines)
+  const at = lines.map((l) => ({ id: l.id, s: l.ts.trim() ? tsToSec(l.ts) : null }));
+  const after = (t: number) => {
+    let id: number | null = null;
+    for (const x of at) { if (x.s !== null && x.s <= t) id = x.id; else if (x.s !== null) break; }
+    return id;
+  };
+  return [...markers].sort((a, b) => a.t - b.t).map((m) => {
+    const id = after(m.t);
+    const name = markerKey(m);
+    const note = m.label.trim() && m.label.trim() !== name ? ` — ${r.redact(m.label.trim())}` : "";
+    // an untimed transcript cannot place an event on a line; the event still
+    // carries its own clock, which is better than dropping it
+    return `${id === null ? "?" : `after line ${id}`}\t${r.redact(name)}${note}`;
+  }).join("\n");
+}
+
+export const estimateSectionsTokens = (
+  lines: Line[], vocab: Vocab, brief: string, r: Redaction, markers: Marker[] = [],
+) => estimateTokens(SYSTEM) + estimateTokens(renderSections(lines, vocab, brief, r, markers));
 
 const SCHEMA = {
   type: "object",
@@ -94,7 +127,8 @@ const SCHEMA = {
     dropped before the researcher ever sees it. */
 export async function proposeSections(opts: {
   key: string; model: string; lines: Line[]; vocab: Vocab; brief: string;
-  redaction: Redaction; existing: Stretch[]; pid: string; signal?: AbortSignal;
+  redaction: Redaction; existing: Stretch[]; pid: string;
+  markers?: Marker[]; signal?: AbortSignal;
 }): Promise<{ sections: SectionProposal[]; usage: Usage }> {
   const { data, usage } = await callJson<{
     sections: { dim: string; value: string; line_start: number; line_end: number; why: string }[];
@@ -102,7 +136,7 @@ export async function proposeSections(opts: {
     key: opts.key,
     model: opts.model,
     system: SYSTEM,
-    user: renderSections(opts.lines, opts.vocab, opts.brief, opts.redaction),
+    user: renderSections(opts.lines, opts.vocab, opts.brief, opts.redaction, opts.markers ?? []),
     schemaName: "propose_sections",
     schema: SCHEMA,
     signal: opts.signal,

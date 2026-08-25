@@ -96,6 +96,9 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
         ? `${groups.length} ${transient ? "area" : "similarity group"}${groups.length === 1 ? "" : "s"} laid out on the map.`
         : `No ${transient ? "areas" : "similarity groups"} stood out.`);
     } catch (e) {
+      // the request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete)
+      useStore.getState().logAiIncomplete(e, { model: model.id, task: "group", pid: "(codebook)", lines: codes.length, redactions });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

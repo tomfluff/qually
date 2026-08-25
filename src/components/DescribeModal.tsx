@@ -140,6 +140,9 @@ export function DescribeModal({ initial, onClose }: {
         ? `${names.length} definition${names.length === 1 ? "" : "s"} written.`
         : "The model returned no definitions.");
     } catch (e) {
+      // the request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete)
+      useStore.getState().logAiIncomplete(e, { model: model.id, task: "describe", pid: "(codebook)", lines: sent.length, redactions });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

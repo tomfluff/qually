@@ -1125,7 +1125,7 @@ function SectionsSide({ onRun }: { onRun: (pid: string) => void }) {
           in every state, a row's sparkle just opens it on that transcript. */}
       <button className="btn groundBtn" onClick={() => onRun("")}
         title="Pick a transcript and let the AI propose its sections (sends it to OpenAI after your approval)">
-        <Icon name="bookmark" size={15} /> AI section marking
+        <Icon name="sparkle" size={15} /> AI section marking
       </button>
       <ClearSections />
       {pids.length === 0 ? (

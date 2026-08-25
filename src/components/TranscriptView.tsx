@@ -220,8 +220,12 @@ export function TranscriptView() {
       evidence: list.filter(isEvidence) };
   }, [allStretches, active, stretchBand, stretchLabel, stretchColors, dark]);
   const [stretchMenu, setStretchMenu] = useState<{ x: number; y: number; start: number; end: number; addAfter: Group } | null>(null);
-  // right-click on a label pill: edit/recolour/remove THAT stretch. Delegated
-  // from the overlay — the pills are imperative DOM, not React children.
+  // Click a label pill to act on THAT stretch — accept or reject it while it is
+  // a proposal, edit/recolour/remove once it is a mark. A plain LEFT click,
+  // because a pill is a control the researcher can see: making them find the
+  // right-click menu on a 13px tab was hiding the verdict behind a gesture, and
+  // right-click stays wired for the muscle memory. Delegated from the overlay —
+  // the pills are imperative DOM, not React children.
   const [pillMenu, setPillMenu] = useState<{ x: number; y: number; si: number } | null>(null);
   useEffect(() => {
     const ov = stretchOvRef.current;
@@ -230,6 +234,15 @@ export function TranscriptView() {
       const pill = (e.target as HTMLElement).closest?.(".stFloatLabel, .stGrip") as HTMLElement | null;
       if (!pill?.dataset.si) return;
       e.preventDefault();
+      const me = e as globalThis.MouseEvent;
+      setPillMenu({ x: me.clientX, y: me.clientY, si: +pill.dataset.si });
+    };
+    // the same menu on a left click of the PILL only — a grip's left button is
+    // the drag that moves the stretch's end, and must stay that
+    const onClick = (e: Event) => {
+      const pill = (e.target as HTMLElement).closest?.(".stFloatLabel") as HTMLElement | null;
+      if (!pill?.dataset.si || (e as globalThis.MouseEvent).button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
       const me = e as globalThis.MouseEvent;
       setPillMenu({ x: me.clientX, y: me.clientY, si: +pill.dataset.si });
     };
@@ -268,8 +281,13 @@ export function TranscriptView() {
       document.addEventListener("mouseup", up);
     };
     ov.addEventListener("contextmenu", onCtx);
+    ov.addEventListener("click", onClick);
     ov.addEventListener("mousedown", onDown);
-    return () => { ov.removeEventListener("contextmenu", onCtx); ov.removeEventListener("mousedown", onDown); };
+    return () => {
+      ov.removeEventListener("contextmenu", onCtx);
+      ov.removeEventListener("click", onClick);
+      ov.removeEventListener("mousedown", onDown);
+    };
   }, [active]);
   // The sticky labels: a stretch's name rides the top of the viewport while
   // you are inside it and hands off where the next stretch begins — computed
@@ -374,7 +392,9 @@ export function TranscriptView() {
       const el = document.createElement("span");
       el.className = "stFloatLabel" + (st.status === "candidate" ? " stCand" : "");
       el.textContent = st.value;
-      el.title = `${st.dim}: ${st.value} · lines ${st.start}–${st.end}`;
+      el.title = st.status === "candidate"
+        ? `Proposed: ${st.dim}: ${st.value} · lines ${st.start}–${st.end} — click to accept or reject`
+        : `${st.dim}: ${st.value} · lines ${st.start}–${st.end} — click to edit`;
       const c = stretchColorOf(st.value, ctx.colors, ctx.dark);
       el.style.cssText = `left:${baseX + ctx.leadIn + col * ctx.colW}px;top:${top}px;` +
         `font-size:${ctx.labelPx}px;background:${c};color:${inkOn(c)};width:${ctx.pillW}px;`;
@@ -538,6 +558,24 @@ export function TranscriptView() {
   const focusActive = useMemo(
     () => focusName && groups.some((g) => g.speaker.trim() === focusName) ? focusName : null,
     [groups, focusName]);
+  // The section lens, the same shape as the speaker one: the spans of THIS
+  // transcript carrying the focused label, EVIDENCE only — a lens built out of
+  // proposals nobody has judged would be showing you the model's guess about
+  // where you are. A label that no longer exists here (a re-import, a relabel)
+  // is ignored rather than dimming the whole file.
+  const sectionFocus = useStore((s) => s.ui.sectionFocus);
+  const sectionSpans = useMemo(() => {
+    const f = sectionFocus[active];
+    if (!f) return null;
+    const spans = evidence(allStretches)
+      .filter((x) => x.pid === active && x.dim === f.dim && x.value === f.value)
+      .map((x) => [x.start, x.end] as [number, number]);
+    return spans.length ? spans : null;
+  }, [sectionFocus, active, allStretches]);
+  // a group is inside the lens if ANY of its lines is
+  const inSection = useCallback((ids: number[]) =>
+    !sectionSpans || ids.some((id) => sectionSpans.some(([a, b]) => id >= a && id <= b)),
+  [sectionSpans]);
 
   // Session events, interleaved BY TIME (see markers.ts / useMarkers): each one
   // renders immediately before the first line that starts after it, so reading down
@@ -1078,7 +1116,7 @@ export function TranscriptView() {
               key={`g${it.g.startId}`}
               group={it.g}
               selected={it.g.ids.some((id) => selLines?.has(id))}
-              spkOff={focusActive && focusActive !== it.g.speaker.trim()
+              spkOff={(focusActive && focusActive !== it.g.speaker.trim()) || !inSection(it.g.ids)
                 ? (focusDim ? " spk-off-dim" : "") + (focusCollapse ? " spk-off-collapse" : "")
                 : ""}
               cols={cols}
@@ -1583,6 +1621,37 @@ function StretchPillMenu({ x, y, si, onClose }: {
     onClose();
   };
   const cur = stretchColorOf(st.value, stColors, dark);
+  // A CANDIDATE's pill answers the only question worth asking about it: yes or
+  // no. Relabelling, recolouring and removing are all things you do to a mark
+  // you have accepted — offering them first would invite editing a proposal
+  // into shape rather than judging it, and Remove in particular forgets the
+  // rejection the next run needs to remember.
+  if (st.status === "candidate") {
+    return (
+      <div ref={ref} className="ctxmenu stretchMenu" role="dialog"
+        aria-label={`Proposed section ${st.dim}: ${st.value}, lines ${st.start} to ${st.end}`}
+        onKeyDown={arrows} style={{ left: x, top: y, fontSize: fs }}>
+        <div className="ctxhead">{st.dim}: {st.value} <span className="stRange">{st.start}–{st.end}</span></div>
+        <div className="stCandRow" style={{ border: "none", background: "none", padding: 0 }}>
+          {st.why && <div className="stWhy">{st.why}</div>}
+          <div className="stCandBtns">
+            <button className="btn primary" onClick={() => {
+              useStore.getState().setStretchStatus(si, "accepted");
+              announce(`Accepted ${st.dim}: ${st.value}, lines ${st.start} to ${st.end}`);
+              onClose();
+            }}>Accept</button>
+            <button className="btn" title="Not this — and do not propose it again"
+              onClick={() => {
+                useStore.getState().setStretchStatus(si, "rejected");
+                announce(`Rejected ${st.dim}: ${st.value}, lines ${st.start} to ${st.end}`);
+                onClose();
+              }}>Reject</button>
+          </div>
+          {st.proposedBy && <div className="stBy">{st.proposedBy}</div>}
+        </div>
+      </div>
+    );
+  }
   return (
     <div ref={ref} className="ctxmenu stretchMenu" role="dialog" aria-label={`${st.dim}: ${st.value}`}
       onKeyDown={arrows} style={{ left: x, top: y, fontSize: fs }}>
@@ -1842,10 +1911,12 @@ function measureSpk(labels: string[], fontSize: number): string {
   return `${Math.min(Math.ceil(w) + 13, chip * 14)}px`; // +13 = the chip's 6px side padding, +1 for rounding
 }
 
-// Focus one speaker's dialogue — a floating target button at the transcript's
+// Focus what you are reading — a floating target button at the transcript's
 // bottom right (the eye-menu pattern, mirrored to the bottom). PER TRANSCRIPT:
-// focus is a lens on a study file, not a global. Only appears when the file
-// actually has more than one speaker.
+// focus is a lens on a study file, not a global.
+// TWO lenses, independent and combinable: one speaker, and one section. "The
+// participant, during task 2" is both picked at once rather than a third mode,
+// and the dim/collapse switches at the foot govern whichever are on.
 function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
   const ui = useStore((s) => s.ui);
   const setUi = useStore((s) => s.setUi);
@@ -1858,28 +1929,69 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
     for (const g of groups) { const sp = g.speaker.trim(); if (sp && !seen.includes(sp)) seen.push(sp); }
     return seen;
   }, [groups]);
-  if (speakers.length < 2) return null;
   const focus = ui.speakerFocus[active];
   const setFocus = (sp: string | null) => {
     const next = { ...ui.speakerFocus };
     if (sp) next[active] = sp; else delete next[active];
     setUi({ speakerFocus: next });
   };
+  // the sections THIS transcript actually carries — evidence only, so a lens
+  // is never built out of a proposal nobody has judged
+  const stretches = useStore((s) => s.stretches);
+  const sections = useMemo(() => {
+    const seen: { dim: string; value: string }[] = [];
+    for (const x of evidence(stretches)) {
+      if (x.pid !== active) continue;
+      if (!seen.some((y) => y.dim === x.dim && y.value === x.value)) seen.push({ dim: x.dim, value: x.value });
+    }
+    return seen.sort((a, b) => a.dim.localeCompare(b.dim) || a.value.localeCompare(b.value));
+  }, [stretches, active]);
+  const sf = ui.sectionFocus[active];
+  const setSection = (pick: { dim: string; value: string } | null) => {
+    const next = { ...ui.sectionFocus };
+    if (pick) next[active] = pick; else delete next[active];
+    setUi({ sectionFocus: next });
+  };
+  // nothing to focus BY: one speaker and no sections is not a lens, it is a wall
+  if (speakers.length < 2 && !sections.length) return null;
   return (
     <div className="focuswrap" ref={ref}>
       {menu && (
-        <div className="focusmenu" role="group" aria-label="Focus one speaker's dialogue"
+        <div className="focusmenu" role="group" aria-label="Focus what you are reading"
           style={{ fontSize: ui.sidebarFontSize }}>
-          <button className={"focusitem" + (!focus ? " on" : "")} onClick={() => setFocus(null)}>
-            <span className="focusname">Everyone</span>{!focus && " ✓"}
-          </button>
-          {speakers.map((sp) => (
-            <button key={sp} className={"focusitem" + (focus === sp ? " on" : "")}
-              onClick={() => setFocus(focus === sp ? null : sp)}>
-              <span className="lensdot" style={{ background: speakerColor(ui, sp) }} />
-              <span className="focusname">{sp}</span>{focus === sp && " ✓"}
+          {speakers.length > 1 && <>
+            <div className="focushead">Speaker</div>
+            <button className={"focusitem" + (!focus ? " on" : "")} onClick={() => setFocus(null)}>
+              <span className="focusname">Everyone</span>{!focus && " ✓"}
             </button>
-          ))}
+            {speakers.map((sp) => (
+              <button key={sp} className={"focusitem" + (focus === sp ? " on" : "")}
+                onClick={() => setFocus(focus === sp ? null : sp)}>
+                <span className="lensdot" style={{ background: speakerColor(ui, sp) }} />
+                <span className="focusname">{sp}</span>{focus === sp && " ✓"}
+              </button>
+            ))}
+          </>}
+          {/* the second lens, on the same footing as the first: pick a section
+              and everything outside it takes the same dim/collapse treatment.
+              Combinable with the speaker above — "the participant, during
+              task 2" is two picks, not a mode */}
+          {sections.length > 0 && <>
+            <div className="focushead">Section</div>
+            <button className={"focusitem" + (!sf ? " on" : "")} onClick={() => setSection(null)}>
+              <span className="focusname">Whole session</span>{!sf && " ✓"}
+            </button>
+            {sections.map((x) => {
+              const on = sf?.dim === x.dim && sf?.value === x.value;
+              return (
+                <button key={`${x.dim}\u0000${x.value}`} className={"focusitem" + (on ? " on" : "")}
+                  onClick={() => setSection(on ? null : x)}>
+                  <span className="lensdot" style={{ background: stretchColorOf(x.value, ui.stretchColors, ui.dark) }} />
+                  <span className="focusname">{x.dim}: {x.value}</span>{on && " ✓"}
+                </button>
+              );
+            })}
+          </>}
           {/* independent, combinable effects — dim only, collapse only, or both */}
           <div className="focusmode">
             <span>Others:</span>

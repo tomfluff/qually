@@ -2,7 +2,10 @@
    Copyright (C) 2026 Yotam Sechayk */
 /* zen mode: hide chrome, keep transcript + video */
 #app.zen #toolbar, #app.zen #tabs, #app.zen #sidebar, #app.zen .hotbar { display:none; }
-.zenexit { position:fixed; top:10px; left:12px; z-index:60;
+/* bottom left, not top left: zen mode exists to put the transcript's first
+   line where the eye already is, and the way OUT was sitting exactly there —
+   competing with the text for the corner the reader starts from. */
+.zenexit { position:fixed; bottom:10px; left:12px; z-index:60;
   display:inline-flex; align-items:center; gap:.45em; padding:.4em .85em;
   background:var(--panel); border:1px solid var(--line); border-radius:999px;
   color:var(--muted); font:inherit; line-height:1; cursor:pointer;

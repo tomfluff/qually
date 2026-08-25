@@ -95,6 +95,9 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
       earcon.aiDone();
       announce("Summary draft ready — review it before it replaces anything.");
     } catch (e) {
+      // the request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete)
+      useStore.getState().logAiIncomplete(e, { model: model.id, task: "summary", pid, lines: evSel.length + exSel.length, redactions });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

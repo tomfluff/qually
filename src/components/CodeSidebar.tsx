@@ -87,7 +87,7 @@ export function CodeSidebar() {
                 line. What it IS gated on is the brief, and that lives in the
                 gate — where the labels can be written on the spot. */}
             <button role="menuitem" onClick={() => { setSectionsOpen(true); setAiMenu(false); }}>
-              <Icon name="bookmark" size={sidebarFontSize} /> AI section marking
+              <Icon name="sparkle" size={sidebarFontSize} /> AI section marking
             </button>
           </div>
         )}

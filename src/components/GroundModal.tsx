@@ -92,6 +92,9 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
       earcon.aiDone();
       announce(`Grounding complete: ${grounded} segment${grounded === 1 ? "" : "s"} grounded.`);
     } catch (e) {
+      // the request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete)
+      useStore.getState().logAiIncomplete(e, { model: model.id, task: "ground", pid: pids.join("+"), lines: eligible.length, redactions });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

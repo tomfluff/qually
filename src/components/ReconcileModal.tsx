@@ -164,6 +164,14 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
       earcon.aiDone();
       announce(`${nC} merge cluster${nC === 1 ? "" : "s"} and ${nA} action${nA === 1 ? "" : "s"} laid out on the map.`);
     } catch (e) {
+      // the request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete)
+      useStore.getState().logAiIncomplete(e, {
+        model: model.id, task: "reconcile",
+        pid: focusMode ? `(focus: ${codes.length} codes)`
+          : scope === "all" ? "(codebook)" : `(island: ${groups[scope as number]?.name})`,
+        lines: codes.length + contextCodes.length, redactions,
+      });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
