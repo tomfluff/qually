@@ -19,6 +19,13 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
   pencil: { d: ["M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4z", "M13.5 6.5l4 4"] },
   // tabler "brackets" — the substitution toggle: square brackets, the mark itself
   brackets: { d: ["M9 3h-5v18h5", "M15 3h5v18h-5"] },
+  // tabler "replace" — two swapped boxes: the find-and-replace toggle
+  replace: { d: [
+    "M3 4a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z",
+    "M15 16a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z",
+    "M21 11v-3a2 2 0 0 0 -2 -2h-6l3 3m0 -6l-3 3",
+    "M3 13v3a2 2 0 0 0 2 2h6l-3 -3m0 6l3 -3",
+  ] },
   text: { d: ["M4 6h16", "M4 12h10", "M4 18h14"] },
   droplet: { d: ["M6.8 11a6 6 0 1 0 10.4 0l-5.2 -9l-5.2 9"] },
   pin: { d: ["M9 4v6l-2 4v2h10v-2l-2 -4v-6", "M12 16v5", "M8 4h8"] },

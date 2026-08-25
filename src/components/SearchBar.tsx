@@ -191,7 +191,7 @@ export function SearchBar() {
               onClick={() => setRepOpen((v) => !v)}
               title={repOpen ? "Hide replace" : "Replace what you find"}
               aria-label={repOpen ? "Hide replace" : "Replace what you find"}>
-              <Icon name="pencil" size={16} />
+              <Icon name="replace" size={16} />
             </button>
           )}
           <div className="segmented searchscope">
