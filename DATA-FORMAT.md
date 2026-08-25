@@ -10,7 +10,7 @@ Transcripts import as CSV, one row per line. A header row is required.
 
 | Column | Meaning |
 |---|---|
-| `line_id` | Sequential integers starting at 1. **Required** (import needs `line_id` + `text`). |
+| `line_id` | Whole numbers, unique within the file. **Required** (import needs `line_id` + `text`). Gaps are fine and rows may arrive in any order — they are sorted by this. Sequential from 1 is simply the tidiest case. |
 | `timestamp` | Line start time, `H:MM:SS` or `MM:SS` (milliseconds after a `.` are ignored). Powers the play-from-here chip. Optional. |
 | `end_timestamp` | Line end time, same shape. Makes the merge-by-pause gap exact — without it, where a line ends is estimated from its text length at a typical speaking pace. Optional. |
 | `speaker` | Any consistent label, reused per speaker — a full name is fine, it needn't be short. Optional (defaults to `P`). The interviewer is auto-dimmed (and prefixed `[R:]` in excerpts) when the label is exactly `R`, `I`, `Interviewer`, `Moderator`, `Facilitator` (or `R1`, `R2`…) — a first guess, editable per speaker in Settings → Speakers. A participant named "Rachel" stays a participant. |

@@ -26,7 +26,7 @@ Requirements:
     Hard-cut at ~600 characters if no sentence end appears. Never split mid-segment
     and never invent a timestamp — every row's timestamp must come from a real
     boundary in the source.
-- line_id: sequential integers starting at 1.
+- line_id: whole numbers, unique within the file (gaps are fine; rows are sorted by it).
 - timestamp: that row's start time as H:MM:SS, or MM:SS under an hour. Drop milliseconds.
   Empty if the row has no time.
 - end_timestamp: when the row's speech ENDS, same shape, only if the source carries end
@@ -103,7 +103,7 @@ export function DataFormatButton() {
                 <p>One row per line. Columns (header row required):</p>
                 <table className="fmt-table">
                   <tbody>
-                    <tr><td><code>line_id</code></td><td>Sequential integers, starting at 1. <b>Required.</b></td></tr>
+                    <tr><td><code>line_id</code></td><td>Whole numbers, unique within the file. Gaps are fine and order does not matter — rows are sorted by this. <b>Required.</b></td></tr>
                     <tr><td><code>timestamp</code></td><td>Line start time, <code>H:MM:SS</code> or <code>MM:SS</code> (milliseconds ignored). Powers the play-from-here chip. Optional.</td></tr>
                     <tr><td><code>end_timestamp</code></td><td>Line end time, same shape. Makes the merge-by-pause gap exact (otherwise it's estimated from the text's length). Optional.</td></tr>
                     <tr><td><code>speaker</code></td><td>Any consistent label, reused per speaker — a full name is fine, it needn't be short. Optional (defaults to <code>P</code>).</td></tr>

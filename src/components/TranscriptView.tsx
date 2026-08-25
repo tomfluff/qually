@@ -282,13 +282,30 @@ export function TranscriptView() {
       document.addEventListener("mousemove", move);
       document.addEventListener("mouseup", up);
     };
+    // The gutter overlay is a SIBLING of the list, not a child of it — so the
+    // scroller is nowhere in a pill's ancestor chain and a wheel over one had
+    // nothing to scroll: the transcript simply froze under the pointer. The
+    // overlay itself is pointer-events:none, but the pills and grips are not
+    // (they are click and drag targets), and that is exactly where the wheel
+    // died. Hand the scroll to the list the overlay floats over. Not passive:
+    // we take the event over rather than letting it fall through, so nothing
+    // above us scrolls twice.
+    const onWheel = (e: WheelEvent) => {
+      const list = ov.parentElement?.querySelector(".tviewlist");
+      if (!list) return;
+      e.preventDefault();
+      list.scrollTop += e.deltaY;
+      list.scrollLeft += e.deltaX;
+    };
     ov.addEventListener("contextmenu", onCtx);
     ov.addEventListener("click", onClick);
     ov.addEventListener("mousedown", onDown);
+    ov.addEventListener("wheel", onWheel, { passive: false });
     return () => {
       ov.removeEventListener("contextmenu", onCtx);
       ov.removeEventListener("click", onClick);
       ov.removeEventListener("mousedown", onDown);
+      ov.removeEventListener("wheel", onWheel);
     };
   }, [active]);
   // The sticky labels: a stretch's name rides the top of the viewport while

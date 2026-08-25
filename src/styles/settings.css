@@ -119,7 +119,6 @@
 .set-h { font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:600;
   color:var(--muted); margin:10px 0 -3px; }
 .set-panel > .set-h:first-child { margin-top:0; }
-.set-cat .opt { font-weight:400; text-transform:none; letter-spacing:0; color:var(--muted); font-size:.9em; }
 
 /* AI settings block */
 .srow.aicol { flex-direction:column; align-items:stretch; gap:5px; }

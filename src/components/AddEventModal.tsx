@@ -156,7 +156,6 @@ function TypeCombobox({ value, onChange }: { value: string; onChange: (v: string
   const colors = useStore((s) => s.ui.markerColors);
   const [open, setOpen] = useState(false);
   const [hl, setHl] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
   const lastPt = useRef({ x: -1, y: -1 });
 
   // every type in use, with its count — most-used first, like the hotbar thinks
@@ -196,7 +195,7 @@ function TypeCombobox({ value, onChange }: { value: string; onChange: (v: string
         onBlur={() => setOpen(false)}
         onKeyDown={onKey} />
       {showList && (
-        <div className="acList nicescroll" ref={listRef} role="listbox" id="addev-types">
+        <div className="acList nicescroll" role="listbox" id="addev-types">
           {entries.map((en, i) => (
             <div key={en.type + en.name} className={"acItem" + (i === hl ? " hl" : "")}
               role="option" id={`addev-types-${i}`} aria-selected={i === hl}

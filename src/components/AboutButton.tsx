@@ -106,12 +106,15 @@ export function AboutButton() {
                   <li><b>Code without the mouse:</b> <kbd>Tab</kbd> to the transcript, <kbd>↓</kbd> to select
                     a line, <kbd>1</kbd>–<kbd>9</kbd> or <kbd>0</kbd> to apply a code. Every control shows a
                     focus ring, so where you are is never a guess.</li>
-                  <li><b>Nothing rides on colour alone:</b> each code's lane bar carries a <b>pattern</b> as
-                    well as a hue (the sidebar swatch shows the same one), a selected line gets a rail, AI
-                    noticings differ by underline style, and rejected segments are striped and outlined.</li>
+                  <li><b>Little rides on colour alone:</b> a selected line gets a rail, AI
+                    noticings differ by underline style, rejected segments are striped and outlined, and an
+                    AI proposal awaiting your verdict is striped in the gutter. Code identity is the
+                    exception: lane bars can carry a <b>pattern</b> as well as a hue (the sidebar swatch
+                    shows the same one), but that is a setting and it is <b>off by default</b> — turn on
+                    Settings → Codes → <i>Code patterns</i> to make which-code-is-which independent of hue.</li>
                   <li><b>Contrast:</b> text meets WCAG AA in both themes, and the app follows your system's
                     "increase contrast" and "reduce motion" settings.</li>
-                  <li><b>Less to look at:</b> zen mode hides every panel; the eye button hides AI highlights;
+                  <li><b>Less to look at:</b> zen mode hides the toolbar, tabs and sidebar, leaving the transcript (and the video dock, if you loaded media); the eye button hides AI highlights;
                     "merge lines" joins fragments into fewer, longer reading units.</li>
                 </ul>
               </section>

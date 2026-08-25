@@ -31,7 +31,7 @@ approve a request.
   texture as well as a hue — the sidebar swatch shows the same one, so it stays learnable.
 - **Contrast meets WCAG AA** for text in both themes, on every primary colour, and the app
   honours your system's *increase contrast* and *reduce motion* settings.
-- **Less to look at when you need it:** zen mode hides every panel; "merge lines" joins
+- **Less to look at when you need it:** zen mode strips the chrome down to the transcript; "merge lines" joins
   fragments into fewer, longer reading units.
 
 Known gaps are tracked honestly in [`ACCESSIBILITY.md`](ACCESSIBILITY.md) — screen-reader

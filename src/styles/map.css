@@ -283,8 +283,6 @@
 .mapSimName { flex:1; min-width:0; line-height:1.35; overflow-wrap:anywhere; }
 .mapSimName b { font-weight:700; }
 .mapSimName i { display:block; font-style:normal; color:var(--muted); font-size:.85em; }
-.mapSimCount { color:var(--muted); font-weight:700; font-size:.8em; margin-left:.45em;
-  font-variant-numeric:tabular-nums; }
 /* a code that already lives somewhere: warned, and unticked until you say so */
 .mapSimHome { color:var(--warn, #c98a2a); font-size:.75em; font-weight:700; margin-left:.45em;
   border:1px solid currentColor; border-radius:99px; padding:0 .5em; white-space:nowrap;

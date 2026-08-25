@@ -31,7 +31,8 @@ const FILES = [
   { name: "transcripts/P01.csv", text: "line_id,text\r\n1,héllo ünicode\r\n" }, // nested dir + UTF-8
 ];
 
-// no @types/node in this project, so stay off Buffer
+// Uint8Array rather than Buffer: the assertions should read the same in a
+// browser-shaped runtime as they do under Node
 const sigAt = (b: Uint8Array, at: number) => [...b.subarray(at, at + 4)];
 const hasSig = (b: Uint8Array, sig: number[]) => {
   for (let i = 0; i + 4 <= b.length; i++) if (sig.every((v, k) => b[i + k] === v)) return true;

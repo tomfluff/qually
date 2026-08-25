@@ -25,9 +25,10 @@ valuable next step.
   which is what happens if you lean on browser zoom instead.
 - Browser zoom (`Ctrl` `+`) works and is not hijacked — `Ctrl+0` resets it. (It *was*
   hijacked: the digit-key code handler swallowed it. Fixed.)
-- Tooltips are custom and app-wide (one shared bubble, portaled above every panel, so
-  nothing clips it) and scale **with the sidebar text size**, opening on keyboard focus
-  as well as hover; native tooltips are stuck at ~12px.
+- Tooltips on the controls that carry `data-tip` are custom (one shared bubble, portaled
+  above every panel, so nothing clips it) and scale **with the sidebar text size**, opening on keyboard focus
+  as well as hover. Many controls still carry a plain `title` instead, and those stay at the
+  browser's ~12px — the custom bubble is not yet app-wide.
 - The minimap's "simplified" mode enlarges its marks and enforces minimum block sizes.
 
 ### Reading font
@@ -133,8 +134,8 @@ Listed plainly, worst first. These are real; do not read the README as claiming 
    resize it (the popover has no range editor yet), dragging a **section**'s endpoint grips
    in the gutter (the same gap, for the same reason — and the gutter overlay itself is
    `aria-hidden`, so its label pills are decoration, not controls), **relabelling or
-   recolouring an existing section** and removing one (the pill's own menu opens only on
-   a right-click of that pill, which nothing but a mouse can aim at), and the minimap
+   recolouring an existing section** and removing one (the pill's own menu opens on a click
+   of that pill — the gutter overlay is `aria-hidden`, so nothing but a mouse can reach it), and the minimap
    (navigation duplicate; keyboard has Home/End/PageUp and back-to-selection).
    Marking a section by hand is NOT on this list: the line-row dialog's "Mark these lines
    as…" form is reachable by the same `Shift+F10` / Menu key as everything else in it.

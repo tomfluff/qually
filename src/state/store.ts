@@ -528,7 +528,6 @@ export interface State {
     /** false when a caller batches several drops under its own ONE pushUndo */
     undoable?: boolean) => void;
   // Themes-stage drop: position + island membership, ONE entry. gi -1 = no island.
-  themesDrop: (code: string, pos: { x: number; y: number }, gi: number) => void;
   // a reconcile run landing: clusters + actions + fresh layout, ONE entry
   applyReconcilePlan: (clusters: CodeCluster[], actions: CodePlanAction[], resetLayout: boolean,
     source?: DecisionSource, model?: string) => void;
@@ -2288,21 +2287,6 @@ export const useStore = create<State>()(
         }
         set({ codeClusters: clusters,
           mapPositions: { ...s.mapPositions, reconcile: { ...s.mapPositions.reconcile, [code]: pos } } });
-      },
-      themesDrop: (code, pos, gi) => {
-        get().pushUndo();
-        const s = get();
-        const cur = s.codeGroups.findIndex((g) => g.codes.includes(code));
-        const positions = { ...s.mapPositions.themes };
-        if (cur === gi) positions[code] = pos; // same home: the drop position holds
-        else delete positions[code];           // new home: the packer files it in
-        set({
-          mapPositions: { ...s.mapPositions, themes: positions },
-          codeGroups: cur === gi ? s.codeGroups : s.codeGroups.map((g, i) => ({
-            ...g,
-            codes: i === gi ? [...g.codes, code] : g.codes.filter((c) => c !== code),
-          })).filter((g) => g.codes.length > 0),
-        });
       },
       // Adjusting the layout is a layout EDIT, not a view mode: it writes the
       // nudged positions like a hand-drag would, so it persists, exports, and
