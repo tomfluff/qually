@@ -113,6 +113,30 @@ Shipped items get moved to the "Done" list with the commit.
   only saved when the researcher finalizes it. The AI drafts; the researcher
   owns the definition.
 
+### Known, not yet scheduled
+
+- **`--line` contrast audit (raised 2026-08-26).** `--line` is `#e4e4e4` on white
+  (**1.27:1**) and `#2c333a` in dark (**1.37:1**). WCAG 1.4.11 asks **3:1** for the
+  visual boundary of a *control*, and the token is used **151 times** across 21
+  stylesheets — 123 of those as some form of `border`. `base.css` already knows the
+  distinction: one comment there notes that a control's own boundary needs `--muted`,
+  not `--line`. Nothing is broken for a sighted user, which is exactly why it has
+  survived; four separate feature reviews have now flagged it independently.
+
+  The work is not "raise the token" — that would darken every decorative divider in
+  the app and flatten a deliberate hierarchy. It is an audit: go through all 151 uses
+  and sort each into
+  (a) **the boundary of a control** — inputs, buttons, comboboxes, the edges that tell
+  you where you may click: these owe 3:1 and should move to `--muted` or a new
+  `--line-strong`;
+  (b) **a divider or container edge** — card outlines, menu separators, table rules:
+  decorative, 1.4.11 does not apply, `--line` is right;
+  (c) **ambiguous** — a card that is also a click target, which needs a decision
+  rather than a rule.
+  The deliverable is that classification. Once it exists the change itself is small.
+  Densest files: browse.css (35), map.css (29), about.css (17), search.css (12),
+  transcript.css (11).
+
 ### Parked, deliberately (2026-08-23)
 - **Per-code history.** `historyOf` in `src/provenance.ts` already walks the
   decision ledger back through a code's former names; nothing surfaces it. The

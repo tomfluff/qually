@@ -88,12 +88,46 @@ export function AboutButton() {
                   <li><b>Edit a segment:</b> click its colored lane bar (notes, reject, delete, copy) or drag its top/bottom edge to resize. Hover a bar to see its line range.</li>
                   <li><b>Manage codes:</b> right-click a code (sidebar or Codebook) to rename, edit its definition, recolor, merge, pin, or delete.</li>
                   <li><b>Fix transcription:</b> double-click a line to correct it in place — with media loaded, the utterance loops at 0.75× while you type. The original is kept (✱ marks edited lines, hover to see it) and every correction exports via <b>Export → Transcript edits (.csv)</b> (the item appears once you've edited a line).</li>
-                  <li><b>AI (optional, off by default):</b> add your own OpenAI key in Settings and an <b>AI observation scan</b> — from a transcript's code sidebar, or from the <b>Assist</b> tab for any transcript — can flag likely mis-transcriptions (amber, dotted — double-click to fix) and, if you tick them, mark observations for your review: emotional expressions, likes/dislikes, desires, workarounds, tensions, quotable phrasing — each mapped to a first-cycle coding method. It marks instances only; coding stays yours. Choose which speakers to include, see the exact lines before they're sent (listed names redacted first), Alt-click an observation to dismiss it, hide them all with the eye button to read blind, and every request is logged for your methods appendix — including one you abandoned or that failed, because the lines had already left.</li>
-                  <li><b>AI section marking (optional):</b> from the same menu, or the <b>Assist</b> tab's <b>Sections</b> panel, the AI can mark up the <i>shape</i> of a session — which stretch is the warm-up, which the second task, which condition a passage came from. You write a short study brief with the labels it may use (<code>- phase: warm-up, task 1, debrief</code>); it may use those and nothing else, and the gate shows you exactly which it parsed before anything is sent. Proposals arrive striped in the section gutter: right-click any line inside one to read why it was proposed and accept or reject it. Nothing counts towards your analysis until you accept it, and rejecting is remembered so a re-run will not propose the same span again.</li>
                   <li><b>Mixed-speaker flag:</b> a small <b>!</b> badge on a segment's corner means its excerpt keeps only the dominant speaker — the other speaker's words may drop out, so double-check it.</li>
-                  <li><b>Codebook tab:</b> pick codes on the left, read their excerpts on the right; click a ref to jump to it. The sidebar holds <b>Ground codes</b>, a <b>Show rejected</b> toggle, and a <b>Grounding</b> style menu (how AI grounding is emphasised in the excerpts).</li>
-                  <li><b>Assist tab:</b> the AI's observations side by side across participants, grouped by lens or by transcript and filterable to what you haven't coded yet — <b>Code</b> writes a segment for that line (authored by you), <b>Open</b> jumps to it, <b>Dismiss</b> removes it. Every AI run also starts here — observations, code suggestions, sections and the rest: the sparkle on a transcript row (or the button above each list) opens that run's consent gate for it.</li>
+                  <li><b>Codebook tab:</b> pick codes on the left, read their excerpts on the right; click a ref to jump to it. The sidebar holds a <b>Show rejected</b> toggle and a <b>Grounding</b> style menu (how grounded quotes are emphasised in the excerpts).</li>
+                  <li><b>Assist tab:</b> one panel per kind of AI work, chosen from the tab's own menu. Each lists what is waiting for your judgement across participants and is where its run starts — the sparkle on a transcript row, or the button above the list, opens that run's consent gate.</li>
                   <li><b>Re-importing a transcript:</b> if you fix the CSV and import it again, the app matches the new lines against the old ones and re-anchors your codes, showing you what carries over before it changes anything. You can also keep both copies instead.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3>AI functions</h3>
+                <p className="about-note">
+                  All optional and <b>off by default</b>. Nothing reaches a model until you add your own
+                  OpenAI key in <b>Settings → AI</b> and approve that particular run: every one opens a gate
+                  showing the lines it would send, with names you listed replaced first, the number of
+                  substitutions, and a cost estimate. Every request is written to the AI log — including one
+                  you stopped or that failed, because the material had already left. Nothing an AI proposes
+                  counts as your analysis until you accept it.
+                </p>
+                <ul>
+                  <li><b>On one transcript</b> — from its code sidebar or the <b>Assist</b> tab.{" "}
+                    <b>Scan</b> flags likely mis-transcriptions (amber, dotted — double-click to fix) and,
+                    per lens you tick, marks observations for review: emotional expressions, likes and
+                    dislikes, desires, workarounds, tensions, quotable phrasing.{" "}<b>Suggest codes</b>{" "}
+                    proposes codings drawn only from your existing codebook. <b>Find sections</b> marks the
+                    shape of the session against a study brief you write, using the labels you declare and
+                    no others. <b>Summarise</b> drafts a session summary for you to edit and own.</li>
+                  <li><b>On the codebook</b> — from the <b>Code map</b> or the Assist panels.{" "}
+                    <b>Merge duplicates</b> and <b>Consolidate</b> find codes doing the same work,
+                    <b>Find similar</b> looks for the same idea under different words,
+                    <b>Group into areas</b> sorts the map, <b>Draft definitions</b> writes a definition from
+                    a code's own excerpts, and <b>Ground codes</b> quotes the passage that earned each one.
+                    These are the runs that may propose a <i>new name</i> for a merged or renamed code —
+                    the codings and sections above never invent a label.</li>
+                  <li><b>Across everything: Ask</b> — a question answered only from your codes, excerpts and
+                    session events, with every claim carrying a citation you can click back to.</li>
+                  <li><b>Reviewing what comes back:</b> a proposal is drawn provisionally — striped in the
+                    section gutter, lighter in the lanes, ghosted with a hairline on the minimap — until you
+                    accept or reject it. Rejections are remembered, so a re-run will not put the same
+                    proposal back in front of you.</li>
+                  <li><b>The record:</b> <b>Export → AI log (.csv)</b> is your methods appendix — model, task,
+                    lines sent, substitutions, cost and outcome for every request this project has made.</li>
                 </ul>
               </section>
 
@@ -141,15 +175,16 @@ export function AboutButton() {
               </section>
 
               {/* the credit that used to be the app-wide footer strip */}
-              <section className="about-credit">
-                <span>Created with love and care by</span>
-                <a className="foot-author" href="https://tomfluff.github.io/" target="_blank" rel="noreferrer">
-                  <img className="foot-avatar" src={AUTHOR_AVATAR} alt="Yotam Sechayk" width={20} height={20} />
-                  <span>Yotam Sechayk</span>
-                </a>
-                <span>— reach out with any questions.</span>
-              </section>
             </div>
+
+            <section className="about-credit">
+              <span>Created with love and care by</span>
+              <a className="foot-author" href="https://tomfluff.github.io/" target="_blank" rel="noreferrer">
+                <img className="foot-avatar" src={AUTHOR_AVATAR} alt="Yotam Sechayk" width={20} height={20} />
+                <span>Yotam Sechayk</span>
+              </a>
+              <span>— reach out with any questions.</span>
+            </section>
           </div>
         </div>
       )}

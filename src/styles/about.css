@@ -22,13 +22,21 @@
 .about { width:min(37.5em, 100%); max-height:84vh; display:flex; flex-direction:column;
   background:var(--bg); border:1px solid var(--line); border-radius:14px;
   box-shadow:0 20px 60px rgba(0,0,0,.45); padding:18px 20px; font-size:1rem; }
-.about-head { display:flex; align-items:center; }
+.about-head { display:flex; align-items:center; flex:none; }
 /* em, not 19px: at a raised setting a fixed title ended up SMALLER than the body text
    it was titling */
 .about-head h2 { margin:0; flex:1; font-size:1.19em; }
-.about-lede { color:var(--muted); line-height:1.5; margin:6px 0 12px; }
-.about-body { overflow-y:auto; padding-right:6px; }
+.about-lede { color:var(--muted); line-height:1.5; margin:6px 0 12px; flex:none; }
+/* head and lede hold their size, the body takes the slack and scrolls, the
+   credit stays pinned below it: the attribution is how someone reaches the
+   author, and it was only reachable by scrolling to the end of the longest
+   panel in the app. min-height:0 or the flex child refuses to shrink and the
+   footer is pushed off the dialog instead. */
+.about-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding-right:6px; }
 .about-body section { margin-bottom:16px; }
+/* the standing terms of a whole section, before its list — quieter than a
+   bullet because it governs all of them rather than being one of them */
+.about-note { color:var(--muted); line-height:1.5; margin:0 0 8px; }
 .about-body h3 { font-size:.75em; text-transform:uppercase; letter-spacing:.07em;
   color:var(--muted); margin:0 0 8px; }
 .about-body ul, .about-body ol { margin:0; padding-left:20px; line-height:1.55; }
@@ -186,9 +194,9 @@
 .ai-models button.on { background:var(--accent); color:#fff; }
 [data-theme=dark] .ai-models button.on { color:#12161a; }
 
-/* the credit, moved in from the retired footer strip — same voice, calmer home */
+/* the credit: a pinned footer of the dialog, not the tail of its scroll */
 .about-credit { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px;
-  margin-top:18px; padding-top:14px; border-top:1px solid var(--line);
+  flex:none; margin-top:14px; padding-top:12px; border-top:1px solid var(--line);
   color:var(--muted); font-size:.92em; }
 .about-credit .foot-author { display:inline-flex; align-items:center; gap:6px;
   color:var(--fg); font-weight:500; text-decoration:none; }
