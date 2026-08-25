@@ -157,7 +157,7 @@ export interface Ui {
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
   // which Assist-tab panel is showing — chosen from the tab's own menu
-  assistPanel: "observations" | "merge" | "suggest" | "summary" | "describe" | "ask" | "decisions" | "tail";
+  assistPanel: "observations" | "merge" | "suggest" | "sections" | "summary" | "describe" | "ask" | "decisions" | "tail";
   // what the thin-tail queue counts as thin (1, 2 or 3 excerpts) — the
   // researcher's call, and the map's launcher can set it on the way in
   tailLimit: number;

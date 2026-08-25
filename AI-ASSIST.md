@@ -366,12 +366,26 @@ project-file-only for now.
   provenance lives on the stretches themselves (`status` + `proposedBy` + `why`)
   and exports as `sections.csv`.
 
-### Launch surface
+### Launch surface and the corpus-wide worklist
 
 F1–F3 doctrine: a full-width button in the Assist tab plus a per-transcript
 control. F7 adds a **Sections** panel to the `assistPanel` union with the same
 two entry points, and the transcript picker's per-row readout (lines, last run,
 live candidates) comes free from `aiLog`.
+
+The panel is the corpus-wide half of review; the per-line verdict stays in the
+transcript, where the lines around a boundary are visible and a verdict can
+actually be made. Here you see how much is waiting, run the next transcript,
+and — once a run has earned it — take one transcript's proposals in a single
+gesture. **Accept all is offered per transcript, not corpus-wide**: a run is per
+transcript, and "I read that one and it was right" is a thing a researcher can
+truthfully say about one session and not about six.
+
+**Clear sections** discards in bulk, and deliberately does not offer "reject in
+bulk": rejecting is a verdict the next run consults, and a verdict on thirty
+boundaries nobody read is not a verdict. Clearing the rejected ones forgets
+their memory, which the menu says, because that memory is the only reason a
+rejected section is kept at all.
 
 ### Copy
 

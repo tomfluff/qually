@@ -389,6 +389,7 @@ const ASSIST_GROUPS = [
     items: [
       { id: "observations", label: "Observations", hint: "AI observations to triage into codes" },
       { id: "suggest", label: "Suggest codes", hint: "candidate codings from your codebook" },
+      { id: "sections", label: "Sections", hint: "which stretch of a session belongs to which part of the study" },
       { id: "summary", label: "Transcript summary", hint: "AI-drafted session summaries to edit and own" },
     ],
   },
@@ -416,6 +417,7 @@ type AssistPanelId = (typeof ASSIST_GROUPS)[number]["items"][number]["id"];
 // says nothing rather than guessing.
 function useAssistCounts(): Partial<Record<AssistPanelId, string>> {
   const segments = useStore((s) => s.segments);
+  const stretches = useStore((s) => s.stretches);
   const transcripts = useStore((s) => s.transcripts);
   const codebook = useStore((s) => s.codebook);
   const aiFlags = useStore((s) => s.aiFlags);
@@ -430,6 +432,8 @@ function useAssistCounts(): Partial<Record<AssistPanelId, string>> {
     if (notices) out.observations = `${notices} to review`;
     const cand = segments.filter((x) => x.status === "candidate").length;
     if (cand) out.suggest = `${cand} candidate${cand === 1 ? "" : "s"}`;
+    const sect = stretches.filter((x) => x.status === "candidate").length;
+    if (sect) out.sections = `${sect} to review`;
     const written = Object.keys(summaries).filter((p) => (summaries[p] ?? "").trim() && transcripts[p]).length;
     const pids = Object.keys(transcripts).length;
     if (pids) out.summary = `${written} of ${pids} written`;
@@ -441,7 +445,7 @@ function useAssistCounts(): Partial<Record<AssistPanelId, string>> {
     if (answers.length) out.ask = `${answers.length} answered`;
     if (ledger.length) out.decisions = `${ledger.length} recorded`;
     return out;
-  }, [segments, transcripts, codebook, aiFlags, ledger, answers, summaries, tailLimit]);
+  }, [segments, stretches, transcripts, codebook, aiFlags, ledger, answers, summaries, tailLimit]);
 }
 
 // The Map tab's menu: the seven views, the working three flat and the derived

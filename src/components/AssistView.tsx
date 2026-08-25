@@ -16,6 +16,8 @@ import { DescribeModal } from "./DescribeModal";
 import { AskModal } from "./AskModal";
 import { AskList, ScopeGroup } from "./AskPanel";
 import { SuggestModal } from "./SuggestModal";
+import { SectionsModal } from "./SectionsModal";
+import { stretchColorOf, isEvidence } from "../stretches";
 import { AiCheckModal } from "./AiCheckModal";
 import { SummarizeModal } from "./SummarizeModal";
 import { openSummary } from "./SummaryView";
@@ -101,6 +103,7 @@ export function AssistView() {
   const [describeOpen, setDescribeOpen] = useState(false);
   // null = closed; "" = open with nothing picked; a pid = open on that transcript
   const [suggestFor, setSuggestFor] = useState<string | null>(null);
+  const [sectionsFor, setSectionsFor] = useState<string | null>(null);
   const [scanFor, setScanFor] = useState<string | null>(null);
   const [sumFor, setSumFor] = useState<string | null>(null);
   const [suggestBy, setSuggestBy] = useState(remembered.suggestBy);
@@ -340,7 +343,7 @@ export function AssistView() {
         {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
             own menu — this heading just names what's showing. It stays fixed; the
             list below scrolls inside cbList so the scrollbar clears the drag divider. */}
-        <div className="bSideHead">{panel === "tail" ? "The thin tail" : panel === "decisions" ? "Decisions" : panel === "merge" ? "Merge duplicates" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
+        <div className="bSideHead">{panel === "tail" ? "The thin tail" : panel === "decisions" ? "Decisions" : panel === "merge" ? "Merge duplicates" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "sections" ? "Sections" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
 
         <div className="cbList nicescroll" ref={listRef}
           onScroll={(e) => { remembered.leftScroll[panel] = e.currentTarget.scrollTop; }}>
@@ -514,6 +517,8 @@ export function AssistView() {
               </>
             )}
           </>
+        ) : panel === "sections" ? (
+          <SectionsSide onRun={setSectionsFor} />
         ) : panel === "summary" ? (
           <>
             {/* Same two ways in as the other panels: the button picks in the modal,
@@ -650,6 +655,8 @@ export function AssistView() {
         ) : panel === "ask" ? (
           <AskList answers={answers} question={askQ} setQuestion={setAskQ}
             onAsk={() => setAskOpen(true)} canAsk={!askWhy} why={askWhy} />
+        ) : panel === "sections" ? (
+          <SectionList onRun={setSectionsFor} />
         ) : panel === "describe" ? (
           <DescribeList codebook={codebook} codes={shownDefCodes} stats={stats}
             sortBy={defSort} setSortBy={setDefSort} grouped={defScope === "all"}
@@ -669,6 +676,8 @@ export function AssistView() {
         onAsked={() => setAskQ("")} onClose={() => setAskOpen(false)} />}
       {suggestFor !== null && <SuggestModal pid={suggestFor} choose
         onClose={() => setSuggestFor(null)} />}
+      {sectionsFor !== null && <SectionsModal pid={sectionsFor} choose
+        onClose={() => setSectionsFor(null)} />}
       {scanFor !== null && <AiCheckModal pid={scanFor} choose
         onClose={() => setScanFor(null)} />}
       {sumFor !== null && <SummarizeModal pid={sumFor} choose
@@ -1092,5 +1101,165 @@ function NoticeList({ notices, groupBy, pidOrder, onlyUncoded, setOnlyUncoded }:
         </div>
       ))}
     </>
+  );
+}
+
+// ── Sections (F7) ──────────────────────────────────────────────────────────
+// The corpus-wide half of section review. The per-line verdict lives in the
+// transcript, where the lines around a boundary are visible and a verdict can
+// actually be judged; this is where you see how much is waiting, run the next
+// transcript, and — once you trust a run — take the whole thing in one gesture.
+
+/** the left rail: launch, and one row per transcript with what it is carrying */
+function SectionsSide({ onRun }: { onRun: (pid: string) => void }) {
+  const stretches = useStore((s) => s.stretches);
+  const transcripts = useStore((s) => s.transcripts);
+  const tabs = useStore((s) => s.tabs);
+  const pids = [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))]
+    .filter((p) => transcripts[p]);
+  const n = (pid: string, status?: string) =>
+    stretches.filter((x) => x.pid === pid && (status ? x.status === status : isEvidence(x))).length;
+  return (
+    <>
+      {/* Two ways in, one modal — the same shape Suggest uses: the button works
+          in every state, a row's sparkle just opens it on that transcript. */}
+      <button className="btn groundBtn" onClick={() => onRun("")}
+        title="Pick a transcript and let the AI propose its sections (sends it to OpenAI after your approval)">
+        <Icon name="bookmark" size={15} /> AI section marking
+      </button>
+      <ClearSections />
+      {pids.length === 0 ? (
+        <div className="bSideNote">No transcripts yet. Import one and its sections can be proposed.</div>
+      ) : pids.map((p) => (
+        <div key={p} className="nLens">
+          <span className="nName">{p}</span>
+          {/* an em dash, not 0: the row is a launcher too, and "0 waiting" reads
+              as a result where "never run" is the actual state */}
+          <span className="cnt">{n(p, "candidate") || "—"}</span>
+          <button className="rowRun" aria-label={`AI section marking for ${p}`}
+            title={`AI section marking for ${p}${n(p) ? ` · ${n(p)} section${n(p) === 1 ? "" : "s"} already marked` : ""}`}
+            onClick={(e) => { e.stopPropagation(); onRun(p); }}>
+            <Icon name="sparkle" size={14} />
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Discard in bulk — the way out of a run nobody wanted. Deliberately NOT
+    "reject in bulk": rejecting is a verdict the next run consults, and a verdict
+    on thirty boundaries nobody read is not a verdict. Discarding forgets, which
+    is the honest thing to do with proposals you never judged. */
+function ClearSections() {
+  const stretches = useStore((s) => s.stretches);
+  const fs = useStore((s) => s.ui.sidebarFontSize);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  useDismiss(ref, () => setOpen(false));
+  useMenuToggleFocus(open, menuRef, btnRef);
+  const arrows = useMenuArrows(menuRef);
+  const n = (status: "candidate" | "rejected") => stretches.filter((x) => x.status === status).length;
+  if (!n("candidate") && !n("rejected")) return null;
+  const run = (status: "candidate" | "rejected") => {
+    useStore.getState().deleteStretchesBy({ status });
+    setOpen(false);
+  };
+  return (
+    <div className="settings-wrap clearSugWrap" ref={ref}>
+      <button className="btn groundBtn clearSug" aria-haspopup="menu" aria-expanded={open} ref={btnRef}
+        onClick={() => setOpen((v) => !v)}>
+        <Icon name="trash" size={14} /> Clear sections
+      </button>
+      {open && (
+        <div className="ctxmenu" role="menu" aria-label="Clear sections" ref={menuRef}
+          onKeyDown={arrows} style={{ fontSize: fs }}>
+          <div className="ctxhead">Across every transcript</div>
+          <button role="menuitem" disabled={!n("candidate")} onClick={() => run("candidate")}>
+            <Icon name="trash" size={fs} /> Proposed, unreviewed
+            <span className="ctxcount">{n("candidate")}</span>
+          </button>
+          {/* forgetting a rejection invites the same boundary back on the next
+              run — worth saying, since that memory is the whole reason a
+              rejected section is kept at all */}
+          <button role="menuitem" disabled={!n("rejected")} onClick={() => run("rejected")}
+            title="These are remembered so a re-run does not propose them again. Clearing forgets that.">
+            <Icon name="trash" size={fs} /> Rejected, and their memory
+            <span className="ctxcount">{n("rejected")}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** the worklist: every candidate section, grouped by transcript */
+function SectionList({ onRun }: { onRun: (pid: string) => void }) {
+  const stretches = useStore((s) => s.stretches);
+  const tabs = useStore((s) => s.tabs);
+  const stColors = useStore((s) => s.ui.stretchColors);
+  const dark = useStore((s) => s.ui.dark);
+  const jumpTo = useStore((s) => s.jumpTo);
+  // the STORE index is what setStretchStatus takes, so it is carried along
+  const cands = stretches.map((st, i) => ({ st, i })).filter(({ st }) => st.status === "candidate");
+  if (!cands.length) {
+    return (
+      <div className="empty">
+        No sections waiting. Run <b>AI section marking</b> on a transcript — the button on the left,
+        or the sparkle on any transcript row — and its proposals show up here, and striped in the
+        transcript, to accept or reject. It may only use labels you declared yourself.
+      </div>
+    );
+  }
+  const groups = [...tabs, ...new Set(cands.map((c) => c.st.pid))]
+    .filter((p, k, a) => a.indexOf(p) === k && cands.some((c) => c.st.pid === p));
+  return (
+    <div className="mList">
+      {groups.map((pid) => (
+        <div key={pid} className="bGroup">
+          <div className="nGrp">
+            {pid}
+            {/* Accept ALL of one transcript's proposals, one undo entry. Offered
+                per transcript rather than corpus-wide: a run is per transcript,
+                and "I read that one and it was right" is a thing a researcher
+                can truthfully say about one session, not about six. */}
+            <button className="nBtn" style={{ marginLeft: "auto" }}
+              title={`Accept every proposed section in ${pid} — one Ctrl+Z takes it back`}
+              onClick={() => useStore.getState().acceptSections(pid)}>
+              Accept all {cands.filter((c) => c.st.pid === pid).length}
+            </button>
+          </div>
+          {cands.filter((c) => c.st.pid === pid).map(({ st, i }) => (
+            <div key={i} className="nInst"
+              style={{ "--lens-c": stretchColorOf(st.value, stColors, dark) } as CSSProperties}>
+              <div className="mPair" style={{ marginBottom: 4 }}>
+                <span className="mCode">
+                  <span className="mSw" style={{ background: stretchColorOf(st.value, stColors, dark) }} />
+                  {st.dim}: {st.value}
+                </span>
+                <span className="nRef">{st.proposedBy}</span>
+              </div>
+              <div className="nLine">{st.why || "(no reason given)"}</div>
+              <div className="nFoot">
+                <span className="nRef">{st.pid}:{st.start}–{st.end}</span>
+                <span className="nActs">
+                  <button className="nBtn pri" onClick={() => useStore.getState().setStretchStatus(i, "accepted")}>Accept</button>
+                  <button className="nBtn" title="Not this — and do not propose it again"
+                    onClick={() => useStore.getState().setStretchStatus(i, "rejected")}>Reject</button>
+                  <button className="nBtn" onClick={() => jumpTo(st.pid, st.start)}>Open</button>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+      <div className="bSideNote" style={{ margin: "10px 2px" }}>
+        A boundary is easiest to judge with the lines around it in view — <b>Open</b> puts you
+        there. Rejecting is remembered, so the next run will not propose the same span again.
+        <button className="nBtn" style={{ marginLeft: 8 }} onClick={() => onRun("")}>Run another</button>
+      </div>
+    </div>
   );
 }
