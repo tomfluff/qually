@@ -57,14 +57,15 @@ Rules:
     makes between code names and definitions). The brief's prose IS redacted:
     it is about the study, and study prose names people. */
 export function renderSections(
-  lines: Line[], vocab: Vocab, brief: string, r: Redaction, markers: Marker[] = [],
+  lines: Line[], vocab: Vocab, brief: string, r: Redaction,
+  markers: Marker[] = [], offset = 0,
 ): string {
   const labels = vocab.axes.map((a) => `- ${a.dim}: ${a.values.join(", ")}`).join("\n");
   const prose = briefProse(brief);
   const body = lines.map((l) => `${l.id}\t${r.redact(l.speaker)}\t${r.redact(l.text)}`).join("\n");
   return `LABELS (the only ones that exist):\n${labels}\n\n`
     + (prose ? `BRIEF (the researcher's own words about this study):\n${r.redact(prose)}\n\n` : "")
-    + (markers.length ? `EVENTS (logged during the session, each after the line it followed):\n${renderEvents(lines, markers, r)}\n\n` : "")
+    + (markers.length ? `EVENTS (logged during the session, each after the line it followed):\n${renderEvents(lines, markers, r, offset)}\n\n` : "")
     + `TRANSCRIPT:\n${body}`;
 }
 
@@ -75,27 +76,53 @@ export function renderSections(
     Each event is anchored to the LAST line that began at or before it, so the
     model can name a line id rather than a timestamp; the labels are the
     researcher's own words, so they go through the redactor like any prose. */
-function renderEvents(lines: Line[], markers: Marker[], r: Redaction): string {
-  // line starts in seconds, ascending — ids are already sorted (rowsToLines)
-  const at = lines.map((l) => ({ id: l.id, s: l.ts.trim() ? tsToSec(l.ts) : null }));
+function renderEvents(lines: Line[], markers: Marker[], r: Redaction, offset: number): string {
+  // Events are stamped on the VIDEO clock; the transcript runs on its own, and
+  // video[pid].offset is the correction between them. anchorMarkers subtracts it
+  // for every other placement in the app, and skipping it here would have sent
+  // the model events pinned to the wrong lines on any transcript whose media
+  // needed aligning — confidently, and with no way for the reader to tell.
+  const timed = lines
+    .map((l) => ({ id: l.id, s: l.ts.trim() ? tsToSec(l.ts) : null }))
+    .filter((x): x is { id: number; s: number } => x.s !== null);
+  // the LAST line at or before this moment. No early break: line ids ascend on
+  // import, timestamps are not guaranteed to (a hand-mangled CSV), and stopping
+  // at the first later time would silently skip every line after it
   const after = (t: number) => {
-    let id: number | null = null;
-    for (const x of at) { if (x.s !== null && x.s <= t) id = x.id; else if (x.s !== null) break; }
+    let id: number | null = null, best = -Infinity;
+    for (const x of timed) if (x.s <= t && x.s >= best) { best = x.s; id = x.id; }
     return id;
   };
   return [...markers].sort((a, b) => a.t - b.t).map((m) => {
-    const id = after(m.t);
+    const id = after(m.t - offset);
     const name = markerKey(m);
     const note = m.label.trim() && m.label.trim() !== name ? ` — ${r.redact(m.label.trim())}` : "";
-    // an untimed transcript cannot place an event on a line; the event still
-    // carries its own clock, which is better than dropping it
-    return `${id === null ? "?" : `after line ${id}`}\t${r.redact(name)}${note}`;
+    // an event before the first timed line, or a transcript with no times at
+    // all, cannot be placed on a line — it still carries its own clock, which
+    // is worth more to the reader than dropping the event
+    const where = id === null ? `at ${fmtSec(m.t - offset)}` : `after line ${id}`;
+    return `${where}\t${r.redact(name)}${note}`;
   }).join("\n");
 }
 
+const fmtSec = (s: number) => {
+  const n = Math.max(0, Math.round(s));
+  return `${String(Math.floor(n / 3600)).padStart(2, "0")}:${String(Math.floor(n / 60) % 60).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
+};
+
+/** what renderEvents actually SENDS of one event, for the gate's redaction count
+    — the name it chose plus the label only where the label adds something. The
+    consent facts and the AI log both quote that number, and a count of fields
+    the payload does not carry is a number that describes a different payload. */
+export const eventRedactions = (m: Marker, r: Redaction) => {
+  const name = markerKey(m);
+  const note = m.label.trim() && m.label.trim() !== name ? m.label.trim() : "";
+  return r.count(name) + (note ? r.count(note) : 0);
+};
+
 export const estimateSectionsTokens = (
-  lines: Line[], vocab: Vocab, brief: string, r: Redaction, markers: Marker[] = [],
-) => estimateTokens(SYSTEM) + estimateTokens(renderSections(lines, vocab, brief, r, markers));
+  lines: Line[], vocab: Vocab, brief: string, r: Redaction, markers: Marker[] = [], offset = 0,
+) => estimateTokens(SYSTEM) + estimateTokens(renderSections(lines, vocab, brief, r, markers, offset));
 
 const SCHEMA = {
   type: "object",
@@ -128,7 +155,7 @@ const SCHEMA = {
 export async function proposeSections(opts: {
   key: string; model: string; lines: Line[]; vocab: Vocab; brief: string;
   redaction: Redaction; existing: Stretch[]; pid: string;
-  markers?: Marker[]; signal?: AbortSignal;
+  markers?: Marker[]; offset?: number; signal?: AbortSignal;
 }): Promise<{ sections: SectionProposal[]; usage: Usage }> {
   const { data, usage } = await callJson<{
     sections: { dim: string; value: string; line_start: number; line_end: number; why: string }[];
@@ -136,7 +163,7 @@ export async function proposeSections(opts: {
     key: opts.key,
     model: opts.model,
     system: SYSTEM,
-    user: renderSections(opts.lines, opts.vocab, opts.brief, opts.redaction, opts.markers ?? []),
+    user: renderSections(opts.lines, opts.vocab, opts.brief, opts.redaction, opts.markers ?? [], opts.offset ?? 0),
     schemaName: "propose_sections",
     schema: SCHEMA,
     signal: opts.signal,

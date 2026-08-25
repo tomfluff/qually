@@ -82,15 +82,18 @@ export function AskModal({ question, scope, onAsked, onClose }: {
       const { reply, usage } = await askQuestion({
         key, model: model.id, question, corpus, redaction: red, signal: ctl.signal,
       });
-      // Stop (or a close) can land while the reply is in transit or being parsed:
-      // an answer written after the researcher cancelled is one they never agreed
-      // to keep, and it would sit in the project as if they had.
-      if (ctl.signal.aborted || !alive.current) return;
+      // Logged BEFORE the cancellation check: the request happened and the
+      // corpus left either way, and the provenance log records requests, not
+      // answers — a cancel that loses the race must not lose the log entry.
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "ask", pid: "(corpus)",
         lines: items, redactions,
         inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
       });
+      // Stop (or a close) can land while the reply is in transit or being parsed:
+      // an answer written after the researcher cancelled is one they never agreed
+      // to keep, and it would sit in the project as if they had.
+      if (ctl.signal.aborted || !alive.current) return;
       useStore.getState().addAnswer({
         question, points: reply.points, unsupported: reply.unsupported,
         scope, model: model.id, costUsd: usage.costUsd,

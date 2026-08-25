@@ -367,7 +367,7 @@ test("session events ride with the transcript, anchored to the line they followe
   const out = renderSections(lines, parseBrief(brief), brief, red, [
     mk(1, 320, "TASK_START", "Ann Lee starts task 1"),  // 5:20 → after line 2
     mk(2, 10, "recording_start", ""),                   // 0:10 → after line 1
-  ]);
+  ], 0);
   // sorted by time, each placed on the last line that had started
   const events = out.split("EVENTS")[1].split("TRANSCRIPT")[0];
   expect(events).toContain("after line 1\trecording_start");
@@ -396,4 +396,52 @@ test("a run that was dispatched and abandoned is in the log, and says which", ()
   // the API reported no usage; the lines left anyway, which is the point
   expect(log.every((c) => c.inTok === 0 && c.costUsd === 0 && c.lines === 4)).toBe(true);
   expect(useStore.getState().exportAiLog()).toContain("aborted");
+});
+
+test("an event is placed on the transcript's clock, not the video's", async () => {
+  const { renderSections } = await import("./ai/sections");
+  const { redactor } = await import("./ai/redact");
+  const lines = [
+    { id: 1, ts: "00:00:00", speaker: "R", text: "one" },
+    { id: 2, ts: "00:05:00", speaker: "P", text: "two" },
+    { id: 3, ts: "00:09:00", speaker: "P", text: "three" },
+  ];
+  const brief = "- phase: task 1";
+  const ev = [{ mid: 1, pid: "P09", event: "marker", code: "TASK", label: "", t: 620, detail: "", raw: {} }];
+  const sec = (offset: number) =>
+    renderSections(lines, parseBrief(brief), brief, redactor([]), ev, offset)
+      .split("EVENTS")[1].split("TRANSCRIPT")[0];
+  // 10:20 on the video clock lands after the last line
+  expect(sec(0)).toContain("after line 3");
+  // ...but if the media starts 6 minutes before the transcript does, the same
+  // event happened at 4:20 — line 1's stretch, not line 3's
+  expect(sec(360)).toContain("after line 1");
+});
+
+test("an event before the first timed line keeps its own clock", async () => {
+  const { renderSections } = await import("./ai/sections");
+  const { redactor } = await import("./ai/redact");
+  const brief = "- phase: task 1";
+  const out = renderSections([{ id: 1, ts: "00:05:00", speaker: "P", text: "x" }],
+    parseBrief(brief), brief, redactor([]),
+    [{ mid: 1, pid: "P09", event: "recording_start", code: "", label: "", t: 12, detail: "", raw: {} }], 0);
+  // unplaceable on a line, but "it happened at 12 seconds" is worth more than
+  // dropping the event entirely
+  expect(out).toContain("at 00:00:12\trecording_start");
+});
+
+test("a transcript whose timestamps do not ascend still finds the right line", async () => {
+  const { renderSections } = await import("./ai/sections");
+  const { redactor } = await import("./ai/redact");
+  const brief = "- phase: task 1";
+  // line 2's time is out of order (a hand-mangled CSV); line 3 must still be
+  // reachable — an early break would have stopped the scan at line 2
+  const lines = [
+    { id: 1, ts: "00:00:00", speaker: "R", text: "a" },
+    { id: 2, ts: "00:20:00", speaker: "P", text: "b" },
+    { id: 3, ts: "00:05:00", speaker: "P", text: "c" },
+  ];
+  const out = renderSections(lines, parseBrief(brief), brief, redactor([]),
+    [{ mid: 1, pid: "P09", event: "marker", code: "TASK", label: "", t: 400, detail: "", raw: {} }], 0);
+  expect(out).toContain("after line 3"); // 6:40 → the latest line at or before it
 });

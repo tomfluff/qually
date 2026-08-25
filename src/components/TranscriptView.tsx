@@ -1902,9 +1902,10 @@ function measureSpk(labels: string[], fontSize: number): string {
 // Focus what you are reading — a floating target button at the transcript's
 // bottom right (the eye-menu pattern, mirrored to the bottom). PER TRANSCRIPT:
 // focus is a lens on a study file, not a global.
-// TWO lenses, independent and combinable: one speaker, and one section. "The
-// participant, during task 2" is both picked at once rather than a third mode,
-// and the dim/collapse switches at the foot govern whichever are on.
+// Two things live here, and they are not the same kind of thing: a LENS (follow
+// one speaker, and say what that does to everyone else) and a DISPLAY setting
+// (how loudly the section gutter reads). They share a popover because they
+// answer one question — what am I reading right now — and nothing else.
 function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
   const ui = useStore((s) => s.ui);
   const setUi = useStore((s) => s.setUi);
@@ -1924,15 +1925,19 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
     setUi({ speakerFocus: next });
   };
   // whether this transcript has a section gutter at all — the three-way control
-  // below is about how loudly it reads, and there is nothing to quiet without one
+  // below is about how loudly it reads, and there is nothing to quiet without
+  // one. The same set the gutter draws (visible: candidates too, not evidence
+  // alone): a transcript holding only unjudged proposals still shows a gutter,
+  // and a collapse left on from another transcript would otherwise hide a
+  // fresh run's proposals with no control on this one to bring them back.
   const stretches = useStore((s) => s.stretches);
   const hasSections = useMemo(
-    () => evidence(stretches).some((x) => x.pid === active), [stretches, active]);
+    () => visible(stretches).some((x) => x.pid === active), [stretches, active]);
   if (speakers.length < 2 && !hasSections) return null;
   return (
     <div className={"focuswrap" + (menu ? " open" : "")} ref={ref}>
       {menu && (
-        <div className="focusmenu" role="group" aria-label="Focus what you are reading"
+        <div className="focusmenu" role="group" aria-label="Focus a speaker, and set how the section gutter reads"
           style={{ fontSize: ui.sidebarFontSize }}>
           {speakers.length > 1 && <>
             <div className="focushead">Speaker</div>
@@ -1980,8 +1985,12 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
       )}
       <button className={"focustoggle" + (focus ? " on" : "")} onClick={() => setMenu((m) => !m)}
         aria-expanded={menu} aria-haspopup="menu" aria-pressed={!!focus}
-        aria-label={focus ? `Focused on ${focus} — change or clear` : "Focus one speaker's dialogue"}
-        title={focus ? `Focused on ${focus}` : "Focus one speaker's dialogue"}>
+        // the button opens the sections control too, and on a single-speaker
+        // transcript that is the ONLY thing it opens — naming it after speakers
+        // would send a reader looking for something that is not there
+        aria-label={focus ? `Focused on ${focus} — change, or set how sections read`
+          : "Focus a speaker, or set how the section gutter reads"}
+        title={focus ? `Focused on ${focus}` : "Focus a speaker, or set how sections read"}>
         <Icon name="target" size={17} />
       </button>
     </div>

@@ -127,8 +127,14 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
     abort.current = new AbortController();
     const st = useStore.getState();
     let errors = 0, notices = 0, cost = 0;
+    // hoisted out of the loop so the catch can name the one chunk in flight
+    let i = 0;
     try {
-      for (let i = 0; i < chunks.length; i++) {
+      for (; i < chunks.length; i++) {
+        // Stop landing between chunks: the next fetch would reject as an
+        // AbortError without dispatching, and the catch would then disclose
+        // lines that never left. Nothing more is sent, so nothing more is logged.
+        if (abort.current.signal.aborted) return;
         const { flags, usage } = await scanChunk({
           key, model: model.id, lines: chunks[i], lenses, redaction: red, signal: abort.current.signal,
         });
@@ -149,10 +155,16 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
         ? "AI scan complete. Nothing marked."
         : `AI scan complete: ${errors} possible transcription error${errors === 1 ? "" : "s"}, ${notices} observation${notices === 1 ? "" : "s"}.`);
     } catch (e) {
-      // the request was dispatched, so the data left whether or not an answer
-      // came back — the provenance log says so (see logAiIncomplete)
-      useStore.getState().logAiIncomplete(e, { model: model.id, task: `scan:${[...lenses].sort().join("+")}`, pid,
-        lines: lines.length, redactions });
+      // The request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete). Only the
+      // chunk in flight: the earlier chunks logged themselves on success, and
+      // the later ones never left, so logging the whole run here would count
+      // the first twice and disclose the second falsely.
+      const c = chunks[i];
+      if (c) useStore.getState().logAiIncomplete(e, {
+        model: model.id, task: `scan:${[...lenses].sort().join("+")}`, pid,
+        lines: c.length, redactions: c.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0),
+      });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

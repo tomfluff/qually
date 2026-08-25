@@ -73,8 +73,14 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
     abort.current = new AbortController();
     const st = useStore.getState();
     let grounded = 0, empty = 0, cost = 0;
+    // hoisted out of the loop so the catch can name the one chunk in flight
+    let i = 0;
     try {
-      for (let i = 0; i < chunks.length; i++) {
+      for (; i < chunks.length; i++) {
+        // Stop landing between chunks: the next fetch would reject as an
+        // AbortError without dispatching, and the catch would then disclose
+        // items that never left. Nothing more is sent, so nothing more is logged.
+        if (abort.current.signal.aborted) return;
         const { recs, usage } = await groundChunk({
           key, model: model.id, items: chunks[i], redaction: red, signal: abort.current.signal,
         });
@@ -92,9 +98,16 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
       earcon.aiDone();
       announce(`Grounding complete: ${grounded} segment${grounded === 1 ? "" : "s"} grounded.`);
     } catch (e) {
-      // the request was dispatched, so the data left whether or not an answer
-      // came back — the provenance log says so (see logAiIncomplete)
-      useStore.getState().logAiIncomplete(e, { model: model.id, task: "ground", pid: pids.join("+"), lines: eligible.length, redactions });
+      // The request was dispatched, so the data left whether or not an answer
+      // came back — the provenance log says so (see logAiIncomplete). Only the
+      // chunk in flight: the earlier chunks logged themselves on success, and
+      // the later ones never left, so logging the whole run here would count
+      // the first twice and disclose the second falsely.
+      const c = chunks[i];
+      if (c) useStore.getState().logAiIncomplete(e, {
+        model: model.id, task: "ground", pid: pids.join("+"),
+        lines: c.length, redactions: c.reduce((n, it) => n + red.count(it.excerpt) + red.count(it.def), 0),
+      });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);

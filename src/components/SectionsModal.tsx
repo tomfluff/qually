@@ -14,8 +14,8 @@ import { getKey } from "../ai/key";
 import { modelOf, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { parseBrief, vocabSays, vocabRespelled, briefProse } from "../sections";
-import { proposeSections, estimateSectionsTokens, renderSections, SECTIONS_TOKEN_CAP,
-  SECTIONS_MAX, SECTION_OUT_TOKENS } from "../ai/sections";
+import { proposeSections, estimateSectionsTokens, renderSections, eventRedactions,
+  SECTIONS_TOKEN_CAP, SECTIONS_MAX, SECTION_OUT_TOKENS } from "../ai/sections";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
@@ -39,6 +39,9 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   // are redacted and counted like any other prose in the payload.
   const allMarkers = useStore((s) => s.markers);
   const markers = useMemo(() => allMarkers.filter((m) => m.pid === pid), [allMarkers, pid]);
+  // events are stamped on the VIDEO clock; this is the correction to the
+  // transcript's own, and every other placement in the app applies it
+  const offset = useStore((s) => s.video[pid]?.offset ?? 0);
 
   // The brief this run will use: the transcript's own override if it has one,
   // otherwise the study default. Edits here apply to THIS RUN only — a run must
@@ -87,8 +90,8 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   const respelled = useMemo(() => vocabRespelled(brief, stretches), [brief, stretches]);
 
   const inTok = useMemo(
-    () => (lines.length && declared ? estimateSectionsTokens(lines, vocab, brief, red, markers) : 0),
-    [lines, vocab, brief, red, declared, markers]);
+    () => (lines.length && declared ? estimateSectionsTokens(lines, vocab, brief, red, markers, offset) : 0),
+    [lines, vocab, brief, red, declared, markers, offset]);
   const tooBig = inTok > SECTIONS_TOKEN_CAP;
   // the brief's prose is part of the payload and is redacted too (see
   // renderSections), so a name caught there belongs in this count — it is what
@@ -96,7 +99,9 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   const redactions = useMemo(
     () => lines.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
       + red.count(briefProse(brief))
-      + markers.reduce((n, m) => n + red.count(m.label) + red.count(m.code) + red.count(m.event), 0),
+      // only what renderEvents actually sends — counting the fields it drops
+      // would describe a payload other than the one being approved
+      + markers.reduce((n, m) => n + eventRedactions(m, red), 0),
     [lines, red, brief, markers]);
   // Priced against the schema's OWN ceiling, not against a guess at how many
   // sections the model will find: the reply is capped at SECTIONS_MAX, so this
@@ -104,7 +109,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   // price may overstate; it must never understate.
   const estCost = costOf(model, inTok, SECTIONS_MAX * SECTION_OUT_TOKENS);
   const preview = lines.length && declared
-    ? renderSections(lines.slice(0, 6), vocab, brief, red, markers.slice(0, 4)) : "";
+    ? renderSections(lines.slice(0, 6), vocab, brief, red, markers.slice(0, 4), offset) : "";
 
   const choices = useMemo(() => {
     if (!choose) return [];
@@ -133,7 +138,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
     const by = `AI · ${model.name}`;
     try {
       const { sections, usage } = await proposeSections({
-        key, model: model.id, lines, vocab, brief, redaction: red, markers,
+        key, model: model.id, lines, vocab, brief, redaction: red, markers, offset,
         existing: useStore.getState().stretches, pid, signal: abort.current.signal,
       });
       const added = useStore.getState().landSections(pid, sections, by);

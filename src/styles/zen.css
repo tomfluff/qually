@@ -6,6 +6,8 @@
    line where the eye already is, and the way OUT was sitting exactly there —
    competing with the text for the corner the reader starts from. */
 .zenexit { position:fixed; bottom:10px; left:12px; z-index:60;
+  /* "Back to selection" owns this same corner inside the transcript (z 20,
+     under this pill) — in zen it steps up out of the way; see below */
   display:inline-flex; align-items:center; gap:.45em; padding:.4em .85em;
   background:var(--panel); border:1px solid var(--line); border-radius:999px;
   color:var(--muted); font:inherit; line-height:1; cursor:pointer;
@@ -17,3 +19,8 @@
 .zenexit:hover { color:var(--fg); border-color:var(--accent); }
 .zenexit kbd { display:inline-flex; align-items:center; line-height:1; padding:.15em .4em;
   border:1px solid var(--line); border-radius:.3em; font:inherit; font-size:.85em; }
+/* The exit pill now owns the transcript's bottom-left, which is where "Back to
+   selection" floats (transcript.css, z 20 — under this pill's 60). In zen the
+   two would stack in the same corner, so the jump-back button steps above the
+   pill instead of vanishing beneath it. */
+#app.zen .backtosel { bottom:52px; }
