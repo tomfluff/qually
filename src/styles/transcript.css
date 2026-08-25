@@ -345,11 +345,13 @@
    in the gutter it must be tellable at a glance from a section the researcher
    agreed to. An ::after overlay rather than background-image, because the
    band's colour arrives as an inline `background`, which resets any image a
-   class could set. The pill goes dashed for the same reason it exists at all:
-   colour alone must not be the only signal. */
+   class could set. The stripes carry it alone: the pill is a TAB welded to
+   this band and always sits against it, so a second signal on the pill said
+   the same thing twice. It also cost real legibility — a dashed outline plus
+   opacity:.85 composited the pill's ground toward the page (white cannot fade
+   against white) and dropped its label from 5.82:1 to 4.20:1, under AA. */
 .stretchLabels .stFloatBand.stCand::after { content:""; position:absolute; inset:0;
   background:repeating-linear-gradient(135deg, transparent 0 5px, var(--bg) 5px 9px); opacity:.6; }
-.stretchLabels .stFloatLabel.stCand { outline:2px dashed currentColor; outline-offset:-3px; opacity:.85; }
 /* the endpoint grips: invisible grab zones at the band's real ends — the one
    part of the overlay that DOES take the pointer, so it must stay small.
    Hover shows a thin handle bar in the section's own ink. */

@@ -93,7 +93,7 @@ most valuable thing anyone could do for this project:
 | Mixed-speaker excerpt | amber | a **`!`** badge |
 | AI: likely mis-transcription | amber | **dotted** underline |
 | AI: which noticing lens | lens hue | **underline style** (wavy / double / dashed / thick / boxed) |
-| Section is an unjudged AI proposal | faded hue | **stripes** on its gutter band + a dashed pill, and **gaps** down its minimap strip |
+| Section is an unjudged AI proposal | faded hue | **stripes** on its gutter band (its label pill is welded to that band), and **gaps** down its minimap strip |
 
 **Caveat on code patterns.** These are a **setting, off by default** (Settings → Codes →
 *Code patterns*). Solid bars scan faster for a sighted coder, so the default favours them;
