@@ -44,7 +44,9 @@ beforeAll(async () => {
 test("the project file carries everything that is the research work", () => {
   const p = parseProject(useStore.getState().exportProject());
   expect(p.format).toBe(FORMAT);
-  expect(p.version).toBe(VERSION);
+  // stamped v1: this project carries no AI-proposed section, so there is
+  // nothing in it an older build could misread (see exportProject)
+  expect(p.version).toBe(1);
   // the correction — the thing a CSV re-import would silently revert
   const l2 = p.transcripts.P01.lines[1];
   expect(l2.text).toBe("I kept losing the tick marks.");

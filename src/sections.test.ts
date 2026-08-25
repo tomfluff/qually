@@ -137,6 +137,22 @@ test("an unrecognised status in a file reads as a CANDIDATE, never as a hand mar
   expect(p!.stretches![1].status).toBeUndefined(); // a real hand mark stays one
 });
 
+test("a file carrying a proposal is stamped for what an older build would misread", async () => {
+  const { parseProject, VERSION } = await import("./project");
+  const plain = parseProject(useStore.getState().exportProject());
+  expect(plain!.version).toBe(1); // nothing here an older build gets wrong
+  useStore.getState().landSections("P09", sanitizeSections(VOCAB, IDS, [
+    { dim: "phase", value: "task 1", line_start: 3, line_end: 4, why: "the second task" },
+  ]), "AI · Terra");
+  const withCand = parseProject(useStore.getState().exportProject());
+  // a v1 build has no notion of status: it would spread the field through and
+  // count an unjudged candidate as a section the researcher drew, so it must
+  // refuse the file instead
+  expect(withCand!.version).toBe(VERSION);
+  expect(VERSION).toBeGreaterThan(1);
+  useStore.getState().undo(); // leave the store as the later tests expect it
+});
+
 test("rejection memory is EXACT — a boundary one line off may be proposed again", () => {
   const rejected: Stretch[] = [
     { pid: "P09", start: 3, end: 4, dim: "phase", value: "task 1", status: "rejected" },
@@ -253,4 +269,38 @@ test("a per-transcript brief override follows a rename and dies with a delete", 
   // left behind, a later transcript imported under this name would silently
   // inherit a brief written for the deleted one
   expect("P10" in useStore.getState().studyBrief).toBe(false);
+});
+
+// ── the payload (no network) ───────────────────────────────────────────────
+
+test("labels go PLAIN, the brief's prose is redacted, and both are sent with the lines", async () => {
+  const { renderSections, estimateSectionsTokens } = await import("./ai/sections");
+  const { redactor } = await import("./ai/redact");
+  const red = redactor(["Ann Lee"]);
+  const lines = [
+    { id: 1, ts: "00:00:05", speaker: "R", text: "Ann Lee, shall we start" },
+    { id: 2, ts: "00:00:20", speaker: "P", text: "sure" },
+  ];
+  const brief = "Ann Lee ran the session.\n- phase: warm-up, task 1";
+  const v = parseBrief(brief);
+  const out = renderSections(lines, v, brief, red);
+  // a redacted label would come back as [REDACTED_n] and match nothing — the
+  // same split F3 makes between code names and definitions
+  expect(out).toContain("- phase: warm-up, task 1");
+  // the prose is about the study, and study prose names people
+  expect(out).toContain("BRIEF");
+  expect(out).toContain("[REDACTED_1] ran the session.");
+  expect(out).toContain("1\tR\t[REDACTED_1], shall we start");
+  expect(out).not.toContain("Ann Lee");
+  expect(estimateSectionsTokens(lines, v, brief, red)).toBeGreaterThan(0);
+});
+
+test("a brief that is only declarations sends no BRIEF block at all", async () => {
+  const { renderSections } = await import("./ai/sections");
+  const { redactor } = await import("./ai/redact");
+  const brief = "- phase: warm-up";
+  const out = renderSections([{ id: 1, ts: "", speaker: "P", text: "hi" }],
+    parseBrief(brief), brief, redactor([]));
+  expect(out).not.toContain("BRIEF");
+  expect(out).toContain("LABELS");
 });

@@ -24,7 +24,13 @@ import type { GroundRec } from "./ai/ground";
 import type { Marker } from "./markers";
 
 export const FORMAT = "qually-project";
-export const VERSION = 1;
+// v2 added the AI fields on a stretch (F7: status/proposedBy/why). A file is
+// only STAMPED v2 when it actually carries a proposal — see exportProject. A v1
+// build reading a v2 file refuses it, which is the point: it has no notion of
+// status, so it would spread the field through and count an unjudged candidate
+// as a section the researcher drew. A project with no proposals in it stays v1
+// and stays readable by older builds, because nothing in it can be misread.
+export const VERSION = 2;
 
 export interface Project {
   format: string;

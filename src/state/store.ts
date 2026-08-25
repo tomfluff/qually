@@ -1844,7 +1844,12 @@ export const useStore = create<State>()(
       exportProject: () => {
         const s = get();
         const p: Project = {
-          format: FORMAT, version: VERSION, savedAt: new Date().toISOString(),
+          format: FORMAT,
+          // stamped for what the file CONTAINS, not for the build that wrote
+          // it: a project with no AI-proposed sections holds nothing an older
+          // build could misread, so it stays v1 and stays openable there
+          version: s.stretches.some((x) => x.status) ? VERSION : 1,
+          savedAt: new Date().toISOString(),
           transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
           extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
           hotbar: s.hotbar, video: s.video,

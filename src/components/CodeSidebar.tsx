@@ -8,6 +8,7 @@ import { CodeCounts } from "./CodeCounts";
 import { CodeCombobox } from "./CodeCombobox";
 import { AiCheckModal } from "./AiCheckModal";
 import { SuggestModal } from "./SuggestModal";
+import { SectionsModal } from "./SectionsModal";
 import { EventList } from "./EventList";
 import { openColorPicker } from "../colorPicker";
 import { announce } from "../announce";
@@ -32,6 +33,7 @@ export function CodeSidebar() {
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [sectionsOpen, setSectionsOpen] = useState(false);
   const hasCodes = liveCodes(codebook).length > 0;
   const { open: aiMenu, setOpen: setAiMenu, btnRef: aiBtnRef, menuRef: aiMenuRef, arrows: aiArrows } = useToggleMenu();
 
@@ -79,6 +81,13 @@ export function CodeSidebar() {
               title={hasCodes ? undefined : "Add a code first — suggestions apply your existing codes"}
               onClick={() => { if (hasCodes) { setSuggestOpen(true); setAiMenu(false); } }}>
               <Icon name="sparkle" size={sidebarFontSize} /> AI code suggestion
+            </button>
+            {/* not gated on the codebook: sections are the shape of the SESSION,
+                which a researcher may well want marked up before they code a
+                line. What it IS gated on is the brief, and that lives in the
+                gate — where the labels can be written on the spot. */}
+            <button role="menuitem" onClick={() => { setSectionsOpen(true); setAiMenu(false); }}>
+              <Icon name="bookmark" size={sidebarFontSize} /> AI section marking
             </button>
           </div>
         )}
@@ -154,6 +163,7 @@ export function CodeSidebar() {
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
       {aiOpen && <AiCheckModal pid={active} onClose={() => setAiOpen(false)} />}
       {suggestOpen && <SuggestModal pid={active} onClose={() => setSuggestOpen(false)} />}
+      {sectionsOpen && <SectionsModal pid={active} onClose={() => setSectionsOpen(false)} />}
     </div>
   );
 }

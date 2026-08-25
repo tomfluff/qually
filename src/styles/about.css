@@ -203,3 +203,23 @@
 .recDials .settings-note { margin:0; max-width:56ch; }
 .recDials .segmented { flex:none; }
 .recDials .segmented .seg { padding:5px 12px; font-weight:500; }
+
+/* AI consent gate — the study brief (F7). The one AI modal where the
+   researcher WRITES the thing that governs the run, so the field is a real
+   editing surface rather than a preview: monospace, because the bulleted
+   declarations are read as structure and a proportional font hides a stray
+   character that stopped a line parsing. */
+.ai-brief { width:100%; box-sizing:border-box; resize:vertical; padding:8px 10px;
+  border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85em; line-height:1.6; }
+.ai-brief:disabled { opacity:.6; }
+/* The echo: what the run has promised to accept, said back before it is sent.
+   Quiet by design — it confirms rather than warns, and the warning variant (no
+   labels at all) is .ai-warn, which is the loud one. */
+.ai-vocab { display:flex; align-items:baseline; gap:8px; margin:8px 0 4px;
+  padding:8px 10px; border-radius:8px; line-height:1.5;
+  background:color-mix(in srgb, var(--accent) 10%, var(--bg));
+  border:1px solid color-mix(in srgb, var(--accent) 45%, var(--bg)); }
+.ai-vocab svg { flex:none; color:var(--accent); }
+.ai-briefsave { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 2px; }
+.ai-briefsave .btn { font-size:.9em; }
