@@ -292,7 +292,12 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
               <>
                 <div className="ai-payload">
                   <div className="ai-payload-head">
-                    <span className="eyebrow">Exactly what leaves your device</span>
+                    {/* not "exactly what leaves your device", which the other
+                        gates say of a payload they show whole: this run sends
+                        the entire transcript, so the panel is a SAMPLE of it —
+                        the first lines, in the form they leave in. The count
+                        beside it is the honest total. */}
+                    <span className="eyebrow">The first lines, in the form they leave your device</span>
                     <span className="ai-model">{model.id}</span>
                   </div>
                   <pre className="nicescroll">{preview}{lines.length > 6 ? "\n…" : ""}</pre>

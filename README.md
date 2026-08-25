@@ -9,7 +9,8 @@ small target with a mouse. QuAlly assumes you might not.
 
 Load a transcript, assign codes to lines with the keyboard, and browse everything by
 code — all in one self-contained HTML file that runs in your browser with no server, no
-install, and no data ever leaving your machine.
+install, and nothing leaving your machine unless you turn the optional AI on and
+approve a request.
 
 **→ [Open QuAlly](https://tomfluff.github.io/qually/)**  ·  Or download
 [`docs/index.html`](docs/index.html) and open it locally.
@@ -48,14 +49,18 @@ support in particular is **not** there yet.
   (which words carry each one), propose candidate codings from your own codebook, propose
   near-duplicate codes to merge, and mark up the shape of a session — which stretch is the
   warm-up, which the second task — against labels you declare yourself. Every one is a
-  proposal — it applies nothing without your decision, and it never invents a code or a
-  label you did not write.
+  proposal — it applies nothing without your decision. Two of those runs work from a
+  CLOSED vocabulary and cannot step outside it: candidate codings use only codes already
+  in your codebook, and sections use only the labels you declared in your brief. (The
+  codebook consolidation pass is the exception, and says so: asked to merge or rename, it
+  may propose a clearer name — which is still a proposal you accept or reject.)
 - **Merge partial lines**, line numbers, full/short speaker names, a resizable transcript
   minimap, and "near-balance" speaker warnings on mixed excerpts.
 - **Save & continue** — export a `.qually.json` project (transcripts + codebook + corrections)
   and reopen it later, or export everything as CSVs in a zip.
-- **Private by default** — everything lives in your browser (localStorage); nothing is
-  uploaded.
+- **Private by default** — everything lives in your browser (localStorage). Nothing is
+  uploaded unless you add your own OpenAI key and approve a request, and each gate shows
+  you what is being sent before it goes.
 
 ## Input format
 

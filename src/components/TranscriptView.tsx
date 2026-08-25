@@ -780,6 +780,25 @@ export function TranscriptView() {
       if (g) { e.preventDefault(); openAddEvent(g); }
       return;
     }
+    // Shift+F10 / the Menu key: the keyboard twin of right-clicking the
+    // selection — the same line-row dialog, same rows. This is what makes an
+    // AI-proposed section's verdict reachable without a mouse from the
+    // transcript itself (the Assist panel is the other route), which is the
+    // promise ACCESSIBILITY.md makes about it. Anchored to the selection's
+    // last row; the arrows keep that row scrolled into view, and the dialog
+    // clamps itself to the viewport regardless.
+    if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+      const sel = useStore.getState().selection;
+      if (sel.pid !== active || !sel.lines.size) return;
+      const { first, last } = boundsOf(sel.lines);
+      const g = groups.find((x) => last >= x.startId && last <= x.endId);
+      if (!g) return;
+      e.preventDefault(); // also keeps the browser's own menu from opening over ours
+      const r = document.getElementById(`trow-${g.startId}`)?.getBoundingClientRect();
+      setStretchMenu({ x: r ? r.left + 24 : 80, y: r ? r.bottom : 80,
+        start: first, end: last, addAfter: g });
+      return;
+    }
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const s = useStore.getState();
     if (s.selection.pid === active && s.selection.lines.size) return; // App moves it from here

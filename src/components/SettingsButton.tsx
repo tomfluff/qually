@@ -496,10 +496,11 @@ function AiSettings() {
     <>
       <div className="settings-note">
         Off until you add a key. Anything you run sends transcript lines to OpenAI —
-        you approve each request and see exactly what's sent. The AI only proposes
+        you approve each request and see what's being sent. The AI only proposes
         (marks, grounds, suggests codings and merges, and marks up a session's
-        sections); nothing is applied without your decision, and it never invents
-        a code or a section label you did not write yourself.
+        sections); nothing is applied without your decision. Code suggestions and
+        section marking work from a closed vocabulary — your codebook, and the
+        labels you declared — and cannot step outside it.
       </div>
 
       <div className="set-h">Access</div>

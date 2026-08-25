@@ -120,6 +120,7 @@ events.csv            session events and field notes, as loaded (with your edits
 ai-observations.csv   instances the AI marked for review (not codes)
 ai-provenance.csv     every AI request made: model, lines sent, cost
 decisions.csv         every codebook decision: what, why, whose idea
+answers.csv           every question asked of the material: one row per cited point
 sections.csv          which part of the study each stretch of talk belongs to
                       (blank status = you marked it; otherwise the AI proposed it)
 

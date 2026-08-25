@@ -45,7 +45,9 @@ valuable next step.
   `Enter` to play the loaded media from the selected line, `Space` to play/pause it and
   `[`/`]` to change its speed (all three stand down while typing), `M` to open the selected
   line's AI mark (apply its suggested fix when one is offered, or dismiss it; pressing
-  again cycles the line's marks).
+  again cycles the line's marks), `Shift+F10` (or the Menu key) to open the selected
+  lines' dialog — mark them as a section, add an event after them, or accept/reject an
+  AI-proposed section overlapping them.
 - So is everything around the coding: tabs switch and close from the keyboard; sidebar
   and Browse code rows apply on `Enter`; every code-management action (rename, recolor,
   merge, pin, delete) is reachable through a per-row `⋯` button (or `Shift+F10` — on
@@ -59,12 +61,15 @@ valuable next step.
 ### Screen readers (new, and honestly provisional)
 Wired in this pass; **not yet tested with real screen-reader users**, which is the next
 most valuable thing anyone could do for this project:
-- The transcript is a `listbox` with `option` rows (`aria-selected`,
-  `aria-setsize`/`aria-posinset`, `aria-activedescendant` following the selection head).
-  The list is virtualized, so rows scrolled far away genuinely do not exist in the DOM;
-  set-size/position keep the counts truthful and the active row is always rendered while
-  you drive it, but a screen reader's own document-cursor walk will only see the
-  rendered window. This is the compromise, stated plainly.
+- The transcript is a **focusable region**, not a `listbox`. It was one, briefly; the
+  contract was deliberately dropped, because no `option` row can express this app's
+  reading order plus its AI marks plus a whole multi-line selection at once, and a row
+  announcing itself over the live region's account of the same thing is two voices
+  disagreeing. The region carries an `aria-label` naming the keys that work in it, the
+  rows carry no `role=option`/`aria-selected`, and a polite live region is the single
+  voice for what changed. The list is also virtualized, so rows scrolled far away
+  genuinely do not exist in the DOM and a document-cursor walk sees a window, not the
+  transcript. Both compromises, stated plainly.
 - A polite live region announces the things the eye gets for free: a code applied
   ("Coded lines 8 to 10 as workarounds"), undo/redo, segment status changes and
   deletions, import results, search-match position, AI-scan completion.
@@ -126,11 +131,16 @@ Listed plainly, worst first. These are real; do not read the README as claiming 
 2. **Mouse-only interactions with no keyboard equivalent:** dragging a segment's edge to
    resize it (the popover has no range editor yet), dragging a **section**'s endpoint grips
    in the gutter (the same gap, for the same reason — and the gutter overlay itself is
-   `aria-hidden`, so its label pills are decoration, not controls), and the minimap
+   `aria-hidden`, so its label pills are decoration, not controls), **relabelling or
+   recolouring an existing section** and removing one (the pill's own menu opens only on
+   a right-click of that pill, which nothing but a mouse can aim at), and the minimap
    (navigation duplicate; keyboard has Home/End/PageUp and back-to-selection).
+   Marking a section by hand is NOT on this list: the line-row dialog's "Mark these lines
+   as…" form is reachable by the same `Shift+F10` / Menu key as everything else in it.
    A section's *verdict* is deliberately not in that list: an AI-proposed section is
-   accepted or rejected from the line-row dialog (right-click, or the keyboard route into
-   it) and from the Assist tab's Sections panel — both ordinary buttons in the tab order,
+   accepted or rejected from the line-row dialog (right-click a selected line, or press
+   `Shift+F10` / the Menu key on the selection) and from the Assist tab's Sections
+   panel — both ordinary buttons in the tab order,
    because a verdict reachable only through an aria-hidden overlay would be reachable only
    by mouse. `Alt`-click dismissal of an AI
    mark left this list: `M` now opens the selected line's mark popover, which carries

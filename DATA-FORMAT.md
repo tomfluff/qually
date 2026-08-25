@@ -99,11 +99,16 @@ bundle:
 | `proposed_by` | blank for your own; otherwise the model, e.g. `AI · Terra` |
 | `why` | for a proposal, the model's one sentence naming what marks the boundary — kept after you accept, so the reason is still there when you write up |
 
-A blank `status` and a blank `proposed_by` mean the same thing and always will:
-you drew it. Only the AI-proposed rows carry either.
+A blank `status` with a blank `proposed_by` means you drew it — that is what QuAlly
+itself writes for a section you marked by hand, and only AI-proposed rows carry either
+field. (A hand-edited or third-party project file may set one without the other; nothing
+breaks, but the pair no longer tells you where the section came from.)
 
 Rejected sections are exported too. They are kept so a re-run does not propose
 the same span again, and they count towards nothing.
+
+`sections.csv` is export-only — nothing reads it back in. Sections come back
+through the project file, where they ride with everything else.
 
 ## Working with your data
 

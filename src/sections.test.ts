@@ -338,3 +338,16 @@ test("a rejected section still exports — it is the memory a re-run consults", 
   useStore.getState().setStretchStatus(i, "rejected");
   expect(useStore.getState().exportSections()).toContain("rejected");
 });
+
+test("a project holding only a study brief is still stamped for the build that understands it", () => {
+  const st = useStore.getState();
+  st.deleteStretchesBy({ status: "candidate" });
+  st.deleteStretchesBy({ status: "rejected" });
+  // no AI-proposed stretch left anywhere — only the brief, which a v1 build
+  // does not carry at all and would drop on its next save
+  expect(useStore.getState().stretches.some((x) => x.status)).toBe(false);
+  expect(Object.values(useStore.getState().studyBrief).some((t) => t.trim())).toBe(true);
+  const p = JSON.parse(useStore.getState().exportProject());
+  expect(p.version).toBe(2);
+  expect(p.studyBrief[""]).toContain("phase");
+});

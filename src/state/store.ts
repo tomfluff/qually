@@ -1874,10 +1874,18 @@ export const useStore = create<State>()(
         const s = get();
         const p: Project = {
           format: FORMAT,
-          // stamped for what the file CONTAINS, not for the build that wrote
-          // it: a project with no AI-proposed sections holds nothing an older
-          // build could misread, so it stays v1 and stays openable there
-          version: s.stretches.some((x) => x.status) ? VERSION : 1,
+          // Stamped for what the file CONTAINS, not for the build that wrote
+          // it: a project holding nothing an older build could get wrong stays
+          // v1 and stays openable there.
+          // Two things make it v2. A stretch with a status, because a v1 build
+          // has no notion of one and would count an unjudged candidate as a
+          // section the researcher drew. And a study brief, because a v1 build
+          // does not carry the field at all — it would open the file, not know
+          // studyBrief exists, and drop it on the next save. A brief survives a
+          // run that proposed nothing and a run whose proposals were discarded,
+          // so "has a statused stretch" was never the whole test.
+          version: s.stretches.some((x) => x.status)
+            || Object.values(s.studyBrief).some((t) => t.trim()) ? VERSION : 1,
           savedAt: new Date().toISOString(),
           transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
           extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
