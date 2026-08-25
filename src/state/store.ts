@@ -156,11 +156,12 @@ export interface Ui {
   // isolate one speaker's dialogue, PER TRANSCRIPT (focus is a lens on a study
   // file, not a global): pid -> speaker name; absent = everyone
   speakerFocus: Record<string, string>;
-  /** Focus one SECTION, per transcript, the way speakerFocus focuses one
-      speaker — "show me the second task". Independent of it and combinable:
-      a row is dimmed or collapsed if either lens excludes it, so "the
-      participant, during task 2" is two picks rather than a new mode. */
-  sectionFocus: Record<string, { dim: string; value: string }>;
+  /** How loudly the section gutter reads: as marked, quieted, or away
+      altogether. A display setting sitting beside the focus lenses because it
+      answers the same question they do — what am I reading right now — and
+      independent of them: quieting the sections has nothing to do with which
+      speaker you are following. */
+  stretchView: "show" | "dim" | "collapse";
   // which Assist-tab panel is showing — chosen from the tab's own menu
   assistPanel: "observations" | "merge" | "suggest" | "sections" | "summary" | "describe" | "ask" | "decisions" | "tail";
   // what the thin-tail queue counts as thin (1, 2 or 3 excerpts) — the
@@ -958,7 +959,7 @@ export const useStore = create<State>()(
       transcripts: {}, segments: [], codebook: {}, extSegRows: [],
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
-      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, sectionFocus: {}, focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, stretchColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
+      video: {}, ui: { fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right", mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md", palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false, mergeGap: 3, showLineNumbers: false, accent: DEFAULT_ACCENT, speakerNames: "full", fontFamily: "system", warnCorner: "right", warnSize: "sm", laneWidth: "md", minimapWidth: 66, minimapDetail: "detailed", showNotices: true, hiddenLenses: [], lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75, speakerFocus: {}, stretchView: "show", focusDim: true, focusCollapse: false, assistPanel: "observations", tailLimit: 1, stretchBand: "sm", stretchLabel: "md", eventListHeight: 200, eventSort: "type", codeSort: "name", markerColors: {}, stretchColors: {}, summaryLayout: "side", summarySplit: 0.5, groundBold: true, groundWash: true, groundUnderline: false,
         speakerColors: {}, speakerWeight: {}, coderName: "" },
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
@@ -978,7 +979,7 @@ export const useStore = create<State>()(
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
-          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, sectionFocus: {}, markerColors: {}, stretchColors: {} },
+          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {}, stretchColors: {} },
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
           jump: null, search: NO_SEARCH,
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
@@ -2804,7 +2805,7 @@ export const useStore = create<State>()(
         s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
         s.ui.assistPanel ??= "observations";
         s.studyBrief ??= {}; // added with F7; a workspace saved before it has none
-        s.ui.sectionFocus ??= {};
+        s.ui.stretchView ??= "show";
         s.ui.tailLimit ??= 1;
         s.ui.stretchBand ??= "sm";
         s.ui.stretchLabel ??= "md";

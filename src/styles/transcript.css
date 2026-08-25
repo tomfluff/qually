@@ -396,8 +396,16 @@
 .stretchMenu .stCandBtns { display:flex; gap:6px; }
 .stretchMenu .stCandBtns .btn { flex:1; justify-content:center; }
 .stretchMenu .stBy { color:var(--muted); font-size:.85em; }
-/* the focus menu carries two lenses now (speaker, section) — a quiet head
-   apiece, so a list of names and a list of sections cannot be read as one list */
+/* the focus menu carries a speaker lens and a sections control — a quiet head
+   apiece, so a list of names and a list of states cannot be read as one list */
 .focusmenu .focushead { font-size:.72em; text-transform:uppercase; letter-spacing:.08em;
   color:var(--muted); font-weight:700; padding:6px 8px 3px; }
 .focusmenu .focushead:not(:first-child) { border-top:1px solid var(--line); margin-top:4px; }
+
+/* Sections "quieted": the gutter stays where it is, keeping the page's geometry
+   and the reader's place, but stops competing with the text for attention.
+   Opacity on the overlay, not per band, so bands and pills fade together and a
+   candidate's stripe fades with the band it belongs to. Not lower than .35 —
+   below that the bands stop being legible AS bands, which is hiding, and
+   hiding has its own setting. */
+.stretchLabels.stQuiet { opacity:.35; }

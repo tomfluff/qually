@@ -193,7 +193,12 @@ export function TranscriptView() {
   const stretchColors = useStore((s) => s.ui.stretchColors);
   // the gutter exists only while this transcript has stretches; every row
   // shares one geometry so the text column stays aligned
+  const stretchView = useStore((s) => s.ui.stretchView);
   const stretchCtx = useMemo(() => {
+    // "collapse" is not a narrower gutter, it is no gutter: the whole point is
+    // to give the width back to the text, and every consumer below already
+    // handles the no-sections case by rendering nothing
+    if (stretchView === "collapse") return null;
     // everything but the REJECTED: those exist only so a re-run does not
     // propose them again, and a section nobody agreed to must not be drawn
     // beside the ones they did. Candidates ride along, striped (see .stCand).
@@ -218,7 +223,7 @@ export function TranscriptView() {
       // the minimap paints the SESSION, not the review: a candidate strip there
       // would be indistinguishable from a section the researcher agreed to
       evidence: list.filter(isEvidence) };
-  }, [allStretches, active, stretchBand, stretchLabel, stretchColors, dark]);
+  }, [allStretches, active, stretchBand, stretchLabel, stretchColors, dark, stretchView]);
   const [stretchMenu, setStretchMenu] = useState<{ x: number; y: number; start: number; end: number; addAfter: Group } | null>(null);
   // Click a label pill to act on THAT stretch — accept or reject it while it is
   // a proposal, edit/recolour/remove once it is a mark. A plain LEFT click,
@@ -558,24 +563,6 @@ export function TranscriptView() {
   const focusActive = useMemo(
     () => focusName && groups.some((g) => g.speaker.trim() === focusName) ? focusName : null,
     [groups, focusName]);
-  // The section lens, the same shape as the speaker one: the spans of THIS
-  // transcript carrying the focused label, EVIDENCE only — a lens built out of
-  // proposals nobody has judged would be showing you the model's guess about
-  // where you are. A label that no longer exists here (a re-import, a relabel)
-  // is ignored rather than dimming the whole file.
-  const sectionFocus = useStore((s) => s.ui.sectionFocus);
-  const sectionSpans = useMemo(() => {
-    const f = sectionFocus[active];
-    if (!f) return null;
-    const spans = evidence(allStretches)
-      .filter((x) => x.pid === active && x.dim === f.dim && x.value === f.value)
-      .map((x) => [x.start, x.end] as [number, number]);
-    return spans.length ? spans : null;
-  }, [sectionFocus, active, allStretches]);
-  // a group is inside the lens if ANY of its lines is
-  const inSection = useCallback((ids: number[]) =>
-    !sectionSpans || ids.some((id) => sectionSpans.some(([a, b]) => id >= a && id <= b)),
-  [sectionSpans]);
 
   // Session events, interleaved BY TIME (see markers.ts / useMarkers): each one
   // renders immediately before the first line that starts after it, so reading down
@@ -1116,7 +1103,7 @@ export function TranscriptView() {
               key={`g${it.g.startId}`}
               group={it.g}
               selected={it.g.ids.some((id) => selLines?.has(id))}
-              spkOff={(focusActive && focusActive !== it.g.speaker.trim()) || !inSection(it.g.ids)
+              spkOff={focusActive && focusActive !== it.g.speaker.trim()
                 ? (focusDim ? " spk-off-dim" : "") + (focusCollapse ? " spk-off-collapse" : "")
                 : ""}
               cols={cols}
@@ -1221,7 +1208,8 @@ export function TranscriptView() {
       {pop && <SegmentPopover sid={pop.sid} x={pop.x} y={pop.y} onClose={() => setPop(null)} />}
       {codeMenu && <CodeMenu code={codeMenu.code} x={codeMenu.x} y={codeMenu.y}
         onClose={() => setCodeMenu(null)} />}
-      <div className="stretchLabels" ref={stretchOvRef} aria-hidden="true" />
+      <div className={"stretchLabels" + (stretchView === "dim" ? " stQuiet" : "")}
+        ref={stretchOvRef} aria-hidden="true" />
       {stretchMenu && (
         <StretchMenu x={stretchMenu.x} y={stretchMenu.y} start={stretchMenu.start} end={stretchMenu.end}
           after={stretchMenu.addAfter.endId}
@@ -1935,25 +1923,12 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
     if (sp) next[active] = sp; else delete next[active];
     setUi({ speakerFocus: next });
   };
-  // the sections THIS transcript actually carries — evidence only, so a lens
-  // is never built out of a proposal nobody has judged
+  // whether this transcript has a section gutter at all — the three-way control
+  // below is about how loudly it reads, and there is nothing to quiet without one
   const stretches = useStore((s) => s.stretches);
-  const sections = useMemo(() => {
-    const seen: { dim: string; value: string }[] = [];
-    for (const x of evidence(stretches)) {
-      if (x.pid !== active) continue;
-      if (!seen.some((y) => y.dim === x.dim && y.value === x.value)) seen.push({ dim: x.dim, value: x.value });
-    }
-    return seen.sort((a, b) => a.dim.localeCompare(b.dim) || a.value.localeCompare(b.value));
-  }, [stretches, active]);
-  const sf = ui.sectionFocus[active];
-  const setSection = (pick: { dim: string; value: string } | null) => {
-    const next = { ...ui.sectionFocus };
-    if (pick) next[active] = pick; else delete next[active];
-    setUi({ sectionFocus: next });
-  };
-  // nothing to focus BY: one speaker and no sections is not a lens, it is a wall
-  if (speakers.length < 2 && !sections.length) return null;
+  const hasSections = useMemo(
+    () => evidence(stretches).some((x) => x.pid === active), [stretches, active]);
+  if (speakers.length < 2 && !hasSections) return null;
   return (
     <div className="focuswrap" ref={ref}>
       {menu && (
@@ -1972,25 +1947,19 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
               </button>
             ))}
           </>}
-          {/* the second lens, on the same footing as the first: pick a section
-              and everything outside it takes the same dim/collapse treatment.
-              Combinable with the speaker above — "the participant, during
-              task 2" is two picks, not a mode */}
-          {sections.length > 0 && <>
-            <div className="focushead">Section</div>
-            <button className={"focusitem" + (!sf ? " on" : "")} onClick={() => setSection(null)}>
-              <span className="focusname">Whole session</span>{!sf && " ✓"}
-            </button>
-            {sections.map((x) => {
-              const on = sf?.dim === x.dim && sf?.value === x.value;
-              return (
-                <button key={`${x.dim}\u0000${x.value}`} className={"focusitem" + (on ? " on" : "")}
-                  onClick={() => setSection(on ? null : x)}>
-                  <span className="lensdot" style={{ background: stretchColorOf(x.value, ui.stretchColors, ui.dark) }} />
-                  <span className="focusname">{x.dim}: {x.value}</span>{on && " ✓"}
-                </button>
-              );
-            })}
+          {/* How loudly the section gutter reads. Beside the speaker lens
+              because it answers the same question — what am I reading right
+              now — and independent of it: quieting the sections has nothing to
+              do with which speaker you are following. Collapse takes the gutter
+              away entirely and gives its width back to the text. */}
+          {hasSections && <>
+            <div className="focushead">Sections</div>
+            {([["show", "As marked"], ["dim", "Quieted"], ["collapse", "Hidden"]] as const).map(([id, label]) => (
+              <button key={id} className={"focusitem" + (ui.stretchView === id ? " on" : "")}
+                onClick={() => setUi({ stretchView: id })}>
+                <span className="focusname">{label}</span>{ui.stretchView === id && " ✓"}
+              </button>
+            ))}
           </>}
           {/* independent, combinable effects — dim only, collapse only, or both */}
           <div className="focusmode">
