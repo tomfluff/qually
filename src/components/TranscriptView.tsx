@@ -18,7 +18,7 @@ import { fuzzy } from "./CodeCombobox";
 import { stretchColorOf, stretchDims, visible, evidence, pendingAt, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
-import { findMatches, scopeFilter } from "../search";
+import { scopeFilter } from "../search";
 import { withSubs, SubText, subSpans } from "../markup";
 import { excerptOf } from "../contract/excerpt";
 import { savedScroll, positioned, rememberScroll } from "../scrollMemory";
@@ -31,6 +31,7 @@ import { AddEventModal } from "./AddEventModal";
 import { tsToSec } from "../video/seek";
 import type { ReactNode } from "react";
 import { stretchLabelPlacement } from "../stretchLabelPosition";
+import { searchHighlight } from "./SearchHighlight";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 
@@ -40,23 +41,6 @@ type LanedSeg = ReturnType<typeof laneAssign>[number];
 // restore, jumps, keep-in-view, the minimap) indexes THIS array — one axis, so a
 // marker between two lines can't push the two views out of step.
 export type Item = { kind: "g"; g: Group } | { kind: "m"; m: Marker };
-
-// text with search matches wrapped in <mark>; the occ == curOcc match is emphasized
-function renderText(text: string, query: string, curOcc: number): ReactNode {
-  const m = findMatches(text, query);
-  const subs = subSpans(text);
-  if (!m.length) return withSubs(text, 0, subs);
-  const nodes: ReactNode[] = [];
-  let last = 0;
-  m.forEach(([s, e], k) => {
-    if (s > last) nodes.push(<SubText key={"p" + k} text={text.slice(last, s)} from={last} spans={subs} />);
-    nodes.push(<mark key={k} className={k === curOcc ? "cur" : ""}>
-      <SubText text={text.slice(s, e)} from={s} spans={subs} /></mark>);
-    last = e;
-  });
-  if (last < text.length) nodes.push(<SubText key="tail" text={text.slice(last)} from={last} spans={subs} />);
-  return nodes;
-}
 
 // AI marks in the text. Transcription flags: amber dotted (something's wrong).
 // Noticing lenses: a quiet per-lens tint (something to look at). Hover shows the
@@ -1885,7 +1869,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
               // and it would fire behind the custom tooltips on the spans inside it
               <span onDoubleClick={(e) => { e.preventDefault(); onEditStart(l.id); }}>
                 {searchQuery && inSearch(l)
-                  ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
+                  ? searchHighlight(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
                   : flagsByLine.has(l.id)
                     ? renderFlagged(l.text, flagsByLine.get(l.id)!, l.id)
                     : withSubs(l.text)}

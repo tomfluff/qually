@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import { useDialogFocus } from "../useDialogFocus";
+import { saveBlob } from "../download";
 import { Icon } from "./Icon";
 
 // The prompt a user pastes into an AI (ChatGPT / Claude) to turn any transcript
@@ -73,10 +74,7 @@ export function DataFormatButton() {
     setTimeout(() => setCopied(false), 1600);
   };
   const downloadExample = () => {
-    const url = URL.createObjectURL(new Blob([EXAMPLE_CSV], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url; a.download = "example-transcript.csv"; a.click();
-    URL.revokeObjectURL(url);
+    saveBlob(new Blob([EXAMPLE_CSV], { type: "text/csv" }), "example-transcript.csv");
   };
 
   return (

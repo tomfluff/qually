@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useMemo, useState } from "react";
 import { useStore, patternOf, liveCodes } from "../state/store";
-import { codeStats, sortCodes, SORTS } from "../codeStats";
+import { codeStats, sortCodes } from "../codeStats";
 import { CodeMenu } from "./CodeMenu";
 import { CodeCounts } from "./CodeCounts";
 import { CodeCombobox } from "./CodeCombobox";
@@ -11,9 +11,9 @@ import { SuggestModal } from "./SuggestModal";
 import { SectionsModal } from "./SectionsModal";
 import { EventList } from "./EventList";
 import { openColorPicker } from "../colorPicker";
-import { announce } from "../announce";
 import { useToggleMenu } from "../usePopover";
 import { Icon, countIconSize } from "./Icon";
+import { CodeSortChip } from "./CodeSortChip";
 
 export function CodeSidebar() {
   const active = useStore((s) => s.active); // the sidebar only renders for a transcript view
@@ -50,10 +50,6 @@ export function CodeSidebar() {
   // one chip, cycling — three orders is one more than a toggle but still far less
   // room than three pills cost in a 250px panel, and the chip names the order it
   // is IN, so the list is always labelled even when nobody touches it
-  // Math.max: rehydrate normalizes codeSort, but a render must never be one
-  // bad value away from SORTS[-1].label throwing (the app has no error boundary)
-  const sortIdx = Math.max(0, SORTS.findIndex((s) => s.id === codeSort));
-  const nextSort = SORTS[(sortIdx + 1) % SORTS.length];
   // the counts read as icons, not as "12·3": a glyph pair survives the panel getting
   // narrow, and the separator dot never did say which number was which
   const cntIcon = countIconSize(sidebarFontSize);
@@ -97,12 +93,7 @@ export function CodeSidebar() {
       <div className="codeHead">
         <span className="codeTitle">Codes</span>
         <span className="cnt">{codes.length}</span>
-        <button className="sortchip"
-          onClick={() => { setUi({ codeSort: nextSort.id }); announce(`Sorted by ${nextSort.label}`); }}
-          title={`Sorted by ${SORTS[sortIdx].label} — switch to ${nextSort.label}`}
-          aria-label={`Sorted by ${SORTS[sortIdx].label}. Switch to ${nextSort.label}.`}>
-          {SORTS[sortIdx].label}
-        </button>
+        <CodeSortChip value={codeSort} onChange={(value) => setUi({ codeSort: value })} />
       </div>
       <div className="codeList nicescroll">
       {codes.map((code) => {

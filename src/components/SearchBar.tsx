@@ -1,27 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { findMatches, replaceOccurrence, scopeFilter, parseRange } from "../search";
-import { withSubs, SubText, subSpans } from "../markup";
 import { Icon } from "./Icon";
 import { announce } from "../announce";
-
-// render text with all query matches wrapped in <mark>
-function highlight(text: string, query: string): ReactNode {
-  const m = findMatches(text, query);
-  const subs = subSpans(text);
-  if (!m.length) return withSubs(text, 0, subs);
-  const nodes: ReactNode[] = [];
-  let last = 0;
-  m.forEach(([s, e], k) => {
-    if (s > last) nodes.push(<SubText key={"p" + k} text={text.slice(last, s)} from={last} spans={subs} />);
-    nodes.push(<mark key={k}><SubText text={text.slice(s, e)} from={s} spans={subs} /></mark>);
-    last = e;
-  });
-  if (last < text.length) nodes.push(<SubText key="tail" text={text.slice(last)} from={last} spans={subs} />);
-  return nodes;
-}
+import { searchHighlight } from "./SearchHighlight";
 
 export function SearchBar() {
   const search = useStore((s) => s.search);
@@ -345,7 +329,7 @@ export function SearchBar() {
                       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpTo(g.pid, h.line); }
                     }}>
                     <span className="searchlid">{h.line}</span>
-                    <span className="searchtext">{highlight(h.text, query)}</span>
+                    <span className="searchtext">{searchHighlight(h.text, query)}</span>
                   </div>
                 ))}
               </div>

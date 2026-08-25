@@ -9,8 +9,8 @@ import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { segExcerpt } from "../contract/excerpt";
 import { MERGE_EXEMPLARS, renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
+import { gatherCodeEvidence } from "../codeEvidence";
 import { clusterCodes, estimateClusterTokens, type ClusterGroup } from "../ai/cluster";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
@@ -42,20 +42,9 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
   const model = modelOf(modelId);
 
   // one input per code that has accepted segments — name + def + up to N excerpts
-  const codes = useMemo<MergeCodeInput[]>(() => {
-    const byCode = new Map<string, string[]>();
-    for (const s of segments) {
-      if (s.status !== "accepted" || !transcripts[s.pid]) continue;
-      if (codebook[s.code]?.parked) continue; // set-aside codes are outside the working book here too
-      const arr = byCode.get(s.code) ?? [];
-      if (arr.length >= MERGE_EXEMPLARS) continue;
-      const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
-      if (ex) { arr.push(ex); byCode.set(s.code, arr); }
-    }
-    return [...byCode.entries()].map(([name, excerpts]) => ({
-      name, def: codebook[name]?.def ?? "", excerpts,
-    }));
-  }, [segments, transcripts, codebook]);
+  const codes = useMemo<MergeCodeInput[]>(() =>
+    gatherCodeEvidence(segments, transcripts, codebook, MERGE_EXEMPLARS),
+  [segments, transcripts, codebook]);
 
   const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0);
   const inTok = useMemo(() => estimateClusterTokens(codes, red, transient ? "areas" : "usage"), [codes, red, transient]);

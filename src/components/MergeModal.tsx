@@ -9,9 +9,9 @@ import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { segExcerpt } from "../contract/excerpt";
 import { dedupeCodes, renderMergePayload, estimateMergeTokens, MERGE_EXEMPLARS,
   type MergeCodeInput, type MergeProposal } from "../ai/dedupe";
+import { gatherCodeEvidence } from "../codeEvidence";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
@@ -35,20 +35,9 @@ export function MergeModal({ onProposals, onClose }: {
   const model = modelOf(modelId);
 
   // one input per code that has accepted segments — name + def + up to N excerpts
-  const codes = useMemo<MergeCodeInput[]>(() => {
-    const byCode = new Map<string, string[]>();
-    for (const s of segments) {
-      if (s.status !== "accepted" || !transcripts[s.pid]) continue;
-      if (codebook[s.code]?.parked) continue; // set aside means out of the payload too
-      const arr = byCode.get(s.code) ?? [];
-      if (arr.length >= MERGE_EXEMPLARS) continue;
-      const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
-      if (ex) { arr.push(ex); byCode.set(s.code, arr); }
-    }
-    return [...byCode.entries()].map(([name, excerpts]) => ({
-      name, def: codebook[name]?.def ?? "", excerpts,
-    }));
-  }, [segments, transcripts, codebook]);
+  const codes = useMemo<MergeCodeInput[]>(() =>
+    gatherCodeEvidence(segments, transcripts, codebook, MERGE_EXEMPLARS),
+  [segments, transcripts, codebook]);
 
   const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0);
   const inTok = useMemo(() => estimateMergeTokens(codes, red), [codes, red]);

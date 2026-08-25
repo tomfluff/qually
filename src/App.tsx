@@ -32,6 +32,7 @@ import { useCallback, useMemo, useRef } from "react";
 import { useDismiss, OVERLAY_SELECTOR } from "./usePopover";
 import { hasVideo, playheadSecFor } from "./video/seek";
 import { announce } from "./announce";
+import { saveBlob } from "./download";
 
 // Show/hide the AI noticing highlights — the blind-reading control. Only appears
 // once the active transcript actually has notices, so it costs no chrome before.
@@ -330,11 +331,8 @@ function SaveWarning() {
   useEffect(() => { if (!saveFailed) setDismissed(false); }, [saveFailed]);
   if (!saveFailed || dismissed) return null;
   const exportProject = () => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([useStore.getState().exportProject()], { type: "application/json" }));
-    a.download = "qually-backup.qually.json";
-    a.click();
-    URL.revokeObjectURL(a.href);
+    saveBlob(new Blob([useStore.getState().exportProject()], { type: "application/json" }),
+      "qually-backup.qually.json");
   };
   return (
     <div className="savewarn" role="alert">

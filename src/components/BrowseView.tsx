@@ -20,6 +20,7 @@ import { Icon, countIconSize } from "./Icon";
 import { CodeCounts } from "./CodeCounts";
 import { announce } from "../announce";
 import { codeStats, sortCodes, SORTS, type SortBy } from "../codeStats";
+import { CodeSortChip } from "./CodeSortChip";
 
 // Codebook working state (chosen codes, filter, show-rejected) survives leaving the
 // tab — the view unmounts, so plain useState would reset it on every visit.
@@ -123,8 +124,6 @@ export function BrowseView() {
 
   // the order the View menu asks for — the same three the transcript sidebar and
   // the Assist definitions panel offer, off the same setting
-  const sortIdx = Math.max(0, SORTS.findIndex((x) => x.id === codeSort));
-  const nextSort = SORTS[(sortIdx + 1) % SORTS.length];
   const allCodes = useMemo(
     () => sortCodes(liveCodes(codebook), counts, codeSort), [codebook, counts, codeSort]);
   // the Codebook is where a set-aside code stays visible — everywhere else has
@@ -182,12 +181,7 @@ export function BrowseView() {
         <div className="codeHead">
           <span className="codeTitle">Codes</span>
           <span className="cnt">{listed.length}</span>
-          <button className="sortchip"
-            onClick={() => { setUi({ codeSort: nextSort.id }); announce(`Sorted by ${nextSort.label}`); }}
-            title={`Sorted by ${SORTS[sortIdx].label} — switch to ${nextSort.label}`}
-            aria-label={`Sorted by ${SORTS[sortIdx].label}. Switch to ${nextSort.label}.`}>
-            {SORTS[sortIdx].label}
-          </button>
+          <CodeSortChip value={codeSort} onChange={(value) => setUi({ codeSort: value })} />
         </div>
         <div className="cbList nicescroll" ref={listRef}
           onScroll={(e) => { codeListScroll = e.currentTarget.scrollTop; }}>

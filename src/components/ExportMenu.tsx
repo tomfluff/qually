@@ -3,20 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { zipTextFiles } from "../zip";
+import { saveBlob } from "../download";
 import { Icon } from "./Icon";
 
-const save = (blob: Blob, name: string) => {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-};
 // CSVs get a UTF-8 BOM: without it Excel decodes as the ANSI code page
 // (Shift-JIS on Japanese Windows) and every non-ASCII excerpt is mojibake.
 // Re-import is safe — File.text() and the header trim both strip it.
 export const saveText = (text: string, name: string, type = "text/csv") =>
-  save(new Blob([type === "text/csv" ? "\uFEFF" + text : text], { type }), name);
+  saveBlob(new Blob([type === "text/csv" ? "\uFEFF" + text : text], { type }), name);
 const slug = (s: string) => (s.replace(/[^\w.-]+/g, "-").replace(/^-|-$/g, "") || "qually");
 // ZIP entry names keep the transcript name as-is (the ZIP declares UTF-8 names);
 // only characters illegal in filenames are replaced.
@@ -177,7 +171,7 @@ These CSVs are for pipelines, co-authors, and appendices.
 To CONTINUE this work in QuAlly, use the project file (.qually.json) —
 it round-trips everything, including corrections and AI observations.
 ` });
-    save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
+    saveBlob(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
       new Date()), `${b}-csv.zip`);
     setOpen(false);
   })());

@@ -11,8 +11,8 @@ import { useStore, liveCodes, type CodeGroup } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { segExcerpt } from "../contract/excerpt";
 import { renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
+import { gatherCodeEvidence } from "../codeEvidence";
 import { reconcileCodes, reconcileFocus, estimateReconcileTokens, estimateFocusTokens, renderFocusPayload, mergeFocusResults, DEFAULT_ASKS, type ReconcilePlan, type ReconcileAsks } from "../ai/reconcile";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
@@ -55,28 +55,10 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
   const model = modelOf(modelId);
 
   const focusMode = typeof scope === "object";
-  // excerpt gatherer: cap excerpts per code; include zero-evidence codes when asked
-  const gather = useMemo(() => {
-    return (only: Set<string> | null, cap: number, includeEmpty: boolean): MergeCodeInput[] => {
-      const byCode = new Map<string, string[]>();
-      for (const s of segments) {
-        if (s.status !== "accepted" || !transcripts[s.pid]) continue;
-        // a code you set aside is out of the analysis, so it is out of the
-        // payload — its excerpts are still there, they are just not evidence
-        // the model is asked to reason about
-        if (codebook[s.code]?.parked) continue;
-        if (only && !only.has(s.code)) continue;
-        const arr = byCode.get(s.code) ?? [];
-        if (arr.length >= cap) continue;
-        const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
-        if (ex) { arr.push(ex); byCode.set(s.code, arr); }
-      }
-      const names = includeEmpty && only
-        ? [...only].filter((n) => n in codebook && !codebook[n].parked)
-        : [...byCode.keys()];
-      return names.map((name) => ({ name, def: codebook[name]?.def ?? "", excerpts: byCode.get(name) ?? [] }));
-    };
-  }, [segments, transcripts, codebook]);
+  const gather = useMemo(() =>
+    (only: Set<string> | null, cap: number, includeEmpty: boolean): MergeCodeInput[] =>
+      gatherCodeEvidence(segments, transcripts, codebook, cap, only, includeEmpty),
+  [segments, transcripts, codebook]);
   // one input per in-scope code — name + def + up to exN excerpts. Focus mode:
   // focus codes carry the full evidence dial (zero-evidence ones included),
   // the REST of the codebook rides as context with 2 excerpts each.

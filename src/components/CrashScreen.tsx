@@ -26,6 +26,8 @@ export class CrashScreen extends Component<{ children: ReactNode }, { error: Err
       try { raw = JSON.stringify(await readRawState(KEY) ?? {}, null, 1); } catch { /* nothing to save */ }
       name = "qually-raw-state.json";
     }
+    // Keep this fallback self-contained: it must still load when another app
+    // module is the reason the normal interface cannot render.
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
     a.download = name;
