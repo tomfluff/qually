@@ -56,6 +56,23 @@ export function ExportMenu() {
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onEsc); };
   }, [open]);
 
+  // The menu grows an item per thing the researcher has produced, so it is
+  // longest exactly when the session is richest — and it ran off the bottom of
+  // the screen, taking the last CSVs with it. Cap it to what is left below the
+  // trigger and scroll, like .ctxmenu does. Measured rather than a
+  // calc(100vh - Npx): the toolbar WRAPS at high zoom, which moves the menu's
+  // own top, and a hardcoded offset overflows again exactly there.
+  const [cap, setCap] = useState<number>();
+  useEffect(() => {
+    if (!open) return;
+    const fit = () => {
+      if (ref.current) setCap(window.innerHeight - ref.current.getBoundingClientRect().bottom - 14);
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [open]);
+
   useEffect(() => {
     if (!nameGate) return;
     const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setNameGate(null); } };
@@ -168,7 +185,7 @@ it round-trips everything, including corrections and AI observations.
         <Icon name="chevron-down" size={13} />
       </button>
       {open && (
-        <div className="exmenu">
+        <div className="exmenu nicescroll" style={{ maxHeight: cap }}>
           <div className="exsec">Save &amp; continue</div>
           {item("Project (.qually.json)", "Transcripts, corrections, codes, AI observations. Load it to pick up where you left off.", doProject, true)}
           <div className="exsec">Share &amp; publish</div>

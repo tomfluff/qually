@@ -184,13 +184,24 @@ export const Minimap = forwardRef<MinimapHandle, {
           if (gi0 === undefined || gi1 === undefined) continue;
           // same line-id → row math as the code-lane bars below
           const y0 = yOf(gi0), y1 = yOf(gi1 + 1);
+          const h0 = Math.max(2, y1 - y0);
           ctx.fillStyle = stretchColorOf(st.value, ui.stretchColors, ui.dark);
-          // a candidate (unjudged AI proposal) rides the same strip, dimmed —
-          // same treatment as the AI mark ticks below, so an unreviewed
-          // stretch doesn't read as evidence the researcher already accepted
-          ctx.globalAlpha = st.status === "candidate" ? 0.55 : 0.9;
-          ctx.fillRect(col * stPitch, y0, sw, Math.max(2, y1 - y0));
-          ctx.globalAlpha = 1;
+          if (st.status === "candidate") {
+            // an unjudged proposal rides the same strip BROKEN, not merely
+            // faded. The code lanes tell a candidate apart by alpha alone,
+            // which is safe there — laneAssign guarantees nothing overlaps
+            // underneath. Same-dimension stretches deliberately may overlap
+            // and share one column, so a translucent strip would composite
+            // over an accepted one and read as a third colour. Gaps are a
+            // real non-colour channel (1.4.1) and they cannot blend.
+            const on = simple ? 4 : 3, off = simple ? 3 : 2;
+            for (let y = y0; y < y0 + h0; y += on + off)
+              ctx.fillRect(col * stPitch, y, sw, Math.min(on, y0 + h0 - y));
+          } else {
+            ctx.globalAlpha = 0.9;
+            ctx.fillRect(col * stPitch, y0, sw, h0);
+            ctx.globalAlpha = 1;
+          }
         }
       }
 

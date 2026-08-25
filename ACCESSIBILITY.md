@@ -93,6 +93,7 @@ most valuable thing anyone could do for this project:
 | Mixed-speaker excerpt | amber | a **`!`** badge |
 | AI: likely mis-transcription | amber | **dotted** underline |
 | AI: which noticing lens | lens hue | **underline style** (wavy / double / dashed / thick / boxed) |
+| Section is an unjudged AI proposal | faded hue | **stripes** on its gutter band + a dashed pill, and **gaps** down its minimap strip |
 
 **Caveat on code patterns.** These are a **setting, off by default** (Settings → Codes →
 *Code patterns*). Solid bars scan faster for a sighted coder, so the default favours them;
@@ -156,10 +157,13 @@ Listed plainly, worst first. These are real; do not read the README as claiming 
    (They *do* all clear AA against the text drawn on them — teal and green were failing at
    3.96 and 4.26 and have been darkened, with a test that now blocks a regression — but
    none of them is a genuine high-contrast mode.)
-6. **The minimap still encodes codes by hue alone** — it is a canvas, so the CSS patterns
-   don't reach it. (Speakers *are* now on their own rail there, and it follows the
-   quiet/normal/bold weight you set rather than a hardcoded "R". It is now hidden from
-   screen readers as a duplicate view.)
+6. **The minimap still encodes codes — and a section's value — by hue alone** — it is a
+   canvas, so the CSS patterns don't reach it. (Speakers *are* now on their own rail there,
+   and it follows the quiet/normal/bold weight you set rather than a hardcoded "R". It is now
+   hidden from screen readers as a duplicate view.) *Status* on the minimap is not hue-only:
+   an unjudged section proposal is drawn as a broken strip, and a segment's own status still
+   rides on alpha alone — safe there only because lane assignment guarantees nothing overlaps
+   underneath it, which is not true of the section column.)
 7. **The patterns that vary vertically restart at each row boundary** within a multi-line
    segment. A minor seam, but visible.
 

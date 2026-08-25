@@ -289,7 +289,7 @@ is looking at (**[review]**):
 | `coverageOf` (drives the Code map's by-dimension grouping) | excluded | excluded |
 | `stretchDims` / gutter columns | own striped column | excluded |
 | `stretchesAt`, the line-row dialog | listed, marked pending | excluded |
-| Minimap strips | excluded | excluded |
+| Minimap strips | included, painted **broken** (gaps) | excluded |
 | Browse membership dots | excluded | excluded |
 | `sections.csv` | included, with status | included, with status |
 
