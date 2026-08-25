@@ -7,7 +7,7 @@ import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
 import { excerptOf, RESEARCHER } from "../contract/excerpt";
 import { mergeGroups, type Group } from "../merge";
-import { replaceAllIn } from "../search";
+import { replaceAllIn, scopeFilter, type LineScope } from "../search";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
 import { hashLine, spanLens, type Flag } from "../ai/flag";
@@ -203,10 +203,16 @@ export const clampEventHeight = (h: number) =>
 // summary split bounds — neither pane may vanish under the drag
 export const clampSummarySplit = (f: number) =>
   Number.isFinite(f) ? Math.max(0.05, Math.min(0.95, f)) : 0.5;
-export interface Search {
+export interface Search extends LineScope {
   open: boolean; query: string; scope: "tab" | "all";
   current: { line: number; occ: number } | null; // the emphasized occurrence
+  // speaker/range (from LineScope) narrow WHICH LINES the query is allowed to
+  // find — and, when Replace All runs, which lines it is allowed to rewrite.
 }
+// A closed bar, with nothing left over from the last search — the filter
+// included: a speaker or a range still set the next time the bar opens would
+// quietly hide hits the researcher never asked to hide.
+export const NO_SEARCH: Search = { open: false, query: "", scope: "tab", current: null, speaker: "", range: "" };
 // A re-import of an already-coded transcript, held until the user picks what to do.
 export interface PendingImport {
   pid: string;
@@ -417,7 +423,7 @@ export interface State {
   editLine: (pid: string, id: number, text: string) => void;
   /** Find-and-replace across ONE transcript: every occurrence in every line,
       as one undoable gesture. Returns how many occurrences went. */
-  replaceInTranscript: (pid: string, find: string, repl: string) => number;
+  replaceInTranscript: (pid: string, find: string, repl: string, only?: LineScope) => number;
   exportEdits: () => string;
   setAi: (patch: Partial<Ai>) => void;
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
@@ -922,7 +928,7 @@ export const useStore = create<State>()(
       ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
-      search: { open: false, query: "", scope: "tab", current: null },
+      search: NO_SEARCH,
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
 
       // wipe the workspace, keep the person: ui prefs (coder name, theme, fonts)
@@ -939,7 +945,7 @@ export const useStore = create<State>()(
           // the NEXT study would silently dim everyone else there
           ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {}, stretchColors: {} },
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
-          jump: null, search: { open: false, query: "", scope: "tab", current: null },
+          jump: null, search: NO_SEARCH,
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
           nextSid: 1, nextMid: 1,
         });
@@ -1280,7 +1286,7 @@ export const useStore = create<State>()(
       setEventAt: (t) => set({ eventAt: t }),
       setFormatOpen: (v) => set({ formatOpen: v }),
       openSearch: () => set({ search: { ...get().search, open: true } }),
-      closeSearch: () => set({ search: { open: false, query: "", scope: "tab", current: null } }),
+      closeSearch: () => set({ search: NO_SEARCH }),
       setSearch: (patch) => set({ search: { ...get().search, ...patch } }),
       closeTab: (pid) => {
         const s = get();
@@ -1508,9 +1514,13 @@ export const useStore = create<State>()(
       // editing back to the original clears the flag. Line ids never change, so
       // segments are untouched. On the undo stack as a targeted line entry (see
       // lineEntry) — `orig` stays the RECORD of the change, Ctrl+Z steps it back.
-      replaceInTranscript: (pid, find, repl) => {
+      replaceInTranscript: (pid, find, repl, only) => {
         const s = get();
         const t = s.transcripts[pid];
+        // the sweep is bounded by the SAME filter the bar was counting with:
+        // "replace every one of these" means every one it was showing, not
+        // every one in the file (see LineScope)
+        const inScope = only ? scopeFilter(only) : () => true;
         // NOT `find === repl`: matching is case-insensitive, so replacing
         // "System" with "system" is a real edit. Whether anything changed is
         // decided per line, below, where the answer is actually knowable.
@@ -1518,6 +1528,7 @@ export const useStore = create<State>()(
         let n = 0;
         const entries: LineSnap[] = [];
         const lines = t.lines.map((l) => {
+          if (!inScope(l)) return l;
           const { text, n: k } = replaceAllIn(l.text, find, repl);
           if (!k || text === l.text) return l;
           n += k;
@@ -1891,7 +1902,7 @@ export const useStore = create<State>()(
           // someone arranged for a different study
           mapPositions: emptyLayout(), mapIslandPos: emptyLayout(),
           selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [],
-          jump: null, search: { open: false, query: "", scope: "tab", current: null },
+          jump: null, search: NO_SEARCH,
           pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
           nextSid: p.segments.reduce((m, x) => Math.max(m, x.sid), 0) + 1, // reduce, not spread: spreading throws past ~65k elements
           nextMid: (p.markers ?? []).reduce((m, x) => Math.max(m, x.mid), 0) + 1,

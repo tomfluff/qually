@@ -26,6 +26,8 @@ const PATHS: Record<string, { d: string[]; fill?: boolean }> = {
     "M21 11v-3a2 2 0 0 0 -2 -2h-6l3 3m0 -6l-3 3",
     "M3 13v3a2 2 0 0 0 2 2h6l-3 -3m0 6l3 -3",
   ] },
+  // tabler "filter" — the search filter: which lines the query may look at
+  filter: { d: ["M4 4h16v2.172a2 2 0 0 1 -.586 1.414l-4.414 4.414v7l-6 2v-8.5l-4.48 -4.928a2 2 0 0 1 -.52 -1.345v-2.227z"] },
   text: { d: ["M4 6h16", "M4 12h10", "M4 18h14"] },
   droplet: { d: ["M6.8 11a6 6 0 1 0 10.4 0l-5.2 -9l-5.2 9"] },
   pin: { d: ["M9 4v6l-2 4v2h10v-2l-2 -4v-6", "M12 16v5", "M8 4h8"] },

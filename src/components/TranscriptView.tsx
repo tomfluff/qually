@@ -18,7 +18,7 @@ import { fuzzy } from "./CodeCombobox";
 import { stretchColorOf, stretchDims, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
-import { findMatches } from "../search";
+import { findMatches, scopeFilter } from "../search";
 import { withSubs, SubText, subSpans } from "../markup";
 import { excerptOf } from "../contract/excerpt";
 import { savedScroll, positioned, rememberScroll } from "../scrollMemory";
@@ -419,6 +419,12 @@ export function TranscriptView() {
   const headId = useStore((s) => (s.selection.pid === s.active ? s.selection.head : null));
   const fontSize = useStore((s) => s.ui.fontSize);
   const search = useStore((s) => s.search);
+  // The search bar counts only the lines its filter admits; the page must mark
+  // only those too, or "0/3" reads as a lie against a page full of highlights.
+  // deps are the filter's two fields, NOT the search object: `current` moves on
+  // every step, and rebuilding the predicate there would re-parse the range on
+  // every keypress for nothing
+  const inSearch = useMemo(() => scopeFilter(search), [search.speaker, search.range]); // eslint-disable-line react-hooks/exhaustive-deps
   const selectLine = useStore((s) => s.selectLine);
   const startSelection = useStore((s) => s.startSelection);
   const pushUndo = useStore((s) => s.pushUndo);
@@ -1094,6 +1100,7 @@ export function TranscriptView() {
               speakerNames={speakerNames}
               shortName={shorts[it.g.speaker.trim()] ?? it.g.speaker.trim()}
               searchQuery={search.query}
+              inSearch={inSearch}
               current={search.current}
               editingId={editingId}
               onEditStart={setEditingId}
@@ -1557,7 +1564,7 @@ function StretchCell({ ctx }: { ctx: StretchCtx }) {
   return <span className="stretchCell" style={{ width: ctx.width }} aria-hidden="true" />;
 }
 
-function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowContext, stretchCtx, onLaneClick, onLaneMenu, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowContext, stretchCtx, onLaneClick, onLaneMenu, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, inSearch, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
   group: Group;
   /** right-click on the row body — the parent decides between "add event" and
       the stretch menu (a selection is the stretch gesture's handle) */
@@ -1583,6 +1590,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
   speakerNames: "full" | "short";
   shortName: string;
   searchQuery: string;
+  inSearch: (l: Line) => boolean; // the search filter: which lines may be marked
   current: { line: number; occ: number } | null;
   editingId: number | null;
   onEditStart: (id: number) => void;
@@ -1723,7 +1731,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
               // no title= on this span: a native tip on every line is noise while reading,
               // and it would fire behind the custom tooltips on the spans inside it
               <span onDoubleClick={(e) => { e.preventDefault(); onEditStart(l.id); }}>
-                {searchQuery
+                {searchQuery && inSearch(l)
                   ? renderText(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
                   : flagsByLine.has(l.id)
                     ? renderFlagged(l.text, flagsByLine.get(l.id)!, l.id)

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStore } from "../state/store";
-import { findMatches, replaceOccurrence } from "../search";
+import { findMatches, replaceOccurrence, scopeFilter, parseRange } from "../search";
 import { withSubs, SubText, subSpans } from "../markup";
 import { Icon } from "./Icon";
 import { announce } from "../announce";
@@ -50,7 +50,33 @@ export function SearchBar() {
   const [wrap, setWrap] = useState(true);
   const replText = wrap && repl.trim() && !/^\[.*\]$/.test(repl.trim()) ? `[${repl.trim()}]` : repl;
 
-  const { open, query, scope } = search;
+  // The filter row: closed until asked for, like replace. Its VALUES live in
+  // the store with the query (they are part of what is being searched), but
+  // whether the row is showing is this component's business.
+  const [filtOpen, setFiltOpen] = useState(false);
+  const rangeRef = useRef<HTMLInputElement>(null);
+  const spkRef = useRef<HTMLSelectElement>(null);
+
+  const { open, query, scope, speaker, range } = search;
+  const rng = parseRange(range);
+  // an unreadable range counts as filtering: it now matches nothing (see
+  // scopeFilter), so the toggle must not sit there looking switched off
+  const filtered = !!speaker || !!range.trim();
+  // typed but unreadable ("12--40", "abc"): the row says so, and the filter
+  // holds everything back until it reads — see scopeFilter
+  const badRange = !!range.trim() && !rng;
+  const filtSays = [speaker && `${speaker} only`,
+    rng ? (rng.time ? range.trim() : `lines ${range.trim()}`) : badRange && "a range it cannot read"]
+    .filter(Boolean).join(", ");
+  const inScope = useMemo(() => scopeFilter({ speaker, range }), [speaker, range]);
+  // every speaker the filter could name: this transcript's in tab scope, all
+  // of them across the loaded transcripts in All (the same name is one entry)
+  const speakers = useMemo(() => {
+    const seen = new Set<string>();
+    const src = scope === "tab" ? (transcripts[active] ? [transcripts[active]] : []) : Object.values(transcripts);
+    for (const t of src) for (const l of t.lines) { const n = l.speaker.trim(); if (n) seen.add(n); }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [transcripts, active, scope]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
   // opening replace puts the caret where the next thing to type goes; closing
   // it hands the caret back to the query rather than dropping it on <body>
@@ -58,6 +84,12 @@ export function SearchBar() {
     if (repOpen) replRef.current?.focus();
     else if (document.activeElement === document.body) inputRef.current?.focus();
   }, [repOpen]);
+  useEffect(() => {
+    // the caret lands on the FIRST field of the row it just opened; a forward
+    // Tab from the range field would never have reached the speaker picker
+    if (filtOpen) spkRef.current?.focus();
+    else if (document.activeElement === document.body) inputRef.current?.focus();
+  }, [filtOpen]);
 
   // "This tab": flat, ordered list of every occurrence
   const tabMatches = useMemo(() => {
@@ -66,11 +98,12 @@ export function SearchBar() {
     if (!t) return [];
     const out: { line: number; occ: number }[] = [];
     for (const l of t.lines) {
+      if (!inScope(l)) continue;
       const n = findMatches(l.text, query).length;
       for (let o = 0; o < n; o++) out.push({ line: l.id, occ: o });
     }
     return out;
-  }, [transcripts, active, query, scope]);
+  }, [transcripts, active, query, scope, inScope]);
 
   // Back to the first hit when the QUERY changes — not when the match list
   // merely re-derives. It re-derives on every replace (the transcript changed),
@@ -78,7 +111,7 @@ export function SearchBar() {
   // rewrote the top of the transcript instead of walking down it, and a
   // replacement containing the query ("system" → "[system A]") rewrote its own
   // output forever.
-  useEffect(() => { setIdx(0); }, [query, scope, active]);
+  useEffect(() => { setIdx(0); }, [query, scope, active, speaker, range]);
   // the list shrinks under the cursor as occurrences are replaced away
   const at = tabMatches.length ? Math.min(idx, tabMatches.length - 1) : 0;
   useEffect(() => {
@@ -94,13 +127,14 @@ export function SearchBar() {
     for (const [pid, t] of Object.entries(transcripts)) {
       const hits = [];
       for (const l of t.lines) {
+        if (!inScope(l)) continue;
         const c = findMatches(l.text, query).length;
         if (c) hits.push({ line: l.id, text: l.text, count: c });
       }
       if (hits.length) groups.push({ pid, hits, total: hits.reduce((a, h) => a + h.count, 0) });
     }
     return groups;
-  }, [transcripts, query, scope]);
+  }, [transcripts, query, scope, inScope]);
   const allTotal = allResults.reduce((a, g) => a + g.total, 0);
 
   if (!open) return null;
@@ -148,10 +182,10 @@ export function SearchBar() {
     // the replacement containing the query would otherwise be rewritten by its
     // own sweep — one pass over the ORIGINAL text is what the store does, so
     // this is safe, but say the count plainly
-    const n = replaceInTranscript(active, query, replText);
+    const n = replaceInTranscript(active, query, replText, { speaker, range });
     // same focus rescue as replaceOne: the sweep usually empties the list
     if (n) replRef.current?.focus();
-    announce(n ? `Replaced ${n} occurrence${n === 1 ? "" : "s"} in ${active}` : "Nothing to replace");
+    announce(n ? `Replaced ${n} occurrence${n === 1 ? "" : "s"} in ${active}${filtered ? ", within the filter" : ""}` : "Nothing to replace");
   };
   // closing unmounts the focused input and focus falls to <body> — hand it back to
   // the transcript list so the arrow-key flow it advertises still works
@@ -159,13 +193,21 @@ export function SearchBar() {
     // the bar renders null while closed but stays MOUNTED, so a half-typed
     // replacement would be waiting the next time it opens — against something
     // the researcher may by then have searched for a different reason
-    setRepOpen(false); setRepl("");
-    closeSearch();
+    setRepOpen(false); setRepl(""); setFiltOpen(false);
+    closeSearch(); // clears the filter with the query (see NO_SEARCH)
     document.querySelector<HTMLElement>(".tviewlist")?.focus();
   };
 
   return (
-    <div className="searchbar">
+    // Escape closes the bar from ANYWHERE inside it — the speaker picker and
+    // the This tab / All buttons included. Without this, App's global Escape
+    // catches those and calls closeSearch() straight on the store, which
+    // leaves this component's own state (the open replace row, a half-typed
+    // replacement) behind for the next time the bar opens, and drops the caret
+    // on <body>. Escape only: Enter belongs to the fields, where it steps.
+    <div className="searchbar" onKeyDown={(e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+    }}>
       <div className="searchrow">
         <div className="searchmain">
           <input ref={inputRef} className="searchinput" value={query} placeholder="Find in transcript…"
@@ -173,7 +215,6 @@ export function SearchBar() {
             onChange={(e) => setSearch({ query: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
-              else if (e.key === "Escape") { e.preventDefault(); close(); }
             }} />
           {/* role=status: the match position announces as you type/step */}
           <span className="searchcount" role="status">
@@ -197,6 +238,15 @@ export function SearchBar() {
               <Icon name="replace" size={16} />
             </button>
           )}
+          {/* the filter is offered in BOTH scopes: "everything the interviewer
+              asked, across every transcript" is one of the reasons it exists */}
+          <button className={"btn iconbtn filt" + (filtered ? " on" : "")}
+            aria-expanded={filtOpen} aria-controls="searchFilterRow"
+            onClick={() => setFiltOpen((v) => !v)}
+            title={filtered ? `Filtered to ${filtSays}` : "Search only one speaker, or a stretch of the session"}
+            aria-label={filtered ? `Filter, on: ${filtSays}` : "Filter what is searched"}>
+            <Icon name="filter" size={16} />
+          </button>
           <div className="segmented searchscope">
             <button className={"seg" + (scope === "tab" ? " on" : "")} aria-pressed={scope === "tab"}
               onClick={() => setSearch({ scope: "tab", current: null })}>This tab</button>
@@ -206,6 +256,49 @@ export function SearchBar() {
         </div>
         <button className="searchclose" onClick={close} title="Close (Esc)"><Icon name="x" size={16} /></button>
       </div>
+
+      {filtOpen && (
+        // Narrow the search before you widen the damage: a sweep of "the first
+        // one" is safe on the participant's lines and wrong on the
+        // interviewer's, and the same phrase means different things either
+        // side of the task boundary. Both narrow the COUNT and the sweep.
+        <div className="searchrow searchfilt" id="searchFilterRow">
+          <div className="searchmain">
+            <label className="searchfiltlab" htmlFor="searchSpeaker">Speaker</label>
+            <select id="searchSpeaker" ref={spkRef} className="searchsel" value={speaker}
+              onChange={(e) => setSearch({ speaker: e.target.value, current: null })}>
+              <option value="">Anyone</option>
+              {speakers.map((n) => <option key={n} value={n}>{n}</option>)}
+              {/* a name kept from another transcript: shown, not silently
+                  dropped — a select whose value is in no option renders blank
+                  while the filter goes on hiding every hit */}
+              {speaker && !speakers.includes(speaker) &&
+                <option value={speaker}>{speaker} — not in this transcript</option>}
+            </select>
+            <label className="searchfiltlab" htmlFor="searchRange">Range</label>
+            <input id="searchRange" ref={rangeRef} className="searchinput searchrange" value={range}
+              placeholder="12-40 or 3:00-12:30" aria-label="Line or time range"
+              aria-invalid={badRange || undefined}
+              aria-describedby={badRange ? "searchRangeErr" : undefined}
+              onChange={(e) => setSearch({ range: e.target.value, current: null })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+              }} />
+            {/* clearing disables this button, and the browser drops focus from
+                a disabled button onto <body> — park it on the range field, the
+                same rescue Replace performs when the list empties */}
+            <button className="btn" disabled={!speaker && !range.trim()}
+              onClick={() => { setSearch({ speaker: "", range: "", current: null }); rangeRef.current?.focus(); }}
+              title="Search the whole transcript again">Clear</button>
+            {/* role=alert, not status: the span mounts already holding its text,
+                and screen readers only announce a live region INSERTED with
+                content when it is an alert (same as AddEventModal's error) */}
+            {badRange && <span className="searchbad" id="searchRangeErr" role="alert">
+              Reads as lines <b>12-40</b> or times <b>3:00-12:30</b>. One end may be left off.
+            </span>}
+          </div>
+        </div>
+      )}
 
       {repOpen && scope === "tab" && (
         // One occurrence at a time, reviewed — "first system" is sometimes the
@@ -218,7 +311,6 @@ export function SearchBar() {
               onChange={(e) => setRepl(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") { e.preventDefault(); replaceOne(); }
-                else if (e.key === "Escape") { e.preventDefault(); close(); }
               }} />
             <button className={"btn iconbtn brackets" + (wrap ? " on" : "")} aria-pressed={wrap}
               aria-label="Wrap the replacement in square brackets"
@@ -233,7 +325,7 @@ export function SearchBar() {
             <button className="btn" onClick={() => step(1)} disabled={!tabMatches.length}
               title="Leave this one as it is and move to the next">Skip</button>
             <button className="btn" onClick={replaceEvery} disabled={!tabMatches.length || !repl.trim()}
-              title={`Replace every occurrence in ${active} — one undo takes it all back`}>All</button>
+              title={`Replace every occurrence ${filtered ? `within the filter (${filtSays})` : `in ${active}`} — one undo takes it all back`}>All</button>
           </div>
         </div>
       )}

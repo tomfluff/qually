@@ -104,3 +104,22 @@
    so the button previews exactly what the brackets will do */
 .searchbar .btn.brackets.on { color:var(--subst-ink); border-color:var(--subst-ink);
   background:color-mix(in srgb, var(--subst-ink) 12%, var(--bg)); }
+
+/* the filter row: same padding and field as the query above it, but it wraps —
+   the bad-range hint needs a line of its own rather than squeezing the input */
+.searchfilt { border-top:1px solid var(--line); }
+.searchfilt .searchmain { flex-wrap:wrap; }
+.searchfilt .btn { padding:0 12px; white-space:nowrap; }
+.searchfiltlab { font-size:.85em; color:var(--muted); white-space:nowrap; }
+/* the speaker picker stands the same height as everything else in the bar */
+.searchsel { height:28px; box-sizing:border-box; max-width:12em; padding:0 4px;
+  border:1px solid var(--line); border-radius:6px; background:var(--panel);
+  color:var(--fg); font-family:inherit; font-size:.92em; }
+/* the range is a short field, not the bar-wide one the query gets */
+.searchinput.searchrange { flex:1 1 11em; min-width:7em; max-width:16em; }
+.searchbad { flex-basis:100%; font-size:.85em; color:var(--warn); }
+.searchinput[aria-invalid=true] { border-color:var(--warn); }
+/* filter ON wears the accent, so a narrowed search can't be mistaken for a
+   whole-transcript one when the row is collapsed */
+.searchbar .btn.filt.on { color:var(--accent); border-color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }

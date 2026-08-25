@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
+import { tsToSec } from "./video/seek";
 // Case-insensitive substring occurrences in a line: [start, end) char offsets.
 export function findMatches(text: string, query: string): [number, number][] {
   if (!query) return [];
@@ -31,4 +32,63 @@ export function replaceAllIn(text: string, query: string, repl: string): { text:
   let out = "", last = 0;
   for (const [s, e] of m) { out += text.slice(last, s) + repl; last = e; }
   return { text: out + text.slice(last), n: m.length };
+}
+
+// ── the filter: which lines a search is allowed to look at ──────────────────
+// A search of a study transcript is often a search of one PERSON's words ("did
+// the participant ever say this, or was it only ever me asking?"), or of one
+// stretch of the session ("the second task, after 12 minutes"). Both narrow
+// what counts as a hit — and, when Replace All runs, what it is allowed to
+// rewrite.
+
+/** speaker: "" is every speaker; otherwise an exact (case-insensitive) name.
+    range: "" is the whole transcript — see parseRange for what it accepts. */
+export interface LineScope { speaker: string; range: string }
+
+/** A line range ("12-40") or a stretch of the session ("3:00-12:30"), parsed.
+    Either end may be left off ("12-", "-40"), and a bare "12" reads as "12
+    onward". A colon on either side makes it a TIME range; without one it is
+    line numbers. A mixed pair ("12-3:00") is refused, not guessed at: a bare
+    number beside a timecode could mean seconds, minutes, or a line, and
+    "3:00-12" quietly read as 0:12–3:00 would hand Replace All the wrong
+    stretch of the session. Backwards ("40-12") is the same stretch, not an
+    empty one. Unparseable returns null, which every caller reads as "no
+    range". */
+export function parseRange(s: string): { time: boolean; a: number; b: number } | null {
+  const p = s.trim().split("-");
+  if (p.length > 2) return null;
+  const a = p[0].trim(), b = (p[1] ?? "").trim();
+  if (!a && !b) return null;
+  const time = a.includes(":") || b.includes(":");
+  const val = (v: string) => time
+    ? (v.includes(":") ? tsToSec(v) : null) // both ends of a time range are times
+    : (/^\d+$/.test(v) ? Number(v) : null);
+  const lo = a ? val(a) : 0;
+  const hi = b ? val(b) : Infinity;
+  if (lo === null || hi === null) return null;
+  return { time, a: Math.min(lo, hi), b: Math.max(lo, hi) };
+}
+
+/** The predicate for one filter, with the range parsed ONCE — it is asked of
+    every line of the transcript, on every keystroke.
+    An UNTIMED line is outside every time range: a line with no timecode cannot
+    be placed in the session, and reading a blank as 0:00 would pile every
+    untimed line into the opening minute. */
+export function scopeFilter(f: LineScope): (l: { id: number; ts: string; speaker: string }) => boolean {
+  const sp = f.speaker.trim().toLowerCase();
+  const r = parseRange(f.range);
+  // A range typed but unreadable ("12--40") matches NOTHING. Reading it as "no
+  // range" is the dangerous half of a typo: the bar prints its hint, but the
+  // count, the highlights and — worst — Replace All would go on working
+  // against the whole transcript, which is exactly what the researcher had
+  // just told them not to do. Nothing found is a state they can see and fix.
+  if (!r && f.range.trim()) return () => false;
+  if (!sp && !r) return () => true;
+  return (l) => {
+    if (sp && l.speaker.trim().toLowerCase() !== sp) return false;
+    if (!r) return true;
+    if (!r.time) return l.id >= r.a && l.id <= r.b;
+    const s = l.ts.trim() ? tsToSec(l.ts) : null;
+    return s !== null && s >= r.a && s <= r.b;
+  };
 }
