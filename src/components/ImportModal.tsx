@@ -15,6 +15,11 @@ export function ImportModal() {
 
   const { pid, preview: p } = pending;
   const pct = Math.round(p.overlap * 100);
+  // "3 codes" / "3 codes and 2 sections" — the buttons promise what they act on,
+  // and sections are discarded by Replace exactly as codes are
+  const n = (k: number, one: string) => `${k} ${one}${k === 1 ? "" : "s"}`;
+  const both = (codes: number, sections: number) =>
+    sections ? `${n(codes, "code")} and ${n(sections, "section")}` : n(codes, "code");
 
   return (
     <div className="about-backdrop" onMouseDown={() => resolve("cancel")}>
@@ -42,8 +47,9 @@ export function ImportModal() {
         ) : (
           <>
             <p className="about-lede">
-              It has <b>{p.total} coded segment{p.total === 1 ? "" : "s"}</b>. Matching them against
-              the new file ({pct}% of lines in common):
+              It has <b>{n(p.total, "coded segment")}</b>
+              {p.sections > 0 && <> and <b>{n(p.sections, "marked section")}</b></>}. Matching
+              them against the new file ({pct}% of lines in common):
             </p>
             <div className="imp-stats">
               <div><b>{p.remapped}</b> re-anchor onto the new lines</div>
@@ -52,19 +58,25 @@ export function ImportModal() {
                   <b>{p.dropped}</b> have no matching line left and would be dropped
                 </div>
               )}
+              {p.sections > 0 && (
+                <div className={p.sectionsDropped > 0 ? "imp-drop" : undefined}>
+                  <b>{p.sections - p.sectionsDropped}</b> of {n(p.sections, "section")} re-anchor
+                  {p.sectionsDropped > 0 && <>; <b>{p.sectionsDropped}</b> would be dropped</>}
+                </div>
+              )}
             </div>
           </>
         )}
 
         <div className="imp-actions">
           <button className={"btn" + (p.different ? "" : " primary")} onClick={() => resolve("update")}>
-            Update — keep the {p.remapped} matched code{p.remapped === 1 ? "" : "s"}
+            Update — keep the matched {both(p.remapped, p.sections - p.sectionsDropped)}
           </button>
           <button className={"btn" + (p.different ? " primary" : "")} onClick={() => resolve("new")}>
             Import as new — keep both, name it “{pid} (2)”
           </button>
           <button className="btn danger" onClick={() => resolve("replace")}>
-            Replace — discard all {p.total} code{p.total === 1 ? "" : "s"}
+            Replace — discard all {both(p.total, p.sections)}
           </button>
           <button className="btn" onClick={() => resolve("cancel")}>Cancel</button>
         </div>

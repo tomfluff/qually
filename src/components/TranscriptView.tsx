@@ -13,7 +13,7 @@ import { Icon } from "./Icon";
 import { Minimap, type MinimapHandle } from "./Minimap";
 import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
-import { useDismiss, useClampToViewport, useMenuArrows, useMenuFocus } from "../usePopover";
+import { useDismiss, useClampToViewport, useMenuArrows, useMenuFocus, useMenuToggleFocus } from "../usePopover";
 import { fuzzy } from "./CodeCombobox";
 import { stretchColorOf, stretchDims, visible, evidence, pendingAt, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
@@ -1910,6 +1910,14 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setMenu(false), []);
   useDismiss(ref, close, { enabled: menu });
+  // the same keyboard contract every other menu in this file has: opening moves
+  // focus into the list, Up/Down walk it, Escape hands focus back. Without it
+  // this was the one menu in the app you could open but not reach — and the
+  // popup renders BEFORE its trigger, so forward Tab left it behind entirely.
+  const menuRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  useMenuToggleFocus(menu, menuRef, btnRef);
+  const arrows = useMenuArrows(menuRef);
   const speakers = useMemo(() => {
     const seen: string[] = [];
     for (const g of groups) { const sp = g.speaker.trim(); if (sp && !seen.includes(sp)) seen.push(sp); }
@@ -1934,15 +1942,22 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
   return (
     <div className={"focuswrap" + (menu ? " open" : "")} ref={ref}>
       {menu && (
-        <div className="focusmenu" role="group" aria-label="Focus a speaker, and set how the section gutter reads"
+        // role=menu with menuitemradio rows, and a labelled group per section —
+        // the shape the Assist panel chooser already uses for exactly this
+        // "pick one of N, twice" menu. The old role=group contradicted the
+        // trigger's aria-haspopup="menu" and gave the two picks no grouping.
+        <div className="focusmenu" ref={menuRef} role="menu" onKeyDown={arrows}
+          aria-label="Focus a speaker, and set how the section gutter reads"
           style={{ fontSize: ui.sidebarFontSize }}>
-          {speakers.length > 1 && <>
-            <div className="focushead">Speaker</div>
-            <button className={"focusitem" + (!focus ? " on" : "")} onClick={() => setFocus(null)}>
+          {speakers.length > 1 && <div role="group" aria-label="Speaker">
+            <div className="focushead" aria-hidden="true">Speaker</div>
+            <button className={"focusitem" + (!focus ? " on" : "")}
+              role="menuitemradio" aria-checked={!focus} onClick={() => setFocus(null)}>
               <span className="focusname">Everyone</span>{!focus && " ✓"}
             </button>
             {speakers.map((sp) => (
               <button key={sp} className={"focusitem" + (focus === sp ? " on" : "")}
+                role="menuitemradio" aria-checked={focus === sp}
                 onClick={() => setFocus(focus === sp ? null : sp)}>
                 <span className="lensdot" style={{ background: speakerColor(ui, sp) }} />
                 <span className="focusname">{sp}</span>{focus === sp && " ✓"}
@@ -1954,33 +1969,32 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
                 role=switch, not the rows' ✓: these two are independent and
                 combinable, and reading them as another exclusive pick would be
                 a lie the tick mark tells. */}
-            {focus && <>
-              {([["focusDim", "Dim"], ["focusCollapse", "Collapse"]] as const).map(([k, label]) => (
-                <button key={k} className="focusitem focusswitchrow" role="switch"
-                  aria-checked={ui[k]} onClick={() => setUi({ [k]: !ui[k] })}>
-                  <span className="focusname">{label} the rest</span>
-                  <span className="focusswitch" aria-hidden="true"><span /></span>
-                </button>
-              ))}
-            </>}
-          </>}
+            {focus && ([["focusDim", "Dim"], ["focusCollapse", "Collapse"]] as const).map(([k, label]) => (
+              <button key={k} className="focusitem focusswitchrow" role="menuitemcheckbox"
+                aria-checked={ui[k]} onClick={() => setUi({ [k]: !ui[k] })}>
+                <span className="focusname">{label} the rest</span>
+                <span className="focusswitch" aria-hidden="true"><span /></span>
+              </button>
+            ))}
+          </div>}
           {/* How loudly the section gutter reads. Beside the speaker lens
               because it answers the same question — what am I reading right
               now — and independent of it: quieting the sections has nothing to
               do with which speaker you are following. Collapse takes the gutter
               away entirely and gives its width back to the text. */}
-          {hasSections && <>
-            <div className="focushead">Sections</div>
+          {hasSections && <div role="group" aria-label="Sections">
+            <div className="focushead" aria-hidden="true">Sections</div>
             {([["show", "Normal"], ["dim", "Dimmed"], ["collapse", "Hidden"]] as const).map(([id, label]) => (
               <button key={id} className={"focusitem" + (ui.stretchView === id ? " on" : "")}
+                role="menuitemradio" aria-checked={ui.stretchView === id}
                 onClick={() => setUi({ stretchView: id })}>
                 <span className="focusname">{label}</span>{ui.stretchView === id && " ✓"}
               </button>
             ))}
-          </>}
+          </div>}
         </div>
       )}
-      <button className={"focustoggle" + (focus ? " on" : "")} onClick={() => setMenu((m) => !m)}
+      <button ref={btnRef} className={"focustoggle" + (focus ? " on" : "")} onClick={() => setMenu((m) => !m)}
         aria-expanded={menu} aria-haspopup="menu" aria-pressed={!!focus}
         // the button opens the sections control too, and on a single-speaker
         // transcript that is the ONLY thing it opens — naming it after speakers

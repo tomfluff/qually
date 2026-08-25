@@ -124,27 +124,23 @@ export function ExportMenu() {
 
   const doBundle = withBase((b) => gated(() => {
     const st = s();
+    // what each entry is, keyed by its name. The README is BUILT from the files
+    // that actually made it into the zip, never written by hand: seven of these
+    // are conditional, so a hand-written list promised a co-author events.csv
+    // and sections.csv in a bundle that contained neither.
+    const doc: Record<string, string> = {
+      "coded-segments.csv": "your coded segments, with computed excerpts",
+      "codebook.csv": "codes: color, definition, status",
+      "transcript-edits.csv": "every transcription correction (original vs corrected)",
+      "events.csv": "session events and field notes, as loaded (with your edits)",
+      "ai-observations.csv": "instances the AI marked for review (not codes)",
+      "ai-provenance.csv": "every AI request made: model, lines sent, cost",
+      "decisions.csv": "every codebook decision: what, why, whose idea",
+      "answers.csv": "every question asked of the material: one row per cited point",
+      "sections.csv": "which part of the study each stretch of talk belongs to\n"
+        + `${" ".repeat(22)}(blank status = you marked it; otherwise the AI proposed it)`,
+    };
     const files = [
-      { name: "README.txt", text:
-`QuAlly CSV bundle — exported ${new Date().toISOString()}
-
-coded-segments.csv    your coded segments, with computed excerpts
-codebook.csv          codes: color, definition, status
-transcripts/*.csv     one per transcript, with your corrections applied
-                      ("original" holds the pre-correction text, where edited)
-transcript-edits.csv  every transcription correction (original vs corrected)
-events.csv            session events and field notes, as loaded (with your edits)
-ai-observations.csv   instances the AI marked for review (not codes)
-ai-provenance.csv     every AI request made: model, lines sent, cost
-decisions.csv         every codebook decision: what, why, whose idea
-answers.csv           every question asked of the material: one row per cited point
-sections.csv          which part of the study each stretch of talk belongs to
-                      (blank status = you marked it; otherwise the AI proposed it)
-
-These CSVs are for pipelines, co-authors, and appendices.
-To CONTINUE this work in QuAlly, use the project file (.qually.json) —
-it round-trips everything, including corrections and AI observations.
-` },
       { name: "coded-segments.csv", text: st.exportCSV() },
       { name: "codebook.csv", text: st.exportCodebook() },
       // every LOADED transcript, not just open tabs — coded-segments.csv already
@@ -165,6 +161,22 @@ it round-trips everything, including corrections and AI observations.
     if (st.ledger.length) files.push({ name: "decisions.csv", text: st.exportLedger() });
     if (answerCount) files.push({ name: "answers.csv", text: st.exportAnswers() });
     if (st.stretches.length) files.push({ name: "sections.csv", text: st.exportSections() });
+    // the transcripts line last: it is a glob, not one of the named entries,
+    // and it is the only one that is always present
+    const manifest = [
+      ...files.filter((f) => doc[f.name]).map((f) => `${f.name.padEnd(21)} ${doc[f.name]}`),
+      `${"transcripts/*.csv".padEnd(21)} one per transcript, with your corrections applied\n`
+        + `${" ".repeat(22)}("original" holds the pre-correction text, where edited)`,
+    ].join("\n");
+    files.unshift({ name: "README.txt", text:
+`QuAlly CSV bundle — exported ${new Date().toISOString()}
+
+${manifest}
+
+These CSVs are for pipelines, co-authors, and appendices.
+To CONTINUE this work in QuAlly, use the project file (.qually.json) —
+it round-trips everything, including corrections and AI observations.
+` });
     save(zipTextFiles(files.map((f) => (f.name.endsWith(".csv") ? { ...f, text: "\uFEFF" + f.text } : f)),
       new Date()), `${b}-csv.zip`);
     setOpen(false);

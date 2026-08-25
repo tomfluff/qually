@@ -194,7 +194,12 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
       const c = chunks[i];
       if (c) useStore.getState().logAiIncomplete(e, {
         model: model.id, task: "suggest", pid,
-        lines: c.length, redactions: c.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0),
+        // the SAME count the success row uses: the codebook rides every chunk,
+        // so a failure row that counts only the transcript reports zero
+        // redactions for a request that carried a redacted definition
+        lines: c.length,
+        redactions: c.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
+          + codes.reduce((n, cd) => n + red.count(cd.def) + cd.excerpts.reduce((m, e2) => m + red.count(e2), 0), 0),
       });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;

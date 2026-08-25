@@ -104,13 +104,25 @@ export interface ImportPreview {
   dropped: number;   // how many have no line left to point at
   overlap: number;   // share of old lines found in the new file
   different: boolean; // near-zero overlap -> almost certainly a different transcript
+  // Sections are line-id work too, and "replace" discards every one of them
+  // while "update" drops the unmappable ones. Undo is cleared across an import,
+  // so this preview is the only safety net — counting segments alone let a
+  // transcript with no coding and three marked sections offer "discard all 0
+  // codes" and then discard all three.
+  sections: number;
+  sectionsDropped: number;
 }
 
-export function previewImport(segs: Segment[], oldLines: Line[], newLines: Line[]): ImportPreview & { map: Map<number, number> } {
+export function previewImport(
+  segs: Segment[], oldLines: Line[], newLines: Line[],
+  stretches: { start: number; end: number }[] = [],
+): ImportPreview & { map: Map<number, number> } {
   const { map, overlap } = alignLines(oldLines, newLines);
   const remapped = segs.filter((s) => remapSegment(s, map) !== null).length;
+  const stKept = stretches.filter((s) => remapSegment(s, map) !== null).length;
   return {
     map, overlap, total: segs.length, remapped, dropped: segs.length - remapped,
+    sections: stretches.length, sectionsDropped: stretches.length - stKept,
     different: overlap < 0.25,
   };
 }

@@ -109,7 +109,10 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   // price may overstate; it must never understate.
   const estCost = costOf(model, inTok, SECTIONS_MAX * SECTION_OUT_TOKENS);
   const preview = lines.length && declared
-    ? renderSections(lines.slice(0, 6), vocab, brief, red, markers.slice(0, 4), offset) : "";
+    // the FULL lines and markers, with `show` truncating the display: events
+    // anchor against the whole transcript, so the preview's "after line N" is
+    // the line the real request names
+    ? renderSections(lines, vocab, brief, red, markers, offset, 6) : "";
 
   const choices = useMemo(() => {
     if (!choose) return [];

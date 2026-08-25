@@ -15,7 +15,7 @@ import type { Line } from "../state/store";
 import { callJson, estimateTokens, type Usage } from "./openai";
 import { tsToSec } from "../video/seek";
 import type { Redaction } from "./redact";
-import { sanitizeSections, briefProse, type SectionProposal, type Vocab } from "../sections";
+import { sanitizeSections, briefProse, SECTIONS_MAX, type SectionProposal, type Vocab } from "../sections";
 import type { Stretch } from "../stretches";
 import type { Marker } from "../markers";
 import { markerKey } from "../markers";
@@ -27,14 +27,10 @@ import { markerKey } from "../markers";
     transcript" a promise the implementation can actually keep. */
 export const SECTIONS_TOKEN_CAP = 180_000;
 
-/** The most sections one reply may carry. A session has a shape, not a
-    thousand parts — and without a bound the schema permits an unbounded list,
-    which makes the gate's output-cost estimate a guess rather than a ceiling.
-    The prompt asks for few and long; this is what happens if it does not. */
-export const SECTIONS_MAX = 120;
-/** what one section costs to say back, generously: the label, the range, and a
-    sentence. Used for the pre-flight estimate, so it must never understate. */
-export const SECTION_OUT_TOKENS = 60;
+/** Re-exported from ../sections, where they live because sanitizeSections —
+    which does not trust the wire — must enforce them, and this module imports
+    that one (defining them here would close the cycle the other way). */
+export { SECTIONS_MAX, SECTION_OUT_TOKENS } from "../sections";
 
 const SYSTEM = `You are marking up the STRUCTURE of a research session — which stretch of the transcript belongs to which part of the study. You are given the researcher's brief, a closed list of labels, and the whole transcript as numbered lines.
 
@@ -58,14 +54,20 @@ Rules:
     it is about the study, and study prose names people. */
 export function renderSections(
   lines: Line[], vocab: Vocab, brief: string, r: Redaction,
-  markers: Marker[] = [], offset = 0,
+  markers: Marker[] = [], offset = 0, show = 0,
 ): string {
   const labels = vocab.axes.map((a) => `- ${a.dim}: ${a.values.join(", ")}`).join("\n");
   const prose = briefProse(brief);
-  const body = lines.map((l) => `${l.id}\t${r.redact(l.speaker)}\t${r.redact(l.text)}`).join("\n");
+  // `show` truncates what is DISPLAYED (the consent gate's sample); every event
+  // is still anchored against the WHOLE transcript. Slicing the lines first —
+  // which the gate used to do — collapsed every event past the sample onto its
+  // last line, so the preview showed anchors the real request never sends, and
+  // read as a bug in the feature rather than in the preview.
+  const shown = show > 0 ? lines.slice(0, show) : lines;
+  const body = shown.map((l) => `${l.id}\t${r.redact(l.speaker)}\t${r.redact(l.text)}`).join("\n");
   return `LABELS (the only ones that exist):\n${labels}\n\n`
     + (prose ? `BRIEF (the researcher's own words about this study):\n${r.redact(prose)}\n\n` : "")
-    + (markers.length ? `EVENTS (logged during the session, each after the line it followed):\n${renderEvents(lines, markers, r, offset)}\n\n` : "")
+    + (markers.length ? `EVENTS (logged during the session, each after the line it followed):\n${renderEvents(lines, markers, r, offset, show)}\n\n` : "")
     + `TRANSCRIPT:\n${body}`;
 }
 
@@ -76,7 +78,7 @@ export function renderSections(
     Each event is anchored to the LAST line that began at or before it, so the
     model can name a line id rather than a timestamp; the labels are the
     researcher's own words, so they go through the redactor like any prose. */
-function renderEvents(lines: Line[], markers: Marker[], r: Redaction, offset: number): string {
+function renderEvents(lines: Line[], markers: Marker[], r: Redaction, offset: number, show = 0): string {
   // Events are stamped on the VIDEO clock; the transcript runs on its own, and
   // video[pid].offset is the correction between them. anchorMarkers subtracts it
   // for every other placement in the app, and skipping it here would have sent
@@ -93,7 +95,10 @@ function renderEvents(lines: Line[], markers: Marker[], r: Redaction, offset: nu
     for (const x of timed) if (x.s <= t && x.s >= best) { best = x.s; id = x.id; }
     return id;
   };
-  return [...markers].sort((a, b) => a.t - b.t).map((m) => {
+  const inOrder = [...markers].sort((a, b) => a.t - b.t);
+  // sliced AFTER sorting, so the sample is the first few events in time rather
+  // than an arbitrary few in store order
+  return (show > 0 ? inOrder.slice(0, show) : inOrder).map((m) => {
     const id = after(m.t - offset);
     const name = markerKey(m);
     const note = m.label.trim() && m.label.trim() !== name ? ` — ${r.redact(m.label.trim())}` : "";

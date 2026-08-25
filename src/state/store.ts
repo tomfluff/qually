@@ -1032,7 +1032,8 @@ export const useStore = create<State>()(
                 || s.answers.some((a) => a.points.some((pt) => pt.refs.some((r) => r.startsWith(`${pid}:`))))
                 || old.lines.some((l) => l.orig !== undefined))) {
                 const lines = rowsToLines(rows);
-                const { map: _m, ...preview } = previewImport(segs, old.lines, lines);
+                const { map: _m, ...preview } = previewImport(segs, old.lines, lines,
+                  s.stretches.filter((x) => x.pid === pid));
                 set({ pendingImports: [...get().pendingImports, { pid, lines, rows, preview }] });
               } else {
                 mark(); importTranscript(get, set, pid, rows);

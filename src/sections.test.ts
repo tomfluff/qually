@@ -3,7 +3,7 @@
 // F7 wave 0: the study brief's closed vocabulary, and the status discipline
 // that keeps an unreviewed proposal out of every count.
 import { beforeAll, test, expect } from "vitest";
-import { parseBrief, briefProse, sanitizeSections, canonKey, vocabSays } from "./sections";
+import { parseBrief, briefProse, sanitizeSections, canonKey, vocabSays, SECTIONS_MAX } from "./sections";
 import { coverageOf, stretchesAt, pendingAt, evidence, visible, type Stretch } from "./stretches";
 
 let useStore: typeof import("./state/store").useStore;
@@ -444,4 +444,44 @@ test("a transcript whose timestamps do not ascend still finds the right line", a
   const out = renderSections(lines, parseBrief(brief), brief, redactor([]),
     [{ mid: 1, pid: "P09", event: "marker", code: "TASK", label: "", t: 400, detail: "", raw: {} }], 0);
   expect(out).toContain("after line 3"); // 6:40 → the latest line at or before it
+});
+
+test("the gate's sample anchors events against the WHOLE transcript", async () => {
+  const { renderSections } = await import("./ai/sections");
+  const { redactor } = await import("./ai/redact");
+  const brief = "- phase: task 1";
+  const lines = Array.from({ length: 60 }, (_, i) => ({
+    id: i + 1, ts: `00:${String(i).padStart(2, "0")}:00`, speaker: "P", text: `line ${i + 1}`,
+  }));
+  const ev = [
+    { mid: 1, pid: "P09", event: "recording_start", code: "", label: "", t: 30, detail: "", raw: {} },
+    { mid: 2, pid: "P09", event: "marker", code: "PROGRESS", label: "", t: 20 * 60, detail: "", raw: {} },
+    { mid: 3, pid: "P09", event: "marker", code: "OBSERVATION", label: "", t: 50 * 60, detail: "", raw: {} },
+  ];
+  // `show` truncates only what is DISPLAYED; the anchors are the ones the real
+  // request sends. Slicing the lines before rendering — what the gate used to
+  // do — collapsed every later event onto the last line of the sample.
+  const out = renderSections(lines, parseBrief(brief), brief, redactor([]), ev, 0, 6);
+  const events = out.split("EVENTS")[1].split("TRANSCRIPT")[0];
+  expect(events).toContain("after line 1\trecording_start");
+  expect(events).toContain("after line 21\tPROGRESS");
+  expect(events).toContain("after line 51\tOBSERVATION");
+  // and the transcript body really is only the sample
+  expect(out).toContain("6\tP\tline 6");
+  expect(out).not.toContain("7\tP\tline 7");
+});
+
+test("the reply's ceiling is enforced here, not only in the schema", async () => {
+  const brief = "- phase: task 1";
+  const v = parseBrief(brief);
+  const ids = Array.from({ length: 400 }, (_, i) => i + 1);
+  // a reply that ignores maxItems entirely: the schema is enforced by the other
+  // end of the wire, which is exactly what this function does not trust
+  const reply = Array.from({ length: 300 }, (_, i) => ({
+    dim: "phase", value: "task 1", line_start: i + 1, line_end: i + 1, why: "x".repeat(5000),
+  }));
+  const out = sanitizeSections(v, ids, reply);
+  expect(out).toHaveLength(SECTIONS_MAX);
+  // and a reason is one sentence, not an essay that rides into every save
+  expect(out[0].why.length).toBeLessThanOrEqual(600);
 });

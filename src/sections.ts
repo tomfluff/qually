@@ -17,6 +17,21 @@
 // without a key.
 import type { Stretch } from "./stretches";
 
+/** The most sections one reply may carry. A session has a shape, not a
+    thousand parts — and without a bound the gate's output-cost estimate is a
+    guess rather than a ceiling. The JSON schema asks the model for at most this
+    many; sanitizeSections is what makes it true, because a boundary that trusts
+    the other end of the wire to enforce its own limit is not a boundary. */
+export const SECTIONS_MAX = 120;
+/** what one section costs to say back, generously: the label, the range, and a
+    sentence. Used for the pre-flight estimate, so it must never understate. */
+export const SECTION_OUT_TOKENS = 60;
+/** A reason is one sentence. It is PERSISTED on the candidate and survives into
+    the project file, so an unbounded one is not just a long tooltip — it is
+    weight on every save from then on. Generous enough that no honest sentence
+    is clipped. */
+const WHY_MAX = 600;
+
 /** One axis and the labels allowed within it, in the spelling that will be stored. */
 export interface Axis { dim: string; values: string[] }
 export interface Vocab {
@@ -167,6 +182,7 @@ export function sanitizeSections(
   reply: { dim?: string; value?: string; line_start?: number; line_end?: number; why?: string }[],
   existing: Stretch[] = [],
   pid = "",
+  max = SECTIONS_MAX,
 ): SectionProposal[] {
   const ids = new Set(lineIds);
   const already = new Set(
@@ -188,7 +204,13 @@ export function sanitizeSections(
     // review dialog reads it aloud, and "" is at least an honest blank
     // the one place the brand is applied: this line IS the trust boundary
     out.push({ dim: hit.dim, value: hit.value, start, end,
-      why: (p.why ?? "").trim() } as SectionProposal);
+      why: (p.why ?? "").trim().slice(0, WHY_MAX) } as SectionProposal);
+    // The cap is what the GATE priced and promised, so it has to hold here too,
+    // not only in the JSON schema — that schema is enforced by the other end of
+    // the wire, and this function's whole job is to not trust that. Both bounds
+    // are on what gets PERSISTED: a candidate's `why` outlives the run in the
+    // project file, so an unbounded one bloats every save from then on.
+    if (out.length >= max) break;
   }
   return out;
 }
