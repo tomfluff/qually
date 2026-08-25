@@ -314,6 +314,10 @@ const selectedIdsSel = (s: { nodes: Node[] }) =>
   // its codes; the HUD counts codes only (see `sel` below)
   s.nodes.filter((n) => n.selected).map((n) => n.type + ":" + n.id).join("\n");
 function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onSelectionChanged: () => void }) {
+  // the HUD is the transient thing, so IT yields the corner: parked where the
+  // researcher parked the minimap, it floated over it — shoving the minimap
+  // down instead read as a jitter every time it moved
+  const mmCorner = useStore((st) => st.ui.mapMinimap);
   const joined = useFlowStore(selectedIdsSel);
   const sel = useMemo(() => (joined ? joined.split("\n")
     .filter((x) => x.startsWith("chip:")).map((x) => x.slice(5)) : []), [joined]);
@@ -406,7 +410,7 @@ function SelectionHud({ canEvict, onSelectionChanged }: { canEvict: boolean; onS
     announce(`Removed ${inMerge.length} code${inMerge.length === 1 ? "" : "s"} from their merge groups`);
   };
   return (
-    <Panel position="top-right" className="mapSelPanel"
+    <Panel position={mmCorner === "top-right" ? "bottom-right" : "top-right"} className="mapSelPanel"
       style={{ visibility: sel.length > 0 ? "visible" : "hidden" }}>
       <span className="mapSelCount">{sel.length} selected</span>
       {inMerge.length > 0 && canEvict && (

@@ -251,9 +251,6 @@
 .mapIslandEdit { cursor:text; user-select:text; -webkit-user-select:text; }
 /* top-left minimap ducks under the pill AND the plan panel's header line */
 .mapCanvas .react-flow__minimap.top.left { margin-top:108px; }
-/* top-right, under the selection HUD for the same reason — the HUD floats in
-   that corner whenever anything is selected, and it was landing ON the map */
-.mapCanvas .react-flow__minimap.top.right { margin-top:64px; }
 /* "Find similar codes": a ranked panel at the cursor. Rows are labels so the
    whole row is a hit target (the chips are small; the list should not be). */
 /* the results node: tethered under the chip you asked about, on a stem like
