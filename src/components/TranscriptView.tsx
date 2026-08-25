@@ -1974,7 +1974,7 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
               away entirely and gives its width back to the text. */}
           {hasSections && <>
             <div className="focushead">Sections</div>
-            {([["show", "As marked"], ["dim", "Quieted"], ["collapse", "Hidden"]] as const).map(([id, label]) => (
+            {([["show", "Normal"], ["dim", "Dimmed"], ["collapse", "Hidden"]] as const).map(([id, label]) => (
               <button key={id} className={"focusitem" + (ui.stretchView === id ? " on" : "")}
                 onClick={() => setUi({ stretchView: id })}>
                 <span className="focusname">{label}</span>{ui.stretchView === id && " ✓"}
