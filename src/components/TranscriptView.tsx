@@ -15,7 +15,7 @@ import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
 import { useDismiss, useClampToViewport, useMenuArrows, useMenuFocus } from "../usePopover";
 import { fuzzy } from "./CodeCombobox";
-import { stretchColorOf, stretchDims, visible, evidence, isEvidence, type Stretch } from "../stretches";
+import { stretchColorOf, stretchDims, visible, evidence, isEvidence, pendingAt, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches, scopeFilter } from "../search";
@@ -1084,6 +1084,14 @@ export function TranscriptView() {
                   const lastG = groups.find((g) => b.last >= g.startId && b.last <= g.endId) ?? it.g;
                   setStretchMenu({ x: e.clientX, y: e.clientY,
                     start: b.first, end: b.last, addAfter: lastG });
+                } else if (pendingAt(useStore.getState().stretches, active, it.g.startId, it.g.endId).length) {
+                  // A right-click on a STRIPED section is a request to judge it.
+                  // Without this the only way to reach the verdict was to select
+                  // lines first, which is a gesture nobody would guess at — and
+                  // the gutter's own pills are aria-hidden and mouse-only, so
+                  // there would be no keyboard route to a verdict at all.
+                  setStretchMenu({ x: e.clientX, y: e.clientY,
+                    start: it.g.startId, end: it.g.endId, addAfter: it.g });
                 } else openAddEvent(it.g);
               }}
               onLaneClick={(seg, e) =>
@@ -1469,7 +1477,40 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
         </div>
       </>)}
       {mode === "menu" && here.length > 0 && <div className="ctxdiv" />}
-      {mode === "menu" && here.map(({ st, i }) => (
+      {/* THE review surface for AI-proposed sections, and deliberately so: the
+          gutter overlay is aria-hidden and its pills open by right-click alone,
+          so a verdict reachable only there would be reachable only by mouse —
+          against what ACCESSIBILITY.md promises, for the researcher this app was
+          built for. Here the label, the range and the model's reason are read
+          out, and the two verdicts are ordinary buttons in the tab order.
+          A candidate offers Accept and Reject; it does NOT offer Remove. The
+          three are not variations on one another: rejecting REMEMBERS, so the
+          next run does not propose the same boundary again, while removing
+          forgets and invites it straight back. */}
+      {mode === "menu" && here.map(({ st, i }) => st.status === "candidate" ? (
+        <div key={i} className="stCandRow">
+          <div className="stCandHead">
+            <span className="stLead"><span className="stDot stDotCand"
+              style={{ background: stretchColorOf(st.value, stColors, dark) }} /></span>
+            {st.dim}: {st.value} <span className="stRange">{st.start}–{st.end}</span>
+          </div>
+          {st.why && <div className="stWhy">{st.why}</div>}
+          <div className="stCandBtns">
+            <button className="btn primary" onClick={() => {
+              useStore.getState().setStretchStatus(i, "accepted");
+              announce(`Accepted ${st.dim}: ${st.value}, lines ${st.start} to ${st.end}`);
+              onClose();
+            }}>Accept</button>
+            <button className="btn" title="Not this — and do not propose it again"
+              onClick={() => {
+                useStore.getState().setStretchStatus(i, "rejected");
+                announce(`Rejected ${st.dim}: ${st.value}, lines ${st.start} to ${st.end}`);
+                onClose();
+              }}>Reject</button>
+          </div>
+          {st.proposedBy && <div className="stBy">{st.proposedBy}</div>}
+        </div>
+      ) : (
         <button key={i} className="stUnmark"
           title={`Remove this mark (lines ${st.start}–${st.end})`}
           onClick={() => { useStore.getState().unmarkStretch(i); announce(`Unmarked ${st.dim}: ${st.value}`); onClose(); }}>

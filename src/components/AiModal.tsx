@@ -49,13 +49,22 @@ export function AiModal({ title, busy, onClose, children }: {
 
 // The per-run model override, identical in every AI modal. The Settings default
 // seeds it; this only changes the one run.
-export function ModelPicker({ modelId, onPick }: { modelId: string; onPick: (id: string) => void }) {
+export function ModelPicker({ modelId, onPick, disabled }: {
+  modelId: string; onPick: (id: string) => void; disabled?: boolean;
+}) {
   return (
     <>
       <div className="ai-sec">Model <span className="ai-sec-hint">this run only; the default is in Settings → AI</span></div>
       <div className="ai-models">
         {MODELS.map((m) => (
+          // aria-pressed, not the class alone: which model is selected was
+          // carried by colour only, so a screen reader could not tell what the
+          // run about to be approved would actually be sent to.
+          // disabled while a run is in flight — the closure has already captured
+          // its model, so a click here would change the price and the highlight
+          // while the request goes on being answered by the other one.
           <button key={m.id} className={modelId === m.id ? "on" : ""}
+            aria-pressed={modelId === m.id} disabled={disabled}
             title={`${m.blurb} — $${m.in}/$${m.out} per 1M tokens in/out`}
             onClick={() => onPick(m.id)}>{m.name}</button>
         ))}

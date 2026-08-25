@@ -248,6 +248,14 @@ export interface LineFlags { hash: string; lenses?: string[]; spans: Flag[] }
 export interface AiCall {
   at: string; model: string; task: string; pid: string;
   lines: number; redactions: number; inTok: number; outTok: number; costUsd: number;
+  /** How the run ENDED. Absent means it completed — which is what every entry
+      written before this field existed was. A request that was dispatched and
+      then aborted, or that failed after dispatch, still sent the transcript: the
+      disclosure happened, and a provenance log that omits it is claiming to be
+      complete while being wrong in the one direction that matters. Token counts
+      and cost are what the API reported, so they are 0 when it reported nothing;
+      the money may still have been spent. */
+  outcome?: "aborted" | "failed";
 }
 
 // The DECISION ledger, the other half of the provenance story. aiLog records

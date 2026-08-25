@@ -11,10 +11,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { getKey } from "../ai/key";
-import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { modelOf, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { parseBrief, vocabSays } from "../sections";
-import { proposeSections, estimateSectionsTokens, renderSections, SECTIONS_TOKEN_CAP } from "../ai/sections";
+import { parseBrief, vocabSays, briefProse } from "../sections";
+import { proposeSections, estimateSectionsTokens, renderSections, SECTIONS_TOKEN_CAP,
+  SECTIONS_MAX, SECTION_OUT_TOKENS } from "../ai/sections";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, ModelPicker } from "./AiModal";
@@ -42,14 +43,27 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   const [briefFor, setBriefFor] = useState(pid); // which pid `brief` was seeded from
   useEffect(() => {
     if (briefFor === pid) return;
-    setBrief(studyBrief[pid] ?? studyBrief[""] ?? "");
+    // Reseed only when the draft is untouched — measured against the transcript
+    // it was seeded FOR, not the one just picked. The common first flow is to
+    // write the brief and THEN pick the transcript to run it on; reseeding
+    // unconditionally would make the picking wipe the words.
+    if (brief === (studyBrief[briefFor] ?? studyBrief[""] ?? ""))
+      setBrief(studyBrief[pid] ?? studyBrief[""] ?? "");
     setBriefFor(pid);
-  }, [pid, briefFor, studyBrief]);
+  }, [pid, briefFor, brief, studyBrief]);
   const dirty = brief !== saved;
-  const hasOwn = pid in studyBrief;
+  // NB the pid check: in choose mode nothing is picked yet and pid is "", which
+  // is the study default's own key — without it the "use the default again"
+  // button would offer to DELETE the study default itself.
+  const hasOwn = !!pid && pid in studyBrief;
 
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ added: number; cost: number } | null>(null);
+  // The dialog stays mounted across the run, so useDialogFocus does not fire
+  // again — and the button that had focus (Send) is replaced by Done, dropping
+  // the caret onto <body> OUTSIDE the focus trap. Hand it to Done instead.
+  const doneRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (done) doneRef.current?.focus(); }, [done]);
   const [err, setErr] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
@@ -69,12 +83,18 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
     () => (lines.length && declared ? estimateSectionsTokens(lines, vocab, brief, red) : 0),
     [lines, vocab, brief, red, declared]);
   const tooBig = inTok > SECTIONS_TOKEN_CAP;
+  // the brief's prose is part of the payload and is redacted too (see
+  // renderSections), so a name caught there belongs in this count — it is what
+  // the facts row and the AI log claim was substituted
   const redactions = useMemo(
-    () => lines.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0),
-    [lines, red]);
-  // output is one line per section and there are few sections — a generous
-  // guess costs a fraction of a cent and never understates the bill
-  const estCost = costOf(model, inTok, estimateTokens(" ".repeat(declared * 240)));
+    () => lines.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
+      + red.count(briefProse(brief)),
+    [lines, red, brief]);
+  // Priced against the schema's OWN ceiling, not against a guess at how many
+  // sections the model will find: the reply is capped at SECTIONS_MAX, so this
+  // is the worst the output can cost rather than the likely case. A pre-flight
+  // price may overstate; it must never understate.
+  const estCost = costOf(model, inTok, SECTIONS_MAX * SECTION_OUT_TOKENS);
   const preview = lines.length && declared
     ? renderSections(lines.slice(0, 6), vocab, brief, red) : "";
 
@@ -123,7 +143,19 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
         ? `${added} section${added === 1 ? "" : "s"} proposed for ${pid}. Review them in the transcript.`
         : `No sections proposed for ${pid}.`);
     } catch (e) {
-      if ((e as Error).name === "AbortError") return;
+      // The request was already in flight, so the transcript HAS left the
+      // device whether or not an answer came back. A provenance log that
+      // records only the runs that succeeded is claiming to be complete while
+      // being wrong in the one direction that matters — so an aborted or failed
+      // run is logged too, with the usage the API never reported (zero) and the
+      // outcome that explains why.
+      const aborted = (e as Error).name === "AbortError";
+      useStore.getState().logAiCall({
+        at: new Date().toISOString(), model: model.id, task: "sections", pid,
+        lines: lines.length, redactions, inTok: 0, outTok: 0, costUsd: 0,
+        outcome: aborted ? "aborted" : "failed",
+      });
+      if (aborted) return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
       setErr(msg);
       earcon.error();
@@ -143,12 +175,13 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
                 ? <>No sections proposed. The transcript may not have the shape the brief
                   describes — or every section it found is already marked.</>
                 : <><b>{done.added} section{done.added === 1 ? "" : "s"}</b> proposed, striped in
-                  the transcript gutter. Right-click a line to accept or reject each one; nothing
-                  counts towards your analysis until you do.</>}
+                  the transcript gutter. Right-click any line inside one to read why it was
+                  proposed and <b>accept</b> or <b>reject</b> it — nothing counts towards your
+                  analysis until you accept it.</>}
             </p>
             <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
           </div>
-          <div className="imp-actions"><button className="btn primary" onClick={onClose}>Done</button></div>
+          <div className="imp-actions"><button ref={doneRef} className="btn primary" onClick={onClose}>Done</button></div>
         </>
       ) : (
         <>
@@ -202,7 +235,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
                 parse does not merely misread, it leaves the label unavailable,
                 and finding that out from an empty result is finding out too late. */}
             {declared > 0 ? (
-              <div className="ai-vocab">
+              <div className="ai-vocab" role="status">
                 <Icon name="check" size={14} />
                 <div><b>These labels, and no others:</b> {vocabSays(vocab)}</div>
               </div>
@@ -215,17 +248,30 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
             )}
 
             <div className="ai-briefsave">
-              <button className="btn" disabled={busy || !dirty || !declared}
+              {/* not gated on `declared`: only RUNNING needs a vocabulary. A
+                  brief half-written, or all prose with the axes still to come,
+                  is exactly the thing worth saving before you lose it.
+                  The default's button is gated on differing from THE DEFAULT,
+                  not from `saved` — otherwise an untouched per-transcript
+                  override could never be promoted to the study default. */}
+              <button className="btn" disabled={busy || brief === (studyBrief[""] ?? "")}
                 onClick={() => { useStore.getState().setStudyBrief("", brief); announce("Saved as the study default"); }}>
                 Save as the study default
               </button>
-              <button className="btn" disabled={busy || !dirty || !declared || !pid}
+              <button className="btn" disabled={busy || !dirty || !pid}
                 onClick={() => { useStore.getState().setStudyBrief(pid, brief); announce(`Saved for ${pid}`); }}>
                 Save for {pid || "this transcript"}
               </button>
               {hasOwn && (
                 <button className="btn" disabled={busy}
-                  onClick={() => { useStore.getState().clearStudyBrief(pid); setBriefFor(""); announce("Using the study default again"); }}>
+                  onClick={() => {
+                    // overwriting the draft is what the button SAYS it does, so
+                    // set it explicitly — the reseed effect above deliberately
+                    // refuses to wipe a dirty draft on its own
+                    useStore.getState().clearStudyBrief(pid);
+                    setBrief(useStore.getState().studyBrief[""] ?? "");
+                    announce("Using the study default again");
+                  }}>
                   Use the study default again
                 </button>
               )}
@@ -240,7 +286,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
               </div>
             )}
 
-            <ModelPicker modelId={modelId} onPick={setModelId} />
+            <ModelPicker modelId={modelId} onPick={setModelId} disabled={busy} />
 
             {ready ? (
               <>

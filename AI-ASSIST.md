@@ -251,6 +251,10 @@ suppress the default (**[review]**).
   boundary, let alone the arc of a session. ~1,500 lines ≈ 31k tokens ≈ 3 cents
   of Luna input; output and reasoning bill on top, and Terra/Sol are 2.5× and 5×
   that. The honest claim is "pennies on Luna", not a total (**[review]**).
+- **A bounded reply.** The schema caps the list at `SECTIONS_MAX`, and the
+  gate prices the run against that cap rather than against a guess at how many
+  sections the model will find — a pre-flight price may overstate, never
+  understate. A session has a shape, not a thousand parts.
 - **A hard ceiling, now.** `callJson` has no context preflight, so an oversized
   request becomes a post-consent API error. The gate refuses above a rendered
   token ceiling and says so. Windowing stays deferred — but the promise it would
@@ -300,6 +304,13 @@ status})` — each one snapshot, mirroring `deleteSegmentsBy` (**[review]**).
 Discarding deletes and so forgets; rejecting keeps the memory. Both are offered,
 and the difference is stated in the buttons.
 
+**Review is reachable without a selection, and by keyboard.** A right-click on
+any line inside a striped section opens the verdict card: the label, the range,
+the model's sentence, and Accept / Reject as ordinary buttons in the tab order.
+A candidate offers those two and NOT Remove — the three are not variants of one
+another, because rejecting remembers and removing forgets, inviting the same
+boundary straight back on the next run.
+
 **Review is reachable by keyboard.** The stretch overlay is `aria-hidden` and
 its pills open by right-click only, so the gutter cannot be the only route —
 ACCESSIBILITY.md promises otherwise, and this app's first user has low vision
@@ -343,7 +354,12 @@ project-file-only for now.
 ### Provenance
 
 - `aiLog` records the run as `task: "sections"` with real usage — including a
-  run that proposed nothing, which is a result, not a non-event.
+  run that proposed nothing, which is a result, not a non-event, and including
+  one that was **aborted or failed after dispatch**. The transcript left the
+  device either way: a log that records only the runs that came back is claiming
+  to be complete while being wrong in the one direction that matters. `AiCall`
+  gains an optional `outcome`; absent still means "completed", which is what
+  every entry written before this field was.
 - The decision **ledger is not extended**: its kinds and payload are
   codebook-centric (`codes: string[]`), and bending them to carry section
   verdicts would corrupt the codebook story the methods paragraph tells. Section

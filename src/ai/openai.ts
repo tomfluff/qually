@@ -27,9 +27,17 @@ export const MODELS: Model[] = [
 export const DEFAULT_MODEL = "gpt-5.6-luna";
 export const modelOf = (id: string) => MODELS.find((m) => m.id === id) ?? MODELS[0];
 
-// ~4 chars/token. Deliberately rough: it drives a *pre-flight estimate* the user
-// sees before approving, and the log records the real usage the API reports back.
-export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
+// ~4 chars/token for Latin script — but roughly ONE token per character for CJK,
+// which is the direction that matters: an under-estimate lets a request through
+// a size gate the API then refuses, after the researcher has consented and
+// possibly been billed. So CJK characters are counted at 1 and the rest at 1/4.
+// Still deliberately rough: it drives a pre-flight estimate the researcher sees
+// before approving, and the log records the real usage the API reports back.
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
+export const estimateTokens = (text: string) => {
+  const dense = (text.match(CJK) ?? []).length;
+  return Math.ceil(dense + (text.length - dense) / 4);
+};
 
 export const costOf = (m: Model, inTok: number, outTok: number) =>
   (inTok / 1e6) * m.in + (outTok / 1e6) * m.out;

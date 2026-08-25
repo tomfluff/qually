@@ -372,3 +372,24 @@
 .stretchMenu .stUnmark:hover svg { color:var(--fg); }
 /* the form's own "how do I get out of this" line, in the event card's words */
 .stretchMenu .ctxhead .stHint { float:right; font-weight:400; color:var(--muted); font-size:.85em; }
+
+/* A candidate section awaiting a verdict, in the line-row dialog. Not a menu
+   row like the marks above it: it carries the model's reason and two verdicts,
+   so it is a small card rather than one clickable line — and it must not read
+   as "another mark you already made". */
+.stretchMenu .stCandRow { display:flex; flex-direction:column; gap:5px;
+  padding:8px; margin:2px 0; border-radius:8px;
+  background:var(--panel); border:1px dashed var(--muted); }
+.stretchMenu .stCandHead { display:flex; align-items:center; gap:7px; }
+.stretchMenu .stCandHead .stRange { color:var(--muted); font-variant-numeric:tabular-nums; margin-left:auto; }
+/* the dot is striped like the band it stands for, so the dialog and the gutter
+   say the same thing about the same section */
+.stretchMenu .stDot.stDotCand { position:relative; overflow:hidden; }
+.stretchMenu .stDot.stDotCand::after { content:""; position:absolute; inset:0;
+  background:repeating-linear-gradient(135deg, transparent 0 2px, var(--bg) 2px 4px); opacity:.7; }
+/* the model's one sentence of evidence — the thing the verdict is made on, so
+   it is body text and not a footnote */
+.stretchMenu .stWhy { color:var(--fg-dim); line-height:1.45; }
+.stretchMenu .stCandBtns { display:flex; gap:6px; }
+.stretchMenu .stCandBtns .btn { flex:1; justify-content:center; }
+.stretchMenu .stBy { color:var(--muted); font-size:.85em; }

@@ -304,3 +304,13 @@ test("a brief that is only declarations sends no BRIEF block at all", async () =
   expect(out).not.toContain("BRIEF");
   expect(out).toContain("LABELS");
 });
+
+test("a CJK transcript is not under-estimated into a request the API would refuse", async () => {
+  const { estimateTokens } = await import("./ai/openai");
+  // chars/4 alone would call this 5 tokens; it is nearer 20, and an
+  // under-estimate is what slips an oversized request past the gate
+  const jp = "これはとても長い日本語の文章です、テストのために書きました";
+  expect(estimateTokens(jp)).toBeGreaterThanOrEqual(jp.length - 2);
+  // Latin text is unchanged — the old ratio still holds where it was right
+  expect(estimateTokens("abcdefgh")).toBe(2);
+});
