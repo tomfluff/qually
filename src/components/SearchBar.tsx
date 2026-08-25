@@ -223,7 +223,6 @@ export function SearchBar() {
               title={wrap
                 ? "Writing it in as [a substitution] — your word, not the participant's. Click to insert it plain."
                 : "Inserting the text as typed. Click to wrap it in square brackets."}>
-              [&thinsp;]
             </button>
             <button className="btn" onClick={replaceOne} disabled={!tabMatches.length || !repl.trim()}
               title="Replace this one and move to the next (Enter)">Replace</button>

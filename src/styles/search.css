@@ -17,10 +17,6 @@
   border-radius:6px; background:var(--panel); color:var(--fg); font-family:inherit; }
 .searchcount { min-width:3ch; text-align:center; font-size:12px; color:var(--muted);
   font-variant-numeric:tabular-nums; }
-/* no query, no count — but the ELEMENT stays (it is the live region search
-   announcements speak through), it just stops holding a blank 3ch gap open
-   between the field and the arrows */
-.searchcount:empty { min-width:0; }
 /* every control in the bar stands the same height as the This tab / All
    toggle — the arrows and buttons read as one instrument, not two sizes */
 .searchmain .btn { height:28px; box-sizing:border-box; display:inline-flex;
@@ -99,6 +95,9 @@
 /* the bracket toggle says what it does by BEING the thing it inserts */
 .searchbar .btn.brackets { width:34px; padding:0; font-weight:700;
   letter-spacing:.04em; line-height:1; color:var(--muted); }
+/* the glyphs hang below the line box's centre (same asymmetric-metrics story
+   as --ink-nudge, in the other direction) — lift them onto it */
+.searchbar .btn.brackets::before { content:"[\2009]"; transform:translateY(-0.09em); }
 /* pressed = the substitution's own look, not a hairline colour change: the
    ink, its wash behind, and the weight — the same three carriers .subst uses,
    so the button previews exactly what the brackets will do */
