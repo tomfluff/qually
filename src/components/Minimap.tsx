@@ -185,7 +185,10 @@ export const Minimap = forwardRef<MinimapHandle, {
           // same line-id → row math as the code-lane bars below
           const y0 = yOf(gi0), y1 = yOf(gi1 + 1);
           ctx.fillStyle = stretchColorOf(st.value, ui.stretchColors, ui.dark);
-          ctx.globalAlpha = 0.9;
+          // a candidate (unjudged AI proposal) rides the same strip, dimmed —
+          // same treatment as the AI mark ticks below, so an unreviewed
+          // stretch doesn't read as evidence the researcher already accepted
+          ctx.globalAlpha = st.status === "candidate" ? 0.55 : 0.9;
           ctx.fillRect(col * stPitch, y0, sw, Math.max(2, y1 - y0));
           ctx.globalAlpha = 1;
         }

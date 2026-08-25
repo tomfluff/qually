@@ -349,7 +349,7 @@
    colour alone must not be the only signal. */
 .stretchLabels .stFloatBand.stCand::after { content:""; position:absolute; inset:0;
   background:repeating-linear-gradient(135deg, transparent 0 5px, var(--bg) 5px 9px); opacity:.6; }
-.stretchLabels .stFloatLabel.stCand { outline:2px dashed var(--fg); outline-offset:-3px; opacity:.85; }
+.stretchLabels .stFloatLabel.stCand { outline:2px dashed currentColor; outline-offset:-3px; opacity:.85; }
 /* the endpoint grips: invisible grab zones at the band's real ends — the one
    part of the overlay that DOES take the pointer, so it must stay small.
    Hover shows a thin handle bar in the section's own ink. */

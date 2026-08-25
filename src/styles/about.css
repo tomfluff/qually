@@ -209,7 +209,10 @@
    editing surface rather than a preview: monospace, because the bulleted
    declarations are read as structure and a proportional font hides a stray
    character that stopped a line parsing. */
-.ai-brief { width:100%; box-sizing:border-box; resize:vertical; padding:8px 10px;
+/* inset from the scrolling ai-body's edges, same as .sumCtx — flush at 100%
+   width, the corner (and the resize grip sitting in it) got clipped by
+   ai-body's overflow-y:auto */
+.ai-brief { width:calc(100% - 8px); margin:4px; box-sizing:border-box; resize:vertical; padding:8px 10px;
   border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg);
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85em; line-height:1.6; }
 .ai-brief:disabled { opacity:.6; }

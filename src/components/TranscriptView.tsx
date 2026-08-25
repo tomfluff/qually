@@ -15,7 +15,7 @@ import { Resizer } from "./Resizer";
 import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../video/seek";
 import { useDismiss, useClampToViewport, useMenuArrows, useMenuFocus } from "../usePopover";
 import { fuzzy } from "./CodeCombobox";
-import { stretchColorOf, stretchDims, visible, evidence, isEvidence, pendingAt, type Stretch } from "../stretches";
+import { stretchColorOf, stretchDims, visible, evidence, pendingAt, type Stretch } from "../stretches";
 import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { findMatches, scopeFilter } from "../search";
@@ -219,10 +219,7 @@ export function TranscriptView() {
     const si = new Map<Stretch, number>();
     allStretches.forEach((st, i) => { if (st.pid === active) si.set(st, i); });
     return { list, dims, bandPx, labelPx, pillW, leadIn, colW, width: `${widthPx}px`, widthPx,
-      colors: stretchColors, dark, sorted, si,
-      // the minimap paints the SESSION, not the review: a candidate strip there
-      // would be indistinguishable from a section the researcher agreed to
-      evidence: list.filter(isEvidence) };
+      colors: stretchColors, dark, sorted, si };
   }, [allStretches, active, stretchBand, stretchLabel, stretchColors, dark, stretchView]);
   const [stretchMenu, setStretchMenu] = useState<{ x: number; y: number; start: number; end: number; addAfter: Group } | null>(null);
   // Click a label pill to act on THAT stretch — accept or reject it while it is
@@ -1181,7 +1178,7 @@ export function TranscriptView() {
       <Minimap ref={mmRef} items={items} laned={laned} cols={cols} codebook={codebook}
         closeCallSids={closeCallSids} flagsByLine={flagsByLine}
         detail={minimapDetail} ui={uiSlim} vref={vref} onNav={stopAnims}
-        stretches={stretchCtx?.evidence ?? []} stretchDimList={stretchCtx?.dims ?? []} />
+        stretches={stretchCtx?.list ?? []} stretchDimList={stretchCtx?.dims ?? []} />
         {selOff && (
           <button className={`backtosel ${selOff}`} onClick={backToSelection}
             style={{ fontSize: sidebarFontSize }} aria-label="Scroll back to your selected line(s)">
