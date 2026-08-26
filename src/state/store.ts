@@ -2093,7 +2093,7 @@ export const useStore = create<State>()(
         // Clear candidates. The row must survive the proposal it explains; once
         // the segment is gone, no current-state field can recover that it left
         // without a verdict.
-        if (seg?.status === "candidate") {
+        if (seg?.status === "candidate" && isAiProposed(seg.proposedBy)) {
           get().logDecision({ kind: "discard-coding", codes: [seg.code],
             ...decisionSourceOf(seg.proposedBy), moved: 1,
             // A discard row's kind and count already say what happened and to how many.
@@ -2118,9 +2118,15 @@ export const useStore = create<State>()(
         // Only a candidate batch records a new disposition. Clearing settled
         // codings is housekeeping: their verdict is already a row, while a
         // candidate batch leaves without ever acquiring one.
-        if (status === "candidate") {
-          get().logDecision({ kind: "discard-coding", codes: distinct(doomed.map((x) => x.code)),
-            ...batchDecisionSource(doomed), moved: doomed.length,
+        // ...and only for the PROPOSALS in it. A hand-marked candidate is not a
+        // proposal, so counting it here would put the researcher's own work into
+        // a row about what a model suggested — and attributing the whole batch to
+        // the researcher because one member was theirs would hide the AI discards
+        // from the methods paragraph entirely (it counts source "ai" rows).
+        const proposed = doomed.filter((x) => isAiProposed(x.proposedBy));
+        if (status === "candidate" && proposed.length) {
+          get().logDecision({ kind: "discard-coding", codes: distinct(proposed.map((x) => x.code)),
+            ...batchDecisionSource(proposed), moved: proposed.length,
             // A discard row's kind and count already say what happened and to how many.
             // Restating that as the reason prints it twice in the panel and fills the
             // export's `why` column with something the researcher never wrote.
@@ -2136,8 +2142,14 @@ export const useStore = create<State>()(
         set({ segments: s.segments.map((x) => x.sid === sid ? { ...x, status } : x) });
         // The ledger is history, so changing an earlier verdict is a new row,
         // not an edit to the first one. Restricting this to the persisted AI
-        // prefix keeps ordinary hand-marked status changes out of provenance;
-        // CSV import still applies status elsewhere and fabricates no decision.
+        // prefix keeps ordinary hand-marked status changes out of provenance.
+        //
+        // resolveSegUpdates deliberately sits outside this boundary: importing a
+        // CSV is one act of accepting a FILE, not a verdict passed on each row it
+        // carries, and writing a decision per imported status would claim the
+        // researcher judged excerpts they never saw. The imported provenance
+        // travels in the file's own status/proposed_by columns, and the paragraph
+        // stays correct either way because it counts current state, not rows.
         if (seg && isAiProposed(seg.proposedBy)
           && seg.status !== status && (status === "accepted" || status === "rejected")) {
           get().logDecision({ kind: status === "accepted" ? "accept-coding" : "reject-coding",
@@ -2264,11 +2276,14 @@ export const useStore = create<State>()(
         get().pushUndo();
         const gone = new Set(doomed);
         set({ stretches: cur.filter((x) => !gone.has(x)) });
-        // Same rule as deleteSegmentsBy: settled sections already have a verdict;
-        // candidates leave an honest record of being cleared without one.
-        if (status === "candidate") {
-          get().logDecision({ kind: "discard-section", codes: sectionDecisionLabels(doomed),
-            ...batchDecisionSource(doomed), moved: doomed.length,
+        // Same rule as deleteSegmentsBy: a settled section already has its verdict,
+        // and of the candidates only the PROPOSED ones leave a row — a section the
+        // researcher drew by hand and then cleared is their own work being undone,
+        // not a proposal they declined to judge.
+        const proposed = doomed.filter((x) => isAiProposed(x.proposedBy));
+        if (status === "candidate" && proposed.length) {
+          get().logDecision({ kind: "discard-section", codes: sectionDecisionLabels(proposed),
+            ...batchDecisionSource(proposed), moved: proposed.length,
             // A discard row's kind and count already say what happened and to how many.
             // Restating that as the reason prints it twice in the panel and fills the
             // export's `why` column with something the researcher never wrote.

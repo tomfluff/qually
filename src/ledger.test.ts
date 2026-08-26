@@ -224,16 +224,31 @@ describe("proposed coding decisions", () => {
     expect(useStore.getState().ledger[0].model).toBeUndefined();
   });
 
-  it("attributes a batch to the researcher when any candidate is not AI-proposed", () => {
+  // A hand-marked candidate is not a proposal, so a mixed batch records only the
+  // proposals in it. Attributing the whole batch to the researcher instead would
+  // both credit them with the model's suggestions and hide those discards from
+  // the methods paragraph, which counts source "ai" rows.
+  it("records only the AI-proposed members of a mixed batch", () => {
     useStore.setState({ segments: [
       { sid: 20, pid: "P01", start: 1, end: 1, code: "small text", notes: "",
         proposedBy: AI_PROPOSED_BY_PREFIX + "Terra", status: "candidate" },
       { sid: 21, pid: "P01", start: 2, end: 2, code: "tiny text", notes: "",
         proposedBy: "Researcher", status: "candidate" },
     ] });
-    useStore.getState().deleteSegmentsBy({ status: "candidate" });
-    expect(useStore.getState().ledger[0].source).toBe("you");
-    expect(useStore.getState().ledger[0].model).toBeUndefined();
+    expect(useStore.getState().deleteSegmentsBy({ status: "candidate" })).toBe(2);
+    expect(useStore.getState().ledger).toHaveLength(1);
+    expect(useStore.getState().ledger[0]).toMatchObject({
+      kind: "discard-coding", codes: ["small text"], source: "ai", model: "Terra", moved: 1,
+    });
+  });
+
+  it("writes no row when a cleared batch holds no proposal at all", () => {
+    useStore.setState({ segments: [
+      { sid: 22, pid: "P01", start: 1, end: 1, code: "small text", notes: "",
+        proposedBy: "Researcher", status: "candidate" },
+    ] });
+    expect(useStore.getState().deleteSegmentsBy({ status: "candidate" })).toBe(1);
+    expect(useStore.getState().ledger).toHaveLength(0);
   });
 });
 
@@ -294,6 +309,40 @@ describe("proposed section decisions", () => {
   // Clearing settled memory is not another verdict. The original row remains
   // the history; inventing a discard here would claim a judgement the button
   // did not ask the researcher to make.
+  it("writes no row when a single hand-marked candidate is deleted", () => {
+    useStore.setState({ segments: [
+      { sid: 23, pid: "P01", start: 1, end: 1, code: "small text", notes: "",
+        proposedBy: "Researcher", status: "candidate" },
+    ] });
+    useStore.getState().deleteSegment(23);
+    expect(useStore.getState().ledger).toHaveLength(0);
+  });
+
+  // the section twin of the coding mixed-batch rule
+  it("records only the AI-proposed sections of a mixed cleared batch", () => {
+    useStore.setState({ stretches: [
+      { pid: "P01", start: 1, end: 1, dim: "phase", value: "intro", status: "candidate",
+        proposedBy: AI_PROPOSED_BY_PREFIX + "Terra" },
+      { pid: "P01", start: 2, end: 2, dim: "phase", value: "task", status: "candidate",
+        proposedBy: "Researcher" },
+    ] });
+    // the action still reports the full batch to the UI; only the row is subset
+    expect(useStore.getState().deleteStretchesBy({ status: "candidate" })).toBe(2);
+    expect(useStore.getState().ledger).toHaveLength(1);
+    expect(useStore.getState().ledger[0]).toMatchObject({
+      kind: "discard-section", codes: ["phase: intro"], source: "ai", model: "Terra", moved: 1,
+    });
+  });
+
+  it("writes no section row when a cleared batch holds no proposal", () => {
+    useStore.setState({ stretches: [
+      { pid: "P01", start: 1, end: 1, dim: "phase", value: "intro", status: "candidate",
+        proposedBy: "Researcher" },
+    ] });
+    expect(useStore.getState().deleteStretchesBy({ status: "candidate" })).toBe(1);
+    expect(useStore.getState().ledger).toHaveLength(0);
+  });
+
   it("logs nothing when a batch discards sections that were already rejected", () => {
     useStore.setState({ stretches: [
       { pid: "P01", start: 1, end: 1, dim: "phase", value: "intro", status: "rejected",

@@ -165,7 +165,15 @@ export function methodsParagraph(
   const discardedCodings = discarded("discard-coding");
   const discardedSections = discarded("discard-section");
   const bits: string[] = [];
-  bits.push(`The first author consolidated the codebook to ${codes.length} code${codes.length === 1 ? "" : "s"}.`);
+  // "consolidated" is a claim about work done to the codebook, and the ledger can
+  // only support it when it holds codebook decisions. A book that was never merged
+  // or renamed still HAS a size, so state the size and claim nothing about how it
+  // got there — a project coded entirely from proposals reaches exactly that case.
+  bits.push(book.length
+    ? `The first author consolidated the codebook to ${codes.length} code${codes.length === 1 ? "" : "s"}.`
+    // "working": the count excludes codes set aside, and with no park decision in
+    // the ledger there is no "M set aside" clause below to explain the shortfall.
+    : `The working codebook holds ${codes.length} code${codes.length === 1 ? "" : "s"}.`);
   const acts: string[] = [];
   if (n("merge")) acts.push(`${n("merge")} merge${n("merge") === 1 ? "" : "s"}`);
   if (n("rename")) acts.push(`${n("rename")} rename${n("rename") === 1 ? "" : "s"}`);
@@ -210,6 +218,11 @@ export function methodsParagraph(
   if (discardedCodings) bits.push(`The decision ledger records the first author clearing ${discardedCodings} coding${discardedCodings === 1 ? "" : "s"} proposed by a language model without recording a verdict.`);
   if (discardedSections) bits.push(`The decision ledger records the first author clearing ${discardedSections} section${discardedSections === 1 ? "" : "s"} proposed by a language model without recording a verdict.`);
   if (undone) bits.push(`A further ${undone} decision${undone === 1 ? " was" : "s were"} made and then reversed.`);
-  if (live.length) bits.push("Each decision, its stated reason and the excerpts it rested on are listed in the accompanying decisions file.");
+  // Name what the file actually carries. It holds one row per decision with its
+  // reason, its source and how much it touched — NOT the excerpts themselves, and
+  // for a section row not the line range either. Promising excerpts sends a
+  // reviewer looking for a column that has never existed.
+  if (live.length) bits.push("Each decision, its stated reason, whose idea it was and how much it touched "
+    + "are listed in the accompanying decisions file.");
   return bits.join(" ");
 }

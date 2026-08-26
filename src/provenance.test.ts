@@ -105,8 +105,23 @@ describe("methods paragraph", () => {
     expect(p).toContain("1 decision was made and then reversed");
   });
 
+  // "consolidated" is work the ledger has to be able to show. With no codebook
+  // decision behind it the paragraph states the size and claims nothing more.
   it("stays a single sentence when nothing has been decided", () => {
-    expect(paragraph([], ["a"])).toBe("The first author consolidated the codebook to 1 code.");
+    expect(paragraph([], ["a"])).toBe("The working codebook holds 1 code.");
+  });
+
+  it("only claims consolidation once a codebook decision stands behind it", () => {
+    expect(paragraph([d("merge", ["a", "b"])], ["a"]))
+      .toContain("The first author consolidated the codebook to 1 code.");
+  });
+
+  // A project coded entirely from proposals has a ledger full of rows and no
+  // codebook work in it — the case that made the old wording false.
+  it("does not claim consolidation from coding verdicts alone", () => {
+    const p = paragraph([d("accept-coding", ["a"], "ai", { model: "Terra", moved: 1 })], ["a"]);
+    expect(p).toContain("The working codebook holds 1 code.");
+    expect(p).not.toContain("consolidated");
   });
 
   it("keeps coding rows out of every codebook-consolidation count", () => {
