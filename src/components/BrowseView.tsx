@@ -3,13 +3,14 @@
 // The Codebook tab: go over your coding. Codes on the left, their excerpts on the
 // right. The AI's observations moved out to the Assist tab; this view is yours.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useStore, liveCodes, parkedCodes, type Segment } from "../state/store";
+import { useStore, liveCodes, parkedCodes, clampEventHeight, type Segment } from "../state/store";
 import { stretchesAt, stretchColorOf } from "../stretches";
 import { norm } from "../contract/segments";
 import { segExcerpt } from "../contract/excerpt";
 import { withSubs, SubText, subSpans } from "../markup";
 import { Resizer } from "./Resizer";
 import { CodeMenu } from "./CodeMenu";
+import { HeightGrip } from "./EventList";
 import { openColorPicker } from "../colorPicker";
 import { DefLine } from "./CodeDef";
 import { groundHash } from "../ai/ground";
@@ -72,9 +73,10 @@ export function BrowseView() {
   const hasGrounds = Object.keys(aiGrounds).length > 0;
   const setColor = useStore((s) => s.setColor);
   const setParked = useStore((s) => s.setParked);
-  // shut by default: these are codes the researcher deliberately put away, so the
-  // list should not re-open itself under them every time they come back
-  const [parkOpen, setParkOpen] = useState(false);
+  // open by default, like the events list it now mirrors: as a pinned shelf it
+  // no longer pushes the live codes around, so showing it costs nothing
+  const [parkOpen, setParkOpen] = useState(true);
+  const parkHeight = useStore((s) => s.ui.parkListHeight);
   const jumpTo = useStore((s) => s.jumpTo);
   const [selected, setSelected] = useState<Set<string>>(remembered.selected);
   const [anchor, setAnchor] = useState<string | null>(remembered.anchor);
@@ -224,20 +226,24 @@ export function BrowseView() {
                 under the code's title on the right, where there is room. */}
           </div>
         ))}
+        </div>
         {listedParked.length > 0 && (
-          <>
-            {/* a fold, like the event groups in a transcript: set-aside codes are
-                the tail of a long list and most sessions never need to look at
-                them, but the count has to stay visible or the researcher cannot
-                tell an empty shelf from a shut one */}
+          /* The set-aside shelf, in the events list's clothes (see EventList):
+             pinned under the code list rather than buried at its scrolling tail,
+             the same drag-to-resize grip, and a fold that keeps its count on
+             screen — a shut shelf must never be mistaken for an empty one. */
+          <div className="parkList" style={parkOpen ? { height: clampEventHeight(parkHeight) } : undefined}>
+            {parkOpen && <HeightGrip height={parkHeight} label="Resize the set-aside list"
+              onHeight={(h) => setUi({ parkListHeight: clampEventHeight(h) })} />}
             <button className="codeHead cbParkHead" aria-expanded={parkOpen}
               onClick={() => setParkOpen((v) => !v)}
               title={parkOpen ? "Hide the codes you set aside" : "Show the codes you set aside"}>
-              <Icon name={parkOpen ? "chevron-down" : "chevron-right"} size={sidebarFontSize} />
+              <Icon name={parkOpen ? "chevron-down" : "chevron-up"} size={sidebarFontSize} />
               <span className="codeTitle">Set aside</span>
               <span className="cnt">{listedParked.length}</span>
             </button>
-            {parkOpen && listedParked.map((c) => (
+            {parkOpen && <div className="parkRows nicescroll">
+              {listedParked.map((c) => (
               <div key={c} className={"bCode parked" + (selected.has(c) ? " sel" : "")} tabIndex={0} role="button"
                 aria-label={`Show excerpts for ${c}, set aside, ${counts[c]?.segs || 0} excerpt${counts[c]?.segs === 1 ? "" : "s"}`}
                 aria-pressed={selected.has(c)} onClick={(e) => select(c, e)}
@@ -264,10 +270,10 @@ export function BrowseView() {
                   </button>
                 </div>
               </div>
-            ))}
-          </>
+              ))}
+            </div>}
+          </div>
         )}
-        </div>
       </div>
 
       <Resizer clamp={(w) => Math.max(sidebarFontSize * 14, Math.min(520, w))} onWidth={(w) => setUi({ browseLeftWidth: w })} />

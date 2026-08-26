@@ -165,7 +165,7 @@ function TypeMenu({ evkey, x, y, colors, onClose }: {
 // Horizontal twin of the panel Resizer: drag (or arrow) the top edge to give the
 // events list more or less of the sidebar. Reports the height it should become;
 // the caller clamps, so a drag past either bound simply stops.
-function HeightGrip({ height, onHeight }: { height: number; onHeight: (h: number) => void }) {
+export function HeightGrip({ height, onHeight, label = "Resize the events list" }: { height: number; onHeight: (h: number) => void; label?: string }) {
   const down = (e: React.MouseEvent) => {
     e.preventDefault();
     const startY = e.clientY;
@@ -182,7 +182,7 @@ function HeightGrip({ height, onHeight }: { height: number; onHeight: (h: number
   };
   return (
     <div className="evgrip" role="separator" aria-orientation="horizontal" tabIndex={0}
-      aria-label="Resize the events list" onMouseDown={down}
+      aria-label={label} onMouseDown={down}
       onKeyDown={(e) => {
         if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
         e.preventDefault();

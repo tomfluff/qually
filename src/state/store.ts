@@ -169,6 +169,8 @@ export interface Ui {
   tailLimit: number;
   /** the thin tail's scope: everything thin, or only the codes you set aside */
   tailScope: "all" | "parked";
+  /** the Codebook's set-aside shelf: its height when open (see eventListHeight) */
+  parkListHeight: number;
   // the Summary tab's split between the detailed timeline and the summary text:
   // side by side, stacked, or one pane at a time. The split position is a fraction
   // of the container (not px) so it survives both orientations and window resizes.
@@ -211,7 +213,7 @@ const DEFAULT_UI: Ui = {
   minimapDetail: "detailed", showNotices: true, hiddenLenses: [],
   lanePattern: false, scrollSpeed: 1, loopEdit: true, loopSpeed: 0.75,
   speakerFocus: {}, stretchView: "show", focusDim: true,
-  focusCollapse: false, assistPanel: "observations", tailLimit: 1, tailScope: "all",
+  focusCollapse: false, assistPanel: "observations", tailLimit: 1, tailScope: "all", parkListHeight: 160,
   stretchBand: "sm", stretchLabel: "md", eventListHeight: 200,
   eventSort: "type", codeSort: "name", markerColors: {}, stretchColors: {},
   summaryLayout: "side", summarySplit: 0.5, groundBold: true,

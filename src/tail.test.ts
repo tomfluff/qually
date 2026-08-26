@@ -106,18 +106,20 @@ describe("walking back through verdicts", () => {
 });
 
 describe("the parked scope", () => {
-it("the parked scope narrows the sequence to codes you set aside", () => {
+it("the parked scope is the whole shelf, however thick the codes on it", () => {
   const book = {
     stray: { def: "" },
     shelved: { def: "", parked: true },
+    fatShelved: { def: "", parked: true },
     thick: { def: "" },
   };
-  const counts = stats({ stray: 1, shelved: 1, thick: 9 });
-  // "all" is unchanged: parked codes stay in, so a verdict can be walked back
+  const counts = stats({ stray: 1, shelved: 1, fatShelved: 9, thick: 9 });
+  // "all" is unchanged: thin parked codes stay in, so a verdict can be walked back
   expect(tailSequence(book, counts, 1)).toEqual(["shelved", "stray"]);
-  // "parked" is the shelf on its own — thin or not is still the size filter,
-  // but a live code never appears however thin it is
-  expect(tailSequence(book, counts, 1, "parked")).toEqual(["shelved"]);
-  expect(tailSequence(book, counts, 3, "parked")).toEqual(["shelved"]);
+  // "parked" ignores the size limit entirely: a code was set aside by a
+  // decision, not by its size, and the shelf must show all of it
+  expect(tailSequence(book, counts, 1, "parked")).toEqual(["shelved", "fatShelved"]);
+  // a live code never appears in the shelf however thin it is
+  expect(tailSequence(book, counts, 3, "parked")).not.toContain("stray");
 });
 });

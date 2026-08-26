@@ -95,11 +95,13 @@ export function tailSequence(
   // parked codes stay IN the sequence: setting one aside is a verdict you must
   // be able to walk back to and change, and it is the only surface that offers
   // the way back short of hunting for it in the Codebook.
-  // "parked" scope narrows to exactly those — the shelf of codes you put down,
-  // read one at a time, which is how you decide whether to bring one back.
+  // "parked" scope is the shelf of codes you put down, read one at a time —
+  // which is how you decide whether to bring one back. The thin-size limit does
+  // NOT apply there: a code was set aside by a decision, not by its size, and a
+  // shelf that silently hid the five-excerpt codes would answer "which of these
+  // should come back" with a subset while claiming to show the shelf.
   return Object.keys(codebook)
-    .filter((c) => (scope === "parked" ? !!codebook[c]?.parked : true))
-    .filter((c) => (stats[c]?.segs ?? 0) <= limit)
+    .filter((c) => (scope === "parked" ? !!codebook[c]?.parked : (stats[c]?.segs ?? 0) <= limit))
     .sort((a, b) => (stats[a]?.segs ?? 0) - (stats[b]?.segs ?? 0) || a.localeCompare(b));
 }
 
@@ -130,14 +132,16 @@ export function TailSide({ limit, setLimit }: { limit: TailLimit; setLimit: (n: 
   const done = seq.filter((c) => verdicts.has(c)).length;
   return (
     <>
-      <div className="aByLabel" id="tailLimitLabel">Thin means, at most, this many excerpts</div>
-      <div className="segmented" role="group" aria-labelledby="tailLimitLabel">
-        {TAIL_LIMITS.map((t) => (
-          <button key={t.id} className={"seg" + (limit === t.id ? " on" : "")}
-            aria-pressed={limit === t.id} aria-label={t.said} title={t.said}
-            onClick={() => setLimit(t.id)}>{t.label}</button>
-        ))}
-      </div>
+      {scope !== "parked" && <>
+        <div className="aByLabel" id="tailLimitLabel">Thin means, at most, this many excerpts</div>
+        <div className="segmented" role="group" aria-labelledby="tailLimitLabel">
+          {TAIL_LIMITS.map((t) => (
+            <button key={t.id} className={"seg" + (limit === t.id ? " on" : "")}
+              aria-pressed={limit === t.id} aria-label={t.said} title={t.said}
+              onClick={() => setLimit(t.id)}>{t.label}</button>
+          ))}
+        </div>
+      </>}
       {/* the shelf, on its own: "which of the codes I put down should come back"
           is a different sitting from "which thin codes need a verdict", and it
           was previously only answerable by scrolling the Codebook */}
@@ -154,7 +158,7 @@ export function TailSide({ limit, setLimit }: { limit: TailLimit; setLimit: (n: 
         <div className="tqBar"><span style={{ width: `${thin ? (done / thin) * 100 : 0}%` }} /></div>
         <p className="dvNote">
           {thin === 0
-            ? "Nothing in the tail at this size."
+            ? (scope === "parked" ? "Nothing is set aside." : "Nothing in the tail at this size.")
             : `${done} of ${thin} decided. ${thin - done} still open.`}
         </p>
       </div>
