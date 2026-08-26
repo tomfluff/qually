@@ -129,7 +129,7 @@ export function ExportMenu() {
       "events.csv": "session events and field notes, as loaded (with your edits)",
       "ai-observations.csv": "instances the AI marked for review (not codes)",
       "ai-provenance.csv": "every AI request made: model, lines sent, cost",
-      "decisions.csv": "every codebook decision: what, why, whose idea",
+      "decisions.csv": "every recorded analysis decision: what, why, whose idea; count = affected codings, sections or excerpts",
       "answers.csv": "every question asked of the material: one row per cited point",
       "sections.csv": "which part of the study each stretch of talk belongs to\n"
         + `${" ".repeat(22)}(blank status = you marked it; otherwise the AI proposed it)`,
@@ -210,7 +210,7 @@ it round-trips everything, including corrections and AI observations.
             withBase((b) => { saveText(s().exportSections(), `${b}-sections.csv`); setOpen(false); }))}
           {aiCalls > 0 && item(`AI log (.csv) · ${aiCalls}`, "Every AI request: model, lines, cost. Your methods appendix.",
             withBase((b) => { saveText(s().exportAiLog(), `${b}-ai-provenance.csv`); setOpen(false); }))}
-          {decisions > 0 && item(`Decisions (.csv) · ${decisions}`, "Every merge, rename and removal: the reason, and whose idea it was.",
+          {decisions > 0 && item(`Decisions (.csv) · ${decisions}`, "Every recorded codebook change and proposal disposition: the reason, count, and whose idea it was.",
             withBase((b) => { saveText(s().exportLedger(), `${b}-decisions.csv`); setOpen(false); }))}
         </div>
       )}

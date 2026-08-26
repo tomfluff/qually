@@ -30,7 +30,10 @@ export const FORMAT = "qually-project";
 // status, so it would spread the field through and count an unjudged candidate
 // as a section the researcher drew. A project with no proposals in it stays v1
 // and stays readable by older builds, because nothing in it can be misread.
-export const VERSION = 2;
+// v3 added ledger kinds for verdicts and discards on proposed codings and
+// sections. A v2 build reads every AI ledger row as a codebook proposal, so it
+// would turn those rows into a false account of codebook consolidation.
+export const VERSION = 3;
 
 export interface Project {
   format: string;
@@ -59,8 +62,8 @@ export interface Project {
   aiFlags: Record<string, LineFlags>;
   aiGrounds?: Record<number, GroundRec>; // optional: absent in files written before F1
   aiLog: AiCall[];
-  // the decision ledger — what the researcher decided about the codebook and
-  // why. Optional: absent in files written before it existed.
+  // the decision ledger — codebook changes and verdicts on proposed codings or
+  // sections. Optional: absent in files written before it existed.
   ledger?: Decision[];
   markers?: Marker[]; // optional: absent in files written before session events existed
   // event-type colours, for the same reason the speaker map travels: which colour

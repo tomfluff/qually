@@ -405,7 +405,7 @@ const ASSIST_GROUPS = [
     name: "Looking back",
     items: [
       { id: "ask", label: "Ask", hint: "questions answered from your codes, excerpts and events" },
-      { id: "decisions", label: "Decisions", hint: "what you decided about the codebook, and why" },
+      { id: "decisions", label: "Decisions", hint: "what you decided about the codebook and the model's proposals, and why" },
     ],
   },
 ] as const;

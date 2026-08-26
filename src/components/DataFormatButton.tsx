@@ -135,6 +135,7 @@ export function DataFormatButton() {
                   <li><b>Autosave:</b> everything (transcripts, codes, segments) is saved in this browser automatically — no accounts, no server.</li>
                   <li><b>Back up / hand off:</b> <b>Export coded-segments.csv</b> writes your coding. Do this regularly — clearing the browser's site data wipes the local copy.</li>
                   <li><b>Round-trip:</b> re-importing an exported <code>coded-segments.csv</code> (with the transcripts) restores the segments; imported rows for transcripts you haven't loaded pass through untouched on the next export.</li>
+                  <li><b>Decision record:</b> <code>decisions.csv</code> lists each recorded codebook change and proposal disposition. Its <code>count</code> column is the number of codings, sections or excerpts affected, according to the row's <code>kind</code>.</li>
                   <li><b>Multiple transcripts:</b> import several CSVs — each becomes a tab; the Codebook tab reads codes across all of them.</li>
                 </ul>
               </section>

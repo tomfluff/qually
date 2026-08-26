@@ -356,11 +356,16 @@ project-file-only for now.
   to be complete while being wrong in the one direction that matters. `AiCall`
   gains an optional `outcome`; absent still means "completed", which is what
   every entry written before this field was.
-- The decision **ledger is not extended**: its kinds and payload are
-  codebook-centric (`codes: string[]`), and bending them to carry section
-  verdicts would corrupt the codebook story the methods paragraph tells. Section
-  provenance lives on the stretches themselves (`status` + `proposedBy` + `why`)
-  and exports as `sections.csv`.
+- The earlier decision not to extend the decision ledger is **reversed**. Section
+  verdicts and discards belong in the same history as coding verdicts: keeping
+  only the current status would erase a later change of mind, while a discarded
+  proposal leaves no stretch behind to tell its story. This no longer endangers
+  the codebook account the earlier decision protected, because consolidation is
+  computed only from the restricted `CODEBOOK_DECISIONS` kinds; verdict and
+  discard rows cannot enter those counts. The compromise is named honestly: a
+  `dim: value` label sits in a field called `codes`. For that reason section rows
+  are barred from code links and from `historyOf`, where treating the label as a
+  code identity would invent a relationship that does not exist.
 
 ### Launch surface and the corpus-wide worklist
 

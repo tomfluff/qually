@@ -458,13 +458,15 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .dvRow.undone .dvUndone { color:var(--warn, #b45309); }
 .dvKind { flex:none; min-width:5.5em; font-size:.82em; letter-spacing:.02em; color:var(--muted);
   border:1px solid var(--line); border-radius:999px; padding:1px 8px; text-align:center; }
-.dvKind.merge, .dvKind.rename { color:var(--fg-dim); }
+.dvKind.merge, .dvKind.rename,
+.dvKind.accept-coding, .dvKind.accept-section { color:var(--fg-dim); }
+.dvKind.reject-coding, .dvKind.reject-section,
+.dvKind.discard-coding, .dvKind.discard-section { color:var(--warn); }
 .dvBody { min-width:0; display:flex; flex-direction:column; gap:4px; }
 .dvCodes { display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; }
 .dvCode { font-weight:600; }
 .dvCode + .dvCode { font-weight:400; color:var(--muted); }
-.dvCode.first + .dvCode::before, .dvCode + .dvCode::before { content:"←"; margin-right:.4em; color:var(--muted); }
-.dvCode + .dvCode::before { content:"←"; margin-right:.4em; color:var(--muted); }
+.dvCodes:not(.list) .dvCode + .dvCode::before { content:"←"; margin-right:.4em; color:var(--muted); }
 .dvWhy { color:var(--fg-dim); line-height:1.45; }
 .dvMeta { display:flex; flex-wrap:wrap; gap:10px; align-items:center; font-size:.85em; color:var(--muted); }
 .dvSrc.ai { color:var(--accent); }

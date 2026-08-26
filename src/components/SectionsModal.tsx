@@ -9,7 +9,7 @@
 // Two callers, two scopes, as everywhere: a transcript's own sidebar locks the
 // scope to that transcript; the Assist tab passes `choose` and picks in here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { AI_PROPOSED_BY_PREFIX, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -138,7 +138,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
     announce(`Reading ${pid} for sections…`);
     earcon.aiStart();
     abort.current = new AbortController();
-    const by = `AI · ${model.name}`;
+    const by = AI_PROPOSED_BY_PREFIX + model.name;
     try {
       const { sections, usage } = await proposeSections({
         key, model: model.id, lines, vocab, brief, redaction: red, markers, offset,

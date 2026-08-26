@@ -13,7 +13,8 @@
 // "ai" is sticky: once a proposal shaped a code, later hand-work does not
 // unshape it. Accepting a good proposal is a decision, not a confession — the
 // point of the number is that it is visible, not that it is small.
-import type { Decision } from "./state/store";
+import { AI_PROPOSED_BY_PREFIX, type Decision, type Segment } from "./state/store";
+import type { Stretch } from "./stretches";
 
 type Origin = "untouched" | "you" | "ai";
 
@@ -71,6 +72,10 @@ export function historyOf(ledger: Decision[], code: string): Decision[] {
   const rows: Decision[] = [];
   for (let i = ledger.length - 1; i >= 0; i--) {
     const d = ledger[i];
+    // Section labels share Decision.codes only as an export/display carrier.
+    // They are not code identities, even when a code happens to have the same
+    // dimension:value spelling.
+    if (d.kind === "accept-section" || d.kind === "reject-section" || d.kind === "discard-section") continue;
     if (!d.codes.some((c) => names.has(c))) continue;
     rows.unshift(d);
     if ((d.kind === "rename" || d.kind === "merge") && names.has(d.codes[0])) {
@@ -81,16 +86,84 @@ export function historyOf(ledger: Decision[], code: string): Decision[] {
   return rows;
 }
 
-// The paragraph a methods section needs, written from the ledger rather than by
-// a model: it is a claim about the researcher's own conduct, so nothing else
-// may author it. The panel shows this draft read-only for copying elsewhere.
-export function methodsParagraph(ledger: Decision[], codes: string[]): string {
+const sameCodes = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((code, i) => code === b[i]);
+
+const FOLDABLE_DECISIONS = new Set<Decision["kind"]>([
+  "accept-coding", "reject-coding", "discard-coding",
+  "accept-section", "reject-section", "discard-section",
+]);
+
+/** Compact only neighbouring repetitions for reading. The raw ledger remains
+    append-only because undo identifies a gesture by the ledger length captured
+    before it, and exports need one exact row per decision. */
+export function foldDecisions(ledger: Decision[]): Decision[] {
+  const folded: Decision[] = [];
+  for (const d of ledger) {
+    const prev = folded[folded.length - 1];
+    if (prev && FOLDABLE_DECISIONS.has(d.kind)
+      && prev.kind === d.kind && sameCodes(prev.codes, d.codes)
+      && prev.source === d.source && prev.model === d.model
+      && prev.now === d.now && prev.blind === d.blind
+      && prev.why === d.why
+      && !!prev.undone === !!d.undone) {
+      folded[folded.length - 1] = {
+        ...d,
+        moved: (prev.moved ?? 0) + (d.moved ?? 0),
+        at: d.at,
+      };
+    } else {
+      folded.push({ ...d });
+    }
+  }
+  return folded;
+}
+
+const CODEBOOK_DECISIONS = new Set<Decision["kind"]>([
+  "merge", "rename", "remove", "delete", "keep", "park", "unpark", "dismiss", "define",
+]);
+
+export interface CurrentDisposition {
+  segments: Pick<Segment, "status" | "proposedBy">[];
+  stretches: Pick<Stretch, "status" | "proposedBy">[];
+}
+
+// The paragraph a methods section needs, written from the record rather than by
+// a model: it is a claim about the researcher's own conduct, so nothing else may
+// author it. The panel shows this draft read-only for copying elsewhere.
+export function methodsParagraph(
+  ledger: Decision[], codes: string[], { segments, stretches }: CurrentDisposition,
+): string {
   const live = ledger.filter((d) => !d.undone);
-  const n = (k: Decision["kind"]) => live.filter((d) => d.kind === k).length;
-  const fromAi = live.filter((d) => d.source === "ai").length;
-  const fromWording = live.filter((d) => d.source === "wording").length;
-  const models = [...new Set(live.filter((d) => d.model).map((d) => d.model!))];
+  // Coding and section verdicts describe how evidence was settled, not how the
+  // codebook was consolidated. Keeping this slice explicit prevents a large AI
+  // suggestion run from inflating the code-identity claims below.
+  const book = live.filter((d) => CODEBOOK_DECISIONS.has(d.kind));
+  const n = (k: Decision["kind"]) => book.filter((d) => d.kind === k).length;
+  const fromAi = book.filter((d) => d.source === "ai").length;
+  const fromWording = book.filter((d) => d.source === "wording").length;
+  const models = [...new Set(book.filter((d) => d.model).map((d) => d.model!))];
   const undone = ledger.filter((d) => d.undone).length;
+  const settled = (items: Pick<Segment | Stretch, "status" | "proposedBy">[]) => ({
+    accepted: items.filter((x) => x.proposedBy?.startsWith(AI_PROPOSED_BY_PREFIX)
+      && x.status === "accepted").length,
+    rejected: items.filter((x) => x.proposedBy?.startsWith(AI_PROPOSED_BY_PREFIX)
+      && x.status === "rejected").length,
+  });
+  // Verdict rows are history and can contain several answers for one proposal.
+  // The methods claim is about the corpus now, so a proposal accepted and later
+  // deleted rightly drops out: an excerpt absent from the corpus is not accepted
+  // or rejected in the analysis as it stands.
+  const codings = settled(segments);
+  const sections = settled(stretches);
+  // Discards are different: the deleted proposal is no longer present to count,
+  // and only the ledger can preserve that the researcher cleared it without a
+  // verdict. History is the source of truth for an event that removed its data.
+  const discarded = (kind: Decision["kind"]) => live
+    .filter((d) => d.source === "ai" && d.kind === kind)
+    .reduce((sum, d) => sum + (d.moved ?? 1), 0);
+  const discardedCodings = discarded("discard-coding");
+  const discardedSections = discarded("discard-section");
   const bits: string[] = [];
   bits.push(`The first author consolidated the codebook to ${codes.length} code${codes.length === 1 ? "" : "s"}.`);
   const acts: string[] = [];
@@ -109,16 +182,33 @@ export function methodsParagraph(ledger: Decision[], codes: string[]): string {
   if (fromAi) {
     bits.push(`${fromAi} began as a proposal from a large language model${models.length ? ` (${models.join(", ")})` : ""}, `
       + `run against the researcher's own key; the model applied nothing and every proposal was accepted, edited or rejected by hand.`);
-  } else if (live.length) {
+  } else if (book.length) {
     bits.push("No language model proposed any of them.");
   }
   // the number the question "did the model shape your analysis" actually wants
-  const blind = live.filter((d) => d.blind);
+  const blind = book.filter((d) => d.blind);
   if (blind.length) {
     const agreed = blind.filter((d) => d.blind === "agreed").length;
     bits.push(`On ${blind.length} proposal${blind.length === 1 ? "" : "s"} the researcher recorded a verdict `
       + `before seeing the model's, agreeing with it on ${agreed} and differing on ${blind.length - agreed}.`);
   }
+  // "accepted 0 codings and rejected 1" is true but reads as filler in a methods
+  // section, so a side with nothing on it is left out rather than stated as zero.
+  // Both sides present keeps the pair, because there the contrast is the point.
+  const standing = (noun: string, d: { accepted: number; rejected: number }) => {
+    const plural = (n: number) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+    if (d.accepted && d.rejected) {
+      return `In the analysis as it stands, the first author has accepted ${plural(d.accepted)} `
+        + `proposed by a language model and rejected ${d.rejected}.`;
+    }
+    const n = d.accepted || d.rejected;
+    return `In the analysis as it stands, the first author has ${d.accepted ? "accepted" : "rejected"} `
+      + `${plural(n)} proposed by a language model.`;
+  };
+  if (codings.accepted || codings.rejected) bits.push(standing("coding", codings));
+  if (sections.accepted || sections.rejected) bits.push(standing("section", sections));
+  if (discardedCodings) bits.push(`The decision ledger records the first author clearing ${discardedCodings} coding${discardedCodings === 1 ? "" : "s"} proposed by a language model without recording a verdict.`);
+  if (discardedSections) bits.push(`The decision ledger records the first author clearing ${discardedSections} section${discardedSections === 1 ? "" : "s"} proposed by a language model without recording a verdict.`);
   if (undone) bits.push(`A further ${undone} decision${undone === 1 ? " was" : "s were"} made and then reversed.`);
   if (live.length) bits.push("Each decision, its stated reason and the excerpts it rested on are listed in the accompanying decisions file.");
   return bits.join(" ");

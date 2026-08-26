@@ -70,6 +70,11 @@ export interface Segment {
   sid: number; pid: string; start: number; end: number; code: string;
   notes: string; proposedBy: string; status: string;
 }
+// One spelling at every write and read edge: provenance detection must not drift
+// from the label the proposal modals persist into project files.
+export const AI_PROPOSED_BY_PREFIX = "AI · ";
+const isAiProposed = (proposedBy?: string): proposedBy is string =>
+  proposedBy?.startsWith(AI_PROPOSED_BY_PREFIX) ?? false;
 export interface CodeGroup { name: string; codes: string[]; rationale?: string }
 // a pending reconciliation proposal (Code map): reviewed one verdict at a time
 interface CodePlanAction {
@@ -293,16 +298,19 @@ export interface AiCall {
 }
 
 // The DECISION ledger, the other half of the provenance story. aiLog records
-// what was ASKED of the model; this records what the researcher DID — every
-// merge, rename, rejection and deletion, with the reason and where the idea
-// came from. Undo cannot unwrite history, so an undone decision is FLAGGED
+// what was ASKED of the model; this records what the researcher DID — changes
+// to the codebook and verdicts on proposed codings and sections, with the reason
+// and where the idea came from. Undo cannot unwrite history, so an undone
+// decision is FLAGGED
 // rather than dropped (see snapshot/restore): "I merged these and then thought
 // better of it" is itself part of the record, and silently deleting the row
 // would make the ledger a story about a researcher who never changed their mind.
 type DecisionKind =
   | "merge" | "rename" | "remove" | "delete"   // wired today
   | "keep" | "park" | "unpark" | "dismiss" // the tail queue's outcomes
-  | "define"; // tell-apart's "that is the difference" — it WRITES definitions
+  | "define" // tell-apart's "that is the difference" — it WRITES definitions
+  | "accept-coding" | "reject-coding" | "discard-coding"
+  | "accept-section" | "reject-section" | "discard-section";
 /** where the idea came from — NOT who performed it. Every decision is the researcher's. */
 export type DecisionSource = "you" | "wording" | "ai";
 /** decisions that record a judgement without changing anything (see restore) */
@@ -319,13 +327,38 @@ export interface Decision {
   // one-excerpt codes and a merge that folds 30 excerpts into a code are the
   // same row without these, and they are not the same decision — this is also
   // the only place the number survives, since the codes it counted are gone.
-  moved?: number;          // excerpts that changed code, were rejected, or were deleted
+  moved?: number;          // codings/sections settled, or excerpts changed/rejected/deleted
   now?: number;            // excerpts the surviving code carries afterwards
   // Set when the researcher recorded a verdict BEFORE seeing the model's (the
   // Consolidate view's blind order). It is the number a methods section can
   // actually use: "the researcher and the model agreed on 34 of 41 proposals".
   blind?: "agreed" | "differed";
 }
+
+const decisionSourceOf = (proposedBy?: string): Pick<Decision, "source" | "model"> =>
+  isAiProposed(proposedBy)
+    ? { source: "ai", model: proposedBy.slice(AI_PROPOSED_BY_PREFIX.length) }
+    : { source: "you" };
+
+// A batch names a model only when that attribution is true of the whole gesture.
+// Different models still mean the ideas came from AI; erasing that source would
+// turn a provenance field into a record of who clicked the button instead.
+const batchDecisionSource = (items: { proposedBy?: string }[]): Pick<Decision, "source" | "model"> => {
+  const sources = items.map((x) => decisionSourceOf(x.proposedBy));
+  if (!sources.length || sources.some((p) => p.source !== "ai")) return { source: "you" };
+  const model = sources[0].model;
+  return model && sources.every((p) => p.model === model)
+    ? { source: "ai", model }
+    : { source: "ai" };
+};
+
+const distinct = (values: string[]) => [...new Set(values)];
+
+const sectionDecisionLabels = (items: Pick<Stretch, "dim" | "value">[]) =>
+  // Decision.codes is also the panel/export's stable list of things touched.
+  // Sections have no code identity, so their dimension:value label occupies that
+  // field; consumers use the row kind to keep it out of code links and history.
+  distinct(items.map((x) => `${x.dim}: ${x.value}`));
 
 export interface State {
   transcripts: Record<string, { lines: Line[] }>;
@@ -668,7 +701,7 @@ interface Snap {
   codeGroups: CodeGroup[]; codeAreas: CodeGroup[]; codeAreasFp: string;
   codePlan: CodePlanAction[]; codeClusters: CodeCluster[];
   mapPositions: StageLayout; mapIslandPos: StageLayout; stretches: Stretch[];
-  ledgerLen: number;
+  ledgerLen: number; ledgerUndone?: boolean[];
   sel: { pid: string | null; anchor: number | null; head: number | null; lines: number[] };
 }
 interface LineSnap { kind: "line"; pid: string; id: number; line: Line; flags: LineFlags | null }
@@ -693,9 +726,11 @@ function snapshot(s: State): Snap {
     codePlan: s.codePlan, codeClusters: s.codeClusters,
     mapPositions: s.mapPositions, mapIslandPos: s.mapIslandPos,
     stretches: s.stretches,
-    // not the ledger itself — its LENGTH. Undo flags the decisions logged after
-    // this point as undone instead of erasing them (see restore).
+    // not the ledger rows themselves — their length and reversal flags. Length
+    // tells restore which later rows did not exist yet; the flags are necessary
+    // because a redo snapshot can contain a reversed row between live ones.
     ledgerLen: s.ledger.length,
+    ledgerUndone: s.ledger.map((d) => !!d.undone),
     sel: { pid: s.selection.pid, anchor: s.selection.anchor, head: s.selection.head, lines: [...s.selection.lines] },
   };
 }
@@ -912,15 +947,18 @@ function restore(get: () => State, set: (p: Partial<State>) => void, o: Snap) {
     codeClusters: o.codeClusters ?? cur.codeClusters,
     mapPositions: o.mapPositions ?? cur.mapPositions,
     mapIslandPos: o.mapIslandPos ?? cur.mapIslandPos,
-    // decisions logged after this snapshot are marked undone, not deleted; the
-    // same rule read forwards un-marks them on redo. A snapshot from before the
-    // ledger existed carries no length, and leaves it alone.
+    // Decisions logged after this snapshot are marked undone, not deleted. For
+    // rows that already existed, the exact flags matter: a redo can restore a
+    // live row followed by a reversed one. The length-only branch keeps an old
+    // in-memory snapshot usable; one from before the ledger leaves it alone.
     ledger: typeof o.ledgerLen === "number"
       ? cur.ledger.map((d, i) => {
           // "kept" and "to code more" changed no state — they are a record of
           // having LOOKED, and no undo of some other action reverses that
           if (INERT_DECISIONS.has(d.kind)) return d;
-          const undone = i >= o.ledgerLen;
+          const undone = i >= o.ledgerLen
+            ? true
+            : o.ledgerUndone?.[i] ?? false;
           return !!d.undone === undone ? d : { ...d, undone };
         })
       : cur.ledger,
@@ -1711,10 +1749,10 @@ export const useStore = create<State>()(
         get().ledger.map((d) => ({
           at: d.at, kind: d.kind, codes: d.codes.join(" | "), why: d.why,
           source: d.source, model: d.model ?? "",
-          excerpts_moved: d.moved ?? "", excerpts_after: d.now ?? "",
+          count: d.moved ?? "", excerpts_after: d.now ?? "",
           blind: d.blind ?? "", undone: d.undone ? "yes" : "",
         })),
-        ["at", "kind", "codes", "why", "source", "model", "excerpts_moved", "excerpts_after", "blind", "undone"]
+        ["at", "kind", "codes", "why", "source", "model", "count", "excerpts_after", "blind", "undone"]
       ),
       // Sections had no CSV of their own until F7 gave the AI a way to propose
       // them — which also gave the bundle a way to be wrong: it calls itself
@@ -1919,8 +1957,15 @@ export const useStore = create<State>()(
           // studyBrief exists, and drop it on the next save. A brief survives a
           // run that proposed nothing and a run whose proposals were discarded,
           // so "has a statused stretch" was never the whole test.
-          version: s.stretches.some((x) => x.status)
-            || Object.values(s.studyBrief).some((t) => t.trim()) ? VERSION : 1,
+          // Verdict and discard rows make it v3: a v2 build treats every AI row
+          // as a codebook proposal and would inflate the consolidation account
+          // with codings and sections that never changed a code's identity.
+          version: s.ledger.some((d) =>
+            d.kind === "accept-coding" || d.kind === "reject-coding" || d.kind === "discard-coding"
+            || d.kind === "accept-section" || d.kind === "reject-section" || d.kind === "discard-section")
+            ? VERSION
+            : s.stretches.some((x) => x.status)
+              || Object.values(s.studyBrief).some((t) => t.trim()) ? 2 : 1,
           savedAt: new Date().toISOString(),
           transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
           extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
@@ -2039,10 +2084,23 @@ export const useStore = create<State>()(
       setSegmentRange: (sid, start, end) =>
         set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, start, end } : x), redoStack: [] }),
       deleteSegment: (sid) => {
+        const seg = get().segments.find((x) => x.sid === sid);
         get().pushUndo();
         const grounds = { ...get().aiGrounds };
         delete grounds[sid]; // its grounding dies with it
         set({ segments: get().segments.filter((x) => x.sid !== sid), aiGrounds: grounds });
+        // A candidate removed through its own popover made the same decision as
+        // Clear candidates. The row must survive the proposal it explains; once
+        // the segment is gone, no current-state field can recover that it left
+        // without a verdict.
+        if (seg?.status === "candidate") {
+          get().logDecision({ kind: "discard-coding", codes: [seg.code],
+            ...decisionSourceOf(seg.proposedBy), moved: 1,
+            // A discard row's kind and count already say what happened and to how many.
+            // Restating that as the reason prints it twice in the panel and fills the
+            // export's `why` column with something the researcher never wrote.
+            why: "No reason recorded" });
+        }
         earcon.uncode();
         announce("Segment deleted");
       },
@@ -2057,12 +2115,40 @@ export const useStore = create<State>()(
         const gone = new Set(doomed.map((x) => x.sid));
         set({ segments: s.segments.filter((x) => !gone.has(x.sid)) });
         set({ ...pruneGrounds(get()), hotbarCache: hotbarCodes(get()) });
+        // Only a candidate batch records a new disposition. Clearing settled
+        // codings is housekeeping: their verdict is already a row, while a
+        // candidate batch leaves without ever acquiring one.
+        if (status === "candidate") {
+          get().logDecision({ kind: "discard-coding", codes: distinct(doomed.map((x) => x.code)),
+            ...batchDecisionSource(doomed), moved: doomed.length,
+            // A discard row's kind and count already say what happened and to how many.
+            // Restating that as the reason prints it twice in the panel and fills the
+            // export's `why` column with something the researcher never wrote.
+            why: "No reason recorded" });
+        }
         announce(`${doomed.length} ${status} coding${doomed.length === 1 ? "" : "s"} deleted`);
         return doomed.length;
       },
       setStatus: (sid, status) => {
+        const s = get();
+        const seg = s.segments.find((x) => x.sid === sid);
         get().pushUndo();
-        set({ segments: get().segments.map((x) => x.sid === sid ? { ...x, status } : x) });
+        set({ segments: s.segments.map((x) => x.sid === sid ? { ...x, status } : x) });
+        // The ledger is history, so changing an earlier verdict is a new row,
+        // not an edit to the first one. Restricting this to the persisted AI
+        // prefix keeps ordinary hand-marked status changes out of provenance;
+        // CSV import still applies status elsewhere and fabricates no decision.
+        if (seg && isAiProposed(seg.proposedBy)
+          && seg.status !== status && (status === "accepted" || status === "rejected")) {
+          get().logDecision({ kind: status === "accepted" ? "accept-coding" : "reject-coding",
+            codes: [seg.code], ...decisionSourceOf(seg.proposedBy), moved: 1,
+            // Grounding says which words carry a code, not why the researcher
+            // accepted it; it can also be stale unless its hash is revalidated.
+            // "No reason recorded", as dismissCluster does: a fallback that
+            // restates the verdict would read in the export as a rationale the
+            // researcher gave, and they gave none
+            why: seg.notes.trim() || "No reason recorded" });
+        }
         // the audible twin of the status flip — Accept/Reject buttons in the
         // popover and the Assist queue had no mark at all
         if (status === "accepted") earcon.accept();
@@ -2128,20 +2214,42 @@ export const useStore = create<State>()(
       },
       setStretchStatus: (i, status) => {
         const cur = get().stretches;
-        if (!cur[i] || cur[i].status === status) return;
+        const stretch = cur[i];
+        if (!stretch || stretch.status === status) return;
         get().pushUndo();
         set({ stretches: cur.map((x, k) => k === i ? { ...x, status } : x) });
+        // A later change of mind is another decision in the history. Hand-drawn
+        // sections have no AI prefix and remain ordinary edits rather than
+        // model-proposal verdicts.
+        if (isAiProposed(stretch.proposedBy) && status !== "candidate") {
+          get().logDecision({ kind: status === "accepted" ? "accept-section" : "reject-section",
+            codes: sectionDecisionLabels([stretch]), ...decisionSourceOf(stretch.proposedBy), moved: 1,
+            // `stretch.why` is the model's pitch and remains on the stretch for
+            // the review UI. Copying it here would attribute the model's words
+            // to the researcher as the reason for their verdict.
+            why: "No reason recorded" });
+        }
         if (status === "accepted") earcon.accept();
         else if (status === "rejected") earcon.reject();
         announce(`Section ${status}`);
       },
       acceptSections: (pid) => {
         const cur = get().stretches;
-        const n = cur.filter((x) => x.pid === pid && x.status === "candidate").length;
+        const candidates = cur.filter((x) => x.pid === pid && x.status === "candidate");
+        const n = candidates.length;
         if (!n) return 0;
         get().pushUndo();
         set({ stretches: cur.map((x) =>
           x.pid === pid && x.status === "candidate" ? { ...x, status: "accepted" as const } : x) });
+        const proposed = candidates.filter((x) => isAiProposed(x.proposedBy));
+        if (proposed.length) {
+          get().logDecision({ kind: "accept-section", codes: sectionDecisionLabels(proposed),
+            ...batchDecisionSource(proposed), moved: proposed.length,
+            // The batch control records no researcher-authored note. Its model
+            // pitches remain on the stretches, but none may impersonate the
+            // researcher's reason in the decision export.
+            why: "No reason recorded" });
+        }
         earcon.accept();
         announce(`${n} section${n === 1 ? "" : "s"} accepted`);
         return n;
@@ -2156,6 +2264,16 @@ export const useStore = create<State>()(
         get().pushUndo();
         const gone = new Set(doomed);
         set({ stretches: cur.filter((x) => !gone.has(x)) });
+        // Same rule as deleteSegmentsBy: settled sections already have a verdict;
+        // candidates leave an honest record of being cleared without one.
+        if (status === "candidate") {
+          get().logDecision({ kind: "discard-section", codes: sectionDecisionLabels(doomed),
+            ...batchDecisionSource(doomed), moved: doomed.length,
+            // A discard row's kind and count already say what happened and to how many.
+            // Restating that as the reason prints it twice in the panel and fills the
+            // export's `why` column with something the researcher never wrote.
+            why: "No reason recorded" });
+        }
         announce(`${doomed.length} ${status} section${doomed.length === 1 ? "" : "s"} discarded`);
         return doomed.length;
       },

@@ -9,7 +9,7 @@
 // transcript (its menu says "AI for this transcript"), while the Assist tab passes
 // `choose` and picks from the corpus in here — Assist has no active transcript.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { guessQuiet, liveCodes, useStore } from "../state/store";
+import { AI_PROPOSED_BY_PREFIX, guessQuiet, liveCodes, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -147,7 +147,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     announce(`Suggesting codes for ${pid} across ${chunks.length} window${chunks.length === 1 ? "" : "s"}…`);
     earcon.aiStart();
     abort.current = new AbortController();
-    const by = `AI · ${model.name}`;
+    const by = AI_PROPOSED_BY_PREFIX + model.name;
     let added = 0, skipped = 0, cost = 0, pushed = false;
     // hoisted out of the loop so the catch can name the one chunk in flight
     let i = 0;

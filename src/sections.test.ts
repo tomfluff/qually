@@ -138,7 +138,7 @@ test("an unrecognised status in a file reads as a CANDIDATE, never as a hand mar
 });
 
 test("a file carrying a proposal is stamped for what an older build would misread", async () => {
-  const { parseProject, VERSION } = await import("./project");
+  const { parseProject } = await import("./project");
   const plain = parseProject(useStore.getState().exportProject());
   expect(plain!.version).toBe(1); // nothing here an older build gets wrong
   useStore.getState().landSections("P09", sanitizeSections(VOCAB, IDS, [
@@ -148,8 +148,7 @@ test("a file carrying a proposal is stamped for what an older build would misrea
   // a v1 build has no notion of status: it would spread the field through and
   // count an unjudged candidate as a section the researcher drew, so it must
   // refuse the file instead
-  expect(withCand!.version).toBe(VERSION);
-  expect(VERSION).toBeGreaterThan(1);
+  expect(withCand!.version).toBe(2);
   useStore.getState().undo(); // leave the store as the later tests expect it
 });
 
@@ -343,6 +342,9 @@ test("a project holding only a study brief is still stamped for the build that u
   const st = useStore.getState();
   st.deleteStretchesBy({ status: "candidate" });
   st.deleteStretchesBy({ status: "rejected" });
+  // Earlier tests exercised the v3 ledger. Clear that test fixture so this one
+  // isolates the v2 field it names rather than asking the highest version to win.
+  useStore.setState({ ledger: [] });
   // no AI-proposed stretch left anywhere — only the brief, which a v1 build
   // does not carry at all and would drop on its next save
   expect(useStore.getState().stretches.some((x) => x.status)).toBe(false);
