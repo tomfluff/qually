@@ -132,16 +132,10 @@ export function TailSide({ limit, setLimit }: { limit: TailLimit; setLimit: (n: 
   const done = seq.filter((c) => verdicts.has(c)).length;
   return (
     <>
-      {scope !== "parked" && <>
-        <div className="aByLabel" id="tailLimitLabel">Thin means, at most, this many excerpts</div>
-        <div className="segmented" role="group" aria-labelledby="tailLimitLabel">
-          {TAIL_LIMITS.map((t) => (
-            <button key={t.id} className={"seg" + (limit === t.id ? " on" : "")}
-              aria-pressed={limit === t.id} aria-label={t.said} title={t.said}
-              onClick={() => setLimit(t.id)}>{t.label}</button>
-          ))}
-        </div>
-      </>}
+      {/* Scope leads, and the size filter follows it — never the other way. The
+          scope control is always here; the limit only applies to "all thin", so
+          putting the limit first made these buttons jump down the panel every
+          time the scope changed, moving the control under the cursor. */}
       {/* the shelf, on its own: "which of the codes I put down should come back"
           is a different sitting from "which thin codes need a verdict", and it
           was previously only answerable by scrolling the Codebook */}
@@ -154,6 +148,16 @@ export function TailSide({ limit, setLimit }: { limit: TailLimit; setLimit: (n: 
             onClick={() => setUi({ tailScope: id })}>{label}</button>
         ))}
       </div>
+      {scope !== "parked" && <>
+        <div className="aByLabel" id="tailLimitLabel">Thin means, at most, this many excerpts</div>
+        <div className="segmented" role="group" aria-labelledby="tailLimitLabel">
+          {TAIL_LIMITS.map((t) => (
+            <button key={t.id} className={"seg" + (limit === t.id ? " on" : "")}
+              aria-pressed={limit === t.id} aria-label={t.said} title={t.said}
+              onClick={() => setLimit(t.id)}>{t.label}</button>
+          ))}
+        </div>
+      </>}
       <div className="tqProgress">
         <div className="tqBar"><span style={{ width: `${thin ? (done / thin) * 100 : 0}%` }} /></div>
         <p className="dvNote">

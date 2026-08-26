@@ -60,7 +60,8 @@ export function EventList({ pid }: { pid: string }) {
     <div className="eventList" style={open ? { height: clampEventHeight(height) } : undefined}>
       {/* drag to resize, above the header so it reads as the boundary between the
           codes and the events — same gesture as the sidebar's own edge */}
-      {open && <HeightGrip height={height} onHeight={(h) => setUi({ eventListHeight: clampEventHeight(h) })} />}
+      {open && <HeightGrip height={height} clamp={clampEventHeight}
+          onHeight={(h) => setUi({ eventListHeight: clampEventHeight(h) })} />}
       <div className="evhead">
         <button className="evheadmain" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           <Icon name={open ? "chevron-down" : "chevron-up"} size={fs} />
@@ -165,16 +166,35 @@ function TypeMenu({ evkey, x, y, colors, onClose }: {
 // Horizontal twin of the panel Resizer: drag (or arrow) the top edge to give the
 // events list more or less of the sidebar. Reports the height it should become;
 // the caller clamps, so a drag past either bound simply stops.
-export function HeightGrip({ height, onHeight, label = "Resize the events list" }: { height: number; onHeight: (h: number) => void; label?: string }) {
+// While the drag runs the height is previewed IMPERATIVELY (panel.style.height)
+// and committed once on release — the same bargain the panel Resizer struck, and
+// for the same reason: a store write per mousemove re-renders every subscriber of
+// `ui` on every pixel. That was survivable behind the transcript's list and not
+// behind the Codebook, which recomputes code counts and the excerpt pane on each
+// one, so the set-aside shelf dragged in steps while the events list looked fine.
+// `clamp` bounds the preview too, so the panel never overshoots and snap back.
+export function HeightGrip({ height, onHeight, label = "Resize the events list",
+  clamp = (h: number) => h }: {
+  height: number; onHeight: (h: number) => void; label?: string; clamp?: (h: number) => number;
+}) {
   const down = (e: React.MouseEvent) => {
     e.preventDefault();
+    const panel = e.currentTarget.parentElement as HTMLElement;
     const startY = e.clientY;
-    const startH = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect().height;
-    const move = (ev: MouseEvent) => onHeight(startH - (ev.clientY - startY)); // drag up = taller
+    const startH = panel.getBoundingClientRect().height;
+    let last = startH;
+    const move = (ev: MouseEvent) => {
+      // released outside the window: the mouseup never reached us, so this stray
+      // move is the first we hear of it — commit rather than drag on
+      if (ev.buttons === 0) { up(); return; }
+      last = clamp(startH - (ev.clientY - startY)); // drag up = taller
+      panel.style.height = `${last}px`;
+    };
     const up = () => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
       document.body.style.cursor = "";
+      onHeight(last); // one store write per drag
     };
     document.body.style.cursor = "row-resize";
     document.addEventListener("mousemove", move);

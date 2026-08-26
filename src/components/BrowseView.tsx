@@ -233,7 +233,7 @@ export function BrowseView() {
              the same drag-to-resize grip, and a fold that keeps its count on
              screen — a shut shelf must never be mistaken for an empty one. */
           <div className="parkList" style={parkOpen ? { height: clampEventHeight(parkHeight) } : undefined}>
-            {parkOpen && <HeightGrip height={parkHeight} label="Resize the set-aside list"
+            {parkOpen && <HeightGrip height={parkHeight} label="Resize the set-aside list" clamp={clampEventHeight}
               onHeight={(h) => setUi({ parkListHeight: clampEventHeight(h) })} />}
             <button className="codeHead cbParkHead" aria-expanded={parkOpen}
               onClick={() => setParkOpen((v) => !v)}
