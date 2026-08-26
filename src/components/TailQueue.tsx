@@ -39,6 +39,7 @@ const TAIL_LIMITS = [
   { id: 3, label: "3", said: "Three or fewer" },
 ] as const;
 export type TailLimit = (typeof TAIL_LIMITS)[number]["id"];
+export type TailScope = "all" | "parked";
 
 /** codes this queue has already had a verdict on — the ledger is the memory */
 export function triaged(ledger: Decision[]): Set<string> {
@@ -89,11 +90,15 @@ export function tailSequence(
   codebook: Record<string, { def: string; parked?: boolean }>,
   stats: Record<string, { segs: number; pids: number }>,
   limit: TailLimit,
+  scope: TailScope = "all",
 ): string[] {
   // parked codes stay IN the sequence: setting one aside is a verdict you must
   // be able to walk back to and change, and it is the only surface that offers
-  // the way back short of hunting for it in the Codebook
+  // the way back short of hunting for it in the Codebook.
+  // "parked" scope narrows to exactly those — the shelf of codes you put down,
+  // read one at a time, which is how you decide whether to bring one back.
   return Object.keys(codebook)
+    .filter((c) => (scope === "parked" ? !!codebook[c]?.parked : true))
     .filter((c) => (stats[c]?.segs ?? 0) <= limit)
     .sort((a, b) => (stats[a]?.segs ?? 0) - (stats[b]?.segs ?? 0) || a.localeCompare(b));
 }
@@ -117,7 +122,9 @@ export function TailSide({ limit, setLimit }: { limit: TailLimit; setLimit: (n: 
   const transcripts = useStore((s) => s.transcripts);
   const ledger = useStore((s) => s.ledger);
   const stats = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
-  const seq = useMemo(() => tailSequence(codebook, stats, limit), [codebook, stats, limit]);
+  const scope = useStore((st) => st.ui.tailScope);
+  const setUi = useStore((st) => st.setUi);
+  const seq = useMemo(() => tailSequence(codebook, stats, limit, scope), [codebook, stats, limit, scope]);
   const verdicts = useMemo(() => lastVerdicts(ledger), [ledger]);
   const thin = seq.length;
   const done = seq.filter((c) => verdicts.has(c)).length;
@@ -129,6 +136,18 @@ export function TailSide({ limit, setLimit }: { limit: TailLimit; setLimit: (n: 
           <button key={t.id} className={"seg" + (limit === t.id ? " on" : "")}
             aria-pressed={limit === t.id} aria-label={t.said} title={t.said}
             onClick={() => setLimit(t.id)}>{t.label}</button>
+        ))}
+      </div>
+      {/* the shelf, on its own: "which of the codes I put down should come back"
+          is a different sitting from "which thin codes need a verdict", and it
+          was previously only answerable by scrolling the Codebook */}
+      <div className="aByLabel" id="tailScopeLabel">Look at</div>
+      <div className="segmented" role="group" aria-labelledby="tailScopeLabel">
+        {([["all", "All thin", "Every thin code"],
+           ["parked", "Set aside", "Only the codes you set aside"]] as const).map(([id, label, said]) => (
+          <button key={id} className={"seg" + (scope === id ? " on" : "")}
+            aria-pressed={scope === id} aria-label={said} title={said}
+            onClick={() => setUi({ tailScope: id })}>{label}</button>
         ))}
       </div>
       <div className="tqProgress">
@@ -156,7 +175,8 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
   // not, and you move through it in both directions. A card you have already
   // decided shows its verdict and lets you change it — which is what "I
   // pressed a key before I understood what it did" actually needs.
-  const seq = useMemo(() => tailSequence(codebook, stats, limit), [codebook, stats, limit]);
+  const scope = useStore((st) => st.ui.tailScope);
+  const seq = useMemo(() => tailSequence(codebook, stats, limit, scope), [codebook, stats, limit, scope]);
   const verdicts = useMemo(() => lastVerdicts(ledger), [ledger]);
   const [folding, setFolding] = useState(false);
   const [foldQuery, setFoldQuery] = useState("");

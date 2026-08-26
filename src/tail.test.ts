@@ -104,3 +104,20 @@ describe("walking back through verdicts", () => {
       .toEqual(["stray", "thin"]);
   });
 });
+
+describe("the parked scope", () => {
+it("the parked scope narrows the sequence to codes you set aside", () => {
+  const book = {
+    stray: { def: "" },
+    shelved: { def: "", parked: true },
+    thick: { def: "" },
+  };
+  const counts = stats({ stray: 1, shelved: 1, thick: 9 });
+  // "all" is unchanged: parked codes stay in, so a verdict can be walked back
+  expect(tailSequence(book, counts, 1)).toEqual(["shelved", "stray"]);
+  // "parked" is the shelf on its own — thin or not is still the size filter,
+  // but a live code never appears however thin it is
+  expect(tailSequence(book, counts, 1, "parked")).toEqual(["shelved"]);
+  expect(tailSequence(book, counts, 3, "parked")).toEqual(["shelved"]);
+});
+});

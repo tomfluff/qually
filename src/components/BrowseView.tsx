@@ -72,6 +72,9 @@ export function BrowseView() {
   const hasGrounds = Object.keys(aiGrounds).length > 0;
   const setColor = useStore((s) => s.setColor);
   const setParked = useStore((s) => s.setParked);
+  // shut by default: these are codes the researcher deliberately put away, so the
+  // list should not re-open itself under them every time they come back
+  const [parkOpen, setParkOpen] = useState(false);
   const jumpTo = useStore((s) => s.jumpTo);
   const [selected, setSelected] = useState<Set<string>>(remembered.selected);
   const [anchor, setAnchor] = useState<string | null>(remembered.anchor);
@@ -223,18 +226,32 @@ export function BrowseView() {
         ))}
         {listedParked.length > 0 && (
           <>
-            <div className="codeHead cbParkHead">
+            {/* a fold, like the event groups in a transcript: set-aside codes are
+                the tail of a long list and most sessions never need to look at
+                them, but the count has to stay visible or the researcher cannot
+                tell an empty shelf from a shut one */}
+            <button className="codeHead cbParkHead" aria-expanded={parkOpen}
+              onClick={() => setParkOpen((v) => !v)}
+              title={parkOpen ? "Hide the codes you set aside" : "Show the codes you set aside"}>
+              <Icon name={parkOpen ? "chevron-down" : "chevron-right"} size={sidebarFontSize} />
               <span className="codeTitle">Set aside</span>
               <span className="cnt">{listedParked.length}</span>
-            </div>
-            {listedParked.map((c) => (
+            </button>
+            {parkOpen && listedParked.map((c) => (
               <div key={c} className={"bCode parked" + (selected.has(c) ? " sel" : "")} tabIndex={0} role="button"
                 aria-label={`Show excerpts for ${c}, set aside, ${counts[c]?.segs || 0} excerpt${counts[c]?.segs === 1 ? "" : "s"}`}
                 aria-pressed={selected.has(c)} onClick={(e) => select(c, e)}
                 onKeyDown={(e) => {
                   if (e.target !== e.currentTarget) return;
                   if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(c, e); }
+                  // the same menu the live rows have: a set-aside code still needs
+                  // rename, recolour, definition and delete, and having none of
+                  // them made the one list that shows these codes a dead end
+                  if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+                    e.preventDefault(); openMenuAt(c, e.currentTarget);
+                  }
                 }}
+                onContextMenu={(e) => { e.preventDefault(); setMenu({ code: c, x: e.clientX, y: e.clientY }); }}
                 data-tip={`${c} — set aside; its excerpts are untouched`}>
                 <div className="bCodeMain">
                   <span className="codebar" style={{ background: codebook[c].color }} data-tip="" />

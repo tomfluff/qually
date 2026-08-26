@@ -1643,7 +1643,7 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
   spkOff: string; // speaker focus: class(es) a NON-focused speaker's row carries ("" = focused/none)
   cols: number;
   laned: LanedSeg[];
-  codebook: Record<string, { color: string }>;
+  codebook: Record<string, { color: string; parked?: boolean }>;
   onRowDown: (e: MouseEvent) => void;
   onLaneClick: (seg: LanedSeg, at: { clientX: number; clientY: number }) => void;
   onLaneMenu: (seg: LanedSeg, at: { clientX: number; clientY: number }) => void;
@@ -1677,10 +1677,17 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
     // status is a suggestion; only an explicit "accepted" earns the solid bar
     const cand = !rej && seg.status !== "accepted";
     const color = codebook[seg.code]?.color || "#999";
+    // Parked is a property of the CODE, not of this segment, so it composes with
+    // whatever status the segment has rather than replacing it: a set-aside code
+    // can still hold accepted, candidate and rejected segments. The coding is not
+    // wrong (that is rejected) and not provisional (that is candidate) — the code
+    // has simply stepped out of the working set, so its bars step back too.
+    const parkedCode = !!codebook[seg.code]?.parked;
     const isStart = seg.start >= startId && seg.start <= endId;
     const isEnd = seg.end >= startId && seg.end <= endId;
     const cc = closeCallSids.has(seg.sid);
     const cls = "laneBar" + (rej ? " rejected" : cand ? " candidate" : lanePattern ? ` lp${patternOf(seg.code)}` : "")
+      + (parkedCode ? " parkedCode" : "")
       + (isStart ? " segStart" : "") + (isEnd ? " segEnd" : "");
     // rejected: an empty husk — NO fill, just a faint outline of the code colour
     // where the segment used to be. Reads as "hollowed out" against accepted's
@@ -1725,11 +1732,11 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
     lanes.push(
       // a real (keyboard-reachable) control on the segment's FIRST line only: one Tab
       // stop per segment opens its popover; the continuation bars stay decorative
-      <span key={i} className={cls} data-sid={seg.sid} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cand ? ` — suggested by ${seg.proposedBy}` : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
+      <span key={i} className={cls} data-sid={seg.sid} data-tip={`${seg.code} (${seg.start}-${seg.end})${rej ? " — rejected" : ""}${cand ? ` — suggested by ${seg.proposedBy}` : ""}${parkedCode ? " · set aside" : ""}${cc ? " · ⚠ near-balanced speakers" : ""}`}
         style={style}
         {...(isStart ? {
           role: "button" as const, tabIndex: 0,
-          "aria-label": `Segment ${seg.code}, lines ${seg.start} to ${seg.end}${rej ? ", rejected" : cand ? `, suggested by ${seg.proposedBy}` : ""}`,
+          "aria-label": `Segment ${seg.code}, lines ${seg.start} to ${seg.end}${rej ? ", rejected" : cand ? `, suggested by ${seg.proposedBy}` : ""}${parkedCode ? ", code set aside" : ""}`,
           onKeyDown: (e: ReactKeyboardEvent) => {
             if (e.key !== "Enter" && e.key !== " ") return;
             e.preventDefault(); e.stopPropagation();

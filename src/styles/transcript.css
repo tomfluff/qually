@@ -202,6 +202,18 @@
    screenshots still show them.) The three patterns that vary along Y restart at
    each row boundary within a multi-line segment; the seam is minor next to the
    alternative, which is no non-colour channel at all. */
+/* A code you SET ASIDE is out of the working codebook, but its codings are
+   untouched — not wrong (that is .rejected) and not provisional (that is
+   .candidate). So its bars step back rather than being voided: drained of
+   saturation AND narrowed to half their lane. Width is the non-colour half, so
+   "out of play" still reads under a colour filter or to a colourblind reader.
+   The narrowing is scaleX, not borders or a clip: .rejected and .candidate already
+   own their borders to carry their own meaning, and clipping would take the grips
+   — absolutely positioned children that hang outside the bar — with it. A
+   transform leaves layout, the seam bleed (which is vertical) and the drag
+   handles alone, and composes with all three statuses. */
+.laneBar.parkedCode { filter:saturate(.2); transform:scaleX(.5); }
+
 /* Explicit list, NOT [class*="lp"] — that substring selector also matched .helpbtn
    ("he-lp-btn") and injected an absolute overlay into the Help button. */
 .lp0::before, .lp1::before, .lp2::before,
