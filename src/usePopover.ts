@@ -85,6 +85,27 @@ export function useToggleMenu() {
   useMenuToggleFocus(open, menuRef, btnRef);
   // spread onto the menu element: Up/Down walk its items
   const arrows = useMenuArrows(menuRef);
+  // A dropdown hangs off its trigger, so the room it has is the room BELOW that
+  // trigger — but the base .ctxmenu cap is measured from the top of the SCREEN.
+  // A menu opened partway down the page could therefore be told it may grow
+  // taller than the space it is standing in, and its last items went off the
+  // bottom edge; inside a panel that clips (the Codebook sidebar) they did not
+  // even leave a scrollbar behind to say so. Measured here rather than at the
+  // call sites, for the same reason the keyboard contract above is.
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!open || !el) return;
+    const fit = () => {
+      el.style.maxHeight = "";   // measure where it starts, not where the last cap left it
+      el.style.maxHeight = Math.max(120, window.innerHeight - el.getBoundingClientRect().top - 8) + "px";
+    };
+    fit();
+    // Ctrl+= is this app's most-used control, and it changes innerHeight: a cap
+    // measured once would strand the menu's tail off-screen the moment its reader
+    // zoomed in on it.
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [open]);
   return { open, setOpen, btnRef, menuRef, arrows };
 }
 
