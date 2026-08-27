@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { describe, it, expect } from "vitest";
-import { codeOrigins, foldDecisions, originCounts, historyOf, methodsParagraph } from "./provenance";
-import { AI_PROPOSED_BY_PREFIX, type Decision } from "./state/store";
+import { aiSpend, codeOrigins, foldDecisions, originCounts, historyOf, methodsParagraph,
+  proposalCounts } from "./provenance";
+import { AI_PROPOSED_BY_PREFIX, type AiCall, type Decision } from "./state/store";
 
 const d = (
   kind: Decision["kind"], codes: string[], source: Decision["source"] = "you",
@@ -269,5 +270,90 @@ describe("the standing-disposition sentence", () => {
     const both = methodsParagraph([], ["c"],
       { segments: [seg(1, "accepted"), seg(2, "rejected")], stretches: [] });
     expect(both).toContain("has accepted 1 coding proposed by a language model and rejected 1.");
+  });
+});
+
+// The Decisions sidebar shows these four numbers and the methods paragraph
+// states them in prose. Both read this one function, so the tests below are
+// what stops a panel and a paper from disagreeing about the same study.
+describe("what became of the model's proposals", () => {
+  const item = (status: string, proposedBy = "AI · Terra") => ({ status, proposedBy });
+  const counts = (ledger: Decision[], items: { status?: string; proposedBy?: string }[]) =>
+    proposalCounts(ledger, items, "discard-coding");
+
+  it("counts only what a model proposed, by the verdict it now carries", () => {
+    expect(counts([], [
+      item("accepted"), item("accepted"), item("rejected"), item("candidate"),
+      // the researcher's own coding is not a proposal, whatever its status
+      { status: "accepted", proposedBy: "" },
+      { status: "accepted", proposedBy: undefined },
+    ])).toEqual({ accepted: 2, rejected: 1, waiting: 1, discarded: 0, total: 4 });
+  });
+
+  it("recovers discards from history, which is the only place they still exist", () => {
+    // the discarded codings are GONE from segments — a corpus count sees nothing
+    const ledger = [
+      d("discard-coding", ["c"], "ai", { moved: 3 }),
+      d("discard-coding", ["c"], "ai"),                      // written before `moved`: one
+      d("discard-coding", ["c"], "ai", { moved: 9, undone: true }), // reversed is not discarded
+      d("discard-coding", ["c"], "you", { moved: 5 }),       // not a model's proposal
+      d("discard-section", ["s"], "ai", { moved: 4 }),       // the other kind
+    ];
+    expect(counts(ledger, [])).toMatchObject({ discarded: 4, total: 4 });
+    expect(proposalCounts(ledger, [], "discard-section")).toMatchObject({ discarded: 4 });
+  });
+
+  it("totals the four states, so a bar drawn from them cannot exceed the whole", () => {
+    const c = counts([d("discard-coding", ["c"], "ai", { moved: 2 })],
+      [item("accepted"), item("rejected"), item("candidate")]);
+    expect(c.total).toBe(c.accepted + c.rejected + c.waiting + c.discarded);
+    expect(c.total).toBe(5);
+  });
+
+  it("says the same thing as the methods paragraph", () => {
+    const ledger = [d("discard-coding", ["c"], "ai", { moved: 2 })];
+    const segments = [{ sid: 1, pid: "P01", start: 1, end: 1, code: "c", notes: "",
+      proposedBy: "AI · Terra", status: "accepted" }];
+    const c = proposalCounts(ledger, segments, "discard-coding");
+    const para = methodsParagraph(ledger, ["c"], { segments, stretches: [] });
+    expect(para).toContain(`accepted ${c.accepted} coding`);
+    expect(para).toContain(`clearing ${c.discarded} codings`);
+  });
+});
+
+describe("what the model cost", () => {
+  const call = (over: Partial<AiCall> = {}): AiCall => ({
+    at: "2026-08-28T00:00:00.000Z", model: "Terra", task: "scan", pid: "P01",
+    lines: 10, redactions: 0, inTok: 100, outTok: 20, costUsd: 0.001, ...over,
+  });
+
+  it("adds up the log and counts what a request cost nothing to report", () => {
+    expect(aiSpend([call(), call({ inTok: 50, outTok: 5, costUsd: 0.0004 })]))
+      .toEqual({ calls: 2, unfinished: 0, inTok: 150, outTok: 25, costUsd: 0.0014 });
+  });
+
+  it("counts an aborted or failed request as sent, since it was", () => {
+    // both dispatched: the transcript went out, and the money may have too
+    const s = aiSpend([call({ outcome: "aborted", inTok: 0, outTok: 0, costUsd: 0 }),
+      call({ outcome: "failed", inTok: 0, outTok: 0, costUsd: 0 }), call()]);
+    expect(s).toMatchObject({ calls: 3, unfinished: 2, inTok: 100, costUsd: 0.001 });
+  });
+
+  // Same lesson as the Codebook facets: a project file is hand-editable, and a
+  // string where a number belongs must read as nothing rather than crash render.
+  it("treats a non-numeric field as nothing rather than throwing", () => {
+    const junk = [
+      call({ inTok: "many" as unknown as number }),
+      call({ outTok: undefined as unknown as number }),
+      call({ costUsd: NaN }),
+    ];
+    const s = aiSpend(junk);
+    expect(s.calls).toBe(3);
+    expect(Number.isFinite(s.inTok) && Number.isFinite(s.outTok) && Number.isFinite(s.costUsd)).toBe(true);
+    expect(s).toMatchObject({ inTok: 200, outTok: 40, costUsd: 0.002 });
+  });
+
+  it("has nothing to show for a study that never asked a model anything", () => {
+    expect(aiSpend([])).toEqual({ calls: 0, unfinished: 0, inTok: 0, outTok: 0, costUsd: 0 });
   });
 });

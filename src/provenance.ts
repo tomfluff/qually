@@ -13,7 +13,7 @@
 // "ai" is sticky: once a proposal shaped a code, later hand-work does not
 // unshape it. Accepting a good proposal is a decision, not a confession — the
 // point of the number is that it is visible, not that it is small.
-import { AI_PROPOSED_BY_PREFIX, type Decision, type Segment } from "./state/store";
+import { AI_PROPOSED_BY_PREFIX, type AiCall, type Decision, type Segment } from "./state/store";
 import type { Stretch } from "./stretches";
 
 type Origin = "untouched" | "you" | "ai";
@@ -128,6 +128,54 @@ export interface CurrentDisposition {
   stretches: Pick<Stretch, "status" | "proposedBy">[];
 }
 
+/** What became of what a model proposed. Four states, and the fourth is the one
+    a corpus count alone cannot see: a discarded proposal is GONE from segments
+    and stretches, so only the ledger still knows it was ever offered. */
+export interface ProposalCounts {
+  accepted: number; rejected: number; waiting: number; discarded: number; total: number;
+}
+
+/** The proposals of ONE kind — codings (segments) or sections (stretches) —
+    counted from the corpus as it stands now, plus the discards only history
+    remembers. The Decisions panel shows these; methodsParagraph writes the same
+    numbers into prose, from this one function, so the two cannot drift. */
+export function proposalCounts(
+  ledger: Decision[],
+  items: readonly { status?: string; proposedBy?: string }[],
+  discardKind: Decision["kind"],
+): ProposalCounts {
+  const proposed = items.filter((x) => x.proposedBy?.startsWith(AI_PROPOSED_BY_PREFIX));
+  const n = (status: string) => proposed.filter((x) => x.status === status).length;
+  // `moved` is how many one gesture cleared; a row written before that field
+  // existed cleared one. Undone discards are not discards.
+  const discarded = ledger
+    .filter((d) => !d.undone && d.source === "ai" && d.kind === discardKind)
+    .reduce((sum, d) => sum + (d.moved ?? 1), 0);
+  const accepted = n("accepted"), rejected = n("rejected"), waiting = n("candidate");
+  return { accepted, rejected, waiting, discarded,
+    total: accepted + rejected + waiting + discarded };
+}
+
+/** What the model has cost, added up from the AI log. Every field is read
+    defensively: a project file is hand-editable, and a string where a number
+    belongs must read as nothing rather than throw inside render. */
+export interface AiSpend {
+  calls: number; unfinished: number; inTok: number; outTok: number; costUsd: number;
+}
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+export function aiSpend(log: readonly AiCall[]): AiSpend {
+  const out: AiSpend = { calls: log.length, unfinished: 0, inTok: 0, outTok: 0, costUsd: 0 };
+  for (const c of log) {
+    // aborted and failed both DISPATCHED — the transcript went out either way,
+    // and the API may have charged for it while reporting nothing back
+    if (c.outcome === "aborted" || c.outcome === "failed") out.unfinished++;
+    out.inTok += num(c.inTok);
+    out.outTok += num(c.outTok);
+    out.costUsd += num(c.costUsd);
+  }
+  return out;
+}
+
 // The paragraph a methods section needs, written from the record rather than by
 // a model: it is a claim about the researcher's own conduct, so nothing else may
 // author it. The panel shows this draft read-only for copying elsewhere.
@@ -144,26 +192,15 @@ export function methodsParagraph(
   const fromWording = book.filter((d) => d.source === "wording").length;
   const models = [...new Set(book.filter((d) => d.model).map((d) => d.model!))];
   const undone = ledger.filter((d) => d.undone).length;
-  const settled = (items: Pick<Segment | Stretch, "status" | "proposedBy">[]) => ({
-    accepted: items.filter((x) => x.proposedBy?.startsWith(AI_PROPOSED_BY_PREFIX)
-      && x.status === "accepted").length,
-    rejected: items.filter((x) => x.proposedBy?.startsWith(AI_PROPOSED_BY_PREFIX)
-      && x.status === "rejected").length,
-  });
   // Verdict rows are history and can contain several answers for one proposal.
   // The methods claim is about the corpus now, so a proposal accepted and later
   // deleted rightly drops out: an excerpt absent from the corpus is not accepted
-  // or rejected in the analysis as it stands.
-  const codings = settled(segments);
-  const sections = settled(stretches);
-  // Discards are different: the deleted proposal is no longer present to count,
-  // and only the ledger can preserve that the researcher cleared it without a
-  // verdict. History is the source of truth for an event that removed its data.
-  const discarded = (kind: Decision["kind"]) => live
-    .filter((d) => d.source === "ai" && d.kind === kind)
-    .reduce((sum, d) => sum + (d.moved ?? 1), 0);
-  const discardedCodings = discarded("discard-coding");
-  const discardedSections = discarded("discard-section");
+  // or rejected in the analysis as it stands. Discards are the exception the
+  // count above cannot see, and proposalCounts folds them back in from history.
+  const codings = proposalCounts(ledger, segments, "discard-coding");
+  const sections = proposalCounts(ledger, stretches, "discard-section");
+  const discardedCodings = codings.discarded;
+  const discardedSections = sections.discarded;
   const bits: string[] = [];
   // "consolidated" is a claim about work done to the codebook, and the ledger can
   // only support it when it holds codebook decisions. A book that was never merged

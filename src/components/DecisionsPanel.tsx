@@ -11,7 +11,8 @@
 // whole job is to be readable and exportable.
 import { useMemo, useState } from "react";
 import { useStore, liveCodes, type Decision } from "../state/store";
-import { foldDecisions, originCounts, methodsParagraph, type OriginCounts } from "../provenance";
+import { aiSpend, foldDecisions, originCounts, methodsParagraph, proposalCounts,
+  type OriginCounts, type ProposalCounts } from "../provenance";
 import { preselectBrowse } from "./BrowseView";
 import { Icon } from "./Icon";
 
@@ -67,7 +68,13 @@ export const decisionCodeCanLink = (d: Decision, codebook: Record<string, unknow
 export function DecisionsSide() {
   const ledger = useStore((s) => s.ledger);
   const codebook = useStore((s) => s.codebook);
+  const segments = useStore((s) => s.segments);
+  const stretches = useStore((s) => s.stretches);
+  const aiLog = useStore((s) => s.aiLog);
   const counts = useMemo(() => originCounts(ledger, Object.keys(codebook)), [ledger, codebook]);
+  const codings = useMemo(() => proposalCounts(ledger, segments, "discard-coding"), [ledger, segments]);
+  const sections = useMemo(() => proposalCounts(ledger, stretches, "discard-section"), [ledger, stretches]);
+  const spend = useMemo(() => aiSpend(aiLog), [aiLog]);
   const undone = ledger.filter((d) => d.undone).length;
   const pct = (n: number) => (counts.total ? Math.round((n / counts.total) * 100) : 0);
   const bar = (k: keyof OriginCounts & ("untouched" | "you" | "ai")) =>
@@ -100,7 +107,81 @@ export function DecisionsSide() {
       {undone > 0 && (
         <p className="dvNote">{undone} reversed — struck through below, still counted.</p>
       )}
+      {/* What the model proposed and what you did with it. The methods paragraph
+          states these same numbers in prose, from the same function — this is
+          the version you can read at a glance while you work. */}
+      <Proposals what="coding" counts={codings} />
+      <Proposals what="section" counts={sections} />
+      <Spend spend={spend} />
     </>
+  );
+}
+
+// The four states a proposal can be in, in the order a researcher works through
+// them: settled yes, settled no, still theirs to answer, cleared without an
+// answer. Rendered for codings and for sections separately — they are different
+// objects, and one total over both would answer neither question.
+const PROPOSAL_STATES = [
+  { key: "accepted", label: "accepted" },
+  { key: "rejected", label: "turned down" },
+  { key: "waiting", label: "waiting on you" },
+  { key: "discarded", label: "cleared without a verdict" },
+] as const;
+
+function Proposals({ what, counts }: { what: "coding" | "section"; counts: ProposalCounts }) {
+  // A study that has never asked for this kind of proposal has no story here;
+  // four zeroes would only take up room the rest of the panel needs.
+  if (!counts.total) return null;
+  const pct = (n: number) => Math.round((n / counts.total) * 100);
+  const plural = (n: number) => `${n} ${what}${n === 1 ? "" : "s"}`;
+  return (
+    <div className="dvWho dvBlock">
+      <h4 className="dvHead">Proposed {what}s</h4>
+      <div className="dvBar" role="img"
+        aria-label={PROPOSAL_STATES.filter((s) => counts[s.key] > 0)
+          .map((s) => `${plural(counts[s.key])} ${s.label}`).join(", ")}>
+        {PROPOSAL_STATES.map((s) => counts[s.key] > 0 && (
+          <span key={s.key} className={"dvSeg p-" + s.key} style={{ width: `${pct(counts[s.key])}%` }} />
+        ))}
+      </div>
+      <ul className="dvKeys">
+        {PROPOSAL_STATES.map((s) => (
+          // every state stays listed, zero or not: the list is the bar's key, and
+          // a key that appears and disappears cannot be read against it. A zero
+          // just stops shouting — quiet by colour, never by hiding.
+          <li key={s.key} className={counts[s.key] ? "" : "zero"}>
+            <span className={"dvDot p-" + s.key} /><b>{counts[s.key]}</b> {s.label}</li>
+        ))}
+      </ul>
+      <p className="dvNote">{counts.total} proposed by a model in all.</p>
+    </div>
+  );
+}
+
+// The bill, from the AI log — the same rows the exported ai-provenance.csv
+// carries, added up. Nothing here is an estimate: the token counts are what the
+// API reported, priced by the model's own rates.
+function Spend({ spend }: { spend: ReturnType<typeof aiSpend> }) {
+  if (!spend.calls) return null;
+  const n = (v: number) => v.toLocaleString();
+  return (
+    <div className="dvWho dvBlock">
+      <h4 className="dvHead">What the model cost</h4>
+      <dl className="dvSpend">
+        <dt>Requests</dt><dd>{n(spend.calls)}</dd>
+        <dt>Tokens in</dt><dd>{n(spend.inTok)}</dd>
+        <dt>Tokens out</dt><dd>{n(spend.outTok)}</dd>
+        <dt>Cost</dt><dd className="dvCost">${spend.costUsd.toFixed(4)}</dd>
+      </dl>
+      {/* An aborted or failed request was still sent and may still have been
+          charged, with nothing reported back to count — so say the total is a
+          floor rather than let it read as the whole bill. */}
+      {spend.unfinished > 0 && (
+        <p className="dvNote">{spend.unfinished} request{spend.unfinished === 1 ? "" : "s"} did
+          not finish. {spend.unfinished === 1 ? "It was" : "They were"} still sent, and
+          reported no tokens — the total above is a floor.</p>
+      )}
+    </div>
   );
 }
 

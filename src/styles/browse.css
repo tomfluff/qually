@@ -492,6 +492,30 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .dvDot.you { background:color-mix(in srgb, var(--muted) 62%, var(--bg)); }
 .dvDot.ai { background:var(--accent); }
 .dvNote { color:var(--muted); font-size:.88em; line-height:1.45; margin:10px 0 0; }
+/* the panel's later blocks: proposals, then the bill. Each is the same shape as
+   the origin block above it, separated by a rule rather than by guesswork. */
+.dvBlock { border-top:1px solid var(--line); margin-top:14px; padding-top:12px; }
+.dvHead { font-size:.72em; text-transform:uppercase; letter-spacing:.09em;
+  color:var(--muted); font-weight:700; margin:0 0 9px; }
+/* A verdict is not a shade of the same thing, so these read as four DIFFERENT
+   inks rather than four steps of one: accepted takes the app's own "settled"
+   green, turned down its red, waiting the accent that means "your move" all
+   over this app, and cleared the flat grey of a thing with no verdict on it.
+   Every one of them is also named in the key beside it — the colour is the
+   quick read, never the only one. */
+.dvSeg.p-accepted, .dvDot.p-accepted { background:var(--ok, #3fa860); }
+.dvSeg.p-rejected, .dvDot.p-rejected { background:#e0554f; }
+.dvSeg.p-waiting, .dvDot.p-waiting { background:var(--accent); }
+.dvSeg.p-discarded, .dvDot.p-discarded { background:color-mix(in srgb, var(--muted) 34%, var(--bg)); }
+.dvDot.p-discarded { border:1px solid var(--line); }
+/* label left, number right, so a column of figures lines up down the panel */
+.dvSpend { margin:0; display:grid; grid-template-columns:1fr auto; gap:5px 10px;
+  align-items:baseline; }
+.dvSpend dt { color:var(--muted); }
+.dvSpend dd { margin:0; text-align:right; font-variant-numeric:tabular-nums;
+  color:var(--fg); font-weight:600; }
+.dvSpend .dvCost { color:var(--accent); }
+.dvKeys li.zero b { color:var(--muted); font-weight:400; }
 
 .dvWrap { display:flex; flex-direction:column; gap:14px; }
 .dvPara { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); }
