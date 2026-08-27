@@ -618,8 +618,14 @@ function CbViewMenu({ showRejected, setShowRejected, facets, setFacets, ui, setU
           <div className="cbMenuGrp">Filter codes</div>
           <label className="cbChk"><input type="checkbox" checked={facets.withoutDefinition}
             onChange={(e) => setFacets({ ...facets, withoutDefinition: e.target.checked })} /> Without a definition</label>
+          {/* filled, unlike the plain actions further down: this row only exists
+              while something is being hidden, and it is the way back. Among four
+              quiet checkbox rows and three quiet actions, the one that is live
+              has to look live. */}
           {hasCodebookFacets(facets) && (
-            <button className="cbAct" onClick={() => setFacets(EMPTY_CODEBOOK_FACETS)}>Clear filters</button>
+            <button className="cbAct cbClear" onClick={() => setFacets(EMPTY_CODEBOOK_FACETS)}>
+              <Icon name="x" size={fontSize} /> Clear filters
+            </button>
           )}
           {hasGrounds && (
             <>
