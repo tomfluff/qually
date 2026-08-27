@@ -6,8 +6,6 @@
    cross-axis and leave the menu button taller than the input */
 #sidebar .sidebarNewRow .newCodeWrap { flex:1; min-width:0; margin-bottom:0; }
 #sidebar .aiMenuBtn { flex:none; display:inline-flex; align-items:center; gap:2px; padding:0 8px; }
-/* anchor the menu under the button (the shared .ctxmenu is position:fixed by default) */
-#sidebar .sidebarNewRow .aiMenu { position:absolute; left:auto; right:0; top:calc(100% + 4px); }
 /* Truncate + tooltip, coherent with the Browse code list: the name stays on one
    line (ellipsised) so the key/count/⋯ never wrap, and the full name is one hover
    away (the shared Tooltip reads the row's data-tip). */

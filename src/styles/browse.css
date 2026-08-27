@@ -199,8 +199,11 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .cbViewBtn { color:var(--muted); }
 .cbDot { position:absolute; top:4px; right:4px; width:6px; height:6px;
   border-radius:50%; background:var(--accent); }
-/* both menus anchor under their button (the shared .ctxmenu is position:fixed) */
-.cbMenuWrap .cbMenu { position:absolute; left:auto; right:0; top:calc(100% + 4px); min-width:180px; }
+/* both menus keep .ctxmenu's position:fixed and are placed against their button
+   by useToggleMenu — anchoring them inside this row instead put them inside a
+   panel that clips (.cbSide is overflow:hidden), which cut a menu wider than the
+   sidebar in half with no way to reach the rest */
+.cbMenuWrap .cbMenu { min-width:180px; }
 .cbMenu .cbMenuGrp { font-size:10px; text-transform:uppercase; letter-spacing:.06em;
   color:var(--muted); font-weight:700; margin:8px 8px 3px; padding-top:7px; border-top:1px solid var(--line); }
 .cbMenu .cbChk { display:flex; align-items:center; gap:8px; padding:5px 8px; cursor:pointer; color:var(--fg); }

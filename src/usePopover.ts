@@ -85,22 +85,32 @@ export function useToggleMenu() {
   useMenuToggleFocus(open, menuRef, btnRef);
   // spread onto the menu element: Up/Down walk its items
   const arrows = useMenuArrows(menuRef);
-  // A dropdown hangs off its trigger, so the room it has is the room BELOW that
-  // trigger — but the base .ctxmenu cap is measured from the top of the SCREEN.
-  // A menu opened partway down the page could therefore be told it may grow
-  // taller than the space it is standing in, and its last items went off the
-  // bottom edge; inside a panel that clips (the Codebook sidebar) they did not
-  // even leave a scrollbar behind to say so. Measured here rather than at the
-  // call sites, for the same reason the keyboard contract above is.
+  // Placement, for every menu this hook drives. A dropdown used to be laid out
+  // by CSS as position:absolute inside its trigger's row — which put it inside
+  // a panel that CLIPS (both sidebars are overflow:hidden), so a menu wider
+  // than the sidebar had its left half cut off and unreadable, with no way to
+  // scroll to it. So the menu keeps .ctxmenu's own position:fixed and is placed
+  // here against the trigger's box: right-aligned under it, then pulled back
+  // inside the viewport, and capped by the room BELOW the trigger rather than
+  // by the height of the whole screen (the base .ctxmenu cap measures from the
+  // top of the SCREEN, so a menu opened partway down was told it could grow
+  // taller than the space it stands in and its last items fell off the bottom).
   useLayoutEffect(() => {
     const el = menuRef.current;
-    if (!open || !el) return;
+    const btn = btnRef.current;
+    if (!open || !el || !btn) return;
     const fit = () => {
       el.style.maxHeight = "";   // measure where it starts, not where the last cap left it
-      el.style.maxHeight = Math.max(120, window.innerHeight - el.getBoundingClientRect().top - 8) + "px";
+      const b = btn.getBoundingClientRect();
+      const pad = 8;
+      const top = b.bottom + 4;
+      el.style.left = Math.max(pad,
+        Math.min(b.right - el.offsetWidth, window.innerWidth - el.offsetWidth - pad)) + "px";
+      el.style.top = top + "px";
+      el.style.maxHeight = Math.max(120, window.innerHeight - top - pad) + "px";
     };
     fit();
-    // Ctrl+= is this app's most-used control, and it changes innerHeight: a cap
+    // Ctrl+= is this app's most-used control, and it changes innerHeight: a box
     // measured once would strand the menu's tail off-screen the moment its reader
     // zoomed in on it.
     window.addEventListener("resize", fit);
