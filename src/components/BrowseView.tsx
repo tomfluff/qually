@@ -414,8 +414,11 @@ export function BrowseView() {
                               {/* aiGrounds is hashed against the dominant-speaker excerpt, so highlighting the full text would claim the model saw words it did not. */}
                               {speakerGroups(ex.lines).map((g, i) => (
                                 <div key={i} className="bFullRow">
-                                  <span className="bFullSpk">{g.speaker.trim() || "unlabelled"}</span>
-                                  <span>{withSubs(g.text)}</span>
+                                  {/* the colon is text, not a ::before: it is part of
+                                      what this says, so it has to survive a copy and
+                                      be there for a reader that ignores CSS content */}
+                                  <b className="bFullSpk">{g.speaker.trim() || "unlabelled"}:</b>
+                                  <div>{withSubs(g.text)}</div>
                                 </div>
                               ))}
                             </div>
@@ -618,10 +621,10 @@ function CbViewMenu({ showRejected, setShowRejected, facets, setFacets, ui, setU
           <div className="cbMenuGrp">Filter codes</div>
           <label className="cbChk"><input type="checkbox" checked={facets.withoutDefinition}
             onChange={(e) => setFacets({ ...facets, withoutDefinition: e.target.checked })} /> Without a definition</label>
-          {/* filled, unlike the plain actions further down: this row only exists
-              while something is being hidden, and it is the way back. Among four
-              quiet checkbox rows and three quiet actions, the one that is live
-              has to look live. */}
+          {/* a chip rather than another full-width row: it only exists while
+              something is being hidden, and it is the way back, so it carries the
+              accent — but it is the exit from this menu's subject, not the
+              subject, and at row width the fill said otherwise. */}
           {hasCodebookFacets(facets) && (
             <button className="cbAct cbClear" onClick={() => setFacets(EMPTY_CODEBOOK_FACETS)}>
               <Icon name="x" size={fontSize} /> Clear filters

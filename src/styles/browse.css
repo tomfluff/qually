@@ -61,11 +61,14 @@
 .bDrop:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 .bDrop.warn { color:var(--warn); border-color:var(--warn); font-weight:600; }
 .bDrop.warn:hover { color:var(--fg); background:color-mix(in srgb, var(--warn) 12%, var(--panel)); }
-.bFull { display:flex; flex-direction:column; gap:5px; }
-.bFullRow { display:grid; grid-template-columns:minmax(7ch, 12ch) minmax(0, 1fr);
-  gap:8px; align-items:baseline; }
-.bFullRow > :last-child { min-width:0; overflow-wrap:anywhere; }
-.bFullSpk { color:var(--fg-dim); font-weight:600; overflow-wrap:anywhere; }
+.bFull { display:flex; flex-direction:column; gap:10px; }
+/* speaker over their words, not beside them. The column version reserved up to
+   12ch for the name, and at the text sizes this app is built for that was a
+   third of the reading width gone — on a phrase like "P2:" that costs more than
+   it aligns. Stacked, every excerpt line gets the full column. */
+.bFullRow { min-width:0; }
+.bFullSpk { display:block; color:var(--fg); overflow-wrap:anywhere; }
+.bFullRow > div { overflow-wrap:anywhere; }
 /* the excerpt's context row: section marks first (what span of the study
    these lines belong to), then the other codes that overlap them. Chips, not
    prose — they're navigation (a code chip opens that code) and orientation,
@@ -365,13 +368,18 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   border-radius:6px; cursor:pointer; }
 .cbMenu .cbAct:hover { background:var(--sel); }
 .cbMenu .cbAct:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
-/* Clear filters, the one action in this menu that is undoing a live state rather
-   than starting a new one. Filled like .btn.primary — same accent, same white —
-   so it is found at a glance among the quiet rows, and separated from the
-   checkbox group above so it does not read as another thing to tick.
+/* Clear filters, the one action in this menu that undoes a live state rather than
+   starting a new one, and the only row that is not always there. It carries the
+   accent so it is found at a glance — but as a chip that shrinks to its own words,
+   not a full-width bar: at that size the fill was the loudest thing in a menu
+   whose actual subject is the seven quiet rows above it. The width comes down,
+   the type does not — this app's whole premise is that its reader needs the text
+   big, and a chip is no place to start making exceptions.
    Doubled class because menu.css paints every .ctxmenu button transparent, and a
    single class here loses to it. */
-.cbMenu .cbAct.cbClear { margin:6px 0 2px; background:var(--accent); color:#fff; font-weight:600; }
+.cbMenu .cbAct.cbClear { width:auto; align-self:flex-start; margin:4px 0 2px 8px;
+  padding:3px 10px; gap:5px; border-radius:999px;
+  background:var(--accent); color:#fff; }
 .cbMenu .cbAct.cbClear svg { color:#fff; }
 .cbMenu .cbAct.cbClear:hover { background:var(--accent); filter:brightness(1.12); }
 /* the house focus ring is the accent, which is this button's own fill — so it
