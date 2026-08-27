@@ -186,8 +186,15 @@ export function BrowseView() {
   const parked = useMemo(
     () => sortCodes(parkedCodes(codebook), counts, codeSort), [codebook, counts, codeSort]);
   const hit = (c: string) => c.toLowerCase().includes(filter.toLowerCase());
-  const namedCodes = allCodes.filter(hit);
-  const namedParked = parked.filter(hit);
+  // memoised so the lists below can be: a fresh array every render would defeat
+  // their dependency arrays and re-run the whole predicate on every keystroke,
+  // which is the cost those memos exist to avoid
+  const namedCodes = useMemo(() => allCodes.filter(hit),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allCodes, filter]);
+  const namedParked = useMemo(() => parked.filter(hit),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [parked, filter]);
   // Show rejected is a question about STATUS, not a facet: it decides what a code
   // is even being judged on, and the facets then narrow within that.
   const eligibleSegmentsFor = (code: string) => (segIndex.byCode.get(norm(code)) ?? []).filter((s) =>

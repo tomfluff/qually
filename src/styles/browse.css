@@ -189,7 +189,9 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   white-space:nowrap; text-overflow:ellipsis; }
 .cbSide .codeHead .codeTitle { font-weight:600; }
 .cbSide .codeHead .cnt { margin-right:auto; flex-shrink:1; } /* base.css pins .cnt at 0 */
-.cbSide .codeHead > :last-child { flex:none; }
+/* named, not :last-child — in the Set-aside header the COUNT is the last child,
+   and a blanket rule there pinned the one thing that was supposed to give way */
+.cbSide .codeHead .sortchip { flex:none; }
 .cbFilterRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:10px; }
 .cbFilterRow input[type=search] { flex:1; min-width:0; margin-bottom:0; }
 .cbMenuWrap { position:relative; flex:none; display:flex; }
@@ -381,6 +383,10 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   padding:3px 10px; gap:5px; border-radius:999px;
   background:var(--accent); color:#fff; }
 .cbMenu .cbAct.cbClear svg { color:#fff; }
+/* dark's --accent is a light lavender: white on it reads ~2.7:1, near-black
+   ~6.7:1. Same swap .btn.primary and .segmented .seg.on already make. */
+[data-theme=dark] .cbMenu .cbAct.cbClear,
+[data-theme=dark] .cbMenu .cbAct.cbClear svg { color:#12161a; }
 .cbMenu .cbAct.cbClear:hover { background:var(--accent); filter:brightness(1.12); }
 /* the house focus ring is the accent, which is this button's own fill — so it
    rings in the foreground colour instead, the one thing guaranteed to read

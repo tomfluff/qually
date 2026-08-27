@@ -6,8 +6,9 @@
 // an alternative to it), and a code facet must not start passing codes an excerpt
 // facet has already rejected.
 import { describe, expect, it } from "vitest";
-import { EMPTY_CODEBOOK_FACETS, matchesCodebookFacets, matchesExcerptFacets,
-  needsExcerptFacetData, type CodebookFacets, type ExcerptFacetValues } from "./codebookFacets";
+import { EMPTY_CODEBOOK_FACETS, hasCodebookFacets, matchesCodebookFacets,
+  matchesExcerptFacets, needsExcerptFacetData,
+  type CodebookFacets, type ExcerptFacetValues } from "./codebookFacets";
 
 const on = (patch: Partial<CodebookFacets>): CodebookFacets =>
   ({ ...EMPTY_CODEBOOK_FACETS, ...patch });
@@ -130,6 +131,28 @@ describe("Codebook facets", () => {
     expect(matchesCodebookFacets("", () => [{ sid: 1 }], facets, data)).toBe(false);
     expect(matchesCodebookFacets("", () => [{ sid: 2 }], facets, data)).toBe(true);
     expect(matchesCodebookFacets("Meaning", () => [{ sid: 2 }], facets, data)).toBe(false);
+  });
+
+  // hasCodebookFacets is what the Options dot, the "3 of 12" header and the
+  // Clear filters chip all read: if it ever said false while something was
+  // hidden, evidence would be missing with nothing on screen admitting it.
+  it("reports that something is being hidden for every facet, and only then", () => {
+    expect(hasCodebookFacets(EMPTY_CODEBOOK_FACETS)).toBe(false);
+    for (const k of ["mixedSpeakers", "nearBalanced", "withNote", "withoutDefinition"] as const) {
+      expect(hasCodebookFacets(on({ [k]: true }))).toBe(true);
+    }
+    // the code facet alone needs no excerpt pass; the others all do
+    expect(needsExcerptFacetData(on({ withoutDefinition: true }))).toBe(false);
+  });
+
+  it("intersects a note with a speaker facet rather than widening to either", () => {
+    const facets = on({ withNote: true, mixedSpeakers: true });
+    const data = values(
+      [1, { mixedSpeakers: true, nearBalanced: false, note: "" }],
+      [2, { mixedSpeakers: false, nearBalanced: false, note: "worth a look" }],
+      [3, { mixedSpeakers: true, nearBalanced: false, note: "worth a look" }],
+    );
+    expect([1, 2, 3].filter((sid) => matchesExcerptFacets(sid, facets, data))).toEqual([3]);
   });
 
   // Show rejected is the caller's job: it hands in only the segments that count,
