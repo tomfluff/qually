@@ -176,8 +176,17 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
    beside it — the transcript-sidebar pattern (input + compact menu buttons). */
 /* the sidebar's list header, twinned here (sidebar.css scopes its own to #sidebar) */
 .cbSide .codeHead { display:flex; align-items:center; gap:6px; padding:0 4px 5px; }
+/* With a filter on the count grows from "12" to "123 of 500", and this header
+   lives in a sidebar the researcher can drag down to 14em. Something has to give,
+   and the order matters: the word "Codes" goes first (the tab's own name already
+   says it), then the count, which has its full sentence in the .sr-only text
+   beside it either way. The sort chip is last and never shrinks — a truncated
+   label is a smaller loss than a control clipped out of reach. */
+.cbSide .codeHead .codeTitle, .cbSide .codeHead .cnt { min-width:0; overflow:hidden;
+  white-space:nowrap; text-overflow:ellipsis; }
 .cbSide .codeHead .codeTitle { font-weight:600; }
-.cbSide .codeHead .cnt { margin-right:auto; }
+.cbSide .codeHead .cnt { margin-right:auto; flex-shrink:1; } /* base.css pins .cnt at 0 */
+.cbSide .codeHead > :last-child { flex:none; }
 .cbFilterRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:10px; }
 .cbFilterRow input[type=search] { flex:1; min-width:0; margin-bottom:0; }
 .cbMenuWrap { position:relative; flex:none; display:flex; }

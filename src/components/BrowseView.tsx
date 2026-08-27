@@ -24,14 +24,20 @@ import { announce } from "../announce";
 import { onProjectSwap } from "../sessionReset";
 import { codeStats, sortCodes, SORTS, type SortBy } from "../codeStats";
 import { CodeSortChip } from "./CodeSortChip";
+import { EMPTY_CODEBOOK_FACETS, hasCodebookFacets, matchesCodebookFacets,
+  matchesExcerptFacets, needsExcerptFacetData, type CodebookFacets,
+  type ExcerptFacetValues } from "../codebookFacets";
 
-// Codebook working state (chosen codes, filter, show-rejected) survives leaving the
-// tab — the view unmounts, so plain useState would reset it on every visit.
+// Codebook working state survives leaving the tab — the view unmounts, so plain
+// useState would reset it on every visit. Facets stay here rather than in the
+// persisted store: a reload must not silently hide evidence in a later session,
+// and keeping them out of project data needs no file-format migration.
 const remembered = {
   selected: new Set<string>(),
   anchor: null as string | null,
   filter: "",
   showRejected: false,
+  facets: EMPTY_CODEBOOK_FACETS,
 };
 
 // The Code map's "Open in Codebook": arrive with exactly these codes chosen,
@@ -40,6 +46,7 @@ export function preselectBrowse(codes: string[]) {
   remembered.selected = new Set(codes);
   remembered.anchor = null;
   remembered.filter = "";
+  remembered.facets = EMPTY_CODEBOOK_FACETS;
   excerptScroll = 0;
 }
 
@@ -84,14 +91,16 @@ export function BrowseView() {
   const [anchor, setAnchor] = useState<string | null>(remembered.anchor);
   const [filter, setFilter] = useState(remembered.filter);
   const [showRejected, setShowRejected] = useState(remembered.showRejected);
+  const [facets, setFacets] = useState(remembered.facets);
+  const announceFacetChange = useRef(false);
   // NOT in `remembered`, unlike the filter and the selection above: reading past
   // the dominant speaker is a momentary look at ONE excerpt, not working state
   // worth carrying out of the tab.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [recolor, setRecolor] = useState<{ x: number; y: number } | null>(null);
-  useEffect(() => { Object.assign(remembered, { selected, anchor, filter, showRejected }); },
-    [selected, anchor, filter, showRejected]);
+  useEffect(() => { Object.assign(remembered, { selected, anchor, filter, showRejected, facets }); },
+    [selected, anchor, filter, showRejected, facets]);
   // Opening a project replaces the store in place. If the Codebook was the
   // active view in both files it never unmounts, so neither this component's
   // state nor `remembered` resets on its own — and both are keyed by
@@ -141,6 +150,26 @@ export function BrowseView() {
     return { text: r.excerpt, speaker: r.speaker, dropped: r.dropped, closeCall: r.closeCall, lines: slice };
   };
 
+  const excerptFacetsOn = needsExcerptFacetData(facets);
+  // The filters are normally off. Paying for every excerpt only while one can
+  // use the result keeps an ordinary trip through the Codebook at its old cost.
+  const excerptFacetValues = useMemo(() => {
+    if (!excerptFacetsOn) return null;
+    const bySid = new Map<number, ExcerptFacetValues>();
+    for (const s of segments) {
+      const ex = excerptFor(s);
+      // An absent transcript is unknown, not evidence that any claim about the
+      // excerpt is true. Leaving it out makes every excerpt facet reject it.
+      if (!ex) continue;
+      bySid.set(s.sid, {
+        mixedSpeakers: ex.dropped.length > 0,
+        nearBalanced: ex.closeCall,
+        note: s.notes,
+      });
+    }
+    return bySid;
+  }, [segments, transcripts, excerptFacetsOn]);
+
   // a segment's grounding quotes, but only while the hash still matches what the
   // model saw (recode/resize/edit invalidates — same trick as the scan marks)
   const groundsFor = (seg: Segment, excerpt: string): string[] => {
@@ -157,11 +186,41 @@ export function BrowseView() {
   const parked = useMemo(
     () => sortCodes(parkedCodes(codebook), counts, codeSort), [codebook, counts, codeSort]);
   const hit = (c: string) => c.toLowerCase().includes(filter.toLowerCase());
-  const listed = allCodes.filter(hit);
-  const listedParked = parked.filter(hit);
+  const namedCodes = allCodes.filter(hit);
+  const namedParked = parked.filter(hit);
+  // Show rejected is a question about STATUS, not a facet: it decides what a code
+  // is even being judged on, and the facets then narrow within that.
+  const eligibleSegmentsFor = (code: string) => (segIndex.byCode.get(norm(code)) ?? []).filter((s) =>
+    s.status === "accepted" || (showRejected && s.status === "rejected"));
+  // memoised for the same reason segIndex above is: this runs the predicate over
+  // the whole codebook, and it was re-running on every render of the view —
+  // including every keystroke in the name filter and every excerpt expanded.
+  const keep = (list: string[]) => list.filter((c) => matchesCodebookFacets(codebook[c].def,
+    () => eligibleSegmentsFor(c), facets, excerptFacetValues));
+  const listed = useMemo(() => keep(namedCodes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [namedCodes, codebook, facets, excerptFacetValues, segIndex, showRejected]);
+  const listedParked = useMemo(() => keep(namedParked),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [namedParked, codebook, facets, excerptFacetValues, segIndex, showRejected]);
+  const facetsOn = hasCodebookFacets(facets);
   // a parked code still reads: its excerpts are untouched, and deciding to
   // bring it back means looking at them
   const chosen = [...allCodes, ...parked].filter((c) => selected.has(c));
+
+  const changeFacets = (next: CodebookFacets) => {
+    announceFacetChange.current = true;
+    setFacets(next);
+  };
+  useEffect(() => {
+    if (!announceFacetChange.current) return;
+    announceFacetChange.current = false;
+    const live = `${listed.length} code${listed.length === 1 ? "" : "s"} showing out of ${namedCodes.length}`;
+    const setAside = namedParked.length
+      ? ` ${listedParked.length} set-aside code${listedParked.length === 1 ? "" : "s"} showing out of ${namedParked.length}.`
+      : "";
+    announce(`${live}.${setAside}`);
+  }, [facets, listed.length, listedParked.length, namedCodes.length, namedParked.length]);
 
   // selection mirrors transcript lines: plain = one (or deselect), Shift = range, Ctrl = toggle
   const select = (c: string, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => {
@@ -189,7 +248,7 @@ export function BrowseView() {
     <div id="browse" style={{ fontSize }}>
       <div className="browse-left cbSide" style={{ width: leftWidth, fontSize: sidebarFontSize }}>
         {/* filter + the codebook's AI action (sparkle menu, mirroring the transcript
-            sidebar) + a View menu for the display settings (kept out of the AI menu).
+            sidebar) + an Options menu for filters and display settings.
             The row stays fixed; only the code list scrolls (like the transcript sidebar),
             so the scrollbar sits inset from the drag divider instead of against it. */}
         <div className="cbFilterRow">
@@ -198,7 +257,8 @@ export function BrowseView() {
           <CbAiMenu onGround={() => setGroundOpen(true)} onDescribe={() => setDescribeOpen(true)}
             fontSize={sidebarFontSize} />
           <CbViewMenu showRejected={showRejected} setShowRejected={setShowRejected}
-            ui={uiGround} setUi={setUi} hasGrounds={hasGrounds} fontSize={sidebarFontSize}
+            facets={facets} setFacets={changeFacets} ui={uiGround} setUi={setUi}
+            hasGrounds={hasGrounds} fontSize={sidebarFontSize}
             onRecolor={(r) => setRecolor({ x: r.left, y: r.bottom + 4 })} />
         </div>
         {/* the transcript sidebar's header, twinned: name, count, the same cycling
@@ -206,7 +266,13 @@ export function BrowseView() {
             the redundant path */}
         <div className="codeHead">
           <span className="codeTitle">Codes</span>
-          <span className="cnt">{listed.length}</span>
+          <span className="cnt">
+            {facetsOn ? <>
+              <span aria-hidden="true">{listed.length} of {namedCodes.length}</span>
+              <span className="sr-only">{listed.length} code{listed.length === 1 ? "" : "s"}
+                showing out of {namedCodes.length}</span>
+            </> : listed.length}
+          </span>
           <CodeSortChip value={codeSort} onChange={(value) => setUi({ codeSort: value })} />
         </div>
         <div className="cbList nicescroll" ref={listRef}
@@ -248,7 +314,7 @@ export function BrowseView() {
           </div>
         ))}
         </div>
-        {listedParked.length > 0 && (
+        {namedParked.length > 0 && (
           /* The set-aside shelf, in the events list's clothes (see EventList):
              pinned under the code list rather than buried at its scrolling tail,
              the same drag-to-resize grip, and a fold that keeps its count on
@@ -261,7 +327,13 @@ export function BrowseView() {
               title={parkOpen ? "Hide the codes you set aside" : "Show the codes you set aside"}>
               <Icon name={parkOpen ? "chevron-down" : "chevron-up"} size={sidebarFontSize} />
               <span className="codeTitle">Set aside</span>
-              <span className="cnt">{listedParked.length}</span>
+              <span className="cnt">
+                {facetsOn ? <>
+                  <span aria-hidden="true">{listedParked.length} of {namedParked.length}</span>
+                  <span className="sr-only">{listedParked.length} set-aside
+                    code{listedParked.length === 1 ? "" : "s"} showing out of {namedParked.length}</span>
+                </> : listedParked.length}
+              </span>
             </button>
             {parkOpen && <div className="parkRows nicescroll">
               {listedParked.map((c) => (
@@ -308,8 +380,8 @@ export function BrowseView() {
           <div className="empty">Select a code on the left to see its excerpts.</div>
         ) : (
           chosen.map((code) => {
-            const segs = (segIndex.byCode.get(norm(code)) ?? []).filter((s) =>
-              s.status === "accepted" || (showRejected && s.status === "rejected"));
+            const eligibleSegs = eligibleSegmentsFor(code);
+            const segs = eligibleSegs.filter((s) => matchesExcerptFacets(s.sid, facets, excerptFacetValues));
             return (
               <div key={code} className="bGroup">
                 <h2 className="bTitle">
@@ -319,7 +391,11 @@ export function BrowseView() {
                     title, and edits in place — the excerpts are right below, so
                     there's nothing a dialog could add */}
                 <DefLine code={code} className="bDef" />
-                {segs.length === 0 && <div className="bDef">No excerpts yet.</div>}
+                {segs.length === 0 && <div className="bDef">
+                  {excerptFacetsOn && eligibleSegs.length > 0
+                    ? "All excerpts were filtered out."
+                    : "No excerpts yet."}
+                </div>}
                 {segs.map((s) => {
                   const ex = excerptFor(s);
                   const loaded = !!transcripts[s.pid];
@@ -497,12 +573,14 @@ function RecolorConfirm({ x, y, onClose }: { x: number; y: number; onClose: () =
   );
 }
 
-// View settings for the excerpt list — a rejected filter and grounding emphasis,
-// kept out of the AI menu because they're display prefs, not an action. A dot on
-// the button flags any non-default setting.
-function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, fontSize, onRecolor }: {
+// View settings and filters stay out of the AI menu because they are the
+// researcher's controls, not AI actions. A dot flags any non-default setting.
+function CbViewMenu({ showRejected, setShowRejected, facets, setFacets, ui, setUi,
+  hasGrounds, fontSize, onRecolor }: {
   showRejected: boolean;
   setShowRejected: (f: (v: boolean) => boolean) => void;
+  facets: CodebookFacets;
+  setFacets: (facets: CodebookFacets) => void;
   ui: { groundBold: boolean; groundWash: boolean; groundUnderline: boolean; codeSort: SortBy };
   setUi: (u: Partial<{ groundBold: boolean; groundWash: boolean; groundUnderline: boolean; codeSort: SortBy }>) => void;
   hasGrounds: boolean;
@@ -512,7 +590,7 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
   const { open, setOpen, btnRef, menuRef, arrows } = useToggleMenu();
   // defaults: rejected off, bold on, wash on, underline off, codes A–Z
   const nonDefault = showRejected || !ui.groundBold || !ui.groundWash || ui.groundUnderline
-    || ui.codeSort !== "name";
+    || ui.codeSort !== "name" || hasCodebookFacets(facets);
   return (
     <div className="cbMenuWrap">
       <button className="btn cbMenuBtn cbViewBtn" ref={btnRef} aria-haspopup="menu" aria-expanded={open}
@@ -530,6 +608,19 @@ function CbViewMenu({ showRejected, setShowRejected, ui, setUi, hasGrounds, font
               checkboxes read as two kinds of on/off in one list */}
           <label className="cbChk"><input type="checkbox" checked={showRejected}
             onChange={() => setShowRejected((v) => !v)} /> Show rejected</label>
+          <div className="cbMenuGrp">Filter excerpts</div>
+          <label className="cbChk"><input type="checkbox" checked={facets.mixedSpeakers}
+            onChange={(e) => setFacets({ ...facets, mixedSpeakers: e.target.checked })} /> Mixed speakers</label>
+          <label className="cbChk"><input type="checkbox" checked={facets.nearBalanced}
+            onChange={(e) => setFacets({ ...facets, nearBalanced: e.target.checked })} /> Near-balanced</label>
+          <label className="cbChk"><input type="checkbox" checked={facets.withNote}
+            onChange={(e) => setFacets({ ...facets, withNote: e.target.checked })} /> With a note</label>
+          <div className="cbMenuGrp">Filter codes</div>
+          <label className="cbChk"><input type="checkbox" checked={facets.withoutDefinition}
+            onChange={(e) => setFacets({ ...facets, withoutDefinition: e.target.checked })} /> Without a definition</label>
+          {hasCodebookFacets(facets) && (
+            <button className="cbAct" onClick={() => setFacets(EMPTY_CODEBOOK_FACETS)}>Clear filters</button>
+          )}
           {hasGrounds && (
             <>
               <div className="cbMenuGrp">Grounding emphasis</div>
