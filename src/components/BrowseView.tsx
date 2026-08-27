@@ -6,7 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { useStore, liveCodes, parkedCodes, clampEventHeight, type Segment } from "../state/store";
 import { stretchesAt, stretchColorOf } from "../stretches";
 import { norm } from "../contract/segments";
-import { segExcerpt } from "../contract/excerpt";
+import { segExcerpt, type DroppedSpeaker } from "../contract/excerpt";
+import { speakerGroups } from "../format";
 import { withSubs, SubText, subSpans } from "../markup";
 import { Resizer } from "./Resizer";
 import { CodeMenu } from "./CodeMenu";
@@ -20,6 +21,7 @@ import { useToggleMenu, useDismiss, useMenuArrows, useMenuFocus } from "../usePo
 import { Icon, countIconSize } from "./Icon";
 import { CodeCounts } from "./CodeCounts";
 import { announce } from "../announce";
+import { onProjectSwap } from "../sessionReset";
 import { codeStats, sortCodes, SORTS, type SortBy } from "../codeStats";
 import { CodeSortChip } from "./CodeSortChip";
 
@@ -82,10 +84,23 @@ export function BrowseView() {
   const [anchor, setAnchor] = useState<string | null>(remembered.anchor);
   const [filter, setFilter] = useState(remembered.filter);
   const [showRejected, setShowRejected] = useState(remembered.showRejected);
+  // NOT in `remembered`, unlike the filter and the selection above: reading past
+  // the dominant speaker is a momentary look at ONE excerpt, not working state
+  // worth carrying out of the tab.
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [recolor, setRecolor] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => { Object.assign(remembered, { selected, anchor, filter, showRejected }); },
     [selected, anchor, filter, showRejected]);
+  // Opening a project replaces the store in place. If the Codebook was the
+  // active view in both files it never unmounts, so neither this component's
+  // state nor `remembered` resets on its own — and both are keyed by
+  // identifiers the next study reuses with different meanings: code NAMES for
+  // the selection, and sids, which a new project hands out from 1 again. The
+  // Code map registers the same forget-me for the same reason.
+  useEffect(() => onProjectSwap(() => {
+    setSelected(new Set()); setAnchor(null); setExpanded(new Set());
+  }), []);
 
   const counts = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   const cntIcon = countIconSize(sidebarFontSize);
@@ -106,7 +121,13 @@ export function BrowseView() {
 
   // The excerpt's dominant speaker is shown as its own field in the ref row (below),
   // so the display text drops the "[R:] " prefix the export keeps baked in.
-  const excerptFor = (s: Segment): { text: string; speaker: string } | null => {
+  const excerptFor = (s: Segment): {
+    text: string;
+    speaker: string;
+    dropped: DroppedSpeaker[];
+    closeCall: boolean;
+    lines: { speaker: string; text: string }[];
+  } | null => {
     const t = transcripts[s.pid];
     if (!t) return null;
     // binary-search the range start (ids are kept ascending — rehydrate sorts)
@@ -117,7 +138,7 @@ export function BrowseView() {
     const slice = [];
     for (let i = lo; i < lines.length && lines[i].id <= s.end; i++) slice.push(lines[i]);
     const r = segExcerpt(s, slice);
-    return { text: r.excerpt, speaker: r.speaker };
+    return { text: r.excerpt, speaker: r.speaker, dropped: r.dropped, closeCall: r.closeCall, lines: slice };
   };
 
   // a segment's grounding quotes, but only while the hash still matches what the
@@ -304,14 +325,48 @@ export function BrowseView() {
                   const loaded = !!transcripts[s.pid];
                   const rej = s.status === "rejected";
                   const range = `${s.start}${s.end !== s.start ? `-${s.end}` : ""}`;
+                  // gated on there being something to hide: a resize can leave the
+                  // range single-speaker, and the toggle below then disappears —
+                  // an expanded excerpt with no way back would be a dead end.
+                  const isOpen = expanded.has(s.sid) && !!ex?.dropped.length;
                   return (
                     <div key={s.sid} className={"bExcerpt" + (rej ? " rejected" : "")}
                       style={{ borderLeftColor: codebook[code].color || "var(--line)" }}>
                       <div>{rej && <span className="rejtag">rejected</span>}{
-                        ex?.text
+                        isOpen && ex
+                          ? <div className="bFull">
+                              {/* aiGrounds is hashed against the dominant-speaker excerpt, so highlighting the full text would claim the model saw words it did not. */}
+                              {speakerGroups(ex.lines).map((g, i) => (
+                                <div key={i} className="bFullRow">
+                                  <span className="bFullSpk">{g.speaker.trim() || "unlabelled"}</span>
+                                  <span>{withSubs(g.text)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          : ex?.text
                           ? groundedText(ex.text, groundsFor(s, ex.text), codebook[code].color, uiGround)
                           : "(excerpt in coded-segments.csv)"
                       }</div>
+                      {ex && ex.dropped.length > 0 && (() => {
+                        const hidden = ex.dropped.reduce((n, d) => n + d.lines, 0);
+                        const names = ex.dropped.map((d) => d.speaker || "unlabelled");
+                        const action = isOpen
+                          ? `Show only ${ex.speaker || "unlabelled"}`
+                          : "Show every speaker in this excerpt";
+                        return (
+                          <button className={"bDrop" + (ex.closeCall ? " warn" : "")}
+                            aria-expanded={isOpen} title={action} aria-label={action}
+                            onClick={() => {
+                              const next = new Set(expanded);
+                              isOpen ? next.delete(s.sid) : next.add(s.sid);
+                              setExpanded(next);
+                            }}>
+                            {isOpen
+                              ? "Showing every speaker — hide again"
+                              : `${hidden} line${hidden === 1 ? "" : "s"} hidden — ${names.join(", ")}`}
+                          </button>
+                        );
+                      })()}
                       {s.notes && <div className="bNote">{s.notes}</div>}
                       {(() => {
                         // what ELSE is true of these lines: every other code

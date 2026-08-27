@@ -67,6 +67,10 @@ export function SegmentPopover({ sid, x, y, onClose }: {
     ? segExcerpt(seg, tr.lines)
     : null;
   const closeCall = ex?.closeCall ?? false;
+  const dropped = ex?.dropped ?? [];
+  const droppedLines = dropped.reduce((n, d) => n + d.lines, 0);
+  const droppedNames = dropped.map((d) => d.speaker || "unlabelled").join(", ");
+  const droppedText = `${droppedLines} line${droppedLines === 1 ? "" : "s"} from ${droppedNames}`;
   // AI grounding for this segment, valid only while its hash matches (F1)
   const g = useStore.getState().aiGrounds[sid];
   const excerptText = ex?.excerpt ?? "";
@@ -82,7 +86,10 @@ export function SegmentPopover({ sid, x, y, onClose }: {
         <span className="meta">  ·  {seg.pid}:{range}  ·  {seg.proposedBy}/{seg.status}</span>
       </div>
       {closeCall && (
-        <div className="pop-warn"><Icon name="alert-triangle" size={14} /> Near-balanced speakers — the excerpt keeps only the dominant speaker's lines, so the other speaker's substance drops out. Check this segment.</div>
+        <div className="pop-warn"><Icon name="alert-triangle" size={14} /> Near-balanced speakers — {droppedText} {droppedLines === 1 ? "is" : "are"} not in this excerpt. Check this segment.</div>
+      )}
+      {!closeCall && dropped.length > 0 && (
+        <div className="pop-drop">{droppedText} {droppedLines === 1 ? "is" : "are"} not in this excerpt.</div>
       )}
       {grounds.length > 0 && (
         <div className="pop-grounds">

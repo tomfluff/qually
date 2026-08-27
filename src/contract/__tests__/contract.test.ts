@@ -53,6 +53,7 @@ test("excerpt 1/5: all-P", () => {
   const r = excerptOf([P("charts are hard to read"), P("i zoom a lot")]);
   expect(r.excerpt).toBe("charts are hard to read i zoom a lot");
   expect(r.closeCall).toBe(false);
+  expect(r.dropped).toEqual([]);
 });
 
 test("excerpt 2/5: all-R gets [R:] prefix", () => {
@@ -65,12 +66,14 @@ test("excerpt 3/5: P-dominant with R backchannels drops R, no warn", () => {
   const r = excerptOf([R("mm"), P("i lean in close to the screen and trace each bar"), R("right")]);
   expect(r.excerpt).toBe("i lean in close to the screen and trace each bar");
   expect(r.closeCall).toBe(false);
+  expect(r.dropped).toEqual([{ speaker: "R", lines: 2, chars: 7 }]);
 });
 
 test("excerpt reports its dominant speaker (Browse shows it as a field)", () => {
   expect(excerptOf([R("mm"), P("i lean in close and trace each bar")]).speaker).toBe("P");
   expect(excerptOf([R("so you prefer magnification")]).speaker).toBe("R");
   expect(excerptOf([]).speaker).toBe("");
+  expect(excerptOf([]).dropped).toEqual([]);
 });
 
 test("excerpt 4/5: R-dominant member-check gets [R:], P assent drops", () => {
@@ -92,4 +95,34 @@ test("excerpt tie -> P wins", () => {
   const r = excerptOf([R("aaaaa"), P("bbbbb")]); // 5 vs 5 -> P
   expect(r.excerpt).toBe("bbbbb");
   expect(r.closeCall).toBe(true); // 50/50 is a close call
+});
+
+test("dropped speakers order by characters descending", () => {
+  const r = excerptOf([
+    { speaker: "B", text: "bbbb" },
+    { speaker: "C", text: "cccccc" },
+    { speaker: "P", text: "pppppppppp" },
+  ]);
+  expect(r.dropped).toEqual([
+    { speaker: "C", lines: 1, chars: 6 },
+    { speaker: "B", lines: 1, chars: 4 },
+  ]);
+});
+
+test("dropped speaker character ties keep first-appearance order", () => {
+  const r = excerptOf([
+    { speaker: "Z", text: "zz" },
+    { speaker: "A", text: "aa" },
+    { speaker: "P", text: "pppppppppp" },
+  ]);
+  expect(r.dropped.map((d) => d.speaker)).toEqual(["Z", "A"]);
+});
+
+// A speaker whose only line is blank still HELD a line inside the range, and the
+// Codebook's "n lines hidden" counts lines, not characters — so it has to appear
+// here or the count would not add up to what the reader can see was skipped.
+test("a losing speaker with an empty line is still reported, at zero characters", () => {
+  const r = excerptOf([P("something worth reading"), R("   ")]);
+  expect(r.excerpt).toBe("something worth reading");
+  expect(r.dropped).toEqual([{ speaker: "R", lines: 1, chars: 0 }]);
 });

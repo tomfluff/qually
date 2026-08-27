@@ -3,12 +3,16 @@
 // Speaker-grouped clipboard text: consecutive same-speaker lines merge into one
 // group, raw speaker labels, one group per line. Shared by line-selection copy
 // (App) and segment copy (SegmentPopover).
-export function speakerGroupedText(lines: { speaker: string; text: string }[]): string {
-  const groups: { speaker: string; texts: string[] }[] = [];
+export function speakerGroups(lines: { speaker: string; text: string }[]): { speaker: string; text: string }[] {
+  const groups: { speaker: string; text: string }[] = [];
   for (const l of lines) {
     const last = groups[groups.length - 1];
-    if (last && last.speaker === l.speaker) last.texts.push(l.text.trim());
-    else groups.push({ speaker: l.speaker, texts: [l.text.trim()] });
+    if (last && last.speaker === l.speaker) last.text += " " + l.text.trim();
+    else groups.push({ speaker: l.speaker, text: l.text.trim() });
   }
-  return groups.map((g) => `${g.speaker} : ${g.texts.join(" ")}`).join("\n");
+  return groups;
+}
+
+export function speakerGroupedText(lines: { speaker: string; text: string }[]): string {
+  return speakerGroups(lines).map((g) => `${g.speaker} : ${g.text}`).join("\n");
 }

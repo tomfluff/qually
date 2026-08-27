@@ -12,10 +12,17 @@ export interface ExLine {
   speaker: string;
 }
 
+export interface DroppedSpeaker {
+  speaker: string;
+  lines: number;
+  chars: number;
+}
+
 interface ExcerptResult {
   excerpt: string;
   closeCall: boolean;
   speaker: string; // the dominant speaker whose lines the excerpt keeps ("" if empty)
+  dropped: DroppedSpeaker[];
 }
 
 // Whole-label matches only, same set as the interviewer guess (store.ts guessQuiet
@@ -41,13 +48,15 @@ export function segExcerpt(range: { start: number; end: number }, lines: SegLine
 
 export function excerptOf(lines: ExLine[]): ExcerptResult {
   const chars = new Map<string, number>();
+  const lineCounts = new Map<string, number>();
   const order: string[] = [];
   for (const l of lines) {
     const sp = l.speaker.trim();
-    if (!chars.has(sp)) { chars.set(sp, 0); order.push(sp); }
+    if (!chars.has(sp)) { chars.set(sp, 0); lineCounts.set(sp, 0); order.push(sp); }
     chars.set(sp, chars.get(sp)! + l.text.trim().length);
+    lineCounts.set(sp, lineCounts.get(sp)! + 1);
   }
-  if (!order.length) return { excerpt: "", closeCall: false, speaker: "" };
+  if (!order.length) return { excerpt: "", closeCall: false, speaker: "", dropped: [] };
 
   const total = [...chars.values()].reduce((a, b) => a + b, 0);
 
@@ -66,6 +75,11 @@ export function excerptOf(lines: ExLine[]): ExcerptResult {
   let maxLoser = 0;
   for (const sp of order) if (sp !== winner) maxLoser = Math.max(maxLoser, chars.get(sp)!);
   const closeCall = total > 0 && maxLoser / total >= 0.4;
+  const dropped = order
+    .map((speaker, index) => ({ speaker, index }))
+    .filter(({ speaker }) => speaker !== winner && lineCounts.get(speaker)! > 0)
+    .sort((a, b) => chars.get(b.speaker)! - chars.get(a.speaker)! || a.index - b.index)
+    .map(({ speaker }) => ({ speaker, lines: lineCounts.get(speaker)!, chars: chars.get(speaker)! }));
 
-  return { excerpt, closeCall, speaker: winner };
+  return { excerpt, closeCall, speaker: winner, dropped };
 }

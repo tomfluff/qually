@@ -53,6 +53,19 @@
 /* researcher's note on the segment (SegmentPopover's notes field) */
 .bNote { font-size:.9em; color:var(--fg-dim); margin-top:5px; padding-left:8px;
   border-left:2px solid var(--line); white-space:pre-wrap; font-family:var(--read-font); }
+.bDrop { display:block; max-width:100%; margin-top:5px; padding:4px 8px; font:inherit;
+  font-size:.9em; line-height:1.4; text-align:left; overflow-wrap:anywhere; cursor:pointer;
+  color:var(--fg-dim); background:var(--panel); border:1px solid var(--muted); border-radius:6px; }
+.bDrop:hover { color:var(--fg); border-color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.bDrop:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.bDrop.warn { color:var(--warn); border-color:var(--warn); font-weight:600; }
+.bDrop.warn:hover { color:var(--fg); background:color-mix(in srgb, var(--warn) 12%, var(--panel)); }
+.bFull { display:flex; flex-direction:column; gap:5px; }
+.bFullRow { display:grid; grid-template-columns:minmax(7ch, 12ch) minmax(0, 1fr);
+  gap:8px; align-items:baseline; }
+.bFullRow > :last-child { min-width:0; overflow-wrap:anywhere; }
+.bFullSpk { color:var(--fg-dim); font-weight:600; overflow-wrap:anywhere; }
 /* the excerpt's context row: section marks first (what span of the study
    these lines belong to), then the other codes that overlap them. Chips, not
    prose — they're navigation (a code chip opens that code) and orientation,
