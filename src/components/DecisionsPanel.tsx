@@ -12,7 +12,7 @@
 import { useMemo, useState } from "react";
 import { useStore, liveCodes, type Decision } from "../state/store";
 import { aiSpend, foldDecisions, originCounts, methodsParagraph, proposalCounts,
-  type OriginCounts, type ProposalCounts } from "../provenance";
+  type AiSpend, type OriginCounts, type ProposalCounts } from "../provenance";
 import { preselectBrowse } from "./BrowseView";
 import { Icon } from "./Icon";
 
@@ -136,7 +136,7 @@ function Proposals({ what, counts }: { what: "coding" | "section"; counts: Propo
   const plural = (n: number) => `${n} ${what}${n === 1 ? "" : "s"}`;
   return (
     <div className="dvWho dvBlock">
-      <h4 className="dvHead">Proposed {what}s</h4>
+      <h3 className="dvHead">Proposed {what}s</h3>
       <div className="dvBar" role="img"
         aria-label={PROPOSAL_STATES.filter((s) => counts[s.key] > 0)
           .map((s) => `${plural(counts[s.key])} ${s.label}`).join(", ")}>
@@ -153,26 +153,36 @@ function Proposals({ what, counts }: { what: "coding" | "section"; counts: Propo
             <span className={"dvDot p-" + s.key} /><b>{counts[s.key]}</b> {s.label}</li>
         ))}
       </ul>
-      <p className="dvNote">{counts.total} proposed by a model in all.</p>
+      {/* "on the record", not "in all": a proposal can leave without a row —
+          clearing settled codings logs nothing, deleting a code takes its AI
+          codings with it, and unmarking one candidate section writes no
+          decision. This total is what the corpus and the ledger between them
+          can still show, which is also what the methods paragraph claims. */}
+      <p className="dvNote">{counts.total} proposal{counts.total === 1 ? "" : "s"} on the record.</p>
     </div>
   );
 }
 
 // The bill, from the AI log — the same rows the exported ai-provenance.csv
-// carries, added up. Nothing here is an estimate: the token counts are what the
-// API reported, priced by the model's own rates.
-function Spend({ spend }: { spend: ReturnType<typeof aiSpend> }) {
+// carries, added up. The token counts are what the API reported; the money is
+// NOT, and cannot be: costOf prices them from a table baked into this build
+// (ai/openai.ts), which knows nothing about cached-input discounts or any price
+// change since it shipped. An offline app cannot know today's rates, so the
+// figure is named an estimate rather than quietly presented as an invoice.
+function Spend({ spend }: { spend: AiSpend }) {
   if (!spend.calls) return null;
   const n = (v: number) => v.toLocaleString();
   return (
     <div className="dvWho dvBlock">
-      <h4 className="dvHead">What the model cost</h4>
+      <h3 className="dvHead">What the model cost</h3>
       <dl className="dvSpend">
         <dt>Requests</dt><dd>{n(spend.calls)}</dd>
         <dt>Tokens in</dt><dd>{n(spend.inTok)}</dd>
         <dt>Tokens out</dt><dd>{n(spend.outTok)}</dd>
-        <dt>Cost</dt><dd className="dvCost">${spend.costUsd.toFixed(4)}</dd>
+        <dt>Est. cost</dt><dd className="dvCost">${spend.costUsd.toFixed(4)}</dd>
       </dl>
+      <p className="dvNote">Tokens are what the API reported. The cost is those tokens
+        at the rates this build was written with — your invoice is the real number.</p>
       {/* An aborted or failed request was still sent and may still have been
           charged, with nothing reported back to count — so say the total is a
           floor rather than let it read as the whole bill. */}

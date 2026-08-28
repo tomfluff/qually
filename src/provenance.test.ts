@@ -356,4 +356,36 @@ describe("what the model cost", () => {
   it("has nothing to show for a study that never asked a model anything", () => {
     expect(aiSpend([])).toEqual({ calls: 0, unfinished: 0, inTok: 0, outTok: 0, costUsd: 0 });
   });
+
+  // parseProject fills a MISSING aiLog with [], but does not check that a
+  // present one is a list — and iterating a number throws where this renders.
+  it("reads a log that is not a list as no log at all", () => {
+    expect(aiSpend(42 as unknown as AiCall[]))
+      .toEqual({ calls: 0, unfinished: 0, inTok: 0, outTok: 0, costUsd: 0 });
+    expect(aiSpend({ a: 1 } as unknown as AiCall[])).toMatchObject({ calls: 0 });
+  });
+});
+
+// Same lesson one level over: nothing validates a segment's fields or a ledger
+// row's `moved`, and both are read while the Decisions panel is on screen.
+describe("proposal counts on a hand-edited file", () => {
+  it("treats a non-string proposedBy as not a proposal rather than throwing", () => {
+    const items = [
+      { status: "accepted", proposedBy: 42 as unknown as string },
+      { status: "accepted", proposedBy: { by: "AI · Terra" } as unknown as string },
+      { status: "accepted", proposedBy: "AI · Terra" },
+    ];
+    expect(proposalCounts([], items, "discard-coding"))
+      .toMatchObject({ accepted: 1, total: 1 });
+  });
+
+  it("treats a non-numeric moved as nothing, so no NaN reaches a percentage", () => {
+    const ledger = [
+      d("discard-coding", ["c"], "ai", { moved: "3" as unknown as number }),
+      d("discard-coding", ["c"], "ai", { moved: 2 }),
+    ];
+    const c = proposalCounts(ledger, [], "discard-coding");
+    expect(c.discarded).toBe(2);
+    expect(Number.isFinite(c.total)).toBe(true);
+  });
 });

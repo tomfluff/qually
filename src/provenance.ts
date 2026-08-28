@@ -128,6 +128,10 @@ export interface CurrentDisposition {
   stretches: Pick<Stretch, "status" | "proposedBy">[];
 }
 
+// Hand-edited project files reach both functions below, and a value of the
+// wrong type must read as nothing rather than throw inside render.
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
 /** What became of what a model proposed. Four states, and the fourth is the one
     a corpus count alone cannot see: a discarded proposal is GONE from segments
     and stretches, so only the ledger still knows it was ever offered. */
@@ -144,13 +148,18 @@ export function proposalCounts(
   items: readonly { status?: string; proposedBy?: string }[],
   discardKind: Decision["kind"],
 ): ProposalCounts {
-  const proposed = items.filter((x) => x.proposedBy?.startsWith(AI_PROPOSED_BY_PREFIX));
+  // typeof, not `?.startsWith`: a hand-edited file can put a number here, and
+  // `(42)?.startsWith` throws inside render — the permanent-white-screen class.
+  const proposed = items.filter((x) => typeof x.proposedBy === "string"
+    && x.proposedBy.startsWith(AI_PROPOSED_BY_PREFIX));
   const n = (status: string) => proposed.filter((x) => x.status === status).length;
   // `moved` is how many one gesture cleared; a row written before that field
-  // existed cleared one. Undone discards are not discards.
+  // existed cleared one. Undone discards are not discards. num() for the same
+  // reason as above: a string "3" here would concatenate into "03" and carry a
+  // NaN through every percentage drawn from the total.
   const discarded = ledger
     .filter((d) => !d.undone && d.source === "ai" && d.kind === discardKind)
-    .reduce((sum, d) => sum + (d.moved ?? 1), 0);
+    .reduce((sum, d) => sum + (d.moved === undefined ? 1 : num(d.moved)), 0);
   const accepted = n("accepted"), rejected = n("rejected"), waiting = n("candidate");
   return { accepted, rejected, waiting, discarded,
     total: accepted + rejected + waiting + discarded };
@@ -162,10 +171,12 @@ export function proposalCounts(
 export interface AiSpend {
   calls: number; unfinished: number; inTok: number; outTok: number; costUsd: number;
 }
-const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 export function aiSpend(log: readonly AiCall[]): AiSpend {
-  const out: AiSpend = { calls: log.length, unfinished: 0, inTok: 0, outTok: 0, costUsd: 0 };
-  for (const c of log) {
+  // parseProject fills a missing aiLog with [] but does not check that a
+  // present one IS a list; iterating a number throws where the panel renders.
+  const rows = Array.isArray(log) ? log : [];
+  const out: AiSpend = { calls: rows.length, unfinished: 0, inTok: 0, outTok: 0, costUsd: 0 };
+  for (const c of rows) {
     // aborted and failed both DISPATCHED — the transcript went out either way,
     // and the API may have charged for it while reporting nothing back
     if (c.outcome === "aborted" || c.outcome === "failed") out.unfinished++;
@@ -199,8 +210,6 @@ export function methodsParagraph(
   // count above cannot see, and proposalCounts folds them back in from history.
   const codings = proposalCounts(ledger, segments, "discard-coding");
   const sections = proposalCounts(ledger, stretches, "discard-section");
-  const discardedCodings = codings.discarded;
-  const discardedSections = sections.discarded;
   const bits: string[] = [];
   // "consolidated" is a claim about work done to the codebook, and the ledger can
   // only support it when it holds codebook decisions. A book that was never merged
@@ -252,8 +261,8 @@ export function methodsParagraph(
   };
   if (codings.accepted || codings.rejected) bits.push(standing("coding", codings));
   if (sections.accepted || sections.rejected) bits.push(standing("section", sections));
-  if (discardedCodings) bits.push(`The decision ledger records the first author clearing ${discardedCodings} coding${discardedCodings === 1 ? "" : "s"} proposed by a language model without recording a verdict.`);
-  if (discardedSections) bits.push(`The decision ledger records the first author clearing ${discardedSections} section${discardedSections === 1 ? "" : "s"} proposed by a language model without recording a verdict.`);
+  if (codings.discarded) bits.push(`The decision ledger records the first author clearing ${codings.discarded} coding${codings.discarded === 1 ? "" : "s"} proposed by a language model without recording a verdict.`);
+  if (sections.discarded) bits.push(`The decision ledger records the first author clearing ${sections.discarded} section${sections.discarded === 1 ? "" : "s"} proposed by a language model without recording a verdict.`);
   if (undone) bits.push(`A further ${undone} decision${undone === 1 ? " was" : "s were"} made and then reversed.`);
   // Name what the file actually carries. It holds one row per decision with its
   // reason, its source and how much it touched — NOT the excerpts themselves, and

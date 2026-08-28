@@ -194,7 +194,7 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .cbSide .codeHead .sortchip { flex:none; }
 .cbFilterRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:10px; }
 .cbFilterRow input[type=search] { flex:1; min-width:0; margin-bottom:0; }
-.cbMenuWrap { position:relative; flex:none; display:flex; }
+.cbMenuWrap { flex:none; display:flex; }
 .cbMenuBtn { display:inline-flex; align-items:center; gap:3px; padding:0 8px; position:relative; }
 .cbViewBtn { color:var(--muted); }
 .cbDot { position:absolute; top:4px; right:4px; width:6px; height:6px;
@@ -480,6 +480,12 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .dvWho { padding:2px 0 10px; }
 .dvBar { display:flex; height:1.1em; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
 .dvSeg { display:block; height:100%; }
+/* A hairline in the panel's own ink between segments: the accent is a user
+   choice, and on the Green palette "waiting on you" would otherwise sit against
+   "accepted" as one continuous block (Rose does the same beside "turned down").
+   The key below names every segment either way — this keeps the bar readable
+   too, whatever accent the reader picked. */
+.dvSeg + .dvSeg { border-left:1px solid var(--bg); }
 .dvSeg.untouched { background:color-mix(in srgb, var(--muted) 28%, var(--bg)); }
 .dvSeg.you { background:color-mix(in srgb, var(--muted) 62%, var(--bg)); }
 .dvSeg.ai { background:var(--accent); }

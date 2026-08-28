@@ -100,14 +100,16 @@ export function useToggleMenu() {
     const btn = btnRef.current;
     if (!open || !el || !btn) return;
     const fit = () => {
-      el.style.maxHeight = "";   // measure where it starts, not where the last cap left it
       const b = btn.getBoundingClientRect();
       const pad = 8;
       const top = b.bottom + 4;
+      el.style.top = top + "px";
+      // the cap goes on BEFORE the width is read: capping a tall menu can add a
+      // vertical scrollbar, and a shrink-to-fit fixed box measured without it
+      // lands that scrollbar's width past the right edge we just clamped to
+      el.style.maxHeight = Math.max(120, window.innerHeight - top - pad) + "px";
       el.style.left = Math.max(pad,
         Math.min(b.right - el.offsetWidth, window.innerWidth - el.offsetWidth - pad)) + "px";
-      el.style.top = top + "px";
-      el.style.maxHeight = Math.max(120, window.innerHeight - top - pad) + "px";
     };
     fit();
     // Ctrl+= is this app's most-used control, and it changes innerHeight: a box

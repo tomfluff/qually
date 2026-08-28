@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
    Copyright (C) 2026 Yotam Sechayk */
 /* + new code with the transcript's AI actions in a menu button beside it */
-#sidebar .sidebarNewRow { position:relative; display:flex; gap:6px; align-items:stretch; margin-bottom:8px; }
+#sidebar .sidebarNewRow { display:flex; gap:6px; align-items:stretch; margin-bottom:8px; }
 /* the row owns the bottom spacing; the wrap's own margin would inflate the flex
    cross-axis and leave the menu button taller than the input */
 #sidebar .sidebarNewRow .newCodeWrap { flex:1; min-width:0; margin-bottom:0; }
