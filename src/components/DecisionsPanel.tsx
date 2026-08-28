@@ -181,8 +181,11 @@ function Spend({ spend }: { spend: AiSpend }) {
         <dt>Tokens out</dt><dd>{n(spend.outTok)}</dd>
         <dt>Est. cost</dt><dd className="dvCost">${spend.costUsd.toFixed(4)}</dd>
       </dl>
-      <p className="dvNote">Tokens are what the API reported. The cost is those tokens
-        at the rates this build was written with — your invoice is the real number.</p>
+      {/* one sentence, not three: at the largest sidebar text this note is nine
+          lines under a four-row table, and the pair of facts it has to carry —
+          the tokens are real, the money is priced from a table — fits in one */}
+      <p className="dvNote">Tokens as the API reported them; cost at the rates this
+        build knows — your invoice is the real number.</p>
       {/* An aborted or failed request was still sent and may still have been
           charged, with nothing reported back to count — so say the total is a
           floor rather than let it read as the whole bill. */}
