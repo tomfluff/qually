@@ -20,6 +20,39 @@
    AND the system increase-contrast override, which re-points --muted in base.css.
    NOT a change to --muted itself — that carries content (line numbers, speaker labels,
    timecodes, code counts) at a tuned contrast, and lightening it would drop that text. */
+/* The strip's own scrollbar is hidden: at 10px it was a thin grey line under the
+   tabs that read as part of the seam, and it cost the bar its height on every
+   screen whether or not anything overflowed. What replaces it is louder — a
+   chevron on whichever side still has tabs, which also scrolls when pressed.
+   The wheel handler in Tabs.tsx and focus-driven scrollIntoView both still work;
+   only the dragging surface is gone. */
+#tabsWrap { position:relative; }
+#tabs { scrollbar-width:none; }
+#tabs::-webkit-scrollbar { display:none; }
+/* Overlaid on the strip's end rather than given a gutter of its own: the bar is
+   the app's most crowded row, and a permanently reserved 2.6em each side costs
+   two tabs' worth of room on every screen to say something that is usually
+   false. The tab underneath is not lost — it is one press of this button away,
+   and the gradient behind the chevron shows it continuing under the mark.
+   bottom:2px leaves the seam uncovered: it runs unbroken under everything. */
+/* font:inherit FIRST — a <button> does not inherit font-size, so the 2.6em below
+   was resolving against the UA's 13.33px and the mark never grew with the app's
+   text setting (the same trap the checkboxes in .cbMenu document) */
+.tabScroll { font:inherit; position:absolute; top:0; bottom:2px; z-index:2; width:2.6em;
+  display:flex; align-items:center; border:none; padding:0 4px; cursor:pointer;
+  /* --fg, not --muted: this is the app whose whole premise is that its reader
+     cannot see faint things, and a mark that says "there is more over here"
+     fails at exactly the moment it goes unnoticed */
+  color:var(--fg); }
+.tabScroll:hover { color:var(--accent); }
+.tabScroll:focus-visible { outline:2px solid var(--accent); outline-offset:-3px;
+  border-radius:6px; }
+/* solid under the chevron, fading over the rest: the chevron needs a ground of
+   its own to stay legible over whatever tab is passing beneath it */
+.tabScroll.tsLeft { left:0; justify-content:flex-start;
+  background:linear-gradient(to right, var(--panel) 0 1.6em, transparent); }
+.tabScroll.tsRight { right:0; justify-content:flex-end;
+  background:linear-gradient(to left, var(--panel) 0 1.6em, transparent); }
 #tabs { --tab-edge:color-mix(in srgb, var(--muted) 75%, var(--bg));
   display:flex; align-items:center; gap:2px; padding:6px 8px 0;
   border-bottom:2px solid var(--tab-edge); background:var(--panel); flex-wrap:nowrap;

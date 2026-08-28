@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
+  type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useStore, liveCodes } from "../state/store";
 import { SCROLL_BASE, wheelPixels } from "../scrollSpeed";
 import { useClampToViewport, useDismiss, useMenuArrows, useMenuFocus } from "../usePopover";
@@ -73,6 +74,53 @@ export function Tabs() {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
+  // With the scrollbar hidden (see tabs.css) the strip had no way of saying it
+  // continued past either edge — a half-clipped tab reads as a rendering fault,
+  // not as "there is more". A chevron appears on whichever side still has tabs
+  // on it, and scrolls a screenful when pressed.
+  const [more, setMore] = useState({ left: false, right: false });
+  const measure = useCallback(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    // 1px, not 0: a fractional scrollLeft at the far end is normal at some zoom
+    // levels, and an arrow that points at nothing is worse than no arrow
+    const next = { left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 };
+    // same object every time it has not changed: this runs after EVERY render,
+    // and a fresh literal would re-render forever
+    setMore((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
+  }, []);
+  // after every render, because opening, closing or reordering a tab changes
+  // scrollWidth — which no observer here would otherwise see
+  useLayoutEffect(measure);
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", measure, { passive: true });
+    // the window resizes, and so does the strip on its own: the sidebar drag and
+    // the text-size setting both change how much of it is visible
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", measure); ro.disconnect(); };
+  }, [measure]);
+  const page = (dir: -1 | 1) => {
+    const el = stripRef.current;
+    if (!el) return;
+    // 0.8 of a screenful, so a tab or two stays on screen as an anchor — a full
+    // page leaves nothing recognisable behind to say where you just were.
+    // The CSS reduced-motion kill-switch cannot reach a scrollBy, so ask here
+    // (the same as the map's find flight does).
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: still ? "auto" : "smooth" });
+  };
+  const arrow = (dir: -1 | 1) => (
+    <button className={"tabScroll " + (dir < 0 ? "tsLeft" : "tsRight")}
+      aria-label={`Scroll tabs ${dir < 0 ? "left" : "right"}`}
+      title={`More tabs to the ${dir < 0 ? "left" : "right"}`}
+      onClick={() => page(dir)}>
+      <Icon name={dir < 0 ? "chevron-left" : "chevron-right"} size={18} />
+    </button>
+  );
   const openAssistMenu = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
     // toggle, not open: the second click on the caret closes (see useDismiss's
@@ -90,8 +138,13 @@ export function Tabs() {
   };
 
   return (
-    <div id="tabs" className="nicescroll" style={{ fontSize }} role="tablist"
-      aria-label="Transcripts" ref={stripRef}>
+    // the wrapper exists so the two chevrons are NOT children of the tablist —
+    // they are controls for the strip, not tabs in it. Left one first in the DOM
+    // so the focus order runs left arrow, tabs, right arrow, as the eye does.
+    <div id="tabsWrap" style={{ fontSize }}>
+      {more.left && arrow(-1)}
+      <div id="tabs" className="nicescroll" role="tablist"
+        aria-label="Transcripts" ref={stripRef}>
       {/* label and × are real <button>s so the keyboard can switch and close tabs;
           the label's click bubbles to the wrapper's onClick (whole tab stays clickable).
           The wrapper is presentation so the tablist's exposed children are the tab
@@ -199,6 +252,8 @@ export function Tabs() {
         onClose={() => setReopenMenu(null)} />}
       {closing && <CloseConfirm pid={closing.pid} x={closing.x} y={closing.y}
         onClose={() => setClosing(null)} />}
+      </div>
+      {more.right && arrow(1)}
     </div>
   );
 }

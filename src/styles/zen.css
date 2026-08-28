@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
    Copyright (C) 2026 Yotam Sechayk */
 /* zen mode: hide chrome, keep transcript + video */
-#app.zen #toolbar, #app.zen #tabs, #app.zen #sidebar, #app.zen .hotbar { display:none; }
+#app.zen #toolbar, #app.zen #tabsWrap, #app.zen #sidebar, #app.zen .hotbar { display:none; }
 /* bottom left, not top left: zen mode exists to put the transcript's first
    line where the eye already is, and the way OUT was sitting exactly there —
    competing with the text for the corner the reader starts from. */
