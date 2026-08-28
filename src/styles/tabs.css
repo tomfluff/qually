@@ -38,8 +38,13 @@
 /* font:inherit FIRST — a <button> does not inherit font-size, so the 2.6em below
    was resolving against the UA's 13.33px and the mark never grew with the app's
    text setting (the same trap the checkboxes in .cbMenu document) */
-.tabScroll { font:inherit; position:absolute; top:0; bottom:2px; z-index:2; width:2.6em;
-  display:flex; align-items:center; border:none; padding:0 4px; cursor:pointer;
+/* The BUTTON is only as wide as its solid ground; the fade past it is a ::after
+   that takes no pointer events. A single 2.6em button meant its transparent
+   tail swallowed clicks meant for the tab showing through it — and mis-clicking
+   a tab is exactly the cost this app exists to avoid. */
+.tabScroll { font:inherit; position:absolute; top:0; bottom:2px; z-index:2; width:2em;
+  display:flex; align-items:center; justify-content:center; border:none; padding:0;
+  cursor:pointer;
   /* --fg, not --muted: this is the app whose whole premise is that its reader
      cannot see faint things, and a mark that says "there is more over here"
      fails at exactly the moment it goes unnoticed */
@@ -47,12 +52,17 @@
 .tabScroll:hover { color:var(--accent); }
 .tabScroll:focus-visible { outline:2px solid var(--accent); outline-offset:-3px;
   border-radius:6px; }
-/* solid under the chevron, fading over the rest: the chevron needs a ground of
-   its own to stay legible over whatever tab is passing beneath it */
-.tabScroll.tsLeft { left:0; justify-content:flex-start;
-  background:linear-gradient(to right, var(--panel) 0 1.6em, transparent); }
-.tabScroll.tsRight { right:0; justify-content:flex-end;
-  background:linear-gradient(to left, var(--panel) 0 1.6em, transparent); }
+/* solid under the chevron so it stays legible over whatever tab is passing
+   beneath it, with the fade carrying on past the button's own edge */
+.tabScroll { background:var(--panel); }
+.tabScroll::after { content:""; position:absolute; top:0; bottom:0; width:1em;
+  pointer-events:none; }
+.tabScroll.tsLeft { left:0; }
+.tabScroll.tsLeft::after { left:100%;
+  background:linear-gradient(to right, var(--panel), transparent); }
+.tabScroll.tsRight { right:0; }
+.tabScroll.tsRight::after { right:100%;
+  background:linear-gradient(to left, var(--panel), transparent); }
 #tabs { --tab-edge:color-mix(in srgb, var(--muted) 75%, var(--bg));
   display:flex; align-items:center; gap:2px; padding:6px 8px 0;
   border-bottom:2px solid var(--tab-edge); background:var(--panel); flex-wrap:nowrap;

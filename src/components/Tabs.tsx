@@ -149,7 +149,10 @@ export function Tabs() {
       aria-label={`Scroll tabs ${dir < 0 ? "left" : "right"}`}
       title={`More tabs to the ${dir < 0 ? "left" : "right"}`}
       onClick={() => page(dir)}>
-      <Icon name={dir < 0 ? "chevron-left" : "chevron-right"} size={18} />
+      {/* sized from the setting, like the pin and × on the tabs beside it: a
+          fixed 18px left the mark a small glyph in a big box the moment the
+          reader turned the text up, which is precisely when it matters most */}
+      <Icon name={dir < 0 ? "chevron-left" : "chevron-right"} size={Math.round(fontSize * 1.3)} />
     </button>
   );
   const openAssistMenu = (el: HTMLElement) => {
