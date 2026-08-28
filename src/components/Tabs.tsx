@@ -103,15 +103,46 @@ export function Tabs() {
     ro.observe(el);
     return () => { el.removeEventListener("scroll", measure); ro.disconnect(); };
   }, [measure]);
+  // The press that reaches an end REMOVES the button that was pressed, and focus
+  // falls to <body> — a keyboard user loses their place entirely at the exact
+  // moment they finish scrolling. Noted here, handed over below once the strip
+  // has settled: the surviving arrow does not exist yet at click time.
+  const handOff = useRef(false);
+  useLayoutEffect(() => {
+    if (!handOff.current) return;
+    const act = document.activeElement as HTMLElement | null;
+    if (act && act !== document.body) {
+      // A smooth scroll passes THROUGH the state where both arrows show, and
+      // this runs then too — with the pressed button still focused and still
+      // mounted. Stay armed for the run that actually takes it away; disarm
+      // only once focus has gone somewhere that is not an arrow at all, which
+      // is the user saying where they want to be.
+      if (!act.closest?.(".tabScroll")) handOff.current = false;
+      return;
+    }
+    handOff.current = false;
+    const strip = stripRef.current;
+    const sibling = strip?.parentElement?.querySelector<HTMLElement>(".tabScroll");
+    if (sibling) { sibling.focus(); return; }
+    // nothing left to hand to (a strip that barely overflowed): land on the
+    // strip itself rather than <body>, the same fallback useMenuFocus uses
+    if (!strip) return;
+    strip.tabIndex = -1;
+    strip.focus();
+  }, [more]);
   const page = (dir: -1 | 1) => {
     const el = stripRef.current;
     if (!el) return;
     // 0.8 of a screenful, so a tab or two stays on screen as an anchor — a full
     // page leaves nothing recognisable behind to say where you just were.
+    const step = dir * el.clientWidth * 0.8;
+    const max = el.scrollWidth - el.clientWidth;
+    const target = Math.max(0, Math.min(max, el.scrollLeft + step));
+    handOff.current = dir < 0 ? target <= 1 : target >= max - 1;
     // The CSS reduced-motion kill-switch cannot reach a scrollBy, so ask here
     // (the same as the map's find flight does).
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: still ? "auto" : "smooth" });
+    el.scrollBy({ left: step, behavior: still ? "auto" : "smooth" });
   };
   const arrow = (dir: -1 | 1) => (
     <button className={"tabScroll " + (dir < 0 ? "tsLeft" : "tsRight")}
