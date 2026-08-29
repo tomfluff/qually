@@ -13,10 +13,11 @@ import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
 import { gatherCodeEvidence } from "../codeEvidence";
+import { viewTranscripts } from "../lineText";
 import { reconcileCodes, reconcileFocus, estimateReconcileTokens, estimateFocusTokens, renderFocusPayload, mergeFocusResults, DEFAULT_ASKS, type ReconcilePlan, type ReconcileAsks } from "../ai/reconcile";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 type ReconcileScope = number | "all" | { focus: string[] };
 /** how much evidence each code carries into the request (see exN below) */
@@ -32,6 +33,7 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
 }) {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const codebook = useStore((s) => s.codebook);
   const ai = useStore((s) => s.ai);
   const [busy, setBusy] = useState(false);
@@ -57,8 +59,8 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
   const focusMode = typeof scope === "object";
   const gather = useMemo(() =>
     (only: Set<string> | null, cap: number, includeEmpty: boolean): MergeCodeInput[] =>
-      gatherCodeEvidence(segments, transcripts, codebook, cap, only, includeEmpty),
-  [segments, transcripts, codebook]);
+      gatherCodeEvidence(segments, viewTranscripts(transcripts, lang), codebook, cap, only, includeEmpty),
+  [segments, transcripts, lang, codebook]);
   // one input per in-scope code — name + def + up to exN excerpts. Focus mode:
   // focus codes carry the full evidence dial (zero-evidence ones included),
   // the REST of the codebook rides as context with 2 excerpts each.
@@ -273,6 +275,7 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
                     <span>redacted <b>{redactions}</b></span>
                     <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                     <span>≈ <b>${estCost.toFixed(4)}</b></span>
+                    <LangFact />
                   </div>
                 </>
               )}

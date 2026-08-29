@@ -8,7 +8,7 @@ import { redactor } from "../ai/redact";
 import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine, spanLens } from "../ai/flag";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 // The consent gate. Choose what to look for (lenses) and whose speech to scan
 // (speakers — no naming convention assumed), then see the ACTUAL redacted lines
@@ -287,6 +287,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
                     <span>redacted <b>{redactions}</b></span>
                     <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                     <span>≈ <b>${estCost.toFixed(4)}</b></span>
+                    <LangFact />
                   </div>
                   {redactions === 0 && ai.redactTerms.length === 0 && (
                     <div className="settings-note" style={{ marginTop: 6 }}>

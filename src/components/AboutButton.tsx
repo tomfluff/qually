@@ -74,6 +74,7 @@ export function AboutButton() {
               <section>
                 <h3>Get started</h3>
                 <ol>
+                  <li><b>Reading language:</b> a transcript whose CSV carried a <code>text_en</code> column gets a <b>Source / English</b> switch beside the magnifier. It is not display-only: what you read is what a code quotes, what an export writes and what the AI is sent, so the evidence never disagrees with the page. Lines with no translation stay as they were spoken, and the switch counts them. In the Codebook, <b>Show the original</b> puts the source back under any excerpt.</li>
                   <li><b>Import</b> a transcript CSV — columns <code>line_id, timestamp, speaker, text</code>
                     (an optional <code>codes</code> column is loaded as segments). Optionally add a video/audio file to sync playback.</li>
                   <li><b>Select</b> lines and <b>apply codes</b> (below).</li>

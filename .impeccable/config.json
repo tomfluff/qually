@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/events.css"
+        ],
+        "createdAt": "2026-08-16T10:31:56.481Z",
+        "reason": "markerRow's left border carries var(--mk-c), the event type's own colour — the same semantic colour channel as .codebar pills and the lane bars, not accent decoration. Pre-existing, untouched by this change."
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/browse.css"
+        ],
+        "createdAt": "2026-08-16T11:03:48.109Z",
+        "reason": "All five are blockquote rules on quoted material (.bExcerpt, .nInst, .defEx, .askUnsup, .askQuoted), the standard typographic mark for an excerpt, not an accent stripe on a card: three use the neutral var(--line), one carries the lens's own semantic colour, one the warn colour. Pre-existing, untouched by this change."
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/map.css"
+        ],
+        "createdAt": "2026-08-22T11:05:03.051Z",
+        "reason": "repo comments document both as deliberate: the chip's left stripe IS the code's identity color ('the color stripe IS the left border... at map distance the color IS the identity'), and .mapCardGlimpse is a quote-style accent block ('the glimpse lives IN the card: an accent block under the reasoning'); both predate this change"
+      }
+    ]
+  }
+}

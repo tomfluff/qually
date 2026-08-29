@@ -25,7 +25,7 @@ import {
   type Node, type NodeProps, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useStore, bestSurvivor, liveCodes, MAP_RING_PX, type DecisionSource, type MapStage } from "../state/store";
+import { linesOf, useStore, bestSurvivor, liveCodes, MAP_RING_PX, type DecisionSource, type MapStage } from "../state/store";
 import { codeStats } from "../codeStats";
 import { speakerBuckets } from "../speakerBuckets";
 import { preselectBrowse } from "./BrowseView";
@@ -969,6 +969,7 @@ function MapInner() {
   };
   const [compareMenu, setCompareMenu] = useState<{ left: number; y: number } | null>(null);
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const ai = useStore((s) => s.ai);
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const dark = useStore((s) => s.ui.dark);
@@ -1038,7 +1039,7 @@ function MapInner() {
     for (const seg of segments) {
       if (seg.status !== "accepted" || seg.code !== similarSource || !transcripts[seg.pid]) continue;
       if (focus.excerpts.length >= 4) break;
-      const ex = segExcerpt(seg, transcripts[seg.pid].lines).excerpt;
+      const ex = segExcerpt(seg, linesOf(transcripts, lang, seg.pid)).excerpt;
       if (ex) focus.excerpts.push(ex);
     }
     return { source: similarSource, focus, book };
@@ -1829,7 +1830,7 @@ function MapInner() {
       if (seg.status !== "accepted" || !member.has(seg.code) || !st.transcripts[seg.pid]) continue;
       const arr = byCode.get(seg.code) ?? [];
       if (arr.length >= 4) continue;
-      const ex = segExcerpt(seg, st.transcripts[seg.pid].lines).excerpt;
+      const ex = segExcerpt(seg, linesOf(st.transcripts, st.ui.lang, seg.pid)).excerpt;
       if (ex) { arr.push(ex); byCode.set(seg.code, arr); }
     }
     return [...member].map((name) => ({
@@ -2036,7 +2037,7 @@ function MapInner() {
       const cap = focusSet.has(seg.code) ? 8 : 2;
       const arr = byCode.get(seg.code) ?? [];
       if (arr.length >= cap) continue;
-      const ex = segExcerpt(seg, st.transcripts[seg.pid].lines).excerpt;
+      const ex = segExcerpt(seg, linesOf(st.transcripts, st.ui.lang, seg.pid)).excerpt;
       if (ex) { arr.push(ex); byCode.set(seg.code, arr); }
     }
     const mk = (name: string) => ({ name, def: st.codebook[name]?.def ?? "", excerpts: byCode.get(name) ?? [] });

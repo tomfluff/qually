@@ -11,10 +11,11 @@ import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { MERGE_EXEMPLARS, renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
 import { gatherCodeEvidence } from "../codeEvidence";
+import { viewTranscripts } from "../lineText";
 import { clusterCodes, estimateClusterTokens, type ClusterGroup } from "../ai/cluster";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 export function GroupModal({ transient = false, onGroups, onReconcileInstead, onClose }: {
   // transient: the result is an arrangement LENS, not saved theme groups
@@ -25,6 +26,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
 }) {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const codebook = useStore((s) => s.codebook);
   const hasGroups = useStore((s) => s.codeGroups.length > 0);
   // theming an uncleaned codebook bakes redundancy into the themes — warn,
@@ -43,8 +45,8 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
 
   // one input per code that has accepted segments — name + def + up to N excerpts
   const codes = useMemo<MergeCodeInput[]>(() =>
-    gatherCodeEvidence(segments, transcripts, codebook, MERGE_EXEMPLARS),
-  [segments, transcripts, codebook]);
+    gatherCodeEvidence(segments, viewTranscripts(transcripts, lang), codebook, MERGE_EXEMPLARS),
+  [segments, transcripts, lang, codebook]);
 
   const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0);
   const inTok = useMemo(() => estimateClusterTokens(codes, red, transient ? "areas" : "usage"), [codes, red, transient]);
@@ -164,6 +166,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
                     <span>redacted <b>{redactions}</b></span>
                     <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                     <span>≈ <b>${estCost.toFixed(4)}</b></span>
+                    <LangFact />
                   </div>
                 </>
               )}

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "react-flow": {
+      "source": "framara/react-flow-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "f8fab79ba851aa5387f842697b0203f613ea98762669e66a91b9792b7feea009"
+    }
+  }
+}

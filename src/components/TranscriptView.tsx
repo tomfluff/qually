@@ -973,7 +973,9 @@ export function TranscriptView() {
   // (mixed-substance flag, surfaced while coding — CODING-APP-DEV.md W7 item 18)
   const closeCallSids = useMemo(() => {
     const set = new Set<number>();
-    const lines = transcript?.lines ?? [];
+    // the close-call badge marks what the EXCERPT will be, so it has to weigh
+    // the same text the excerpt will quote
+    const lines = viewed;
     for (const s of laned) {
       // binary-search the range start (ids are kept ascending): the full filter
       // was O(lines) per segment, recomputed on every coding action
@@ -985,7 +987,7 @@ export function TranscriptView() {
       if (excerptOf(range).closeCall) set.add(s.sid);
     }
     return set;
-  }, [laned, transcript]);
+  }, [laned, viewed]);
 
   // the narrow ui slice speakerColor/weightOf/Minimap paint with — one stable
   // object, so a width-only ui change re-renders none of them

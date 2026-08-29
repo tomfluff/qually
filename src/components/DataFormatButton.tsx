@@ -13,7 +13,7 @@ for a qualitative-coding app. Write a Python 3 script (standard library only, cs
 that reads input.txt in the same folder and writes transcript.csv with EXACTLY these
 columns, in this order:
 
-line_id,timestamp,end_timestamp,speaker,text,codes
+line_id,timestamp,end_timestamp,speaker,text,text_en,codes
 
 Requirements:
 - One row per digestible chunk of speech, not per whole speaker turn.
@@ -40,6 +40,10 @@ Requirements:
   the code.
 - text: spoken text, whitespace-trimmed, with any speaker-label prefix and inline
   timecode markers removed.
+- text_en: leave every cell EMPTY. It is a column for an English translation of the
+  text column, added later by a translator or by me — never machine-translate it
+  here, and never copy the text column into it. If my transcript is already in
+  English, keep the column and leave it empty rather than duplicating the text.
 - codes: always empty.
 - Use csv.writer so fields containing commas, quotes, or newlines are correctly quoted
   (RFC 4180). Header row first.
@@ -49,10 +53,10 @@ Requirements:
 Adapt the parsing to my transcript format: 
 <<paste or attach a sample>>`;
 
-const EXAMPLE_CSV = `line_id,timestamp,end_timestamp,speaker,text,codes
-1,00:00:03,00:00:06,R,So how do you usually read a chart?,
-2,00:00:07,00:00:11,P,"I zoom in really close, then pan across to follow the line.",
-3,00:00:12,00:00:15,P,Then I lose track of where the axis labels are.,
+const EXAMPLE_CSV = `line_id,timestamp,end_timestamp,speaker,text,text_en,codes
+1,00:00:03,00:00:06,R,So how do you usually read a chart?,,
+2,00:00:07,00:00:11,P,"I zoom in really close, then pan across to follow the line.",,
+3,00:00:12,00:00:15,P,Then I lose track of where the axis labels are.,,
 `;
 
 export function DataFormatButton() {
@@ -106,6 +110,7 @@ export function DataFormatButton() {
                     <tr><td><code>end_timestamp</code></td><td>Line end time, same shape. Makes the merge-by-pause gap exact (otherwise it's estimated from the text's length). Optional.</td></tr>
                     <tr><td><code>speaker</code></td><td>Any consistent label, reused per speaker — a full name is fine, it needn't be short. Optional (defaults to <code>P</code>).</td></tr>
                     <tr><td><code>text</code></td><td>The spoken text for that line. <b>Required.</b></td></tr>
+                    <tr><td><code>text_en</code></td><td>An English translation of that line. With one, the transcript gains a <b>Source / English</b> switch, and what you read is also what a code quotes, what an export writes and what the AI is sent. Per line: leave it empty and that line stays as it was spoken. Optional.</td></tr>
                     <tr><td><code>codes</code></td><td>Pre-existing codes, <code>;</code>-separated, or empty. Loaded as segments. Optional.</td></tr>
                   </tbody>
                 </table>

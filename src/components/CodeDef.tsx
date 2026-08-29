@@ -6,7 +6,7 @@
 // app exists for, and the Codebook already shows the coding a definition
 // describes — no need to reprint it in a box on top of it.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { linesOf, useStore } from "../state/store";
 import { segExcerpt } from "../contract/excerpt";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
@@ -81,7 +81,7 @@ function DefBadge({ def, ai }: { def: string; ai?: boolean }) {
 // A few of a code's excerpts, one per transcript first so a code used across
 // sessions shows its breadth rather than three quotes from one participant.
 function codeExcerpts(code: string, max = 3): { text: string; ref: string; speaker: string }[] {
-  const { segments, transcripts } = useStore.getState();
+  const { segments, transcripts, ui } = useStore.getState();
   const out: { text: string; ref: string; speaker: string }[] = [];
   const seenPid = new Set<string>();
   for (const pass of [true, false]) { // pass 1: unseen transcripts only; pass 2: fill up
@@ -89,7 +89,7 @@ function codeExcerpts(code: string, max = 3): { text: string; ref: string; speak
       if (out.length >= max) return out;
       if (s.code !== code || s.status !== "accepted" || !transcripts[s.pid]) continue;
       if (pass === seenPid.has(s.pid)) continue;
-      const r = segExcerpt(s, transcripts[s.pid].lines);
+      const r = segExcerpt(s, linesOf(transcripts, ui.lang, s.pid));
       if (!r.excerpt || out.some((x) => x.text === r.excerpt)) continue;
       seenPid.add(s.pid);
       out.push({ text: r.excerpt, speaker: r.speaker,

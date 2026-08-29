@@ -5,7 +5,7 @@
 // Scope: every ACCEPTED segment of every loaded transcript that doesn't already
 // hold a valid grounding (hash — recode/resize/edit invalidates).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { linesOf, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -13,11 +13,12 @@ import { segExcerpt } from "../contract/excerpt";
 import { chunksOfItems, renderGroundChunk, estimateGroundTokens, groundChunk, groundHash, type GroundItem } from "../ai/ground";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 export function GroundModal({ onClose }: { onClose: () => void }) {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const codebook = useStore((s) => s.codebook);
   const aiGrounds = useStore((s) => s.aiGrounds);
   const ai = useStore((s) => s.ai);
@@ -39,7 +40,7 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
   const eligible = useMemo<GroundItem[]>(() => segments
     .filter((s) => s.status === "accepted" && transcripts[s.pid])
     .map((s) => {
-      const excerpt = segExcerpt(s, transcripts[s.pid].lines).excerpt;
+      const excerpt = segExcerpt(s, linesOf(transcripts, lang, s.pid)).excerpt;
       return { sid: s.sid, code: s.code, def: codebook[s.code]?.def ?? "", excerpt };
     })
     .filter((it) => !!it.excerpt),
@@ -182,6 +183,7 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                     <span>redacted <b>{redactions}</b></span>
                     <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                     <span>≈ <b>${estCost.toFixed(4)}</b></span>
+                    <LangFact />
                   </div>
                   {model.id.includes("luna") && (
                     <div className="settings-note" style={{ marginTop: 6 }}>

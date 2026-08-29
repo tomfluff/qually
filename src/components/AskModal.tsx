@@ -14,7 +14,7 @@ import { askQuestion, renderAskPayload, estimateAskTokens } from "../ai/ask";
 import { buildCorpus, type AskScope } from "../askCorpus";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 // Beyond this the payload is too big to answer well, whatever the context window
 // allows: past it the ask is really "read my study", and the honest move is to
@@ -157,7 +157,8 @@ export function AskModal({ question, scope, onAsked, onClose }: {
           <span>redacted <b>{redactions}</b></span>
           <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
           <span>≈ <b>${estCost.toFixed(4)}</b></span>
-        </div>
+                    <LangFact />
+                  </div>
       </div>
 
       {err && <div className="ai-err">{err}</div>}

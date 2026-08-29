@@ -5,6 +5,7 @@
 // they all repeated: the backdrop, the focus-trapped dialog, and the head.
 import { useEffect, useId, type ReactNode } from "react";
 import { MODELS } from "../ai/openai";
+import { useStore } from "../state/store";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
@@ -45,6 +46,20 @@ export function AiModal({ title, busy, onClose, children }: {
       </div>
     </div>
   );
+}
+
+/** What language this run is about to send, for the consent gate.
+    Every payload builder resolves its lines through linesOf, so a study read in
+    English sends English — and a gate that showed the count and the price but
+    not THAT would be describing the wrong request. Renders nothing while the
+    study is read in its source language, which is the case that needs no
+    saying. The preview beside it already shows the text itself; this names it,
+    because a reader who does not know the source language cannot tell from the
+    preview alone which of the two they are looking at. */
+export function LangFact() {
+  const lang = useStore((s) => s.ui.lang);
+  if (lang !== "en") return null;
+  return <span className="ai-lang">sending the <b>English</b> translation</span>;
 }
 
 // The per-run model override, identical in every AI modal. The Settings default

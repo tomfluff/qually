@@ -7,7 +7,7 @@
 // textareas in a dialog was a worse editor than the Definitions panel the
 // researcher already has, and it made a paid run discardable by a stray click.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { linesOf, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -17,7 +17,7 @@ import { describeCodes, renderDescribePayload, estimateDescribeTokens, DESC_EXEM
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { SORTS, sortCodes, type SortBy } from "../codeStats";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 export function DescribeModal({ initial, onClose }: {
   // What the caller had in view: the codes picked in the Definitions sidebar,
@@ -29,6 +29,7 @@ export function DescribeModal({ initial, onClose }: {
 }) {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const codebook = useStore((s) => s.codebook);
   const applyDrafts = useStore((s) => s.applyDrafts);
   const ai = useStore((s) => s.ai);
@@ -56,7 +57,7 @@ export function DescribeModal({ initial, onClose }: {
       const e = byCode.get(s.code) ?? { excerpts: [], segs: 0, pids: new Set<string>() };
       e.segs++; e.pids.add(s.pid);
       if (e.excerpts.length < DESC_EXEMPLARS) {
-        const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
+        const ex = segExcerpt(s, linesOf(transcripts, lang, s.pid)).excerpt;
         if (ex) e.excerpts.push(ex);
       }
       byCode.set(s.code, e);
@@ -263,7 +264,8 @@ export function DescribeModal({ initial, onClose }: {
                   <span>redacted <b>{redactions}</b></span>
                   <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                   <span>≈ <b>${estCost.toFixed(4)}</b></span>
-                </div>
+                    <LangFact />
+                  </div>
               </>
             )}
           </div>

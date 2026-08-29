@@ -75,8 +75,9 @@ function LangToggle() {
         {n > 0 && <span className="langgap" aria-hidden="true">{n}</span>}
       </button>
       {n > 0 && lang === "en" && (
-        <span className="sr-only">{n} line{n === 1 ? "" : "s"} in this transcript
-          have no translation and are shown as they were spoken.</span>
+        <span className="sr-only">{n === 1 ? "1 line" : `${n} lines`} in this transcript
+          {n === 1 ? " has " : " have "}no translation and {n === 1 ? "is" : "are"} shown
+          as {n === 1 ? "it was" : "they were"} spoken.</span>
       )}
     </div>
   );

@@ -180,6 +180,11 @@
 .ai-facts { display:flex; flex-wrap:wrap; gap:14px; padding:10px 2px 0;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72em; color:var(--muted); }
 .ai-facts b { color:var(--fg); font-variant-numeric:tabular-nums; }
+/* the language a run is about to send, in the same row as the count and the
+   price — it belongs to the same sentence, and the accent is what marks it as
+   the fact that is unusual today rather than one more number */
+.ai-lang { color:var(--accent); }
+.ai-lang b { color:var(--accent); font-weight:700; }
 .ai-err { margin-top:10px; padding:8px 10px; border-radius:6px; line-height:1.45;
   background:color-mix(in srgb, #e0554f 12%, var(--bg)); border:1px solid #e0554f; }
 

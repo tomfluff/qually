@@ -17,7 +17,7 @@
 // A plain function, not a hook: the scope spans N transcripts and hooks can't be
 // called in a loop. It leans on the same primitives useSummaryData does
 // (anchorMarkers, segExcerpt, fmtLike) rather than re-deriving any of them.
-import type { State } from "./state/store";
+import { linesOf, type State } from "./state/store";
 import { anchorMarkers, fmtLike, markerKey } from "./markers";
 import { segExcerpt } from "./contract/excerpt";
 import { formatSegRef } from "./contract/segments";
@@ -51,7 +51,9 @@ export function buildCorpus(s: State, scope: AskScope): AskCorpus {
   const codes = new Set(scope.codes);
 
   for (const pid of pids) {
-    const lines = s.transcripts[pid].lines;
+    // the language the study is read in, so a question and its answer quote
+    // the same words the codebook does
+    const lines = linesOf(s.transcripts, s.ui.lang, pid);
     const tsSample = lines.find((l) => l.ts.trim())?.ts;
 
     if (scope.excerpts) {

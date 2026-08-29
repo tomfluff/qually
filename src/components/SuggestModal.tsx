@@ -9,7 +9,7 @@
 // transcript (its menu says "AI for this transcript"), while the Assist tab passes
 // `choose` and picks from the corpus in here — Assist has no active transcript.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AI_PROPOSED_BY_PREFIX, guessQuiet, liveCodes, useStore } from "../state/store";
+import { AI_PROPOSED_BY_PREFIX, guessQuiet, linesOf, liveCodes, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -18,19 +18,20 @@ import { chunksOf, renderSuggestChunk, estimateSuggestTokens, suggestChunk, over
   SUGGEST_EXEMPLARS, type SuggestCode } from "../ai/suggest";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 export function SuggestModal({ pid: initial, choose, onClose }: {
   pid?: string; choose?: boolean; onClose: () => void;
 }) {
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const tabs = useStore((s) => s.tabs);
   const aiLog = useStore((s) => s.aiLog);
   // `choose` shows the picker (Assist); without it the scope is whatever the caller
   // passed and can't be changed here. "" means nothing picked yet.
   const [picked, setPicked] = useState(initial ?? "");
   const pid = picked;
-  const allLines = useMemo(() => transcripts[pid]?.lines ?? [], [transcripts, pid]);
+  const allLines = useMemo(() => linesOf(transcripts, lang, pid), [transcripts, lang, pid]);
   // Lines the researcher had selected on THIS transcript, if any. Scoping a run to
   // a passage is the point of the selection they already made; the toggle lives in
   // the gate so the payload preview, the token count and the price answer to it.
@@ -57,7 +58,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   const [context, setContext] = useState<Set<string>>(() => new Set(guessQuiet([...new Set(allLines.map((l) => l.speaker.trim()))])));
   const pickPid = (p: string) => {
     setPicked(p);
-    const ls = transcripts[p]?.lines ?? [];
+    const ls = linesOf(transcripts, lang, p);
     setContext(new Set(guessQuiet([...new Set(ls.map((l) => l.speaker.trim()))])));
   };
   const toggleSpeaker = (sp: string) =>
@@ -90,7 +91,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
       for (const s of segments) {
         if (excerpts.length >= SUGGEST_EXEMPLARS) break;
         if (s.status !== "accepted" || s.code !== name || !transcripts[s.pid]) continue;
-        const ex = segExcerpt(s, transcripts[s.pid].lines).excerpt;
+        const ex = segExcerpt(s, linesOf(transcripts, lang, s.pid)).excerpt;
         if (ex) excerpts.push(ex);
       }
       return { name, def: codebook[name]?.def ?? "", excerpts };
@@ -314,6 +315,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                     <span>redacted <b>{redactions}</b></span>
                     <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                     <span>≈ <b>${estCost.toFixed(4)}</b></span>
+                    <LangFact />
                   </div>
                   {model.id.includes("luna") && (
                     <div className="settings-note" style={{ marginTop: 6 }}>

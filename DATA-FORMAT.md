@@ -15,6 +15,7 @@ Transcripts import as CSV, one row per line. A header row is required.
 | `end_timestamp` | Line end time, same shape. Makes the merge-by-pause gap exact — without it, where a line ends is estimated from its text length at a typical speaking pace. Optional. |
 | `speaker` | Any consistent label, reused per speaker — a full name is fine, it needn't be short. Optional (defaults to `P`). The interviewer is auto-dimmed (and prefixed `[R:]` in excerpts) when the label is exactly `R`, `I`, `Interviewer`, `Moderator`, `Facilitator` (or `R1`, `R2`…) — a first guess, editable per speaker in Settings → Speakers. A participant named "Rachel" stays a participant. |
 | `text` | The spoken text for that line. **Required.** |
+| `text_en` | An English translation of that line. A transcript carrying one gains a **Source / English** switch beside the magnifier, and the choice is not display-only: what you read is also what a code quotes, what an export writes, and what the AI is sent. Per line — an empty cell leaves that line as it was spoken, and the switch counts how many. In the Codebook, **Show the original** puts the source back under any excerpt. Optional. |
 | `codes` | Pre-existing codes, `;`-separated, or empty. Loaded as coded segments. Optional. |
 
 It is real RFC-4180 CSV: any `text` containing a comma, quote, or newline must be
@@ -24,10 +25,10 @@ prompt below, which emits correctly-quoted CSV.
 Example:
 
 ```csv
-line_id,timestamp,end_timestamp,speaker,text,codes
-1,00:00:03,00:00:06,R,So how do you usually read a chart?,
-2,00:00:07,00:00:11,P,"I zoom in really close, then pan across to follow the line.",
-3,00:00:12,00:00:15,P,Then I lose track of where the axis labels are.,
+line_id,timestamp,end_timestamp,speaker,text,text_en,codes
+1,00:00:03,00:00:06,R,So how do you usually read a chart?,,
+2,00:00:07,00:00:11,P,"I zoom in really close, then pan across to follow the line.",,
+3,00:00:12,00:00:15,P,Then I lose track of where the axis labels are.,,
 ```
 
 ## Session events (optional)
@@ -115,7 +116,10 @@ through the project file, where they ride with everything else.
 - **Autosave:** transcripts, codes, and segments are stored in the browser
   automatically — no accounts, no server, fully offline.
 - **Back up / hand off:** *Export coded-segments.csv* writes your coding
-  (`segment_ref, pid, excerpt, code, proposed_by, status, notes`). Do it
+  (`segment_ref, pid, excerpt, code, proposed_by, status, notes`) — with the
+  reading language set to English on a translated study, an `excerpt_source`
+  column joins it carrying what was actually said, so the file is never only a
+  translation. Do it
   regularly — clearing the browser's site data wipes the local copy.
 - **Round-trip:** re-importing an exported `coded-segments.csv` (with the same
   transcripts loaded) restores the segments; rows for transcripts you haven't
@@ -143,7 +147,7 @@ for a qualitative-coding app. Write a Python 3 script (standard library only, cs
 that reads input.txt in the same folder and writes transcript.csv with EXACTLY these
 columns, in this order:
 
-line_id,timestamp,end_timestamp,speaker,text,codes
+line_id,timestamp,end_timestamp,speaker,text,text_en,codes
 
 Requirements:
 - One row per digestible chunk of speech, not per whole speaker turn.
@@ -170,6 +174,10 @@ Requirements:
   the code.
 - text: spoken text, whitespace-trimmed, with any speaker-label prefix and inline
   timecode markers removed.
+- text_en: leave every cell EMPTY. It is a column for an English translation of the
+  text column, added later by a translator or by me — never machine-translate it
+  here, and never copy the text column into it. If my transcript is already in
+  English, keep the column and leave it empty rather than duplicating the text.
 - codes: always empty.
 - Use csv.writer so fields containing commas, quotes, or newlines are correctly quoted
   (RFC 4180). Header row first.

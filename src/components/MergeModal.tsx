@@ -12,9 +12,10 @@ import { redactor } from "../ai/redact";
 import { dedupeCodes, renderMergePayload, estimateMergeTokens, MERGE_EXEMPLARS,
   type MergeCodeInput, type MergeProposal } from "../ai/dedupe";
 import { gatherCodeEvidence } from "../codeEvidence";
+import { viewTranscripts } from "../lineText";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 export function MergeModal({ onProposals, onClose }: {
   onProposals: (p: MergeProposal[]) => void;
@@ -22,6 +23,7 @@ export function MergeModal({ onProposals, onClose }: {
 }) {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const codebook = useStore((s) => s.codebook);
   const ai = useStore((s) => s.ai);
   const [busy, setBusy] = useState(false);
@@ -36,8 +38,8 @@ export function MergeModal({ onProposals, onClose }: {
 
   // one input per code that has accepted segments — name + def + up to N excerpts
   const codes = useMemo<MergeCodeInput[]>(() =>
-    gatherCodeEvidence(segments, transcripts, codebook, MERGE_EXEMPLARS),
-  [segments, transcripts, codebook]);
+    gatherCodeEvidence(segments, viewTranscripts(transcripts, lang), codebook, MERGE_EXEMPLARS),
+  [segments, transcripts, lang, codebook]);
 
   const exCount = codes.reduce((n, c) => n + c.excerpts.length, 0);
   const inTok = useMemo(() => estimateMergeTokens(codes, red), [codes, red]);
@@ -143,6 +145,7 @@ export function MergeModal({ onProposals, onClose }: {
                     <span>redacted <b>{redactions}</b></span>
                     <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                     <span>≈ <b>${estCost.toFixed(4)}</b></span>
+                    <LangFact />
                   </div>
                   {model.id.includes("luna") && (
                     <div className="settings-note" style={{ marginTop: 6 }}>

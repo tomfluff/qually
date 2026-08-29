@@ -16,7 +16,7 @@ import { renderSummaryPayload, estimateSummaryTokens, summarize } from "../ai/su
 import { useSummaryData } from "../useSummaryData";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 import { openSummary } from "./SummaryView";
 
 export function SummarizeModal({ pid: initial, choose, onClose }: {
@@ -221,7 +221,8 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
                   <span>redacted <b>{redactions}</b></span>
                   <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                   <span>≈ <b>${estCost.toFixed(4)}</b></span>
-                </div>
+                    <LangFact />
+                  </div>
                 {overwriting && (
                   <div className="settings-note" style={{ marginTop: 6 }}>
                     <b>{pid}</b> already has a summary. Nothing is replaced until you use the draft.

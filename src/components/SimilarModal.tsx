@@ -13,7 +13,7 @@ import { estimateSimilarTokens, findSimilarWithAi, similarPayload, type Semantic
 import type { MergeCodeInput } from "../ai/dedupe";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 export function SimilarModal({ focus, book, onMatches, onClose }: {
   focus: MergeCodeInput;
@@ -131,7 +131,8 @@ export function SimilarModal({ focus, book, onMatches, onClose }: {
                   <span>redacted <b>{payload.redactions}</b></span>
                   <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                   <span>≈ <b>${estCost.toFixed(4)}</b></span>
-                </div>
+                    <LangFact />
+                  </div>
               </>
             )}
           </div>

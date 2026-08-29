@@ -5,7 +5,7 @@
 // tab's detailed timeline, and the AI summary's payload — and they must agree, or
 // the consent preview would show a different session than the screen does.
 import { useMemo } from "react";
-import { useStore, type Segment } from "./state/store";
+import { linesOf, useStore, type Segment } from "./state/store";
 import { useMarkers } from "./useMarkers";
 import { fmtLike, markerKey, type Marker } from "./markers";
 import { segExcerpt } from "./contract/excerpt";
@@ -19,6 +19,7 @@ export function useSummaryData(pid: string) {
   const { list, placed, lineOf, offset, tsSample } = useMarkers(pid);
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
 
   const accepted = useMemo(() =>
     segments.filter((s) => s.pid === pid && s.status === "accepted" && transcripts[pid])
@@ -26,7 +27,7 @@ export function useSummaryData(pid: string) {
     [segments, pid, transcripts]);
 
   const rows = useMemo(() => accepted.map((seg) => {
-    const ls = transcripts[pid].lines;
+    const ls = linesOf(transcripts, lang, pid);
     // an excerpt is anchored by TIME, like everything else on this axis — the
     // segment's first and last line timecodes, as the CSV wrote them (one
     // timestamp when they coincide). Untimed lines fall back to line ids.
@@ -37,7 +38,7 @@ export function useSummaryData(pid: string) {
       seg, time,
       excerpt: segExcerpt(seg, ls).excerpt,
     };
-  }), [accepted, transcripts, pid]);
+  }), [accepted, transcripts, lang, pid]);
 
   // one axis: an event sorts before the line it's anchored before (that's what the
   // anchor MEANS), a segment at its start line; tail events (past the last line) go

@@ -20,7 +20,7 @@
 // What you decided is remembered in the ledger, which is also what keeps a
 // second pass from asking again.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useStore, liveCodes, type Decision, type Segment } from "../state/store";
+import { linesOf, useStore, liveCodes, type Decision, type Segment } from "../state/store";
 import { codeStats } from "../codeStats";
 import { segExcerpt } from "../contract/excerpt";
 import { norm } from "../contract/segments";
@@ -210,15 +210,15 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
     });
   }, [at, seq.length]);
 
+  const lang = useStore((s) => s.ui.lang);
   const segs = useMemo(
     () => (code ? segments.filter((s) => norm(s.code) === norm(code) && s.status === "accepted") : []),
     [segments, code]);
   const excerpts = useMemo(() => segs.map((s: Segment) => {
-    const t = transcripts[s.pid];
-    if (!t) return null;
-    const r = segExcerpt(s, t.lines);
+    if (!transcripts[s.pid]) return null;
+    const r = segExcerpt(s, linesOf(transcripts, lang, s.pid));
     return { pid: s.pid, speaker: r.speaker, text: r.excerpt };
-  }).filter((x): x is { pid: string; speaker: string; text: string } => !!x && !!x.text), [segs, transcripts]);
+  }).filter((x): x is { pid: string; speaker: string; text: string } => !!x && !!x.text), [segs, transcripts, lang]);
 
   // Fold targets: the codes that already carry evidence, closest wording
   // first. Offered only AFTER the excerpt has been read, which is the whole

@@ -68,3 +68,23 @@ export function viewLines<T extends TextLine>(lines: readonly T[], lang: Lang): 
   byLang.set(lang, out);
   return out;
 }
+
+/** The same, for a whole record of transcripts — for the surfaces that are
+    handed the record rather than one transcript's lines (gatherCodeEvidence and
+    its three callers). Resolving at the boundary like this is what lets the
+    functions BELOW it — the excerpt rule, the evidence gatherer — stay exactly
+    as they were: they never learn that a translation exists. */
+const recCache = new WeakMap<object, Map<Lang, Record<string, { lines: readonly TextLine[] }>>>();
+export function viewTranscripts<T extends TextLine>(
+  transcripts: Record<string, { lines: T[] }>, lang: Lang,
+): Record<string, { lines: T[] }> {
+  if (lang === "source") return transcripts;
+  let byLang = recCache.get(transcripts);
+  if (!byLang) recCache.set(transcripts, (byLang = new Map()));
+  const hit = byLang.get(lang);
+  if (hit) return hit as Record<string, { lines: T[] }>;
+  const out: Record<string, { lines: readonly TextLine[] }> = {};
+  for (const [pid, t] of Object.entries(transcripts)) out[pid] = { lines: viewLines(t.lines, lang) };
+  byLang.set(lang, out);
+  return out as Record<string, { lines: T[] }>;
+}

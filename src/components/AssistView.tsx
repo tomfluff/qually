@@ -7,6 +7,7 @@
 // axis, and a transcript row carries the sparkle that opens that run's consent gate.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useStore, liveCodes, type Segment } from "../state/store";
+import { viewTranscripts } from "../lineText";
 import { earcon } from "../earcons";
 import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
@@ -80,6 +81,7 @@ const pairKey = (p: MergeProposal) => JSON.stringify([p.from, p.into].sort());
 
 export function AssistView() {
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const segments = useStore((s) => s.segments);
   const markers = useStore((s) => s.markers);
   const summaries = useStore((s) => s.summaries);
@@ -665,8 +667,10 @@ export function AssistView() {
             picked={liveSel.length} total={defVisible.length}
             onClear={() => { setDefSel([]); setDefAnchor(null); }} />
         ) : (
+          // resolved here, once, so the list below reads excerpts in the same
+          // language the transcript and the codebook are showing
           <SuggestList candidates={shownCandidates} groupBy={suggestBy}
-            transcripts={transcripts} codebook={codebook} tabs={tabs} />
+            transcripts={viewTranscripts(transcripts, lang)} codebook={codebook} tabs={tabs} />
         )}
       </div>
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
@@ -917,6 +921,8 @@ function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
       </div>
     );
   }
+  // `transcripts` arrives already resolved to the reading language (see the
+  // call site) — this component never learns a translation exists
   const excerptFor = (s: Segment) => {
     const t = transcripts[s.pid];
     return t ? segExcerpt(s, t.lines) : null;

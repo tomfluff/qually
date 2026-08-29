@@ -18,7 +18,7 @@ import { proposeSections, estimateSectionsTokens, renderSections, eventRedaction
   SECTIONS_TOKEN_CAP, SECTIONS_MAX, SECTION_OUT_TOKENS } from "../ai/sections";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { AiModal, ModelPicker } from "./AiModal";
+import { AiModal, LangFact, ModelPicker } from "./AiModal";
 import { Icon } from "./Icon";
 
 export function SectionsModal({ pid: initial, choose, onClose }: {
@@ -335,7 +335,8 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
                   <span>redacted <b>{redactions}</b></span>
                   <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                   <span>≈ <b>${estCost.toFixed(4)}</b></span>
-                </div>
+                    <LangFact />
+                  </div>
               </>
             ) : (
               <p className="about-lede" style={{ marginTop: 10 }}>

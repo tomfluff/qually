@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useCallback, useEffect, useRef } from "react";
-import { useStore } from "../state/store";
+import { linesOf, useStore } from "../state/store";
 import { speakerGroupedText } from "../format";
 import { segExcerpt } from "../contract/excerpt";
 import { useDialogFocus } from "../useDialogFocus";
@@ -30,9 +30,11 @@ export function SegmentPopover({ sid, x, y, onClose }: {
   const segText = (): string => {
     const s = useStore.getState();
     const sg = s.segments.find((z) => z.sid === sid);
-    const tr = sg ? s.transcripts[sg.pid] : undefined;
-    if (!sg || !tr) return "";
-    return speakerGroupedText(tr.lines.filter((l) => l.id >= sg.start && l.id <= sg.end)
+    if (!sg || !s.transcripts[sg.pid]) return "";
+    // copies what is being READ: a quote pasted into a memo has to match the
+    // excerpt the codebook shows for the same segment
+    const lines = linesOf(s.transcripts, s.ui.lang, sg.pid);
+    return speakerGroupedText(lines.filter((l) => l.id >= sg.start && l.id <= sg.end)
       .map((l) => ({ speaker: l.speaker, text: l.text })));
   };
 
@@ -62,9 +64,9 @@ export function SegmentPopover({ sid, x, y, onClose }: {
   if (!seg) return null;
   const range = seg.start === seg.end ? `${seg.start}` : `${seg.start}-${seg.end}`;
   // read-only transcript, no need to subscribe
-  const tr = useStore.getState().transcripts[seg.pid];
-  const ex = tr
-    ? segExcerpt(seg, tr.lines)
+  const st = useStore.getState();
+  const ex = st.transcripts[seg.pid]
+    ? segExcerpt(seg, linesOf(st.transcripts, st.ui.lang, seg.pid))
     : null;
   const closeCall = ex?.closeCall ?? false;
   const dropped = ex?.dropped ?? [];

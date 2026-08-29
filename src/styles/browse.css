@@ -522,6 +522,12 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   color:var(--fg); font-weight:600; }
 .dvSpend .dvCost { color:var(--accent); }
 .dvKeys li.zero b { color:var(--muted); font-weight:400; }
+/* the source behind a translated excerpt: indented and quieter than the excerpt
+   it belongs to, because it is the check rather than the reading — but quiet by
+   COLOUR, never by opacity (see .bExcerpt.rejected) */
+.bSrcBtn { margin-top:6px; }
+.bSrc { margin-top:6px; padding-left:10px; border-left:2px solid var(--line);
+  color:var(--muted); font-family:var(--read-font); line-height:1.5; }
 
 .dvWrap { display:flex; flex-direction:column; gap:14px; }
 .dvPara { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--bg); }

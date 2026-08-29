@@ -17,7 +17,7 @@ import type { Stretch, StretchStatus } from "../stretches";
 import type { SectionProposal } from "../sections";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
-import type { Lang } from "../lineText";
+import { viewLines, type Lang } from "../lineText";
 import { forgetScroll, renameScroll } from "../scrollMemory";
 import { projectSwapped } from "../sessionReset";
 import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
@@ -63,6 +63,16 @@ export interface Answer {
 // en (optional text_en column) is a translation of `text`. Which of the two a
 // surface uses is decided in ONE place — see lineText.ts — never re-derived.
 export interface Line { id: number; ts: string; speaker: string; text: string; end?: string; orig?: string; en?: string; }
+
+/** A transcript's lines in the language the study is being read in.
+    Every surface that turns lines into evidence — an excerpt, an export, an AI
+    payload — comes through here rather than reaching for `.lines` directly, so
+    what a code quotes and what you are reading can never disagree. Hands back
+    the stored array untouched when reading the source, which is every project
+    that carries no translation. */
+export const linesOf = (
+  transcripts: Record<string, { lines: Line[] }>, lang: Lang, pid: string,
+): Line[] => viewLines(transcripts[pid]?.lines ?? [], lang) as Line[];
 // The selection ring's weight is the researcher's call: what reads as clear
 // at one pair of eyes and one screen reads as either invisible or shouting at
 // another, and this map is navigated by selection.
@@ -2894,13 +2904,27 @@ export const useStore = create<State>()(
 
       exportCSV: () => {
         const s = get();
-        const fields = ["segment_ref", "pid", "excerpt", "code", "proposed_by", "status", "notes"];
+        const excerptFor = (seg: Segment, lang: Lang) =>
+          excerptOf(linesOf(s.transcripts, lang, seg.pid)
+            .filter((l) => l.id >= seg.start && l.id <= seg.end)
+            .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt;
+        // Only a study actually being read in a translation earns the second
+        // column: adding an empty one to every other export would tell a reader
+        // that a source text was looked for and not found.
+        const transcribed = s.ui.lang !== "source"
+          && Object.values(s.transcripts).some((t) => t.lines.some((l) => l.en?.trim()));
+        const fields = ["segment_ref", "pid", "excerpt",
+          ...(transcribed ? ["excerpt_source"] : []),
+          "code", "proposed_by", "status", "notes"];
         const rows = s.segments.map((seg) => ({
           segment_ref: formatSegRef(seg.pid, seg.start, seg.end),
           pid: seg.pid,
-          excerpt: excerptOf((s.transcripts[seg.pid]?.lines || [])
-            .filter((l) => l.id >= seg.start && l.id <= seg.end)
-            .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt,
+          // the excerpt is quoted in the language the study is being read in,
+          // and `excerpt_source` below carries what was actually said — an
+          // export is the evidence trail, so it may never hold only a
+          // translation (the column is omitted entirely when there is none)
+          excerpt: excerptFor(seg, s.ui.lang),
+          excerpt_source: transcribed ? excerptFor(seg, "source") : "",
           // never-empty invariant enforced at the write edge, whatever the source
           code: seg.code, proposed_by: seg.proposedBy.trim() || "(default)", status: seg.status, notes: seg.notes,
         })).concat(s.extSegRows.map((r) => ({ ...r, proposed_by: (r.proposed_by || "").trim() || "(default)" })) as never[]);

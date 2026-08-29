@@ -3,7 +3,7 @@
 // The Codebook tab: go over your coding. Codes on the left, their excerpts on the
 // right. The AI's observations moved out to the Assist tab; this view is yours.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useStore, liveCodes, parkedCodes, clampEventHeight, type Segment } from "../state/store";
+import { linesOf, useStore, liveCodes, parkedCodes, clampEventHeight, type Segment } from "../state/store";
 import { stretchesAt, stretchColorOf } from "../stretches";
 import { norm } from "../contract/segments";
 import { segExcerpt, type DroppedSpeaker } from "../contract/excerpt";
@@ -62,6 +62,7 @@ export function BrowseView() {
   const stretchColors = useStore((s) => s.ui.stretchColors);
   const dark = useStore((s) => s.ui.dark);
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const paneRef = useCallback((el: HTMLDivElement | null) => { if (el) el.scrollTop = excerptScroll; }, []);
   const listRef = useCallback((el: HTMLDivElement | null) => { if (el) el.scrollTop = codeListScroll; }, []);
   const fontSize = useStore((s) => s.ui.fontSize);
@@ -97,6 +98,9 @@ export function BrowseView() {
   // the dominant speaker is a momentary look at ONE excerpt, not working state
   // worth carrying out of the tab.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // which excerpts are showing their source text — same lifetime and the same
+  // reasoning as `expanded` above: view state, reset when a project is swapped
+  const [sourceOpen, setSourceOpen] = useState<Set<number>>(new Set());
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [recolor, setRecolor] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => { Object.assign(remembered, { selected, anchor, filter, showRejected, facets }); },
@@ -108,7 +112,7 @@ export function BrowseView() {
   // the selection, and sids, which a new project hands out from 1 again. The
   // Code map registers the same forget-me for the same reason.
   useEffect(() => onProjectSwap(() => {
-    setSelected(new Set()); setAnchor(null); setExpanded(new Set());
+    setSelected(new Set()); setAnchor(null); setExpanded(new Set()); setSourceOpen(new Set()); setSourceOpen(new Set());
   }), []);
 
   const counts = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
@@ -136,18 +140,25 @@ export function BrowseView() {
     dropped: DroppedSpeaker[];
     closeCall: boolean;
     lines: { speaker: string; text: string }[];
+    source: string;
   } | null => {
     const t = transcripts[s.pid];
     if (!t) return null;
     // binary-search the range start (ids are kept ascending — rehydrate sorts)
     // instead of filtering all of a 1000-line transcript per excerpt
-    const lines = t.lines;
+    const lines = linesOf(transcripts, lang, s.pid);
     let lo = 0, hi = lines.length;
     while (lo < hi) { const mid = (lo + hi) >> 1; if (lines[mid].id < s.start) lo = mid + 1; else hi = mid; }
     const slice = [];
     for (let i = lo; i < lines.length && lines[i].id <= s.end; i++) slice.push(lines[i]);
     const r = segExcerpt(s, slice);
-    return { text: r.excerpt, speaker: r.speaker, dropped: r.dropped, closeCall: r.closeCall, lines: slice };
+    // The same excerpt rule over the same lines, read in the source language —
+    // viewLines preserves order and length, so the found index range holds for
+    // both arrays and the two readings quote the same dominant speaker.
+    const source = lang === "source" ? ""
+      : segExcerpt(s, t.lines.slice(lo, lo + slice.length)).excerpt;
+    return { text: r.excerpt, speaker: r.speaker, dropped: r.dropped, closeCall: r.closeCall,
+      lines: slice, source };
   };
 
   const excerptFacetsOn = needsExcerptFacetData(facets);
@@ -433,6 +444,32 @@ export function BrowseView() {
                           ? groundedText(ex.text, groundsFor(s, ex.text), codebook[code].color, uiGround)
                           : "(excerpt in coded-segments.csv)"
                       }</div>
+                      {/* The source behind a translated excerpt. Its own control,
+                          not folded into the speaker expand above: they answer
+                          different questions ("who else spoke here" vs "what was
+                          actually said"), and a reader checking a quote before it
+                          goes in a paper should not have to open the other one to
+                          get at it. Only rendered when the two actually differ. */}
+                      {ex && ex.source && ex.source !== ex.text && (() => {
+                        const open = sourceOpen.has(s.sid);
+                        return (
+                          <>
+                            <button className="bDrop bSrcBtn" aria-expanded={open}
+                              title={open ? "Hide the source text" : "Show what was said, in the source language"}
+                              onClick={() => {
+                                const next = new Set(sourceOpen);
+                                open ? next.delete(s.sid) : next.add(s.sid);
+                                setSourceOpen(next);
+                              }}>
+                              {open ? "Hide the original" : "Show the original"}
+                            </button>
+                            {/* lang is deliberately absent: the source language is
+                                not recorded anywhere, and guessing one would tell a
+                                screen reader to pronounce the text wrongly */}
+                            {open && <div className="bSrc">{withSubs(ex.source)}</div>}
+                          </>
+                        );
+                      })()}
                       {ex && ex.dropped.length > 0 && (() => {
                         const hidden = ex.dropped.reduce((n, d) => n + d.lines, 0);
                         const names = ex.dropped.map((d) => d.speaker || "unlabelled");

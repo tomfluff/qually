@@ -13,7 +13,7 @@
 // work of deciding leaves the artefact the codebook was missing rather than
 // evaporating into a merge you cannot explain later.
 import { useEffect, useMemo, useState } from "react";
-import { useStore, type DecisionSource } from "../state/store";
+import { linesOf, useStore, type DecisionSource } from "../state/store";
 import { segExcerpt } from "../contract/excerpt";
 import { norm } from "../contract/segments";
 import { earcon } from "../earcons";
@@ -40,6 +40,7 @@ export function TellApartModal({ codes, survivor, newName, source, model, onClos
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
   const fontSize = useStore((s) => s.ui.sidebarFontSize);
   const [a, b] = codes;
   const [sentence, setSentence] = useState("");
@@ -55,7 +56,7 @@ export function TellApartModal({ codes, survivor, newName, source, model, onClos
 
   const readOf = useMemo(() => (code: string) => segments
     .filter((s) => norm(s.code) === norm(code) && s.status === "accepted" && transcripts[s.pid])
-    .map((s) => ({ pid: s.pid, ...segExcerpt(s, transcripts[s.pid].lines) }))
+    .map((s) => ({ pid: s.pid, ...segExcerpt(s, linesOf(transcripts, lang, s.pid)) }))
     .filter((x) => x.excerpt), [segments, transcripts]);
   const left = useMemo(() => readOf(a), [readOf, a]);
   const right = useMemo(() => readOf(b), [readOf, b]);

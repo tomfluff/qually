@@ -183,3 +183,48 @@ test("a pre-speakers project file re-guesses the interviewer", () => {
   expect(w.Interviewer).toBe("quiet");
   expect(w.Rachel).toBeUndefined(); // a participant is never quieted by the guess
 });
+
+// The point of the whole feature: what a code QUOTES follows the reading
+// language, and the export carries both so the evidence trail survives. If
+// these two ever disagree, a quote in a paper stops matching its own data.
+test("an excerpt and its export follow the reading language, and keep the source", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,text_en\n" +
+    "1,0:01,P,\u62e1\u5927\u3057\u307e\u3059,I zoom in.\n" +
+    "2,0:05,P,\u7dda\u3092\u8ffd\u3044\u307e\u3059,I follow the line.\n",
+  ], "JP.csv")]);
+  const st = useStore.getState();
+  st.addSegment("JP", 1, 2, "zooming");
+
+  // reading the source: unchanged behaviour, and no second column invented
+  expect(st.exportCSV()).toContain("\u62e1\u5927\u3057\u307e\u3059 \u7dda\u3092\u8ffd\u3044\u307e\u3059");
+  expect(st.exportCSV()).not.toContain("excerpt_source");
+
+  useStore.getState().setUi({ lang: "en" });
+  const en = useStore.getState().exportCSV();
+  expect(en).toContain("I zoom in. I follow the line.");
+  // the source rides along in its own column — an export may never carry only
+  // a translation, or the file loses the way back to what was said
+  expect(en.split("\r\n")[0]).toContain("excerpt_source");
+  expect(en).toContain("\u62e1\u5927\u3057\u307e\u3059 \u7dda\u3092\u8ffd\u3044\u307e\u3059");
+
+  useStore.getState().setUi({ lang: "source" });
+});
+
+// A study with no translation must be byte-identical whatever the switch says —
+// this is what lets the language reach the excerpt rule and the AI payloads at
+// all without touching a single project that exists today.
+test("the reading language changes nothing for a study that has no translation", () => {
+  // only the untranslated transcripts: the JP one above deliberately does change
+  const { transcripts } = useStore.getState();
+  const plain = Object.fromEntries(Object.entries(transcripts).filter(([pid]) => pid !== "JP"));
+  useStore.setState({ transcripts: plain,
+    segments: useStore.getState().segments.filter((x) => x.pid !== "JP") });
+
+  const before = useStore.getState().exportCSV();
+  useStore.getState().setUi({ lang: "en" });
+  const after = useStore.getState().exportCSV();
+  useStore.getState().setUi({ lang: "source" });
+  expect(after).toBe(before);
+  expect(after).not.toContain("excerpt_source");
+});
