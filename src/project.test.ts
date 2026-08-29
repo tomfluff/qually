@@ -118,6 +118,37 @@ test("the transcript CSV exports the CORRECTED text, so a bundle isn't stale", (
   expect(csv).toContain("I kept losing the ticket marks."); // original, in its own column
 });
 
+// An export is the evidence trail. A translated transcript has to come back out
+// carrying BOTH texts: one that wrote only the English would leave a reader of
+// the file no way back to what was actually said.
+test("a translation round-trips through the transcript CSV, beside the source", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,end_timestamp,speaker,text,text_en,codes\n" +
+    "1,0:01,0:04,R,\u30c1\u30e3\u30fc\u30c8\u3092\u3069\u3046\u8aad\u307f\u307e\u3059\u304b,How do you read a chart?,\n" +
+    "2,0:05,0:09,P,\u62e1\u5927\u3057\u307e\u3059,,\n",
+  ], "JP01.csv")]);
+  const lines = useStore.getState().transcripts.JP01.lines;
+  expect(lines[0]).toMatchObject({ text: "\u30c1\u30e3\u30fc\u30c8\u3092\u3069\u3046\u8aad\u307f\u307e\u3059\u304b", en: "How do you read a chart?" });
+  // a blank text_en is NOT a translation to nothing — the field stays absent
+  expect(lines[1].en).toBeUndefined();
+
+  const csv = useStore.getState().exportTranscript("JP01");
+  expect(csv.split("\r\n")[0]).toBe("line_id,timestamp,end_timestamp,speaker,text,text_en,original");
+  expect(csv).toContain("How do you read a chart?");
+  expect(csv).toContain("\u30c1\u30e3\u30fc\u30c8\u3092\u3069\u3046\u8aad\u307f\u307e\u3059\u304b");
+
+  // and back in again, unchanged
+  await useStore.getState().importFiles([new File([csv], "JP02.csv")]);
+  expect(useStore.getState().transcripts.JP02.lines[0].en).toBe("How do you read a chart?");
+});
+
+// The column is optional, and a transcript that never had one must not grow it:
+// an untranslated export gaining an empty text_en would tell every later reader
+// that a translation was attempted and came back blank.
+test("a transcript with no translation exports no text_en column", () => {
+  expect(useStore.getState().exportTranscript("P01")).not.toContain("text_en");
+});
+
 // Who the interviewer is, and any speaker recolouring, is a property of the STUDY,
 // not a display preference like font size — so it has to survive a project round trip.
 // It didn't: speakerColors/speakerWeight live in ui, and exportProject excludes ui.

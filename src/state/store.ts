@@ -59,7 +59,9 @@ export interface Answer {
   costUsd: number;
 }
 
-export interface Line { id: number; ts: string; speaker: string; text: string; end?: string; orig?: string; }
+// en (optional text_en column) is a translation of `text`. Which of the two a
+// surface uses is decided in ONE place — see lineText.ts — never re-derived.
+export interface Line { id: number; ts: string; speaker: string; text: string; end?: string; orig?: string; en?: string; }
 // The selection ring's weight is the researcher's call: what reads as clear
 // at one pair of eyes and one screen reads as either invisible or shouting at
 // another, and this map is navigated by selection.
@@ -1805,12 +1807,17 @@ export const useStore = create<State>()(
         if (!t) return "";
         const rows = t.lines.map((l) => ({
           line_id: String(l.id), timestamp: l.ts, end_timestamp: l.end ?? "",
-          speaker: l.speaker, text: l.text, original: l.orig ?? "",
+          speaker: l.speaker, text: l.text, text_en: l.en ?? "", original: l.orig ?? "",
         }));
-        // end_timestamp only earns a column when the data actually has one
-        const cols = t.lines.some((l) => l.end)
-          ? ["line_id", "timestamp", "end_timestamp", "speaker", "text", "original"]
-          : ["line_id", "timestamp", "speaker", "text", "original"];
+        // Each optional column earns its place only when the data has one.
+        // text_en is written BESIDE text, never instead of it: an export is the
+        // evidence trail, and one that carried only the translation would leave
+        // no way back to what was actually said.
+        const cols = ["line_id", "timestamp",
+          ...(t.lines.some((l) => l.end) ? ["end_timestamp"] : []),
+          "speaker", "text",
+          ...(t.lines.some((l) => l.en) ? ["text_en"] : []),
+          "original"];
         return toCSV(rows, cols);
       },
 
@@ -3055,6 +3062,10 @@ function rowsToLines(rows: Record<string, string>[]): Line[] {
     .map((r) => {
       const l: Line = { id: +r.line_id, ts: r.timestamp || "", speaker: (r.speaker || "P").trim(), text: r.text || "" };
       if (r.end_timestamp?.trim()) l.end = r.end_timestamp.trim();
+      // a translation column, if the file has one. Trimmed-empty is NOT a
+      // translation: it would otherwise read as "this line translates to
+      // nothing" and blank the line under an English reading.
+      if (r.text_en?.trim()) l.en = r.text_en;
       // our own export writes `original` for a corrected line; without reading it
       // back, a round-trip through CSV laundered the correction into the source
       // text and lost the ✱ diff
