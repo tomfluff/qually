@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { installScrollSpeed } from "./scrollSpeed";
 import { setSounds, setVolume } from "./earcons";
 import { useStore, isTranscriptView } from "./state/store";
+import { hasTranslation, untranslated, type Lang } from "./lineText";
 import { Toolbar } from "./components/Toolbar";
 import { Tabs } from "./components/Tabs";
 import { CodeSidebar } from "./components/CodeSidebar";
@@ -36,6 +37,51 @@ import { saveBlob } from "./download";
 
 // Show/hide the AI noticing highlights — the blind-reading control. Only appears
 // once the active transcript actually has notices, so it costs no chrome before.
+// The reading language, for a transcript that carries a translation. It renders
+// only when there IS one — an inert switch on every other project would be a
+// worse answer than no switch — and it is a two-state segmented control rather
+// than an icon, because which language you are reading is not something to
+// infer from a glyph.
+//
+// The setting is global, not per transcript: a study is worked in a language,
+// and a control that silently meant something different on each tab would make
+// the excerpts in a codebook disagree with each other.
+function LangToggle() {
+  const active = useStore((s) => s.active);
+  const transcripts = useStore((s) => s.transcripts);
+  const lang = useStore((s) => s.ui.lang);
+  const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
+  const t = transcripts[active];
+  if (!t || !hasTranslation(t.lines)) return null;
+  const n = untranslated(t.lines);
+  const pick = (v: Lang) => useStore.getState().setUi({ lang: v });
+  return (
+    <div className="langwrap" style={{ fontSize: sidebarFontSize }}
+      role="group" aria-label="Reading language">
+      {/* aria-pressed, not a radio group: these are two buttons that each say
+          what they do, and a radio's own label would have to repeat the group's */}
+      <button className={"langbtn" + (lang === "source" ? " on" : "")}
+        aria-pressed={lang === "source"} onClick={() => pick("source")}
+        title="Read, code and export in the language that was spoken">Source</button>
+      <button className={"langbtn" + (lang === "en" ? " on" : "")}
+        aria-pressed={lang === "en"} onClick={() => pick("en")}
+        title={n
+          ? `Read, code and export in English — ${n} line${n === 1 ? "" : "s"} here have no translation and stay as spoken`
+          : "Read, code and export in English"}>
+        English
+        {/* the count is the honest part: an English reading of a part-translated
+            transcript is mixed, and the number says how mixed rather than
+            leaving it to be discovered inside a quote */}
+        {n > 0 && <span className="langgap" aria-hidden="true">{n}</span>}
+      </button>
+      {n > 0 && lang === "en" && (
+        <span className="sr-only">{n} line{n === 1 ? "" : "s"} in this transcript
+          have no translation and are shown as they were spoken.</span>
+      )}
+    </div>
+  );
+}
+
 function NoticeToggle() {
   const active = useStore((s) => s.active);
   const aiFlags = useStore((s) => s.aiFlags);
@@ -289,6 +335,7 @@ export function App() {
             </button>
           )}
           {hasData && onTranscript && !searchOpen && <NoticeToggle />}
+          {hasData && onTranscript && !searchOpen && <LangToggle />}
           {hasData && onTranscript && <SearchBar />}
           {!hasData ? <Welcome />
             : active === "browse" ? <BrowseView />

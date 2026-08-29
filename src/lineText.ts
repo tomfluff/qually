@@ -39,3 +39,32 @@ export const hasTranslation = (lines: readonly { en?: string }[]): boolean =>
 export function untranslated(lines: readonly { en?: string }[]): number {
   return hasTranslation(lines) ? lines.filter((l) => !l.en?.trim()).length : 0;
 }
+
+// Every surface downstream — the transcript, an excerpt, an export, an AI
+// payload — wants a list of lines whose `text` is already the one being read.
+// Resolving here rather than at each of the sixty-odd places that touch
+// `line.text` is not only shorter: it is the only way those places can be
+// guaranteed to agree.
+//
+// Two properties this leans on, both deliberate:
+//  - "source" returns the SAME ARRAY, not a copy. An untranslated project (every
+//    project that exists today) therefore keeps referential equality through
+//    every useMemo and every downstream comparison, and pays nothing at all.
+//  - the mapped array is cached against the array it came from, so the whole
+//    transcript is walked once per language and not once per render. A new
+//    lines array — an import, an edit — is a new key, so the cache cannot go
+//    stale; a WeakMap so it dies with the transcript it describes.
+const cache = new WeakMap<object, Map<Lang, readonly TextLine[]>>();
+interface TextLine { text: string; en?: string }
+export function viewLines<T extends TextLine>(lines: readonly T[], lang: Lang): readonly T[] {
+  if (lang === "source") return lines;
+  let byLang = cache.get(lines);
+  if (!byLang) cache.set(lines, (byLang = new Map()));
+  const hit = byLang.get(lang);
+  if (hit) return hit as readonly T[];
+  // an untranslated transcript resolves to itself: same array, same identity,
+  // so switching language on a file with no translation changes nothing at all
+  const out = hasTranslation(lines) ? lines.map((l) => ({ ...l, text: lineText(l, lang) })) : lines;
+  byLang.set(lang, out);
+  return out;
+}

@@ -17,6 +17,7 @@ import type { Stretch, StretchStatus } from "../stretches";
 import type { SectionProposal } from "../sections";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
+import type { Lang } from "../lineText";
 import { forgetScroll, renameScroll } from "../scrollMemory";
 import { projectSwapped } from "../sessionReset";
 import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
@@ -158,6 +159,12 @@ export interface Ui {
   hiddenLenses: string[]; // noticing lenses filtered out while showNotices is on
   lanePattern: boolean; // give each code a pattern as well as a colour (see patternOf)
   scrollSpeed: number; // wheel distance multiplier for the transcript (1 = device default)
+  /** Which text of a line this study is working in. NOT display-only: the
+      excerpt a code carries, what an export writes and what a model is shown
+      all follow it, so the evidence and what you are reading can never
+      disagree. Inert for a transcript with no text_en, where both resolve to
+      the same words. */
+  lang: Lang;
   loopEdit: boolean; // loop the utterance's audio while its line is being edited
   loopSpeed: number; // playback rate while looping (independent of the dock's rate)
   // isolate one speaker's dialogue, PER TRANSCRIPT (focus is a lens on a study
@@ -210,7 +217,7 @@ export interface Ui {
 }
 export type SpeakerWeight = "quiet" | "normal" | "bold";
 const DEFAULT_UI: Ui = {
-  fontSize: 16, sidebarFontSize: 13, dark: false, zen: false,
+  fontSize: 16, sidebarFontSize: 13, dark: false, zen: false, lang: "source",
   sidebarWidth: 250, browseLeftWidth: 264, mapMinimap: "bottom-right",
   mapViewport: null, mapSounds: true, soundVolume: 1, mapRing: "md",
   palettePos: "auto", helpSeen: false, mergeLines: false, mergeGapOn: false,

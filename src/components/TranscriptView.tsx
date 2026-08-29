@@ -6,6 +6,7 @@ import { stopScrollAnim } from "../scrollSpeed";
 import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, clampMinimapWidth } from "../state/store";
 import { earcon } from "../earcons";
 import { mergeGroups, type Group } from "../merge";
+import { viewLines } from "../lineText";
 import { SegmentPopover } from "./SegmentPopover";
 import { CodeMenu } from "./CodeMenu";
 import { AiMarkPopover } from "./AiMarkPopover";
@@ -560,7 +561,14 @@ export function TranscriptView() {
   };
 
   // merged display units (singletons when the toggle is off)
-  const groups = useMemo(() => mergeGroups(transcript?.lines ?? [], mergeLines, mergeGap), [transcript, mergeLines, mergeGap]);
+  // Resolve the reading language ONCE, before anything looks at a line's text:
+  // the groups, the rows, the search and the announcements below all read
+  // `text` and none of them should have to know a translation exists. For a
+  // transcript with no text_en this returns the very same array, so nothing
+  // downstream re-renders and nothing is copied.
+  const lang = useStore((s) => s.ui.lang);
+  const viewed = useMemo(() => viewLines(transcript?.lines ?? [], lang), [transcript, lang]);
+  const groups = useMemo(() => mergeGroups(viewed as Line[], mergeLines, mergeGap), [viewed, mergeLines, mergeGap]);
   // speaker focus (the target button, bottom right) — per transcript. A stale
   // focus name no longer in THIS transcript is ignored rather than dimming
   // every row (a re-import can rename speakers under a stored focus).
