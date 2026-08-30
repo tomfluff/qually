@@ -54,6 +54,7 @@ import { estimateSimilarTokens, type SemanticMatch } from "../ai/similar";
 import { mergeScopedClusters, dropAction, estimateGlimpseTokens, glimpseCluster, argueAgainst, estimateAgainstTokens, reconcileFocus, mergeFocusResults, estimateFocusTokens, haloIdsFor, nameArea, estimateNameAreaTokens, type CodeAction, type ReconcilePlan } from "../ai/reconcile";
 import { useMenuArrows, useMenuToggleFocus } from "../usePopover";
 import { SimilarModal } from "./SimilarModal";
+import { CodeMenu } from "./CodeMenu";
 
 // chip geometry in WORLD units — the viewport transform scales the world.
 // Chips fit their content: width is the measured name plus the count block
@@ -63,15 +64,21 @@ import { SimilarModal } from "./SimilarModal";
 const GX = 14, GY = 12, PAD = 18, ISLAND_GAP = 64, HALO_PAD = 26, HALO_GAP = 72;
 const chipH = (fs: number) => Math.round(fs * 2.4);
 const measurer = document.createElement("canvas").getContext("2d")!;
-const chipW = (fs: number, name: string, segs: number, pids: number) => {
+// `badge` is the proposal mark (✎ / ⊘) that sits between the name and the
+// counts. It was not measured, so a chip carrying one was built at the width of
+// a chip without one — and .mapChip clips, so the badge pushed the counts out
+// of the node and they simply vanished. The node is what should grow.
+const chipW = (fs: number, name: string, segs: number, pids: number, badge = false) => {
   const family = getComputedStyle(document.body).fontFamily;
   measurer.font = `600 ${fs}px ${family}`;
   const nameW = measurer.measureText(name).width;
   measurer.font = `700 ${fs}px ${family}`; // the counts render bold
   const counts = measurer.measureText(`${segs}${pids}`).width + fs * 2.6; // icons + inner gaps
+  // the glyph itself plus the flex gap it introduces (map.css: .mapChip gap:14px)
+  const mark = badge ? measurer.measureText("✎").width + 14 : 0;
   // borders + padding + name/counts gap, with slack — a measured width that
   // comes up 2px short reads as a bug on every single chip
-  return Math.round(nameW + counts + 64);
+  return Math.round(nameW + counts + mark + 64);
 };
 
 // Captions (island and halo) float ABOVE their block and counter-scale against
@@ -1210,7 +1217,11 @@ function MapInner() {
     const fs = MAP_FS;
     const ch = chipH(fs);
     const family = getComputedStyle(document.body).fontFamily; // read once per rebuild
-    const widths = new Map(codes.map((c) => [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0)]));
+    // the badge is part of the chip, so it is part of the chip's width — read
+    // here, before the packing, from the same plan the node renders from
+    const marked = new Set(plan.filter((a) => a.action !== "merge").map((a) => a.code));
+    const widths = new Map(codes.map((c) =>
+      [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0, marked.has(c))]));
     const pack = (list: string[], targetW: number, dimsOf?: (c: string) => { w: number; h: number }) => {
       let x = 0, y = 0, maxW = 0, rowH = 0;
       const pos: Record<string, { x: number; y: number }> = {};
@@ -2651,6 +2662,8 @@ function MapInner() {
     setMenu({ x: e.clientX, y: e.clientY, sel });
   }, [selectionAt, rfSetNodes, codebook]);
   const onPaneContextMenu = useCallback((e: React.MouseEvent | MouseEvent) => e.preventDefault(), []);
+  // the shared code menu, opened FROM the map menu — see the row that sets it
+  const [codeActions, setCodeActions] = useState<{ code: string; x: number; y: number } | null>(null);
   const [selecting, setSelecting] = useState(false);
   // the Revision plan floats: drag it by its header anywhere on the canvas.
   // The drag paints imperatively (the marquee lesson: no React work per move);
@@ -3372,11 +3385,29 @@ function MapInner() {
           )}
         </div>
       )}
+      {codeActions && (
+        <CodeMenu code={codeActions.code} x={codeActions.x} y={codeActions.y}
+          onClose={() => setCodeActions(null)} />
+      )}
       {menu && !menu.island && !menu.halo && menu.sel.length > 0 && (
         <div ref={menuRef} className="ctxmenu mapMenu" onKeyDown={menuArrows} style={{ left: menu.x, top: menu.y, fontSize: sidebarFontSize }} role="menu">
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>
+          {/* The code's OWN actions — rename, define, recolour, merge, delete —
+              the same menu the sidebar row and a transcript's lane bar open. The
+              menu around it is about the MAP (grouping, areas, where a code
+              belongs), so this is a row into the other one rather than a
+              replacement: nothing here would survive being swapped out for it.
+              One code only: every item in it acts on a single code. */}
+          {menu.sel.length === 1 && (
+            <button role="menuitem" onClick={() => {
+              const c = menu.sel[0], { x, y } = menu;
+              setMenu(null); setCodeActions({ code: c, x, y });
+            }}>
+              <Icon name="dots" size={16} /> Rename, define, recolour…
+            </button>
+          )}
           {/* only where its actions (merge, capsule) can land — the derived
               grouping views are read-only piles, so the panel would be a
               list of buttons that do nothing there */}

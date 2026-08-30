@@ -432,7 +432,16 @@ export function BrowseView() {
             const segs = eligibleSegs.filter((s) => matchesExcerptFacets(s.sid, facets, excerptFacetValues));
             return (
               <div key={code} className="bGroup">
-                <h2 className="bTitle">
+                {/* the same menu the sidebar row and a transcript's lane bar
+                    open, on the heading that names the same code — right-click
+                    is how you reach a code's actions everywhere else, and the
+                    one place you are actually reading it was the exception */}
+                <h2 className="bTitle"
+                  onContextMenu={(e) => {
+                    // the rename field keeps its native menu (paste)
+                    if ((e.target as HTMLElement).closest("input")) return;
+                    e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY });
+                  }}>
                   <CodeTitle code={code} defOpen={defEditing === code}
                     takeFocus={focusTitle === code} onFocused={() => setFocusTitle(null)}
                     onRenamed={(to) => {
