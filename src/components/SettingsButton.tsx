@@ -186,7 +186,7 @@ export function SettingsButton() {
                     <button className={"seg" + (mergeLines ? " on" : "")} onClick={() => setUi({ mergeLines: true })}>On</button>
                   </div>
                 </div>
-                <div className="settings-note">Joins a speaker's unfinished lines (no . ? ! …) into one reading unit.</div>
+                <div className="settings-note">Joins a speaker's unfinished lines into one reading unit. A line counts as finished when it ends in a sentence mark — <code>. ? ! …</code> and the equivalents in other scripts (<code>。？！</code>, <code>؟</code>, <code>।</code>, <code>።</code>…), with any closing quote or bracket after it.</div>
                 <div className="srow">
                   <span>Merge by pause</span>
                   <div className="segmented">

@@ -15,9 +15,45 @@ export interface Group {
   ts: string;
 }
 
-// ends with . ? ! … (optionally trailing quotes/brackets) -> a complete line
-const TERMINATED = /[.?!…]['")\]]*$/;
-const isPartial = (text: string) => !TERMINATED.test(text.trim());
+// Does this line finish a sentence? Only the "no" answer merges, so a
+// terminator we fail to recognise is the damaging direction: every line of that
+// language reads as unfinished and the whole transcript folds into one group per
+// speaker. Being generous here is the safe way to be wrong.
+//
+// Sentence-final marks. ASCII covers the Latin-script languages and modern
+// Hebrew, which punctuates with . ? ! like its neighbours; the rest are the
+// marks those keyboards actually produce.
+const TERMINATORS =
+  ".?!\u2026"                    // . ? ! …
+  + "\u3002\uFF0E\uFF1F\uFF01" // 。．？！  CJK and fullwidth
+  + "\u061F\u06D4"              // ؟ ۔       Arabic question mark, Urdu full stop
+  + "\u0964\u0965"              // । ॥       Devanagari danda and double danda
+  + "\u0589\u055E\u055C"       // ։ ՞ ՜     Armenian
+  + "\u1362\u1367\u1368"       // ። ፧ ፨     Ethiopic
+  // Greek's question mark is U+037E. Most Greek keyboards emit ASCII ";" for it
+  // instead, and that one is deliberately NOT here: at the end of a line it is a
+  // Greek question but in English it is a clause that continues, and guessing
+  // wrong for English would stop merging lines that should merge. A Greek
+  // question typed with ASCII ";" therefore reads as unfinished — the merge is
+  // wrong, the text is not, and no other language pays for it.
+  + "\u037E"
+  + "\u203D\u2047\u2048\u2049"; // ‽ ⁇ ⁈ ⁉
+// What may TRAIL the mark and still leave the sentence finished: closing quotes
+// and brackets, in every shape a transcription tool emits. The curly ones matter
+// as much as the CJK ones — “I zoom in.” comes out of Word and out of most
+// transcription services, and read as unfinished under straight quotes alone.
+const CLOSERS =
+  "'\")\\]}"                     // ' " ) ] }
+  // German closes with “ and ‘ — the marks other languages OPEN with — so both
+  // directions of every curly pair belong here; an opening quote can never be
+  // what trails a full stop anyway.
+  + "\u2019\u201D\u2018\u201C\u203A\u00BB\u2039\u00AB" // ’ ” ‘ “ › » ‹ «
+  + "\u300D\u300F\u3011\u3009\u300B\u3015\uFF09\uFF5D\uFF62\uFF63"; // 」』】〉》〕）｝｢｣
+// Bidi controls are formatting, not content: RTL text routinely carries a mark
+// after its full stop, and it was hiding the terminator behind the anchor.
+const BIDI = /[\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069]/g;
+const TERMINATED = new RegExp(`[${TERMINATORS}][${CLOSERS}]*$`);
+const isPartial = (text: string) => !TERMINATED.test(text.replace(BIDI, "").trim());
 
 // The pause rule needs a line's END. A real end_timestamp wins when the import
 // carried one; otherwise it's estimated from how long the text takes to say
