@@ -618,12 +618,11 @@ button.dvCode:not(.first) { color:var(--muted); }
 .tqActs .nBtn.pri kbd { color:inherit; border-color:currentColor; opacity:.8; }
 .tqFold { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px;
   display:flex; flex-direction:column; gap:10px; align-items:flex-start; }
-.fldRow { display:flex; flex-direction:column; gap:4px; width:100%; }
-.fldRow input { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--muted);
-  border-radius:8px; padding:.3em .5em; }
-.tqTargets { display:flex; flex-wrap:wrap; gap:6px; }
-.tqTargets .nBtn { display:inline-flex; align-items:baseline; gap:.5em; }
-.tqTargets .cnt { color:var(--muted); font-variant-numeric:tabular-nums; }
+/* the label above the shared code picker, with the way out beside it — the
+   picker brings its own field and list, and that list overlays whatever sits
+   below it */
+.fldRow { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.fldRow .nBtn { margin-left:auto; }
 /* what the last key did, and the way back from it */
 .tqLast { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
   border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px;

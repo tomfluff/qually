@@ -19,8 +19,20 @@ export const fuzzy = (q: string, t: string) => {
 // the command palette (autoFocus + onClose), and the noticings panel (onPick).
 // Default behavior applies to the current selection (or just creates the code);
 // onPick overrides that and receives the chosen/created code instead.
-export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose, onPick }: {
+export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose, onPick,
+  exclude, allowCreate = true, suggest }: {
   autoFocus?: boolean; placeholder?: string; onClose?: () => void; onPick?: (code: string) => void;
+  /** a code this picker must never offer — you cannot fold a code into itself */
+  exclude?: string;
+  /** false where creating one would be the wrong act entirely: folding into a
+      code that does not exist is a rename, not a fold */
+  allowCreate?: boolean;
+  /** what to offer before anything is typed. The sidebar has nothing useful to
+      say there (every code, in no order, is noise), but a caller that has
+      RANKED the codebook for this moment does — the thin tail knows which codes
+      the one you are reading most resembles, and that list is the answer most
+      of the time. */
+  suggest?: string[];
 }) {
   const codebook = useStore((s) => s.codebook);
   const segments = useStore((s) => s.segments);
@@ -49,20 +61,22 @@ export function CodeCombobox({ autoFocus, placeholder = "+ new code", onClose, o
   }, [segments]);
 
   const query = draft.trim();
+  const usable = (list: string[]) => (exclude ? list.filter((c) => c !== exclude) : list);
   const matches = query
     // a parked code cannot be applied — that is what setting it aside means
-    ? liveCodes(codebook).filter((c) => fuzzy(query, c)).sort((a, b) => {
+    ? usable(liveCodes(codebook).filter((c) => fuzzy(query, c))).sort((a, b) => {
         const ql = query.toLowerCase();
         const rank = (x: string) => (x.toLowerCase().startsWith(ql) ? 0 : x.toLowerCase().includes(ql) ? 1 : 2);
         return rank(a) - rank(b) || a.length - b.length || a.localeCompare(b);
       })
-    : [];
+    // the caller's own ranking, kept in ITS order — it knows why those codes
+    : usable(suggest ?? []);
   // …but it still BLOCKS a new code of the same name, or coding would
   // silently create a second code the book already has, parked
   const exact = Object.keys(codebook).some((c) => norm(c) === norm(query));
   const entries = [
     ...matches.map((c) => ({ type: "code" as const, name: c })),
-    ...(query && !exact ? [{ type: "create" as const, name: query }] : []),
+    ...(allowCreate && query && !exact ? [{ type: "create" as const, name: query }] : []),
   ];
   const showList = open && entries.length > 0;
 

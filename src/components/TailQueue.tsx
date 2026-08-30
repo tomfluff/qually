@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { linesOf, useStore, liveCodes, type Decision, type Segment } from "../state/store";
 import { codeStats } from "../codeStats";
+import { CodeCombobox } from "./CodeCombobox";
 import { segExcerpt } from "../contract/excerpt";
 import { norm } from "../contract/segments";
 import { scoreSimilar } from "../similar";
@@ -187,7 +188,6 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
   const seq = useMemo(() => tailSequence(codebook, stats, limit, scope), [codebook, stats, limit, scope]);
   const verdicts = useMemo(() => lastVerdicts(ledger), [ledger]);
   const [folding, setFolding] = useState(false);
-  const [foldQuery, setFoldQuery] = useState("");
   // A fold changes data, so its way back is the history stack rather than a
   // verdict swap; this remembers whether that undo is still ours to offer.
   //
@@ -210,7 +210,8 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
   const code = seq[at];
   const verdict = code ? verdicts.get(code) : undefined;
   const left = seq.filter((c) => !verdicts.has(c)).length;
-  useEffect(() => { setFolding(false); setFoldQuery(""); }, [code]);
+  // moving to another card abandons a half-finished fold
+  useEffect(() => { setFolding(false); }, [code]);
 
   const go = useCallback((delta: number) => {
     setCursor((cur) => {
@@ -235,14 +236,16 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
   // not the right home.
   const targets = useMemo(() => {
     if (!code) return [];
+    // ranked by how much this code RESEMBLES each other one, name and
+    // definition together — the picker offers these before anything is typed,
+    // and takes over with its own fuzzy match once something is
     const others = liveCodes(codebook).filter((c) => c !== code);
-    const q = foldQuery.trim().toLowerCase();
-    const ranked = others
+    return others
       .map((c) => ({ c, s: scoreSimilar({ name: code, def: codebook[code]?.def ?? "" },
         { name: c, def: codebook[c]?.def ?? "" }).score }))
-      .sort((a, b) => b.s - a.s || (stats[b.c]?.segs ?? 0) - (stats[a.c]?.segs ?? 0));
-    return (q ? ranked.filter((x) => x.c.toLowerCase().includes(q)) : ranked).slice(0, 8).map((x) => x.c);
-  }, [code, codebook, stats, foldQuery]);
+      .sort((a, b) => b.s - a.s || (stats[b.c]?.segs ?? 0) - (stats[a.c]?.segs ?? 0))
+      .slice(0, 8).map((x) => x.c);
+  }, [code, codebook, stats]);
 
   const act = useCallback((what: "keep" | "park" | "fold", into?: string) => {
     if (!code) return;
@@ -336,9 +339,21 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [code, act, folding, go, verdict, clearVerdict]);
 
+  // The fold banner rides along into the empty state. Folding the LAST thin
+  // code empties the queue, and the way back used to disappear with the card —
+  // at exactly the moment it is most wanted, because emptying the queue is when
+  // you find out you folded the wrong thing.
+  const foldBanner = lastFold && !verdict && (
+    <div className="tqLast" role="status">
+      <span>“{lastFold.code}” folded into “{lastFold.into}”. Its excerpts moved across.</span>
+      <button className="nBtn" onClick={undoFold}>Undo that</button>
+    </div>
+  );
+
   if (!code) {
     return (
       <div className="tqCard">
+        {foldBanner}
         <p className="empty" style={{ padding: 0 }}>
           Nothing in the tail at this size. Widen what counts as thin on the
           left, or carry on coding.
@@ -371,12 +386,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
           <button className="nBtn" onClick={clearVerdict}>Take it back <kbd>⌫</kbd></button>
         </div>
       )}
-      {lastFold && !verdict && (
-        <div className="tqLast" role="status">
-          <span>“{lastFold.code}” folded into “{lastFold.into}”. Its excerpts moved across.</span>
-          <button className="nBtn" onClick={undoFold}>Undo that</button>
-        </div>
-      )}
+      {foldBanner}
       <div className="tqHead">
         <h2 className="tqName">{code}</h2>
         <button className="nBtn"
@@ -404,20 +414,23 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
       </div>
       {folding && (
         <div className="tqFold">
-          <label className="fldRow">
+          {/* The app's own code picker, not a second one. This used to be a bare
+              input beside a row of buttons: no arrow keys, no listbox, no
+              combobox semantics — and its Escape never fired, because the card's
+              window handler steps aside for a focused field and the field
+              autofocuses. The shared control answers all of that, and `suggest`
+              is what this surface knows that the sidebar does not: which codes
+              the one being read most resembles, before anything is typed. */}
+          {/* Cancel sits on the LABEL row, not under the picker: the picker's
+              list is an absolutely-positioned dropdown, and a button below it
+              was covered by the very list you would be cancelling. */}
+          <div className="fldRow">
             <span>Fold <b>{code}</b> into</span>
-            <input autoFocus value={foldQuery} placeholder="Search your codes…"
-              onChange={(e) => setFoldQuery(e.target.value)} />
-          </label>
-          <div className="tqTargets">
-            {targets.map((t) => (
-              <button key={t} className="nBtn" onClick={() => act("fold", t)}>
-                {t}<span className="cnt">{stats[t]?.segs ?? 0}</span>
-              </button>
-            ))}
-            {!targets.length && <span className="dvNote">No code matches that.</span>}
+            <button className="nBtn" onClick={() => setFolding(false)}>Cancel <kbd>Esc</kbd></button>
           </div>
-          <button className="nBtn" onClick={() => setFolding(false)}>Cancel <kbd>Esc</kbd></button>
+          <CodeCombobox autoFocus placeholder="Search your codes…"
+            suggest={targets} exclude={code} allowCreate={false}
+            onPick={(t: string) => act("fold", t)} onClose={() => setFolding(false)} />
         </div>
       )}
     </div>
