@@ -6,6 +6,7 @@
 // hold a valid grounding (hash — recode/resize/edit invalidates).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { linesOf, useStore } from "../state/store";
+import { hasTranslation } from "../lineText";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -49,14 +50,19 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
     () => eligible.filter((it) => aiGrounds[it.sid]?.hash === groundHash(it.code, it.excerpt)).length,
     [eligible, aiGrounds]);
   // Grounding is keyed to the excerpt it was computed against, and there is one
-  // slot per segment. Read in another language the excerpt is different text,
-  // so those records read as "not grounded" here — and running would spend
-  // money to overwrite the ones already held. Counted and said out loud rather
-  // than discovered afterwards; the flip itself loses nothing, this run would.
-  const otherLangGrounded = useMemo(
-    () => eligible.filter((it) => aiGrounds[it.sid]
-      && aiGrounds[it.sid].hash !== groundHash(it.code, it.excerpt)).length,
-    [eligible, aiGrounds]);
+  // slot per segment: a record whose hash no longer matches will be paid for
+  // again and replaced. A reading-language flip is one way to get there — but
+  // so is recoding, resizing or editing the segment, and the count cannot tell
+  // them apart, so the note says both rather than naming the wrong cause. It is
+  // only worth raising at all where a translation exists to have flipped to.
+  const anyTranslation = useMemo(
+    () => Object.values(transcripts).some((t) => hasTranslation(t.lines)), [transcripts]);
+  const staleGrounded = useMemo(
+    () => (anyTranslation
+      ? eligible.filter((it) => aiGrounds[it.sid]
+        && aiGrounds[it.sid].hash !== groundHash(it.code, it.excerpt)).length
+      : 0),
+    [eligible, aiGrounds, anyTranslation]);
   const todo = useMemo<GroundItem[]>(() => reground ? eligible
     : eligible.filter((it) => aiGrounds[it.sid]?.hash !== groundHash(it.code, it.excerpt)),
   [eligible, aiGrounds, reground]);
@@ -171,13 +177,13 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                   <em>replaces the current quotes</em></span>
                 </label>
               )}
-              {otherLangGrounded > 0 && (
+              {staleGrounded > 0 && (
                 <div className="settings-note" style={{ marginBottom: 8 }}>
-                  {otherLangGrounded === 1 ? "1 segment is" : `${otherLangGrounded} segments are`} already
-                  grounded against {otherLangGrounded === 1 ? "its" : "their"} excerpt in the other
-                  reading language. Grounding is held per segment, not per language, so running
-                  now pays for {otherLangGrounded === 1 ? "it" : "them"} again and replaces
-                  what {otherLangGrounded === 1 ? "is" : "are"} there.
+                  {staleGrounded === 1 ? "1 segment already holds" : `${staleGrounded} segments already hold`} a
+                  grounding made in the other reading, or before the excerpt last changed.
+                  Grounding is held per segment rather than per reading, so running
+                  now pays for {staleGrounded === 1 ? "it" : "them"} again and replaces
+                  what {staleGrounded === 1 ? "is" : "are"} there.
                 </div>
               )}
               {todo.length === 0 ? (

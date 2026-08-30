@@ -648,7 +648,12 @@ export function TranscriptView() {
   const hiddenLenses = useStore((s) => s.ui.hiddenLenses);
   const flagsByLine = useMemo(() => {
     const m = new Map<number, Flag[]>();
-    for (const l of transcript?.lines ?? []) {
+    // `viewed`, not the stored lines: a scan hashes the text it was given, and
+    // it is given what is on screen. Validating against the stored source
+    // dropped every mark bought under an English reading, in both readings —
+    // paid for and invisible. Marks are therefore tied to the reading they were
+    // made in, which is also what makes a span's quote match the words around it.
+    for (const l of viewed) {
       const f = aiFlags[`${active}:${l.id}`];
       if (!f || !f.spans.length || f.hash !== hashLine(l.text)) continue;
       // noticings hide wholesale (the eye) or per lens (the eye's dropdown);
@@ -662,7 +667,7 @@ export function TranscriptView() {
       if (spans.length) m.set(l.id, spans);
     }
     return m;
-  }, [aiFlags, transcript, active, showNotices, hiddenLenses]);
+  }, [aiFlags, viewed, active, showNotices, hiddenLenses]);
 
   // The mark popover holds a SNAPSHOT of its span — close it when that span is no
   // longer in the flag set (a scan finished and replaced the flags, an undo, the

@@ -7,6 +7,7 @@
 // available — see zip.test.ts).
 import { beforeAll, test, expect } from "vitest";
 import { parseProject, statsOf, FORMAT, VERSION, ProjectError } from "./project";
+import { linesOf } from "./state/store";
 
 let useStore: typeof import("./state/store").useStore;
 
@@ -227,4 +228,36 @@ test("the reading language changes nothing for a study that has no translation",
   useStore.getState().setUi({ lang: "source" });
   expect(after).toBe(before);
   expect(after).not.toContain("excerpt_source");
+});
+
+// A scan hashes the text it was handed, and it is handed what is on screen.
+// Validating those marks against the STORED source dropped every one of them —
+// in both readings — so a run under an English reading was paid for and then
+// invisible. The export validates the same way the transcript does, so this
+// pins both halves of that agreement.
+test("marks bought under an English reading are the marks that come back", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,text_en\n" +
+    "1,0:01,P,\u62e1\u5927\u3057\u307e\u3059,I zoom in really close.\n",
+  ], "SCAN.csv")]);
+  useStore.getState().setUi({ lang: "en" });
+
+  // exactly what AiCheckModal hands addFlags: the RESOLVED lines
+  const scanned = linesOf(useStore.getState().transcripts, "en", "SCAN");
+  expect(scanned[0].text).toBe("I zoom in really close.");
+  useStore.getState().addFlags("SCAN",
+    { 1: [{ lens: "hedging", quote: "really close", reason: "vague degree" }] },
+    scanned as never, ["hedging"]);
+
+  const csv = useStore.getState().exportNotices();
+  expect(csv).toContain("really close");
+  expect(csv).toContain("vague degree");
+
+  // and they are tied to the reading they were made in: back in the source the
+  // hash no longer matches, so the mark drops rather than sitting on words the
+  // model never saw
+  useStore.getState().setUi({ lang: "source" });
+  expect(useStore.getState().exportNotices()).not.toContain("vague degree");
+
+  useStore.getState().setUi({ lang: "source" });
 });

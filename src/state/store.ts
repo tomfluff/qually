@@ -1959,9 +1959,11 @@ export const useStore = create<State>()(
         // still project data; tabs first to keep the familiar row order
         const pids = [...s.tabs, ...Object.keys(s.transcripts).filter((p) => !s.tabs.includes(p))];
         for (const pid of pids) {
-          const t = s.transcripts[pid];
-          if (!t) continue;
-          for (const l of t.lines) {
+          if (!s.transcripts[pid]) continue;
+          // the same validation the transcript does, against the same text: a
+          // mark is tied to the reading it was made in, so the export has to
+          // ask in that reading or it writes nothing for a scan that ran
+          for (const l of linesOf(s.transcripts, s.ui.lang, pid)) {
             const f = s.aiFlags[`${pid}:${l.id}`];
             if (!f || f.hash !== hashLine(l.text)) continue;
             for (const sp of f.spans) {
