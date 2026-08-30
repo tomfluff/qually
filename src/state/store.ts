@@ -539,13 +539,15 @@ export interface State {
   editLine: (pid: string, id: number, text: string, field?: "text" | "en") => void;
   /** Find-and-replace across ONE transcript: every occurrence in every line,
       as one undoable gesture. Returns how many occurrences went. */
-  /** `field` is which text the sweep rewrites — the spoken lines, or their
-      translations. It follows the reading for the same reason editLine does:
-      replacing a name for anonymisation while reading English used to rewrite
-      the SOURCE invisibly and leave the name standing in the translation that
-      the excerpts, the exports and the AI payloads all carry. */
+  /** `lang` is the READING, not a field: the sweep rewrites whatever each line
+      is showing — its translation where it has one, its spoken text where it
+      does not, exactly as lineText resolves it. It follows the reading for the
+      same reason editLine does: replacing a name for anonymisation while
+      reading English used to rewrite the SOURCE invisibly and leave the name
+      standing in the translation that the excerpts, the exports and the AI
+      payloads all carry. */
   replaceInTranscript: (pid: string, find: string, repl: string, only?: LineScope,
-    field?: "text" | "en") => number;
+    lang?: Lang) => number;
   exportEdits: () => string;
   setAi: (patch: Partial<Ai>) => void;
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
@@ -1668,7 +1670,7 @@ export const useStore = create<State>()(
       // editing back to the original clears the flag. Line ids never change, so
       // segments are untouched. On the undo stack as a targeted line entry (see
       // lineEntry) — `orig` stays the RECORD of the change, Ctrl+Z steps it back.
-      replaceInTranscript: (pid, find, repl, only, field = "text") => {
+      replaceInTranscript: (pid, find, repl, only, lang = "source") => {
         const s = get();
         const t = s.transcripts[pid];
         // the sweep is bounded by the SAME filter the bar was counting with:
@@ -1681,12 +1683,15 @@ export const useStore = create<State>()(
         if (!t || !find) return 0;
         let n = 0;
         const entries: LineSnap[] = [];
-        const origKey = field === "en" ? "enOrig" : "orig";
         const lines = t.lines.map((l) => {
           if (!inScope(l)) return l;
+          // per LINE, because the display resolves per line: an untranslated
+          // line inside a translated transcript is showing its spoken words, so
+          // that is the text a replace on it must change. Deciding once for the
+          // whole transcript left those lines counted as matches and never swept.
+          const field = lang === "en" && l.en?.trim() ? "en" : "text";
+          const origKey = field === "en" ? "enOrig" : "orig";
           const before = field === "en" ? l.en ?? "" : l.text;
-          // an untranslated line has no translation to sweep; leaving the source
-          // alone is the point — the reader is not looking at it
           if (!before) return l;
           const { text, n: k } = replaceAllIn(before, find, repl);
           if (!k || text === before) return l;

@@ -165,6 +165,11 @@ function cleanTranscripts(t: Project["transcripts"]): Project["transcripts"] {
         // a pre-correction translation with no translation to be the original OF
         // would make the edit mark diff English against the source
         if (out.en === undefined) delete out.enOrig;
+        // `src` is runtime-only: viewLines puts it on a RESOLVED copy to carry
+        // the spoken words beside a translation, and the excerpt rule weighs it
+        // over `text`. A stored one — which only a hand-edited file can have —
+        // would decide which speaker a code quotes, from a field nothing writes.
+        delete out.src;
         return out;
       }),
   }]));

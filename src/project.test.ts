@@ -382,6 +382,17 @@ test("a line field this build does not know survives the round trip", () => {
   expect((p.transcripts.P.lines[0] as unknown as { futureThing: number }).futureThing).toBe(42);
 });
 
+// `src` is runtime-only — viewLines adds it to a resolved copy, and the excerpt
+// rule weighs it over `text`. Carried in from a file it would quietly decide
+// which speaker a code quotes, from a field nothing ever writes.
+test("a stored src is dropped, whatever the file says", () => {
+  const p = parseProject(JSON.stringify({
+    format: FORMAT, version: VERSION, savedAt: "", segments: [], codebook: {},
+    transcripts: { P: { lines: [{ id: 1, ts: "", speaker: "P", text: "hi", src: "not this" }] } },
+  }));
+  expect("src" in p.transcripts.P.lines[0]).toBe(false);
+});
+
 // A pre-correction translation with no translation to be the original OF would
 // make the edit mark diff the English against the source.
 test("a stray enOrig with no en is dropped", () => {
@@ -419,4 +430,41 @@ test("re-importing over translation work asks first", async () => {
     "line_id,timestamp,speaker,text,text_en\n1,0:01,P,\u306f\u3044,Yes.\n",
   ], "RT.csv")]);
   expect(useStore.getState().pendingImports).toHaveLength(0);
+});
+
+// Find-and-replace follows the READING, and the reading resolves per line. The
+// first cut of that decided once for the whole transcript, which invented a
+// translation on a line that had none — the display then showed the
+// replacement while the spoken text kept the word being replaced away.
+test("replace under an English reading rewrites what each line is showing", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,text_en\n" +
+    "1,0:01,P,\u30d3\u30fc\u30b3\u30f3\u3067\u3059,the beacon helped\n" +
+    "2,0:05,P,beacon in the source only,\n",
+  ], "MIX.csv")]);
+  const lines = () => useStore.getState().transcripts.MIX.lines;
+
+  const n = useStore.getState().replaceInTranscript("MIX", "beacon", "system", undefined, "en");
+  expect(n).toBe(2);   // BOTH — the untranslated line is showing its source
+
+  // the translated line: its translation changed, its spoken words did not
+  expect(lines()[0].en).toBe("the system helped");
+  expect(lines()[0].text).toBe("\u30d3\u30fc\u30b3\u30f3\u3067\u3059");
+  expect(lines()[0].enOrig).toBe("the beacon helped");
+
+  // the untranslated line: its source changed, and no translation was invented
+  expect(lines()[1].text).toBe("system in the source only");
+  expect(lines()[1].en).toBeUndefined();
+  expect(lines()[1].orig).toBe("beacon in the source only");
+});
+
+test("the same replace under a Source reading never touches a translation", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,text_en\n1,0:01,P,beacon here,beacon there\n",
+  ], "SRC.csv")]);
+  useStore.getState().replaceInTranscript("SRC", "beacon", "system", undefined, "source");
+  const l = useStore.getState().transcripts.SRC.lines[0];
+  expect(l.text).toBe("system here");
+  expect(l.en).toBe("beacon there");     // untouched
+  expect(l.enOrig).toBeUndefined();
 });

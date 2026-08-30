@@ -146,7 +146,9 @@ export function SearchBar() {
       step(1);
       return;
     }
-    editLine(active, line.id, next, lang === "en" ? "en" : "text");
+    // the same per-line rule the sweep uses: an untranslated line is showing
+    // its spoken words, and replacing there must not invent a translation
+    editLine(active, line.id, next, lang === "en" && line.en?.trim() ? "en" : "text");
     // the replacement can CONTAIN the query ("system" → "[system A]"): those
     // new occurrences take the replaced one's place in the list, so step past
     // them or Replace would sit here rewriting its own output
@@ -172,8 +174,7 @@ export function SearchBar() {
     // the text ON SCREEN, like the line editor: a replace under an English
     // reading rewrites the translations, which is what the reader is looking at
     // and what their excerpts quote
-    const n = replaceInTranscript(active, query, replText, { speaker, range },
-      lang === "en" ? "en" : "text");
+    const n = replaceInTranscript(active, query, replText, { speaker, range }, lang);
     // same focus rescue as replaceOne: the sweep usually empties the list
     if (n) replRef.current?.focus();
     announce(n ? `Replaced ${n} occurrence${n === 1 ? "" : "s"} in ${active}${filtered ? ", within the filter" : ""}` : "Nothing to replace");
