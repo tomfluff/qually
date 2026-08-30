@@ -31,7 +31,12 @@
 .bTitle .swatch { width:.9em; height:.9em; border-radius:.3em; flex-shrink:0; align-self:center; }
 /* the swatch is a control now — a real button, so it gets a focus ring and a
    pointer, and keeps the exact box the static swatch had */
-.bTitle .swatchBtn { border:none; padding:0; cursor:pointer; }
+/* font:inherit FIRST — a <button> does not inherit font-size, so the .9em above
+   was resolving against the UA's 13.33px and the swatch stayed 12px beside a
+   24px heading. It was a <span> before it became a control; making it a button
+   is what silently detached it from the title's size. (The tab chevrons and the
+   .cbMenu checkboxes carry the same note — it is this file's favourite trap.) */
+.bTitle .swatchBtn { font:inherit; border:none; padding:0; cursor:pointer; }
 .bTitle .swatchBtn:hover { outline:2px solid var(--accent); outline-offset:2px; }
 .bTitle .swatchBtn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 /* the name: no chrome until you point at it, so the heading still reads as a
