@@ -40,7 +40,12 @@ export function CodeMenu({ code, x, y, onClose }: {
   // back to.
   // .codeList is the transcript sidebar's list — this menu opens from there too,
   // and deleting or renaming from it detaches the row the same way
-  useMenuFocus(ref, { home: ".cbList, .cbSide, .sideList, .codeList, [role=listbox]" });
+  // Where focus lands when the opener is gone by the time this closes — the
+  // list this menu was opened from. #codemap is here because the map opens it
+  // from a row of its OWN menu, which unmounts in the same commit this one
+  // mounts: there is no opener to go back to, and without a home a keyboard
+  // user is dropped on <body> after every rename made from the map.
+  useMenuFocus(ref, { home: ".cbList, .cbSide, .sideList, .codeList, [role=listbox], #codemap" });
 
   // Escape peels one layer (a sub-form goes back to the menu); an outside click
   // closes outright whatever the mode

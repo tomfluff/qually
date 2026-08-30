@@ -56,7 +56,12 @@
 .clrpop { position:fixed; z-index:120; background:var(--bg); border:1px solid var(--line);
   border-radius:10px; box-shadow:0 10px 34px rgba(0,0,0,.35); padding:9px; }
 .clrgrid { display:grid; grid-template-columns:repeat(6, 1fr); gap:6px; }
-.clrsw { width:1.7em; height:1.7em; padding:0; border:1px solid rgba(0,0,0,.25);
+/* font:inherit on both: a <button> and an <input> inherit neither font-size, so
+   the 1.7em below was resolving against the UA's 13.33px while the popover
+   around them scales with the panel text setting — the picker stayed 23px wide
+   for a reader who had turned the text up to 28. Sixth instance of this trap in
+   this codebase; if you are sizing a control in em, it needs this line. */
+.clrsw { font:inherit; width:1.7em; height:1.7em; padding:0; border:1px solid rgba(0,0,0,.25);
   border-radius:6px; cursor:pointer; }
 .clrsw:hover, .clrcustom input:hover { border-color:var(--fg); }
 /* selected ring via box-shadow, NOT outline — an author outline replaces the UA
@@ -65,5 +70,5 @@
 .clrsw.on { box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--fg); }
 .clrcustom { display:flex; align-items:center; gap:7px; margin-top:8px;
   color:var(--muted); cursor:pointer; }
-.clrcustom input { width:1.7em; height:1.7em; padding:0; border:1px solid var(--line);
+.clrcustom input { font:inherit; width:1.7em; height:1.7em; padding:0; border:1px solid var(--line);
   border-radius:6px; background:none; cursor:pointer; }

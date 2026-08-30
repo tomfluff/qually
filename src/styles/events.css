@@ -39,7 +39,7 @@
   background:var(--bg); border:1px solid var(--mk-c); border-radius:5px; }
 /* delete stays visible on touch/keyboard, quiet until the row is under the pointer */
 .markerRow .mkdel { flex-shrink:0; margin-left:auto; display:flex; align-items:center;
-  justify-content:center; width:1.7em; height:1.7em; border:none; background:none;
+  justify-content:center; font:inherit; width:1.7em; height:1.7em; border:none; background:none;
   color:var(--muted); border-radius:5px; cursor:pointer; opacity:.35; }
 .markerRow:hover .mkdel, .markerRow:focus-within .mkdel { opacity:1; }
 .markerRow .mkdel:hover { background:#e0554f; color:#fff; }

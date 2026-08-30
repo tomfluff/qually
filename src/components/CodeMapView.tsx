@@ -1218,8 +1218,14 @@ function MapInner() {
     const ch = chipH(fs);
     const family = getComputedStyle(document.body).fontFamily; // read once per rebuild
     // the badge is part of the chip, so it is part of the chip's width — read
-    // here, before the packing, from the same plan the node renders from
-    const marked = new Set(plan.filter((a) => a.action !== "merge").map((a) => a.code));
+    // here, before the packing, from the same plan the node renders from, and
+    // gated on the same VIEW the stylesheet gates the glyph on (map.css hides
+    // it outside reconcile). Widening for a glyph that is not drawn leaves a
+    // hole between the name and the counts, and display:none takes the flex gap
+    // with it, so nothing fills the space that was measured for it.
+    const marked = view === "reconcile"
+      ? new Set(plan.filter((a) => a.action !== "merge").map((a) => a.code))
+      : new Set<string>();
     const widths = new Map(codes.map((c) =>
       [c, chipW(fs, c, stats[c]?.segs ?? 0, stats[c]?.pids ?? 0, marked.has(c))]));
     const pack = (list: string[], targetW: number, dimsOf?: (c: string) => { w: number; h: number }) => {
