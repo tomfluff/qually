@@ -87,3 +87,39 @@ describe("setting a code aside", () => {
     expect(p.codebook.stray.parked).toBe(true);
   });
 });
+
+// The thin tail's "Undo that" identifies the entry its fold pushed, so it can
+// tell "nothing has happened since" from "something has". It used to count the
+// stack instead — and the stack is CAPPED, so once a real session filled it the
+// count stopped moving and the button refused for the rest of the session while
+// the toolbar's Undo went on working. The cap is the trap; this pins it.
+describe("the undo stack's length is not an identity", () => {
+  it("stops growing at the cap while still taking new entries", () => {
+    useStore.setState({ undoStack: [], redoStack: [] });
+    const push = () => useStore.getState().pushUndo();
+
+    for (let i = 0; i < 80; i++) push();
+    const full = useStore.getState().undoStack.length;
+    expect(full).toBe(80);
+
+    const topBefore = useStore.getState().undoStack[full - 1];
+    push();
+    const after = useStore.getState().undoStack;
+    // the length says nothing happened...
+    expect(after.length).toBe(full);
+    // ...while the top of the stack says something did. That difference is
+    // exactly what the fold's undo has to read.
+    expect(after[after.length - 1]).not.toBe(topBefore);
+  });
+
+  it("keeps our entry on top while nothing else pushes, cap or no cap", () => {
+    useStore.setState({ undoStack: [], redoStack: [] });
+    for (let i = 0; i < 80; i++) useStore.getState().pushUndo();
+    useStore.getState().pushUndo();
+    const stack = useStore.getState().undoStack;
+    const ours = stack[stack.length - 1];
+    // reading the store again does not move it; only another push would
+    const later = useStore.getState().undoStack;
+    expect(later[later.length - 1]).toBe(ours);
+  });
+});

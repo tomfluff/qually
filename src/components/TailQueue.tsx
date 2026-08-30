@@ -188,9 +188,18 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
   const verdicts = useMemo(() => lastVerdicts(ledger), [ledger]);
   const [folding, setFolding] = useState(false);
   const [foldQuery, setFoldQuery] = useState("");
-  // a fold changes data, so its way back is the history stack rather than a
-  // verdict swap; this remembers whether that undo is still ours to offer
-  const [lastFold, setLastFold] = useState<{ code: string; into: string; depth: number } | null>(null);
+  // A fold changes data, so its way back is the history stack rather than a
+  // verdict swap; this remembers whether that undo is still ours to offer.
+  //
+  // It holds the ENTRY the fold pushed, not how deep the stack was. The stack is
+  // capped at 80 and drops from the bottom when full, so its LENGTH stops
+  // changing the moment a real session fills it — and a depth check then said
+  // "something else has changed" forever, on a stack nothing else had touched.
+  // (The same cap broke arrow-key undo once before; see pushSelUndo's note.)
+  // A snapshot is a fresh object per push, so identity answers the real
+  // question — is our entry still the top — and no cap can lie about it.
+  const [lastFold, setLastFold] = useState<
+    { code: string; into: string; entry: unknown } | null>(null);
   // null = follow the work: sit on the first card with no verdict yet
   const [cursor, setCursor] = useState<number | null>(null);
 
@@ -246,11 +255,12 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
     if (cur?.kind === "park" && what !== "park") st.setParked(code, false);
 
     if (what === "fold") {
-      const depth = st.undoStack.length;
       // (from, into): the THIN code is the one folded away, into the one that
       // already carries the evidence
       st.mergeCode(code, into!, `Folded in after reading its ${segs.length || "one"} excerpt${segs.length === 1 ? "" : "s"}`, "you");
-      setLastFold({ code, into: into!, depth: depth + 1 });
+      // the entry mergeCode just pushed — the state as it was before the fold
+      const stack = useStore.getState().undoStack;
+      setLastFold({ code, into: into!, entry: stack[stack.length - 1] });
       earcon.join();
     } else if (what === "park") {
       if (cur?.kind !== "park") st.setParked(code, true);
@@ -279,7 +289,7 @@ export function TailQueue({ limit }: { limit: TailLimit }) {
   const undoFold = useCallback(() => {
     if (!lastFold) return;
     const st = useStore.getState();
-    if (st.undoStack.length !== lastFold.depth) {
+    if (st.undoStack[st.undoStack.length - 1] !== lastFold.entry) {
       announce("Something else has changed since — use Undo in the toolbar", { assertive: true });
       return;
     }
