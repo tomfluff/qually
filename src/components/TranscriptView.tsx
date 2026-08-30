@@ -6,7 +6,7 @@ import { stopScrollAnim } from "../scrollSpeed";
 import { useStore, laneAssign, patternOf, speakerColor, weightOf, inkOn, LOOP_SPEEDS, clampMinimapWidth } from "../state/store";
 import { earcon } from "../earcons";
 import { mergeGroups, type Group } from "../merge";
-import { viewLines } from "../lineText";
+import { hasTranslation, untranslated, viewLines } from "../lineText";
 import { SegmentPopover } from "./SegmentPopover";
 import { CodeMenu } from "./CodeMenu";
 import { AiMarkPopover } from "./AiMarkPopover";
@@ -1211,7 +1211,7 @@ export function TranscriptView() {
             <Icon name={selOff === "up" ? "arrow-up" : "arrow-down"} size={sidebarFontSize + 2} /> return
           </button>
         )}
-      <SpeakerFocus active={active} groups={groups} />
+      <ReadingSettings active={active} groups={groups} />
       </div>
       {addEv && <AddEventModal pid={active} defaultT={"t" in addEv ? addEv.t : 0}
         marker={"m" in addEv ? addEv.m : undefined} tsSample={tsSample}
@@ -1876,14 +1876,15 @@ function measureSpk(labels: string[], fontSize: number): string {
   return `${Math.min(Math.ceil(w) + 13, chip * 14)}px`; // +13 = the chip's 6px side padding, +1 for rounding
 }
 
-// Focus what you are reading — a floating target button at the transcript's
-// bottom right (the eye-menu pattern, mirrored to the bottom). PER TRANSCRIPT:
-// focus is a lens on a study file, not a global.
-// Two things live here, and they are not the same kind of thing: a LENS (follow
-// one speaker, and say what that does to everyone else) and a DISPLAY setting
-// (how loudly the section gutter reads). They share a popover because they
-// answer one question — what am I reading right now — and nothing else.
-function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
+// Everything that answers "what am I reading right now", in one floating button
+// at the transcript's bottom right (the eye-menu pattern, mirrored to the
+// bottom). Three unlike things share it because they share that question and
+// nothing else: a LENS (follow one speaker, and what that does to everyone
+// else), a DISPLAY setting (how loudly the section gutter reads), and the
+// READING LANGUAGE where a transcript carries a translation.
+// It began as the speaker-focus button alone; the name and the icon followed
+// the contents rather than the other way round.
+function ReadingSettings({ active, groups }: { active: string; groups: Group[] }) {
   const ui = useStore((s) => s.ui);
   const setUi = useStore((s) => s.setUi);
   const [menu, setMenu] = useState(false);
@@ -1918,7 +1919,14 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
   const stretches = useStore((s) => s.stretches);
   const hasSections = useMemo(
     () => visible(stretches).some((x) => x.pid === active), [stretches, active]);
-  if (speakers.length < 2 && !hasSections) return null;
+  const transcripts = useStore((s) => s.transcripts);
+  const lines = transcripts[active]?.lines;
+  const translated = !!lines && hasTranslation(lines);
+  const noEnglish = translated ? untranslated(lines) : 0;
+  if (speakers.length < 2 && !hasSections && !translated) return null;
+  // anything that is not the plain reading of the file, which is what the dot
+  // on the button reports — the Codebook's Options button does the same
+  const nonDefault = !!focus || ui.stretchView !== "show" || ui.lang === "en";
   return (
     <div className={"focuswrap" + (menu ? " open" : "")} ref={ref}>
       {menu && (
@@ -1972,17 +1980,44 @@ function SpeakerFocus({ active, groups }: { active: string; groups: Group[] }) {
               </button>
             ))}
           </div>}
+          {/* Which text of the line is THE text — not a display preference: what
+              a code quotes, what an export writes and what a model is sent all
+              follow it (see lineText.ts). It sits with the other two because a
+              researcher asks all three questions in the same breath, and the
+              floating pair of buttons it replaces spent the transcript's
+              scarcest corner saying something that is usually not in question. */}
+          {translated && <div role="group" aria-label="Reading language">
+            <div className="focushead" aria-hidden="true">Language</div>
+            {([["source", "Source"], ["en", "English"]] as const).map(([id, label]) => (
+              <button key={id} className={"focusitem" + (ui.lang === id ? " on" : "")}
+                role="menuitemradio" aria-checked={ui.lang === id}
+                onClick={() => setUi({ lang: id })}>
+                <span className="focusname">{label}</span>
+                {/* an English reading of a part-translated file is mixed, and the
+                    number says how mixed rather than leaving it to be found
+                    inside a quote later */}
+                {id === "en" && noEnglish > 0 && (
+                  <span className="focusgap">{noEnglish} as spoken</span>
+                )}
+                {ui.lang === id && " ✓"}
+              </button>
+            ))}
+          </div>}
         </div>
       )}
-      <button ref={btnRef} className={"focustoggle" + (focus ? " on" : "")} onClick={() => setMenu((m) => !m)}
-        aria-expanded={menu} aria-haspopup="menu" aria-pressed={!!focus}
-        // the button opens the sections control too, and on a single-speaker
-        // transcript that is the ONLY thing it opens — naming it after speakers
-        // would send a reader looking for something that is not there
-        aria-label={focus ? `Focused on ${focus} — change, or set how sections read`
-          : "Focus a speaker, or set how the section gutter reads"}
-        title={focus ? `Focused on ${focus}` : "Focus a speaker, or set how sections read"}>
-        <Icon name="target" size={17} />
+      {/* aria-pressed is gone with the target icon: this opens a menu of three
+          unlike settings and is not itself a toggle. What it still has to say is
+          "something in here is not the plain reading of the file", and the dot
+          says that — the same answer the Codebook's Options button gives. */}
+      <button ref={btnRef} className="focustoggle" onClick={() => setMenu((m) => !m)}
+        aria-expanded={menu} aria-haspopup="menu"
+        aria-label={`Reading settings for this transcript${nonDefault ? " — some are changed" : ""}`}
+        title={[focus && `Focused on ${focus}`,
+          ui.stretchView !== "show" && `Sections ${ui.stretchView === "dim" ? "dimmed" : "hidden"}`,
+          ui.lang === "en" && "Reading English"]
+          .filter(Boolean).join(" · ") || "How this transcript reads"}>
+        <Icon name="settings" size={17} />
+        {nonDefault && <span className="focusdot" aria-hidden="true" />}
       </button>
     </div>
   );

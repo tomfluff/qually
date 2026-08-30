@@ -7,6 +7,7 @@ import { SCROLL_BASE, wheelPixels } from "../scrollSpeed";
 import { useClampToViewport, useDismiss, useMenuArrows, useMenuFocus } from "../usePopover";
 import { MAP_VIEW_ITEMS, currentMapView, openMapView, type MapView } from "./CodeMapView";
 import { Icon } from "./Icon";
+import { hasTranslation, untranslated } from "../lineText";
 import { codeStats } from "../codeStats";
 import { tailQueue, type TailLimit } from "./TailQueue";
 import { parseCSV } from "../contract/csv";
@@ -360,6 +361,10 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
   const pinned = useStore((s) => s.pinnedTabs.includes(pid));
   const evCount = useStore((s) => s.markers.filter((m) => m.pid === pid).length);
   const segCount = useStore((s) => s.segments.filter((x) => x.pid === pid).length);
+  const lang = useStore((s) => s.ui.lang);
+  const lines = useStore((s) => s.transcripts[pid]?.lines);
+  const translated = !!lines && hasTranslation(lines);
+  const noEnglish = translated ? untranslated(lines) : 0;
   const [renaming, setRenaming] = useState(false);
   // deleting a transcript can't be undone (see the store), so the menu asks first
   const [confirming, setConfirming] = useState(false);
@@ -439,6 +444,26 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
             <button className="btn" onClick={commit}>Rename</button>
             <button className="btn" onClick={onClose}>Cancel</button>
           </div>
+        </div>
+      )}
+      {/* Which text of a line is THE text. Only where this transcript carries a
+          translation — everywhere else there is nothing to choose between. It is
+          a study-wide setting reached from one tab, which is why the rows name
+          the languages rather than saying "switch": the same two rows mean the
+          same thing whichever tab you opened them from. */}
+      {translated && (
+        <div role="group" aria-label="Reading language">
+          <div className="ctxgrp" aria-hidden="true">Reading language</div>
+          {([["source", "Source"], ["en", "English"]] as const).map(([id, label]) => (
+            <button key={id} role="menuitemradio" aria-checked={lang === id}
+              className={lang === id ? "on" : ""}
+              onClick={() => { useStore.getState().setUi({ lang: id }); onClose(); }}>
+              <Icon name={lang === id ? "check" : "text"} size={fs + 2} /> {label}
+              {id === "en" && noEnglish > 0 && (
+                <span className="ctxcount">{noEnglish} as spoken</span>
+              )}
+            </button>
+          ))}
         </div>
       )}
       <div className="ctxdiv" />

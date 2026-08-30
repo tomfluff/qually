@@ -116,8 +116,14 @@
   background:var(--bg); border:1px solid var(--line); border-radius:10px; color:var(--muted);
   cursor:pointer; box-shadow:0 8px 26px rgba(0,0,0,.28); }
 .focustoggle:hover { color:var(--fg); border-color:var(--accent); }
-.focustoggle.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-[data-theme=dark] .focustoggle.on { color:#12161a; }
+.focustoggle { position:relative; }
+/* "something in here is not the plain reading of the file" — the Codebook's
+   Options button answers the same question the same way */
+.focusdot { position:absolute; top:6px; right:6px; width:7px; height:7px;
+  border-radius:50%; background:var(--accent); }
+/* how many lines an English reading leaves as spoken, on the row it qualifies */
+.focusgap { margin-left:auto; padding-left:.8em; color:var(--muted); font-size:.85em;
+  font-variant-numeric:tabular-nums; }
 .focusmenu { position:absolute; bottom:calc(100% + 6px); right:0; min-width:13em;
   max-width:min(26em, calc(100vw - 140px));
   display:flex; flex-direction:column; gap:2px; padding:.6em;

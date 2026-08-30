@@ -123,26 +123,3 @@
    whole-transcript one when the row is collapsed */
 .searchbar .btn.filt.on { color:var(--accent); border-color:var(--accent);
   background:color-mix(in srgb, var(--accent) 12%, var(--bg)); }
-
-/* Reading-language switch, for a transcript that carries a translation. Same
-   top-right stack as the eye and the magnifier, one step further left; it only
-   renders when there is a translation to switch to, so nothing moves on a
-   project that has none. Words, not an icon: which language you are reading is
-   not something to infer from a glyph. */
-.langwrap { position:absolute; top:8px; right:calc(16px + var(--mm-w) + 102px); z-index:60;
-  display:flex; border-radius:10px; overflow:hidden;
-  box-shadow:0 8px 26px rgba(0,0,0,.28); }
-.langbtn { font:inherit; height:43px; padding:0 11px; display:inline-flex; align-items:center;
-  gap:5px; background:var(--bg); border:1px solid var(--line); color:var(--muted);
-  cursor:pointer; }
-.langbtn + .langbtn { border-left:none; }
-.langbtn:hover { color:var(--fg); border-color:var(--accent); }
-/* the chosen side is filled, not merely darker: at a glance this has to answer
-   "which language am I reading" from across the screen */
-.langbtn.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
-[data-theme=dark] .langbtn.on { color:#12161a; }
-.langbtn:focus-visible { outline:2px solid var(--fg); outline-offset:-3px; }
-/* how many lines have no translation — a count, not a warning icon: it is a
-   fact about the file, and the tooltip says what it means */
-.langgap { font-size:.82em; font-variant-numeric:tabular-nums; border-radius:999px;
-  padding:1px 6px; background:color-mix(in srgb, currentColor 18%, transparent); }

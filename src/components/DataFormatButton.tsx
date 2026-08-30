@@ -110,7 +110,7 @@ export function DataFormatButton() {
                     <tr><td><code>end_timestamp</code></td><td>Line end time, same shape. Makes the merge-by-pause gap exact (otherwise it's estimated from the text's length). Optional.</td></tr>
                     <tr><td><code>speaker</code></td><td>Any consistent label, reused per speaker — a full name is fine, it needn't be short. Optional (defaults to <code>P</code>).</td></tr>
                     <tr><td><code>text</code></td><td>The spoken text for that line. <b>Required.</b></td></tr>
-                    <tr><td><code>text_en</code></td><td>An English translation of that line. With one, the transcript gains a <b>Source / English</b> switch, and what you read is also what a code quotes, what an export writes and what the AI is sent. Per line: leave it empty and that line stays as it was spoken. Optional.</td></tr>
+                    <tr><td><code>text_en</code></td><td>An English translation of that line. With one, the transcript can be read in either language (the ⚙ button at its bottom right, or right-click its tab), and what you read is also what a code quotes, what an export writes and what the AI is sent. Per line: leave it empty and that line stays as it was spoken. Optional.</td></tr>
                     <tr><td><code>codes</code></td><td>Pre-existing codes, <code>;</code>-separated, or empty. Loaded as segments. Optional.</td></tr>
                   </tbody>
                 </table>

@@ -28,6 +28,13 @@
 .ctxmenu button.danger:not(.btn) svg { color:inherit; }
 .ctxmenu button.danger:not(.btn) { color:#e0554f; }
 .ctxmenu button.danger:not(.btn):hover { background:#e0554f; color:#fff; }
+/* a labelled group inside a context menu — the shape the Codebook's Options
+   menu already uses, so a menu that holds two unlike things says which is which */
+.ctxmenu .ctxgrp { font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); font-weight:700; margin:8px 8px 3px; padding-top:7px;
+  border-top:1px solid var(--line); }
+/* the chosen row of a group: the tick carries it, the weight seconds it */
+.ctxmenu button:not(.btn).on { font-weight:600; }
 .ctxmenu .ctxdiv { height:1px; background:var(--line); margin:4px 2px; }
 .ctxmenu .ctxlist { max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:1px; }
 .ctxmenu .ctxlist .swatch { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
