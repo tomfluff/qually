@@ -539,7 +539,13 @@ export interface State {
   editLine: (pid: string, id: number, text: string, field?: "text" | "en") => void;
   /** Find-and-replace across ONE transcript: every occurrence in every line,
       as one undoable gesture. Returns how many occurrences went. */
-  replaceInTranscript: (pid: string, find: string, repl: string, only?: LineScope) => number;
+  /** `field` is which text the sweep rewrites — the spoken lines, or their
+      translations. It follows the reading for the same reason editLine does:
+      replacing a name for anonymisation while reading English used to rewrite
+      the SOURCE invisibly and leave the name standing in the translation that
+      the excerpts, the exports and the AI payloads all carry. */
+  replaceInTranscript: (pid: string, find: string, repl: string, only?: LineScope,
+    field?: "text" | "en") => number;
   exportEdits: () => string;
   setAi: (patch: Partial<Ai>) => void;
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
@@ -1662,7 +1668,7 @@ export const useStore = create<State>()(
       // editing back to the original clears the flag. Line ids never change, so
       // segments are untouched. On the undo stack as a targeted line entry (see
       // lineEntry) — `orig` stays the RECORD of the change, Ctrl+Z steps it back.
-      replaceInTranscript: (pid, find, repl, only) => {
+      replaceInTranscript: (pid, find, repl, only, field = "text") => {
         const s = get();
         const t = s.transcripts[pid];
         // the sweep is bounded by the SAME filter the bar was counting with:
@@ -1675,18 +1681,25 @@ export const useStore = create<State>()(
         if (!t || !find) return 0;
         let n = 0;
         const entries: LineSnap[] = [];
+        const origKey = field === "en" ? "enOrig" : "orig";
         const lines = t.lines.map((l) => {
           if (!inScope(l)) return l;
-          const { text, n: k } = replaceAllIn(l.text, find, repl);
-          if (!k || text === l.text) return l;
+          const before = field === "en" ? l.en ?? "" : l.text;
+          // an untranslated line has no translation to sweep; leaving the source
+          // alone is the point — the reader is not looking at it
+          if (!before) return l;
+          const { text, n: k } = replaceAllIn(before, find, repl);
+          if (!k || text === before) return l;
           n += k;
           entries.push(lineEntry(s, pid, l.id)!);
           // provenance exactly as a hand edit leaves it (see editLine): the
           // words as transcribed stay recoverable on every line touched, and a
           // replace that lands back on the original text drops the mark
-          const orig = l.orig ?? l.text;
-          const { orig: _drop, ...rest } = l;
-          return orig === text ? { ...rest, text } : { ...rest, orig, text };
+          const orig = l[origKey] ?? before;
+          const { [origKey]: _drop, ...rest } = l;
+          return !orig || orig === text
+            ? { ...rest, [field]: text }
+            : { ...rest, [origKey]: orig, [field]: text };
         });
         if (!n) return 0;
         // ONE entry for the whole sweep — the same rule every multi-item

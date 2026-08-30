@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { linesOf, useStore } from "../state/store";
 import { findMatches, replaceOccurrence, scopeFilter, parseRange } from "../search";
 import { Icon } from "./Icon";
 import { announce } from "../announce";
@@ -10,6 +10,11 @@ import { searchHighlight } from "./SearchHighlight";
 export function SearchBar() {
   const search = useStore((s) => s.search);
   const transcripts = useStore((s) => s.transcripts);
+  // Search reads what is on screen. Counting the stored lines while the
+  // transcript highlights the resolved ones made the tally and the highlights
+  // disagree under an English reading — and Replace All swept text nobody was
+  // looking at (see replaceInTranscript).
+  const lang = useStore((s) => s.ui.lang);
   const active = useStore((s) => s.active);
   const setSearch = useStore((s) => s.setSearch);
   const closeSearch = useStore((s) => s.closeSearch);
@@ -78,16 +83,15 @@ export function SearchBar() {
   // "This tab": flat, ordered list of every occurrence
   const tabMatches = useMemo(() => {
     if (scope !== "tab" || !query) return [] as { line: number; occ: number }[];
-    const t = transcripts[active];
-    if (!t) return [];
+    if (!transcripts[active]) return [];
     const out: { line: number; occ: number }[] = [];
-    for (const l of t.lines) {
+    for (const l of linesOf(transcripts, lang, active)) {
       if (!inScope(l)) continue;
       const n = findMatches(l.text, query).length;
       for (let o = 0; o < n; o++) out.push({ line: l.id, occ: o });
     }
     return out;
-  }, [transcripts, active, query, scope, inScope]);
+  }, [transcripts, lang, active, query, scope, inScope]);
 
   // Back to the first hit when the QUERY changes — not when the match list
   // merely re-derives. It re-derives on every replace (the transcript changed),
@@ -108,9 +112,9 @@ export function SearchBar() {
   const allResults = useMemo(() => {
     if (scope !== "all" || !query) return [] as { pid: string; hits: { line: number; text: string; count: number }[]; total: number }[];
     const groups = [];
-    for (const [pid, t] of Object.entries(transcripts)) {
+    for (const pid of Object.keys(transcripts)) {
       const hits = [];
-      for (const l of t.lines) {
+      for (const l of linesOf(transcripts, lang, pid)) {
         if (!inScope(l)) continue;
         const c = findMatches(l.text, query).length;
         if (c) hits.push({ line: l.id, text: l.text, count: c });
@@ -131,8 +135,7 @@ export function SearchBar() {
   // there rewriting its own output forever.
   const replaceOne = () => {
     const cur = tabMatches[at];
-    const t = transcripts[active];
-    const line = cur && t?.lines.find((l) => l.id === cur.line);
+    const line = cur && linesOf(transcripts, lang, active).find((l) => l.id === cur.line);
     // !repl.trim(): the Replace button disables on an empty replacement, but
     // Enter in the field reaches here directly — without the same guard it
     // would replace the occurrence with nothing, i.e. silently DELETE it
@@ -143,7 +146,7 @@ export function SearchBar() {
       step(1);
       return;
     }
-    editLine(active, line.id, next);
+    editLine(active, line.id, next, lang === "en" ? "en" : "text");
     // the replacement can CONTAIN the query ("system" → "[system A]"): those
     // new occurrences take the replaced one's place in the list, so step past
     // them or Replace would sit here rewriting its own output
@@ -166,7 +169,11 @@ export function SearchBar() {
     // the replacement containing the query would otherwise be rewritten by its
     // own sweep — one pass over the ORIGINAL text is what the store does, so
     // this is safe, but say the count plainly
-    const n = replaceInTranscript(active, query, replText, { speaker, range });
+    // the text ON SCREEN, like the line editor: a replace under an English
+    // reading rewrites the translations, which is what the reader is looking at
+    // and what their excerpts quote
+    const n = replaceInTranscript(active, query, replText, { speaker, range },
+      lang === "en" ? "en" : "text");
     // same focus rescue as replaceOne: the sweep usually empties the list
     if (n) replRef.current?.focus();
     announce(n ? `Replaced ${n} occurrence${n === 1 ? "" : "s"} in ${active}${filtered ? ", within the filter" : ""}` : "Nothing to replace");

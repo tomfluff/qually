@@ -74,7 +74,10 @@ export function viewLines<T extends TextLine>(lines: readonly T[], lang: Lang): 
     // English made it diff two different languages. Each reading gets its own.
     ? lines.map((l) => {
       const { orig, enOrig, ...rest } = l as TextLine & { orig?: string; enOrig?: string };
-      const was = lang === "en" ? enOrig : orig;
+      // the original of the text actually on screen: an untranslated line shows
+      // its source under an English reading, so a correction to that source is
+      // still a correction to what is being read
+      const was = lang === "en" && l.en?.trim() ? enOrig : orig;
       return { ...(rest as T), ...(was === undefined ? {} : { orig: was }),
         text: lineText(l, lang), src: l.text };
     })

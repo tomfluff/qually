@@ -103,7 +103,13 @@ export function buildCorpus(s: State, scope: AskScope): AskCorpus {
       const lineOf = new Map<number, number>();
       for (const [lid, ms] of placed.before) for (const mk of ms) lineOf.set(mk.mid, lid);
       const last = lines[lines.length - 1]?.id;
-      if (last !== undefined) for (const mk of placed.tail) lineOf.set(mk.mid, last);
+      // Tail events happened AFTER the transcript ends. They are pinned to the
+      // last line so a citation has somewhere to land, but that is a place to
+      // click, not a claim about where in the session they happened — tagging
+      // them with the last line's sections would read "the participant left
+      // during the final task".
+      const tail = new Set<number>();
+      if (last !== undefined) for (const mk of placed.tail) { lineOf.set(mk.mid, last); tail.add(mk.mid); }
       // two events can land on the same second, which would share a ref for the
       // same reason — they are one moment, so they read as one entry
       const evByRef = new Map<string, AskEvent>();
@@ -123,7 +129,7 @@ export function buildCorpus(s: State, scope: AskScope): AskCorpus {
         // an event is anchored to a line, so it sits in the same sections that
         // line does — the prompt promises both excerpts AND events carry these
         evByRef.set(ref, { ref, pid, line, time, type, text: m.label,
-          sections: sectionIdsAt(out.sections, pid, line) });
+          sections: tail.has(m.mid) ? [] : sectionIdsAt(out.sections, pid, line) });
       }
       for (const x of evByRef.values()) {
         out.events.push(x);

@@ -88,4 +88,30 @@ describe("which text is the text", () => {
       expect(viewTranscripts(t, "en")).toBe(viewTranscripts(t, "en"));
     });
   });
+
+  // The ✱ diffs `orig` against `text`, so the original has to belong to the
+  // text on screen. A translated line read in English shows its translation and
+  // owes the translation's original; an UNTRANSLATED one read in English shows
+  // its source, so a correction to that source is still a correction to what is
+  // being read and keeps its mark.
+  it("carries the original of the text actually being shown", () => {
+    const rows = [
+      { id: 1, text: "\u306f\u3044", en: "Yes.", orig: "\u306f\u3044\uff01", enOrig: "Yeah." },
+      { id: 2, text: "\u3055\u3042", orig: "\u3055\u3042\uff1f" },   // no translation
+    ];
+    const src = viewLines(rows, "source") as typeof rows;
+    expect(src[0].orig).toBe("\u306f\u3044\uff01");
+
+    const en = viewLines(rows, "en") as typeof rows;
+    expect(en[0].text).toBe("Yes.");
+    expect(en[0].orig).toBe("Yeah.");          // the translation's own original
+    // the untranslated line shows its source, and keeps the source's original
+    expect(en[1].text).toBe("\u3055\u3042");
+    expect(en[1].orig).toBe("\u3055\u3042\uff1f");
+  });
+
+  it("leaves no original at all where the shown text has none", () => {
+    const en = viewLines([{ id: 1, text: "a", en: "A" }], "en") as unknown as { orig?: string }[];
+    expect("orig" in en[0]).toBe(false);
+  });
 });

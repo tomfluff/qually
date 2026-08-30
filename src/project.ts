@@ -146,15 +146,25 @@ function cleanTranscripts(t: Project["transcripts"]): Project["transcripts"] {
       // a line with no id is not a line: every range, binary search and segment
       // in the project is keyed by it
       .filter((l): l is Line => !!l && Number.isFinite((l as Line).id))
+      // SPREAD first, then fix the fields this build knows. A whitelist would
+      // delete anything a newer build had written — and the version only bumps
+      // on a semantic change, so a same-version file from a slightly newer
+      // QuAlly would quietly lose its new field on a load-and-save. An unknown
+      // field is inert; a known field of the wrong type is the danger.
       .map((l) => {
-        const out: Line = { id: l.id, ts: str(l.ts) ?? "", speaker: str(l.speaker) ?? "P",
+        const out: Line = { ...l, id: l.id, ts: str(l.ts) ?? "", speaker: str(l.speaker) ?? "P",
           text: str(l.text) ?? "" };
-        // the optional four: absent where the file says something that is not text
-        const end = str(l.end)?.trim(), orig = str(l.orig), en = str(l.en), enOrig = str(l.enOrig);
-        if (end) out.end = end;
-        if (orig !== undefined) out.orig = orig;
-        if (en !== undefined) out.en = en;
-        if (enOrig !== undefined) out.enOrig = enOrig;
+        // the optional four: absent where the file says something that is not
+        // text, rather than carried through to throw inside render
+        const end = str(l.end)?.trim();
+        if (end) out.end = end; else delete out.end;
+        for (const k of ["orig", "en", "enOrig"] as const) {
+          const v = str(l[k]);
+          if (v === undefined) delete out[k]; else out[k] = v;
+        }
+        // a pre-correction translation with no translation to be the original OF
+        // would make the edit mark diff English against the source
+        if (out.en === undefined) delete out.enOrig;
         return out;
       }),
   }]));

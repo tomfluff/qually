@@ -370,6 +370,28 @@ test("a line whose fields are the wrong type loads without them, not with them",
   expect(lines[1]).toEqual({ id: 2, ts: "", speaker: "P", text: "" });
 });
 
+// The version only bumps on a semantic change, so a same-version file written by
+// a slightly newer build can carry a per-line field this one has never heard of.
+// Deleting it on load would lose it on the next save — the field is inert here,
+// the WRONG-TYPED known field is the danger.
+test("a line field this build does not know survives the round trip", () => {
+  const p = parseProject(JSON.stringify({
+    format: FORMAT, version: VERSION, savedAt: "", segments: [], codebook: {},
+    transcripts: { P: { lines: [{ id: 1, ts: "", speaker: "P", text: "hi", futureThing: 42 }] } },
+  }));
+  expect((p.transcripts.P.lines[0] as unknown as { futureThing: number }).futureThing).toBe(42);
+});
+
+// A pre-correction translation with no translation to be the original OF would
+// make the edit mark diff the English against the source.
+test("a stray enOrig with no en is dropped", () => {
+  const p = parseProject(JSON.stringify({
+    format: FORMAT, version: VERSION, savedAt: "", segments: [], codebook: {},
+    transcripts: { P: { lines: [{ id: 1, ts: "", speaker: "P", text: "hi", enOrig: "Hello" }] } },
+  }));
+  expect("enOrig" in p.transcripts.P.lines[0]).toBe(false);
+});
+
 // Undo does not cover transcripts, so a re-import that lands on top of
 // translation work destroys it for good. The guard has to see that work: a
 // CORRECTED translation says so in enOrig, and one WRITTEN where the file had

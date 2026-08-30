@@ -123,6 +123,7 @@ export function BrowseView() {
   // Code map registers the same forget-me for the same reason.
   useEffect(() => onProjectSwap(() => {
     setSelected(new Set()); setAnchor(null); setExpanded(new Set()); setSourceOpen(new Set());
+    setFocusTitle(null);   // a name from the old project must not claim focus in the new one
   }), []);
 
   const counts = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
@@ -237,6 +238,23 @@ export function BrowseView() {
   // a parked code still reads: its excerpts are untouched, and deciding to
   // bring it back means looking at them
   const chosen = [...allCodes, ...parked].filter((c) => selected.has(c));
+
+  // The survivor's title may never mount — a merge into a SET-ASIDE code (whose
+  // row is not a CodeTitle), or one the name filter is hiding. Left armed, the
+  // flag would sit there and grab focus whenever that group did finally appear,
+  // including in a different project that happened to reuse the name. So it is
+  // dropped as soon as it names nothing on screen, and the pane takes the caret
+  // rather than leaving it on <body>.
+  useEffect(() => {
+    if (!focusTitle || chosen.includes(focusTitle)) return;
+    setFocusTitle(null);
+    if (document.activeElement !== document.body) return;
+    const pane = document.querySelector<HTMLElement>(".browse-right");
+    if (!pane) return;
+    pane.tabIndex = -1;
+    pane.focus();
+    announce(`Renamed — “${focusTitle}” is not shown here`);
+  }, [focusTitle, chosen]);
 
   const changeFacets = (next: CodebookFacets) => {
     announceFacetChange.current = true;
@@ -661,7 +679,9 @@ function CodeTitle({ code, defOpen, takeFocus, onFocused, onRenamed }: {
             code moving, so it cannot be a colour a reader has to notice */}
         {collides && (
           <span className="bTitleWarn" id={warnId} role="alert">
-            “{collides}” already exists — saving MERGES this code into it.
+            “{collides}”{codebook[collides]?.parked ? " (a set-aside code)" : ""} already
+            exists — saving MERGES this code into it.
+            {codebook[collides]?.parked && " Its excerpts leave the working codebook."}
           </span>
         )}
       </span>
