@@ -284,3 +284,64 @@ test("a repair says whether it actually happened", () => {
   expect(useStore.getState().applyFix("SCAN", line.id, "\u62e1\u5927", "\u30ba\u30fc\u30e0")).toBe(true);
   expect(useStore.getState().transcripts.SCAN.lines[0].text).toContain("\u30ba\u30fc\u30e0");
 });
+
+// Reading English, the editor edits the TRANSLATION — that is the text on
+// screen, and in a study read in English it is what the excerpts quote. It used
+// to write the spoken field whatever you were reading, so the display did not
+// change (the edit looked ignored) and the record of what was said was gone.
+test("an edit under an English reading corrects the translation, not the source", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,text_en\n" +
+    "1,0:01,P,\u62e1\u5927\u3057\u307e\u3059,I zoom.\n" +
+    "2,0:05,P,\u306f\u3044,\n",
+  ], "ED.csv")]);
+  const line = () => useStore.getState().transcripts.ED.lines[0];
+
+  useStore.getState().editLine("ED", 1, "I zoom right in.", "en");
+  expect(line().en).toBe("I zoom right in.");
+  expect(line().text).toBe("\u62e1\u5927\u3057\u307e\u3059");   // untouched
+  expect(line().enOrig).toBe("I zoom.");                            // its own trail
+  expect(line().orig).toBeUndefined();                              // not the source's
+
+  // the source is still correctable, and keeps its own original
+  useStore.getState().editLine("ED", 1, "\u30ba\u30fc\u30e0\u3057\u307e\u3059", "text");
+  expect(line().orig).toBe("\u62e1\u5927\u3057\u307e\u3059");
+  expect(line().enOrig).toBe("I zoom.");   // the other trail is undisturbed
+
+  // editing back to where it started clears the mark rather than claiming a change
+  useStore.getState().editLine("ED", 1, "I zoom.", "en");
+  expect(line().enOrig).toBeUndefined();
+  expect(line().en).toBe("I zoom.");
+});
+
+// A line with NO translation, read in English, shows the spoken words — there
+// the act is writing the translation, and it must not touch the source.
+test("writing a translation for an untranslated line leaves the spoken text alone", () => {
+  useStore.getState().editLine("ED", 2, "Yes.", "en");
+  const l = useStore.getState().transcripts.ED.lines[1];
+  expect(l.en).toBe("Yes.");
+  expect(l.text).toBe("\u306f\u3044");
+  // nothing was there before, so there is no earlier translation to remember
+  expect(l.enOrig).toBeUndefined();
+});
+
+test("both kinds of correction round-trip, and the audit says which is which", async () => {
+  // correct both texts of the same line, and leave both corrections standing
+  useStore.getState().editLine("ED", 1, "I zoom right in.", "en");
+  const csv = useStore.getState().exportTranscript("ED");
+  expect(csv.split("\r\n")[0])
+    .toBe("line_id,timestamp,speaker,text,text_en,original,text_en_original");
+
+  const edits = useStore.getState().exportEdits();
+  expect(edits.split("\r\n")[0]).toBe("pid,line_id,timestamp,speaker,field,original,corrected");
+  expect(edits).toContain(",text,");      // the transcription correction
+  expect(edits).toContain(",text_en,");   // and the translation one
+
+  // and back in again, both trails intact
+  await useStore.getState().importFiles([new File([csv], "ED2.csv")]);
+  const l = useStore.getState().transcripts.ED2.lines[0];
+  expect(l).toMatchObject({
+    text: "\u30ba\u30fc\u30e0\u3057\u307e\u3059", orig: "\u62e1\u5927\u3057\u307e\u3059",
+    en: "I zoom right in.", enOrig: "I zoom.",
+  });
+});

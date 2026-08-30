@@ -64,7 +64,11 @@ export interface Answer {
 // surface uses is decided in ONE place — see lineText.ts — never re-derived.
 // `src` is never stored or exported — viewLines adds it to a RESOLVED line to
 // carry what was spoken alongside the words being shown (see lineText.ts).
-export interface Line { id: number; ts: string; speaker: string; text: string; end?: string; orig?: string; en?: string; src?: string; }
+// `orig`/`enOrig` are the pre-correction texts, one per field: correcting a
+// translation earns the same trail as correcting a transcription, because in a
+// study read in English the translation IS what the excerpts quote.
+export interface Line { id: number; ts: string; speaker: string; text: string; end?: string;
+  orig?: string; en?: string; enOrig?: string; src?: string; }
 
 /** A transcript's lines in the language the study is being read in.
     Every surface that turns lines into evidence — an excerpt, an export, an AI
@@ -529,7 +533,10 @@ export interface State {
   openSearch: () => void;
   closeSearch: () => void;
   setSearch: (patch: Partial<Search>) => void;
-  editLine: (pid: string, id: number, text: string) => void;
+  /** Correct one line. `field` says WHICH text: what was spoken, or its
+      translation — under an English reading the editor edits the translation,
+      because that is the text on screen and the one the excerpts quote. */
+  editLine: (pid: string, id: number, text: string, field?: "text" | "en") => void;
   /** Find-and-replace across ONE transcript: every occurrence in every line,
       as one undoable gesture. Returns how many occurrences went. */
   replaceInTranscript: (pid: string, find: string, repl: string, only?: LineScope) => number;
@@ -1682,20 +1689,37 @@ export const useStore = create<State>()(
         set({ transcripts: { ...get().transcripts, [pid]: { lines } } });
         return n;
       },
-      editLine: (pid, id, text) => {
+      // `field` is which text this edits: what was SPOKEN, or its translation.
+      // One function rather than two, because everything around the write — the
+      // no-op check, the undo entry, the first-original rule, dropping the
+      // original when you edit back to it — is the same question asked of a
+      // different field, and two copies of it would drift.
+      editLine: (pid, id, text, field = "text") => {
         const s = get();
         const t = s.transcripts[pid];
         const cur = t?.lines.find((l) => l.id === id);
-        if (!t || !cur || cur.text === text) return; // no change, no undo entry
+        const was = field === "en" ? cur?.en ?? "" : cur?.text;
+        if (!t || !cur || was === text) return; // no change, no undo entry
         const entry = lineEntry(s, pid, id)!;
         const stack = [...s.undoStack, entry];
         if (stack.length > UNDO_CAP) stack.shift();
         set({ undoStack: stack, redoStack: [], selRun: false }); // same contract as pushUndo
+        const origKey = field === "en" ? "enOrig" : "orig";
         const lines = t.lines.map((l) => {
-          if (l.id !== id || l.text === text) return l;
-          const orig = l.orig ?? l.text;
-          const { orig: _drop, ...rest } = l;
-          return orig === text ? { ...rest, text } : { ...rest, orig, text };
+          if (l.id !== id) return l;
+          const before = field === "en" ? l.en ?? "" : l.text;
+          if (before === text) return l;
+          // the FIRST pre-edit text is the original; later edits keep it
+          const orig = l[origKey] ?? before;
+          const { [origKey]: _drop, ...rest } = l;
+          // No original when there was nothing there: filling an empty field is
+          // writing, not correcting, and recording "" as the previous text would
+          // put a ✱ on a line that changed nothing and an empty column in the
+          // audit. Edited back to where it started drops the mark for the same
+          // reason — there is no longer a difference to report.
+          return !orig || orig === text
+            ? { ...rest, [field]: text }
+            : { ...rest, [origKey]: orig, [field]: text };
         });
         set({ transcripts: { ...get().transcripts, [pid]: { lines } } });
       },
@@ -1837,7 +1861,8 @@ export const useStore = create<State>()(
         if (!t) return "";
         const rows = t.lines.map((l) => ({
           line_id: String(l.id), timestamp: l.ts, end_timestamp: l.end ?? "",
-          speaker: l.speaker, text: l.text, text_en: l.en ?? "", original: l.orig ?? "",
+          speaker: l.speaker, text: l.text, text_en: l.en ?? "",
+          original: l.orig ?? "", text_en_original: l.enOrig ?? "",
         }));
         // Each optional column earns its place only when the data has one.
         // text_en is written BESIDE text, never instead of it: an export is the
@@ -1847,7 +1872,10 @@ export const useStore = create<State>()(
           ...(t.lines.some((l) => l.end) ? ["end_timestamp"] : []),
           "speaker", "text",
           ...(t.lines.some((l) => l.en) ? ["text_en"] : []),
-          "original"];
+          "original",
+          // a corrected translation keeps its own pre-correction text, for the
+          // same reason a corrected transcription does
+          ...(t.lines.some((l) => l.enOrig) ? ["text_en_original"] : [])];
         return toCSV(rows, cols);
       },
 
@@ -2120,11 +2148,20 @@ export const useStore = create<State>()(
       exportEdits: () => {
         const s = get();
         const rows: Record<string, string>[] = [];
+        // Both kinds of correction, in one audit: `field` says which text was
+        // changed. A translation correction is the same act on the same line and
+        // belongs in the same file — in a study read in English it is also the
+        // text the excerpts quote.
         for (const [pid, t] of Object.entries(s.transcripts))
-          for (const l of t.lines)
+          for (const l of t.lines) {
             if (l.orig !== undefined)
-              rows.push({ pid, line_id: String(l.id), timestamp: l.ts, speaker: l.speaker, original: l.orig, corrected: l.text });
-        return toCSV(rows, ["pid", "line_id", "timestamp", "speaker", "original", "corrected"]);
+              rows.push({ pid, line_id: String(l.id), timestamp: l.ts, speaker: l.speaker,
+                field: "text", original: l.orig, corrected: l.text });
+            if (l.enOrig !== undefined)
+              rows.push({ pid, line_id: String(l.id), timestamp: l.ts, speaker: l.speaker,
+                field: "text_en", original: l.enOrig, corrected: l.en ?? "" });
+          }
+        return toCSV(rows, ["pid", "line_id", "timestamp", "speaker", "field", "original", "corrected"]);
       },
 
       // These three mutate snapshotted state without an undo entry (notes are per-
@@ -3134,6 +3171,7 @@ function rowsToLines(rows: Record<string, string>[]): Line[] {
       // back, a round-trip through CSV laundered the correction into the source
       // text and lost the ✱ diff
       if (r.original?.trim() && r.original !== l.text) l.orig = r.original;
+      if (r.text_en_original?.trim() && r.text_en_original !== l.en) l.enOrig = r.text_en_original;
       return l;
     })
     .filter((l) => Number.isFinite(l.id))

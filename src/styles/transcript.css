@@ -116,6 +116,9 @@
   background:var(--bg); border:1px solid var(--line); border-radius:10px; color:var(--muted);
   cursor:pointer; box-shadow:0 8px 26px rgba(0,0,0,.28); }
 .focustoggle:hover { color:var(--fg); border-color:var(--accent); }
+/* which text the line editor is editing — only shown when it is NOT the spoken
+   line, because that is the case a reader could otherwise mistake */
+.editbar .editWhat { color:var(--accent); margin-right:.5em; }
 .focustoggle { position:relative; }
 /* "something in here is not the plain reading of the file" — the Codebook's
    Options button answers the same question the same way */

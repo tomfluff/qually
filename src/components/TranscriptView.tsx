@@ -1825,24 +1825,17 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
           <Fragment key={l.id}>
             {k > 0 && " "}
             {editingId === l.id ? (
-              <LineEditor line={l} nextTs={nextTsOf(l.id)} onDone={onEditEnd} />
+              <LineEditor line={l} nextTs={nextTsOf(l.id)} onDone={onEditEnd}
+                field={readingTranslated ? "en" : "text"} />
             ) : (
               // no title= on this span: a native tip on every line is noise while reading,
               // and it would fire behind the custom tooltips on the spans inside it
-              // Correcting a TRANSLATION is not correcting a transcript, and
-              // editLine writes the spoken text: under an English reading the
-              // editor would have saved the translation over what was said,
-              // leaving the display unchanged (so the edit looked ignored)
-              // while the evidence was gone. Reading the source is the way in.
-              // the no-title rule above holds for READING; this tip exists only
-              // in the one mode where double-click does nothing, so it is an
-              // explanation of a refusal rather than noise on every line
-              <span title={readingTranslated ? "Switch to Source to correct the transcript" : undefined}
-                onDoubleClick={(e) => {
-                  e.preventDefault();
-                  if (readingTranslated) { announce("Switch to Source to correct the transcript"); return; }
-                  onEditStart(l.id);
-                }}>
+              // The editor edits the text ON SCREEN — the translation under an
+              // English reading, the spoken line under the source. It used to
+              // write the spoken field whatever you were reading, which put the
+              // translation where the words were and left the display unchanged,
+              // so the edit looked ignored while the record was gone.
+              <span onDoubleClick={(e) => { e.preventDefault(); onEditStart(l.id); }}>
                 {searchQuery && inSearch(l)
                   ? searchHighlight(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
                   : flagsByLine.has(l.id)
@@ -2031,8 +2024,18 @@ function loopDur(ts: string, nextTs: string | null): string {
   const win = loopWindow(ts, nextTs);
   return win === null ? "" : `${Math.round(win.e - win.s)}s`;
 }
-function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | null; onDone: () => void }) {
-  const [value, setValue] = useState(line.text);
+function LineEditor({ line, nextTs, onDone, field = "text" }: {
+  line: Line; nextTs: string | null; onDone: () => void;
+  /** which text this is correcting — the spoken line, or its translation */
+  field?: "text" | "en";
+}) {
+  // A translated line seeds with its translation, which is also what is on
+  // screen. A line with NO translation, read in English, shows the source — and
+  // there the act is WRITING the translation, not correcting the source, so the
+  // field starts empty with the spoken words as its placeholder rather than
+  // seeding them and inviting a translation identical to the original.
+  const writing = field === "en" && !line.en?.trim();
+  const [value, setValue] = useState(writing ? "" : line.text);
   const sidebarFs = useStore((s) => s.ui.sidebarFontSize); // the edit bar is chrome — sidebar-sized
   const loopSpeed = useStore((s) => s.ui.loopSpeed);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -2074,13 +2077,20 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
 
   const save = (text: string) => {
     const t = text.trim();
-    if (t) useStore.getState().editLine(pid.current, line.id, t);
+    if (t) useStore.getState().editLine(pid.current, line.id, t, field);
     onDone();
   };
 
   return (
     <span className="lineEdit">
-      <textarea ref={taRef} rows={1} value={value} aria-label={`Correct line ${line.id}`}
+      {/* the label says WHICH text is being edited: the same box over the same
+          line means two different things depending on the reading, and a
+          screen-reader user has nothing else to tell them apart */}
+      <textarea ref={taRef} rows={1} value={value}
+        aria-label={field === "en"
+          ? (writing ? `Write the English for line ${line.id}` : `Correct the English of line ${line.id}`)
+          : `Correct line ${line.id}`}
+        placeholder={writing ? line.text : undefined}
         onChange={(e) => { setValue(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight}px`; }}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); save(value); }
@@ -2088,6 +2098,7 @@ function LineEditor({ line, nextTs, onDone }: { line: Line; nextTs: string | nul
         }}
         onBlur={() => save(value)} />
       <span className="editbar" style={{ fontSize: sidebarFs }}>
+        {field === "en" && <b className="editWhat">{writing ? "new English" : "English"}</b>}
         <kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel
         {hasVideo() && (
           <>

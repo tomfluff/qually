@@ -31,8 +31,12 @@ export function ExportMenu() {
   const ref = useRef<HTMLDivElement>(null);
   const tabs = useStore((s) => s.tabs);
   const hasDefault = useStore((s) => s.segments.some((x) => !x.proposedBy.trim() || x.proposedBy === "(default)"));
+  // one row per CORRECTION, not per line: a line whose transcription and
+  // translation were both corrected is two rows in the file, and a count that
+  // said one would not match what the file holds
   const editCount = useStore((s) => Object.values(s.transcripts)
-    .reduce((n, t) => n + t.lines.filter((l) => l.orig !== undefined).length, 0));
+    .reduce((n, t) => n + t.lines.reduce((m, l) =>
+      m + (l.orig !== undefined ? 1 : 0) + (l.enOrig !== undefined ? 1 : 0), 0), 0));
   const aiCalls = useStore((s) => s.aiLog.length);
   const decisions = useStore((s) => s.ledger.length);
   const answerCount = useStore((s) => s.answers.length);
@@ -125,7 +129,7 @@ export function ExportMenu() {
     const doc: Record<string, string> = {
       "coded-segments.csv": "your coded segments, with computed excerpts",
       "codebook.csv": "codes: color, definition, status",
-      "transcript-edits.csv": "every transcription correction (original vs corrected)",
+      "transcript-edits.csv": "every correction to a line, transcription or translation (field, original vs corrected)",
       "events.csv": "session events and field notes, as loaded (with your edits)",
       "ai-observations.csv": "instances the AI marked for review (not codes)",
       "ai-provenance.csv": "every AI request made: model, lines sent, cost",
@@ -198,7 +202,7 @@ it round-trips everything, including corrections and AI observations.
           {item("All as CSVs (.zip)", "The whole bundle as spreadsheets, for a pipeline or a co-author.", doBundle)}
           {item("Coded segments (.csv)", "Segments with computed excerpts.", withBase((b) => gated(() => { saveText(s().exportCSV(), `${b}-coded-segments.csv`); setOpen(false); })()))}
           {item("Codebook (.csv)", "Codes with colors, definitions, status.", withBase((b) => { saveText(s().exportCodebook(), `${b}-codebook.csv`); setOpen(false); }))}
-          {editCount > 0 && item(`Transcript edits (.csv) · ${editCount}`, "Every correction: original vs corrected.",
+          {editCount > 0 && item(`Transcript edits (.csv) · ${editCount}`, "Every correction to a line — transcription or translation.",
             withBase((b) => { saveText(s().exportEdits(), `${b}-transcript-edits.csv`); setOpen(false); }))}
           {eventCount > 0 && item(`Session events (.csv) · ${eventCount}`, "Markers and field notes, with your edits, in the columns you loaded.",
             withBase((b) => { saveText(s().exportMarkers(), `${b}-events.csv`); setOpen(false); }))}

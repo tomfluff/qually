@@ -69,7 +69,15 @@ export function viewLines<T extends TextLine>(lines: readonly T[], lang: Lang): 
   // is a fact about the recording and not about a display switch; and it lets a
   // surface rebuild the source excerpt without re-indexing the stored array.
   const out = hasTranslation(lines)
-    ? lines.map((l) => ({ ...l, text: lineText(l, lang), src: l.text }))
+    // `orig` travels with the text it belongs to: the ✱ mark diffs orig against
+    // text, and carrying the SOURCE's pre-correction text onto a line showing
+    // English made it diff two different languages. Each reading gets its own.
+    ? lines.map((l) => {
+      const { orig, enOrig, ...rest } = l as TextLine & { orig?: string; enOrig?: string };
+      const was = lang === "en" ? enOrig : orig;
+      return { ...(rest as T), ...(was === undefined ? {} : { orig: was }),
+        text: lineText(l, lang), src: l.text };
+    })
     : lines;
   byLang.set(lang, out);
   return out;
