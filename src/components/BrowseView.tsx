@@ -405,7 +405,15 @@ export function BrowseView() {
             return (
               <div key={code} className="bGroup">
                 <h2 className="bTitle">
-                  <span className="swatch" style={{ background: codebook[code].color }} />{code}
+                  <CodeTitle code={code} onRenamed={(to) => {
+                    // the selection holds NAMES, and the old one has just stopped
+                    // existing — without this the group the researcher was reading
+                    // vanishes the moment they rename it
+                    setSelected((prev) => {
+                      const n = new Set(prev); n.delete(code); n.add(to); return n;
+                    });
+                    setAnchor(to);
+                  }} />
                 </h2>
                 {/* the definition (or its absence) is always visible under the
                     title, and edits in place — the excerpts are right below, so
@@ -547,6 +555,75 @@ export function BrowseView() {
       {groundOpen && <GroundModal onClose={() => setGroundOpen(false)} />}
       {describeOpen && <DescribeModal initial={chosen.length ? chosen : undefined} onClose={() => setDescribeOpen(false)} />}
     </div>
+  );
+}
+
+// The selected code's own name and colour, editable where they are read. The
+// codebook's right-click menu can do both, but a researcher looking at a code's
+// excerpts and deciding its name is wrong is already pointing at the name — and
+// on the Codebook that menu is a right-click away on the OTHER pane's list.
+//
+// The name follows DefLine's contract exactly, one line below it: a real
+// control with a keyboard route in, not a div with a double-click. F2 as well
+// as Enter, because that is the rename key everywhere else a list is edited.
+function CodeTitle({ code, onRenamed }: { code: string; onRenamed: (to: string) => void }) {
+  const color = useStore((s) => s.codebook[code]?.color) ?? "#888888";
+  const codebook = useStore((s) => s.codebook);
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(code);
+  const start = () => { setV(code); setEditing(true); };
+  // renameCode MERGES into a name that already exists, which is right — two
+  // names for one concept is what a merge is — but it moves every excerpt and
+  // it is not what a typo means to do. So the collision is said BEFORE the key
+  // that commits it, not discovered afterwards in the ledger.
+  const collides = useMemo(() => {
+    const t = v.trim().toLowerCase();
+    return t && t !== code.toLowerCase()
+      ? Object.keys(codebook).find((c) => c.toLowerCase() === t && c !== code) ?? ""
+      : "";
+  }, [v, code, codebook]);
+  const save = () => {
+    const t = v.trim();
+    setEditing(false);
+    if (!t || t === code) return;
+    useStore.getState().renameCode(code, t);
+    announce(collides ? `Merged ${code} into ${collides}` : `Renamed to ${t}`);
+    onRenamed(collides || t);
+  };
+
+  if (editing) {
+    return (
+      <span className="bTitleEdit">
+        <input autoFocus value={v} aria-label={`Rename ${code}`}
+          onChange={(e) => setV(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); save(); }
+            else if (e.key === "Escape") { e.stopPropagation(); setEditing(false); }
+          }} />
+        {collides && (
+          <span className="bTitleWarn">
+            “{collides}” already exists — saving MERGES this code into it.
+          </span>
+        )}
+      </span>
+    );
+  }
+  return (
+    <>
+      {/* the swatch is a real button: picking a colour is an ordinary action, so
+          one click is right — unlike the name, where one click would fire while
+          you were only pointing at it */}
+      <button className="swatch swatchBtn" style={{ background: color }}
+        aria-label={`Colour for ${code}`} title="Pick this code's colour"
+        onClick={(e) => openColorPicker(color, (c) => useStore.getState().setColor(code, c),
+          e.currentTarget)} />
+      <span className="bTitleName" role="button" tabIndex={0} onDoubleClick={start}
+        aria-label={`Rename ${code}`}
+        title="Double-click or press Enter to rename this code"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " " || e.key === "F2") { e.preventDefault(); start(); }
+        }}>{code}</span>
+    </>
   );
 }
 

@@ -29,6 +29,23 @@
 .bGroup { margin-bottom:22px; }
 .bTitle { display:flex; align-items:center; gap:8px; margin:0 0 6px; line-height:1; }
 .bTitle .swatch { width:.9em; height:.9em; border-radius:.3em; flex-shrink:0; align-self:center; }
+/* the swatch is a control now — a real button, so it gets a focus ring and a
+   pointer, and keeps the exact box the static swatch had */
+.bTitle .swatchBtn { border:none; padding:0; cursor:pointer; }
+.bTitle .swatchBtn:hover { outline:2px solid var(--accent); outline-offset:2px; }
+.bTitle .swatchBtn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+/* the name: no chrome until you point at it, so the heading still reads as a
+   heading — the affordance is the ring and the tooltip, as on the definition
+   line below it */
+.bTitleName { border-radius:6px; padding:0 4px; margin-left:-4px; cursor:text; }
+.bTitleName:hover { background:var(--sel); }
+.bTitleName:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.bTitleEdit { display:flex; flex-direction:column; gap:4px; flex:1; min-width:0; }
+.bTitleEdit input { font:inherit; width:100%; padding:2px 6px; border:1px solid var(--accent);
+  border-radius:6px; background:var(--bg); color:var(--fg); }
+/* a rename that lands on an existing name is a MERGE — said before the key that
+   commits it, in the app's warning ink rather than as a quiet aside */
+.bTitleWarn { font-size:.62em; font-weight:400; line-height:1.4; color:#e0554f; }
 .bDef { color:var(--muted); font-size:.85em; line-height:1.4; margin-bottom:8px; }
 /* The Assist worklists' options bar: a bordered, filled strip that separates the
    list's own controls from the cards under them. Its parts are different heights
