@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 // The Codebook tab: go over your coding. Codes on the left, their excerpts on the
 // right. The AI's observations moved out to the Assist tab; this view is yours.
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { linesOf, useStore, liveCodes, parkedCodes, clampEventHeight, type Segment } from "../state/store";
 import { stretchesAt, stretchColorOf } from "../stretches";
 import { norm } from "../contract/segments";
@@ -101,6 +101,16 @@ export function BrowseView() {
   // which excerpts are showing their source text — same lifetime and the same
   // reasoning as `expanded` above: view state, reset when a project is swapped
   const [sourceOpen, setSourceOpen] = useState<Set<number>>(new Set());
+  // whose definition is being written right now. A rename changes the group's
+  // KEY, which unmounts it — and an unsaved definition lives in that component's
+  // own state, so renaming would throw the draft away with no way back. The
+  // Definitions panel already tracks this for the same reason.
+  const [defEditing, setDefEditing] = useState<string | null>(null);
+  // A rename changes the group's key, so the title that was focused unmounts and
+  // its own restore cannot run — the caret lands on <body>. This names the title
+  // that should take focus when it mounts: the SURVIVOR, which after a merge is
+  // a different code entirely.
+  const [focusTitle, setFocusTitle] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
   const [recolor, setRecolor] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => { Object.assign(remembered, { selected, anchor, filter, showRejected, facets }); },
@@ -405,7 +415,9 @@ export function BrowseView() {
             return (
               <div key={code} className="bGroup">
                 <h2 className="bTitle">
-                  <CodeTitle code={code} onRenamed={(to) => {
+                  <CodeTitle code={code} defOpen={defEditing === code}
+                    takeFocus={focusTitle === code} onFocused={() => setFocusTitle(null)}
+                    onRenamed={(to) => {
                     // the selection holds NAMES, and the old one has just stopped
                     // existing — without this the group the researcher was reading
                     // vanishes the moment they rename it
@@ -413,12 +425,14 @@ export function BrowseView() {
                       const n = new Set(prev); n.delete(code); n.add(to); return n;
                     });
                     setAnchor(to);
+                    setFocusTitle(to);
                   }} />
                 </h2>
                 {/* the definition (or its absence) is always visible under the
                     title, and edits in place — the excerpts are right below, so
                     there's nothing a dialog could add */}
-                <DefLine code={code} className="bDef" />
+                <DefLine code={code} className="bDef"
+                  onEditing={(on) => setDefEditing((prev) => (on ? code : prev === code ? null : prev))} />
                 {segs.length === 0 && <div className="bDef">
                   {excerptFacetsOn && eligibleSegs.length > 0
                     ? "All excerpts were filtered out."
@@ -566,28 +580,69 @@ export function BrowseView() {
 // The name follows DefLine's contract exactly, one line below it: a real
 // control with a keyboard route in, not a div with a double-click. F2 as well
 // as Enter, because that is the rename key everywhere else a list is edited.
-function CodeTitle({ code, onRenamed }: { code: string; onRenamed: (to: string) => void }) {
+function CodeTitle({ code, defOpen, takeFocus, onFocused, onRenamed }: {
+  code: string;
+  /** a definition is being written below: renaming would unmount the group and
+      take the unsaved draft with it, so the name waits */
+  defOpen?: boolean;
+  /** this title is where the caret belongs — it was just renamed into being */
+  takeFocus?: boolean;
+  onFocused?: () => void;
+  onRenamed: (to: string) => void;
+}) {
   const color = useStore((s) => s.codebook[code]?.color) ?? "#888888";
   const codebook = useStore((s) => s.codebook);
   const [editing, setEditing] = useState(false);
   const [v, setV] = useState(code);
-  const start = () => { setV(code); setEditing(true); };
+  // Leaving the editor — cancelled, unchanged, or renamed — used to drop the
+  // caret on <body>: the input unmounts and nothing claims focus. In an app
+  // built for a reader who navigates by keyboard that is losing their place.
+  const nameRef = useRef<HTMLSpanElement>(null);
+  const backToName = useRef(false);
+  useEffect(() => {
+    if (editing || !backToName.current) return;
+    backToName.current = false;
+    // only when nothing else has taken it — a click elsewhere is the user saying
+    // where they want to be (the same rule useMenuFocus follows)
+    if (document.activeElement === document.body) nameRef.current?.focus();
+  }, [editing]);
+  const warnId = useId();
+  // the rename that created this title left the caret nowhere; claim it, once
+  useEffect(() => {
+    if (!takeFocus) return;
+    if (document.activeElement === document.body) nameRef.current?.focus();
+    onFocused?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [takeFocus]);
+  const start = () => {
+    if (defOpen) { announce("Save or cancel the definition first — renaming would discard it"); return; }
+    setV(code); setEditing(true);
+  };
+  const stop = () => { backToName.current = true; setEditing(false); };
   // renameCode MERGES into a name that already exists, which is right — two
   // names for one concept is what a merge is — but it moves every excerpt and
   // it is not what a typo means to do. So the collision is said BEFORE the key
   // that commits it, not discovered afterwards in the ledger.
+  // norm(), not a lowercase compare: the store decides a collision by the SAME
+  // rule it uses to merge, and norm also collapses runs of whitespace. Asking a
+  // narrower question missed "visual   strain" landing on "visual strain" — no
+  // warning, a merge anyway, and then a selection pointing at a name that had
+  // never existed, so the group being read simply vanished.
   const collides = useMemo(() => {
-    const t = v.trim().toLowerCase();
-    return t && t !== code.toLowerCase()
-      ? Object.keys(codebook).find((c) => c.toLowerCase() === t && c !== code) ?? ""
+    const t = norm(v);
+    return t && t !== norm(code)
+      ? Object.keys(codebook).find((c) => norm(c) === t && c !== code) ?? ""
       : "";
   }, [v, code, codebook]);
   const save = () => {
     const t = v.trim();
+    // a no-op still has to hand focus back; only a real rename moves the group
+    if (!t || t === code) { stop(); return; }
     setEditing(false);
-    if (!t || t === code) return;
     useStore.getState().renameCode(code, t);
     announce(collides ? `Merged ${code} into ${collides}` : `Renamed to ${t}`);
+    // the SURVIVOR, which is the existing spelling when this turned out to be a
+    // merge — the typed one may differ from it by case or spacing and not exist
     onRenamed(collides || t);
   };
 
@@ -595,13 +650,17 @@ function CodeTitle({ code, onRenamed }: { code: string; onRenamed: (to: string) 
     return (
       <span className="bTitleEdit">
         <input autoFocus value={v} aria-label={`Rename ${code}`}
+          aria-describedby={collides ? warnId : undefined}
           onChange={(e) => setV(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); save(); }
-            else if (e.key === "Escape") { e.stopPropagation(); setEditing(false); }
+            else if (e.key === "Escape") { e.stopPropagation(); stop(); }
           }} />
+        {/* tied to the field it warns about, and spoken when it appears: this is
+            the one thing standing between a typo and every excerpt of another
+            code moving, so it cannot be a colour a reader has to notice */}
         {collides && (
-          <span className="bTitleWarn">
+          <span className="bTitleWarn" id={warnId} role="alert">
             “{collides}” already exists — saving MERGES this code into it.
           </span>
         )}
@@ -617,9 +676,11 @@ function CodeTitle({ code, onRenamed }: { code: string; onRenamed: (to: string) 
         aria-label={`Colour for ${code}`} title="Pick this code's colour"
         onClick={(e) => openColorPicker(color, (c) => useStore.getState().setColor(code, c),
           e.currentTarget)} />
-      <span className="bTitleName" role="button" tabIndex={0} onDoubleClick={start}
+      <span className="bTitleName" ref={nameRef} role="button" tabIndex={0} onDoubleClick={start}
         aria-label={`Rename ${code}`}
-        title="Double-click or press Enter to rename this code"
+        title={defOpen
+          ? "Save or cancel the definition below before renaming"
+          : "Double-click or press Enter to rename this code"}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " " || e.key === "F2") { e.preventDefault(); start(); }
         }}>{code}</span>

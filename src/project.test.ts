@@ -345,3 +345,56 @@ test("both kinds of correction round-trip, and the audit says which is which", a
     en: "I zoom right in.", enOrig: "I zoom.",
   });
 });
+
+// A hand-edited project file can put anything on a line, and these fields do not
+// fail politely: orig/enOrig reach tinyDiff and text/en reach the excerpt rule,
+// both INSIDE render — and persist rehydrates the same value, so the white
+// screen returns every time the app opens. Filtered once, at the boundary.
+test("a line whose fields are the wrong type loads without them, not with them", () => {
+  const p = parseProject(JSON.stringify({
+    format: FORMAT, version: VERSION, savedAt: "", segments: [], codebook: {},
+    transcripts: { P: { lines: [
+      { id: 1, ts: "0:01", speaker: "P", text: "fine", orig: 7, en: {}, enOrig: [] },
+      { id: 2, ts: 5, speaker: null, text: undefined },
+      { nope: true },                       // no id at all — not a line
+    ] } },
+  }));
+  const lines = p.transcripts.P.lines;
+  expect(lines).toHaveLength(2);            // the id-less row is gone
+  expect(lines[0]).toEqual({ id: 1, ts: "0:01", speaker: "P", text: "fine" });
+  // a non-string is ABSENT rather than coerced: "7" is not a previous text
+  expect("orig" in lines[0]).toBe(false);
+  expect("en" in lines[0]).toBe(false);
+  expect("enOrig" in lines[0]).toBe(false);
+  // and the required three fall back rather than reaching render as non-strings
+  expect(lines[1]).toEqual({ id: 2, ts: "", speaker: "P", text: "" });
+});
+
+// Undo does not cover transcripts, so a re-import that lands on top of
+// translation work destroys it for good. The guard has to see that work: a
+// CORRECTED translation says so in enOrig, and one WRITTEN where the file had
+// none says nothing on the line — it is found by asking the incoming file.
+test("re-importing over translation work asks first", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,text_en\n1,0:01,P,\u306f\u3044,\n",
+  ], "RT.csv")]);
+  expect(useStore.getState().pendingImports).toHaveLength(0);
+
+  // a translation written where the file had none — nothing on the line says so
+  useStore.getState().editLine("RT", 1, "Yes.", "en");
+  expect(useStore.getState().transcripts.RT.lines[0].enOrig).toBeUndefined();
+
+  // the same file back again would silently take it away
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,text_en\n1,0:01,P,\u306f\u3044,\n",
+  ], "RT.csv")]);
+  expect(useStore.getState().pendingImports).toHaveLength(1);
+  expect(useStore.getState().transcripts.RT.lines[0].en).toBe("Yes.");  // untouched meanwhile
+  useStore.setState({ pendingImports: [] });
+
+  // a file that BRINGS the translation is not taking anything away
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,text_en\n1,0:01,P,\u306f\u3044,Yes.\n",
+  ], "RT.csv")]);
+  expect(useStore.getState().pendingImports).toHaveLength(0);
+});

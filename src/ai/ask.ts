@@ -62,7 +62,8 @@ export function renderAskPayload(q: string, c: AskCorpus, r: Redaction): string 
   if (c.events.length) {
     // type and text are both study-authored, so both go through the redactor
     parts.push("SESSION EVENTS:\n" + c.events.map((x) =>
-      `[${r.redact(x.ref)}] ${r.redact(x.type)}${x.text ? ` — ${r.redact(x.text)}` : ""}`).join("\n"));
+      `[${r.redact(x.ref)}] ${r.redact(x.type)}${x.text ? ` — ${r.redact(x.text)}` : ""}`
+      + (x.sections.length ? ` [${x.sections.join(", ")}]` : "")).join("\n"));
   }
   parts.push("QUESTION:\n" + r.redact(q.trim()));
   return parts.join("\n\n");

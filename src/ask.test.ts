@@ -254,6 +254,11 @@ test("the payload says where in the session each excerpt sits", () => {
   // the excerpt at lines 2-3 is inside both accepted sections, and says so
   const line = payload.split("\n").find((l) => l.startsWith("[P01:2-3]"))!;
   expect(line).toMatch(/\[S1, S2\]$/);
+
+  // and so do EVENTS — the prompt promises both carry them, and an events-only
+  // question ("what was observed during baseline?") is answerable only if they do
+  const ev = payload.split("\n").find((l) => l.startsWith("[P01@"));
+  expect(ev).toMatch(/\[S1, S2\]$/);
 });
 
 test("a study with no marked sections sends no structure block at all", () => {

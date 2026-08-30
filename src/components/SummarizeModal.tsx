@@ -65,7 +65,8 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
   const redactions = useMemo(() =>
     evSel.reduce((n, e) => n + red.count(e.text) + red.count(e.type), 0)
     + exSel.reduce((n, x) => n + red.count(x.excerpt) + red.count(x.ref), 0)
-    + red.count(context), [evSel, exSel, context, red]);
+    + sections.reduce((n, x) => n + red.count(x.time), 0)
+    + red.count(context), [evSel, exSel, sections, context, red]);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(2400))); // a summary runs a few hundred tokens out
   const preview = renderSummaryPayload(evSel, exSel, context, red, sections);
   const overwriting = !!summaries[pid]?.trim();
@@ -218,6 +219,9 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
                 <div className="ai-facts">
                   <span>events <b>{evSel.length}</b></span>
                   <span>excerpts <b>{exSel.length}</b></span>
+                  {/* the session's own shape goes too — counted here for the
+                      same reason everything else on this row is */}
+                  {sections.length > 0 && <span>sections <b>{sections.length}</b></span>}
                   <span>redacted <b>{redactions}</b></span>
                   <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
                   <span>≈ <b>${estCost.toFixed(4)}</b></span>

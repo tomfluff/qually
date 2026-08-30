@@ -117,8 +117,12 @@ interface ProjectStats {
 
 export function statsOf(p: Project): ProjectStats {
   const lines = Object.values(p.transcripts).reduce((n, t) => n + t.lines.length, 0);
+  // one per CORRECTION, not per line: a line whose transcription and its
+  // translation were both corrected is two, and a project holding only
+  // translation corrections used to report none at all
   const edits = Object.values(p.transcripts)
-    .reduce((n, t) => n + t.lines.filter((l) => l.orig !== undefined).length, 0);
+    .reduce((n, t) => n + t.lines.reduce((m, l) =>
+      m + (l.orig !== undefined ? 1 : 0) + (l.enOrig !== undefined ? 1 : 0), 0), 0);
   const notices = Object.values(p.aiFlags ?? {})
     .reduce((n, f) => n + f.spans.filter((s) => (s.lens ?? "transcription") !== "transcription").length, 0);
   return {
@@ -126,6 +130,34 @@ export function statsOf(p: Project): ProjectStats {
     lines, segments: p.segments.length, codes: Object.keys(p.codebook).length,
     edits, notices, events: (p.markers ?? []).length, savedAt: p.savedAt,
   };
+}
+
+// Lines are hand-editable like everything else in this file, and a value of the
+// wrong type here does not fail politely: `orig` and `enOrig` reach tinyDiff and
+// `text`/`en` reach the excerpt rule, both inside render — and persist rehydrates
+// the same value, so the white screen comes back every time the app is opened.
+// The same reasoning, and the same cure, as the markers filter below: fix it
+// once, at the boundary, rather than guarding every reader.
+const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+function cleanTranscripts(t: Project["transcripts"]): Project["transcripts"] {
+  return Object.fromEntries(Object.entries(t).map(([pid, tr]) => [pid, {
+    ...tr,
+    lines: (Array.isArray(tr?.lines) ? tr.lines : [])
+      // a line with no id is not a line: every range, binary search and segment
+      // in the project is keyed by it
+      .filter((l): l is Line => !!l && Number.isFinite((l as Line).id))
+      .map((l) => {
+        const out: Line = { id: l.id, ts: str(l.ts) ?? "", speaker: str(l.speaker) ?? "P",
+          text: str(l.text) ?? "" };
+        // the optional four: absent where the file says something that is not text
+        const end = str(l.end)?.trim(), orig = str(l.orig), en = str(l.en), enOrig = str(l.enOrig);
+        if (end) out.end = end;
+        if (orig !== undefined) out.orig = orig;
+        if (en !== undefined) out.en = en;
+        if (enOrig !== undefined) out.enOrig = enOrig;
+        return out;
+      }),
+  }]));
 }
 
 export class ProjectError extends Error {}
@@ -148,7 +180,7 @@ export function parseProject(text: string): Project {
   // tolerate fields added after v1 being absent
   return {
     format: FORMAT, version: p.version, savedAt: p.savedAt ?? "",
-    transcripts: p.transcripts, segments: p.segments, codebook: p.codebook,
+    transcripts: cleanTranscripts(p.transcripts), segments: p.segments, codebook: p.codebook,
     extSegRows: p.extSegRows ?? [],
     tabs: p.tabs ?? Object.keys(p.transcripts),
     active: p.active ?? "browse",

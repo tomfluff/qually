@@ -35,7 +35,10 @@ export function ProjectModal() {
         <div className="imp-stats">
           <div><b>{st.transcripts}</b> transcript{st.transcripts === 1 ? "" : "s"} · <b>{st.lines.toLocaleString()}</b> lines</div>
           <div><b>{st.segments}</b> coded segment{st.segments === 1 ? "" : "s"} · <b>{st.codes}</b> code{st.codes === 1 ? "" : "s"}</div>
-          {st.edits > 0 && <div><b>{st.edits}</b> transcription correction{st.edits === 1 ? "" : "s"}</div>}
+          {/* "line", not "transcription": the count now covers corrections to a
+              translation too, and naming only one of them would undercount in a
+              way the reader could not see */}
+          {st.edits > 0 && <div><b>{st.edits}</b> line correction{st.edits === 1 ? "" : "s"}</div>}
           {st.notices > 0 && <div><b>{st.notices}</b> AI observation{st.notices === 1 ? "" : "s"}</div>}
           {st.events > 0 && <div><b>{st.events}</b> session event{st.events === 1 ? "" : "s"}</div>}
         </div>

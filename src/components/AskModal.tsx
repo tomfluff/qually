@@ -57,6 +57,7 @@ export function AskModal({ question, scope, onAsked, onClose }: {
     corpus.excerpts.reduce((n, x) => n + red.count(x.text) + red.count(x.ref)
       + red.count(x.speaker ?? "") + red.count(x.time ?? ""), 0)
     + corpus.events.reduce((n, x) => n + red.count(x.text) + red.count(x.type) + red.count(x.ref), 0)
+    + corpus.sections.reduce((n, x) => n + red.count(x.pid), 0)
     + corpus.codes.reduce((n, c) => n + red.count(c.def), 0)
     + red.count(question), [corpus, red, question]);
   // an answer runs a handful of points with refs; reasoning bills at the output
@@ -154,6 +155,10 @@ export function AskModal({ question, scope, onAsked, onClose }: {
           <span>excerpts <b>{corpus.excerpts.length}</b></span>
           <span>events <b>{corpus.events.length}</b></span>
           <span>codes <b>{corpus.codes.length}</b></span>
+          {/* sections leave with the rest of it now, so the row that says what
+              leaves has to count them — a gate that lists everything BUT one
+              kind of material is describing a different request */}
+          {corpus.sections.length > 0 && <span>sections <b>{corpus.sections.length}</b></span>}
           <span>redacted <b>{redactions}</b></span>
           <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
           <span>≈ <b>${estCost.toFixed(4)}</b></span>

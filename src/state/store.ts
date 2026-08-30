@@ -1123,10 +1123,18 @@ export const useStore = create<State>()(
               // corrections (`orig`), which undo cannot bring back: ask first.
               // Stretches are line-id work too: without this, a re-import over a
               // stretch-only transcript would leave the labels on the old ids.
+              const lines = rowsToLines(rows);
+              // Translation work counts as work. A corrected translation says so
+              // in `enOrig`; a translation WRITTEN where the file had none says
+              // nothing on the line, so it is found by asking the incoming file
+              // — a line that has English here and none arriving is about to
+              // lose it, and undo does not cover transcripts.
+              const incomingEn = new Map(lines.map((l) => [l.id, l.en?.trim() ?? ""]));
+              const losesTranslation = old?.lines.some((l) =>
+                l.enOrig !== undefined || (l.en?.trim() && !incomingEn.get(l.id))) ?? false;
               if (old && (segs.length || s.stretches.some((x) => x.pid === pid)
                 || s.answers.some((a) => a.points.some((pt) => pt.refs.some((r) => r.startsWith(`${pid}:`))))
-                || old.lines.some((l) => l.orig !== undefined))) {
-                const lines = rowsToLines(rows);
+                || old.lines.some((l) => l.orig !== undefined) || losesTranslation)) {
                 const { map: _m, ...preview } = previewImport(segs, old.lines, lines,
                   s.stretches.filter((x) => x.pid === pid));
                 set({ pendingImports: [...get().pendingImports, { pid, lines, rows, preview }] });

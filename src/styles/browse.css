@@ -44,8 +44,9 @@
 .bTitleEdit input { font:inherit; width:100%; padding:2px 6px; border:1px solid var(--accent);
   border-radius:6px; background:var(--bg); color:var(--fg); }
 /* a rename that lands on an existing name is a MERGE — said before the key that
-   commits it, in the app's warning ink rather than as a quiet aside */
-.bTitleWarn { font-size:.62em; font-weight:400; line-height:1.4; color:#e0554f; }
+   commits it, in the app's own warning ink (--warn is tuned for contrast in
+   BOTH themes; the hardcoded red it replaced was ~3.8:1 at this size) */
+.bTitleWarn { font-size:.72em; font-weight:600; line-height:1.4; color:var(--warn); }
 .bDef { color:var(--muted); font-size:.85em; line-height:1.4; margin-bottom:8px; }
 /* The Assist worklists' options bar: a bordered, filled strip that separates the
    list's own controls from the cards under them. Its parts are different heights

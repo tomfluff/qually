@@ -36,7 +36,9 @@ export interface AskScope {
 interface AskExcerpt { ref: string; pid: string; line: number; codes: string[]; speaker: string; time: string; text: string;
   /** ids of the sections these lines sit in — see payloadSections */
   sections: string[] }
-interface AskEvent { ref: string; pid: string; line: number; time: string; type: string; text: string }
+interface AskEvent { ref: string; pid: string; line: number; time: string; type: string; text: string;
+  /** ids of the sections this moment falls inside — see payloadSections */
+  sections: string[] }
 export interface AskCorpus {
   excerpts: AskExcerpt[];
   events: AskEvent[];
@@ -118,7 +120,10 @@ export function buildCorpus(s: State, scope: AskScope): AskCorpus {
           if (m.label.trim()) already.text = already.text ? `${already.text}; ${m.label}` : m.label;
           continue;
         }
-        evByRef.set(ref, { ref, pid, line, time, type, text: m.label });
+        // an event is anchored to a line, so it sits in the same sections that
+        // line does — the prompt promises both excerpts AND events carry these
+        evByRef.set(ref, { ref, pid, line, time, type, text: m.label,
+          sections: sectionIdsAt(out.sections, pid, line) });
       }
       for (const x of evByRef.values()) {
         out.events.push(x);
