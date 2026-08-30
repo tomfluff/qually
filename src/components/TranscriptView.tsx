@@ -1435,7 +1435,10 @@ function StretchMenu({ x, y, start, end, after, pid, onAddEvent, onClose }: {
     onClose();
   };
   return (
-    <div ref={ref} className="ctxmenu stretchMenu" role="dialog" aria-label={`Options for ${span}`}
+    // stScroll only in menu mode: the candidate cards live here and there can be
+    // many, while the mark form's comboboxes need the menu NOT to clip them
+    <div ref={ref} className={"ctxmenu stretchMenu" + (mode === "menu" ? " stScroll nicescroll" : "")}
+      role="dialog" aria-label={`Options for ${span}`}
       onKeyDown={arrows} style={{ left: x, top: y, fontSize: fs }}>
       {/* Plain buttons: role=menuitem outside a role=menu is not a thing, and
           this surface stays a dialog on purpose (one of its modes is a form).

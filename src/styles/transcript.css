@@ -391,11 +391,17 @@
   border-radius:99px 0 0 99px; padding:9px 0; text-align:center;
   box-sizing:border-box; }
 
-/* the mark-stretch menu's little form. overflow:visible overrides the menu's
-   scroll cap so the comboboxes' anchored lists can overlay it instead of
-   being clipped into a scrollbar; the form is small, the clamp keeps it on
-   screen. */
+/* The mark-stretch menu, in two modes with opposite needs.
+   MARK mode is the little form: overflow:visible overrides the menu's scroll cap
+   so the comboboxes' anchored lists can overlay it instead of being clipped into
+   a scrollbar. The form is small and the clamp keeps it on screen.
+   MENU mode lists every mark and every unjudged proposal covering these lines,
+   and a run can propose a dozen — each one a card carrying the model's whole
+   sentence of reasoning. Left uncapped it ran off the bottom of the screen with
+   no way to reach the rest. It gets .ctxmenu's own cap back, which is safe here
+   precisely because the comboboxes belong to the other mode. */
 .stretchMenu { min-width:320px; overflow:visible; }
+.stretchMenu.stScroll { max-height:calc(100vh - 24px); overflow-y:auto; }
 .stForm { display:flex; gap:6px; padding:6px 10px 8px; }
 .stForm .stComboWrap { flex:1; min-width:0; margin-bottom:0; }
 .stForm .stComboWrap .signinput { width:100%; }
