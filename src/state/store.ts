@@ -17,7 +17,7 @@ import type { Stretch, StretchStatus } from "../stretches";
 import type { SectionProposal } from "../sections";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
-import { viewLines, type Lang } from "../lineText";
+import { hasTranslation, viewLines, type Lang } from "../lineText";
 import { forgetScroll, renameScroll } from "../scrollMemory";
 import { projectSwapped } from "../sessionReset";
 import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
@@ -538,7 +538,10 @@ export interface State {
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
   addGrounds: (recs: Record<number, GroundRec>) => void;
   dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
-  applyFix: (pid: string, id: number, quote: string, fix: string) => void;
+  /** Repairs the SPOKEN line. Returns false when the quote is not in it — the
+      mark was made against text that has since been edited, or against a
+      translation — so the caller can say what happened instead of guessing. */
+  applyFix: (pid: string, id: number, quote: string, fix: string) => boolean;
   logAiCall: (call: AiCall) => void;
   /** A run that reached OpenAI and did not come back — aborted, or failed after
       dispatch. The transcript went either way, so the log records it. */
@@ -1737,8 +1740,10 @@ export const useStore = create<State>()(
       // only the applied span removed — an edit normally invalidates every mark
       // on the line, which would strand a second error until a re-scan.
       applyFix: (pid, id, quote, fix) => {
+        // the STORED line, deliberately: a transcription repair rewrites what was
+        // said, and must never be able to write a translation over the source
         const l = get().transcripts[pid]?.lines.find((x) => x.id === id);
-        if (!l || !l.text.includes(quote)) return;
+        if (!l || !l.text.includes(quote)) return false;
         // replacer FUNCTION, not the string: in String.replace a string replacement
         // interprets $-sequences ($&, $', $`), so a fix containing them would write
         // something other than what the Apply button showed
@@ -1746,12 +1751,13 @@ export const useStore = create<State>()(
         get().editLine(pid, id, text);
         const key = `${pid}:${id}`;
         const cur = get().aiFlags[key];
-        if (!cur) return;
+        if (!cur) return true; // the line was repaired; there was simply no mark to retire
         // drop the applied span, and any span whose quote the repair broke (it can
         // never render again, but would still be read out by the line announcement)
         const spans = cur.spans.filter((s) =>
           !(spanLens(s) === "transcription" && s.quote === quote) && text.includes(s.quote));
         set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, hash: hashLine(text), spans } } });
+        return true;
       },
 
       logAiCall: (call) => set({ aiLog: [...get().aiLog, call] }),
@@ -1960,12 +1966,24 @@ export const useStore = create<State>()(
         const pids = [...s.tabs, ...Object.keys(s.transcripts).filter((p) => !s.tabs.includes(p))];
         for (const pid of pids) {
           if (!s.transcripts[pid]) continue;
-          // the same validation the transcript does, against the same text: a
-          // mark is tied to the reading it was made in, so the export has to
-          // ask in that reading or it writes nothing for a scan that ran
-          for (const l of linesOf(s.transcripts, s.ui.lang, pid)) {
+          // A mark is hashed against the text it was made on, so it validates in
+          // ONE reading. The screen shows the current reading and rightly hides
+          // the rest — but a file called "every observation" that quietly holds
+          // half of them because of a display switch is a worse answer, so this
+          // asks in both and writes each mark against the words it was made on.
+          // both readings that EXIST, not both that are currently selected: which
+          // switch happens to be thrown when the file is written is not a fact
+          // about the study, and must not decide what the file contains
+          const readings = [linesOf(s.transcripts, "source", pid),
+            ...(hasTranslation(s.transcripts[pid].lines) ? [linesOf(s.transcripts, "en", pid)] : [])];
+          const seen = new Set<string>();
+          for (const l of readings.flat()) {
             const f = s.aiFlags[`${pid}:${l.id}`];
             if (!f || f.hash !== hashLine(l.text)) continue;
+            // a line whose two readings are identical (untranslated) appears in
+            // both passes and would otherwise export its marks twice
+            if (seen.has(`${l.id}`)) continue;
+            seen.add(`${l.id}`);
             for (const sp of f.spans) {
               const lens = sp.lens ?? "transcription";
               if (lens === "transcription") continue;

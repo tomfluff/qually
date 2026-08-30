@@ -31,6 +31,9 @@
 .aipop .aipop-head strong { flex:1; }
 .aipop .aipop-quote { margin-top:8px; color:var(--muted); font-style:italic; user-select:text; }
 .aipop .aipop-reason { margin-top:4px; line-height:1.45; user-select:text; }
+/* why the repair button beside it is refusing — a disabled control that does not
+   say what would enable it is just a dead end */
+.aipop .aipop-note { display:block; margin-top:6px; color:var(--muted); font-size:.9em; line-height:1.4; }
 
 /* F1 grounding quotes in the segment popover */
 .pop-grounds { color:var(--muted); line-height:1.45; }

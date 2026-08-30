@@ -6,7 +6,7 @@
 // suggest are also where their runs START: each groups by transcript or by its own
 // axis, and a transcript row carries the sparkle that opens that run's consent gate.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useStore, liveCodes, type Segment } from "../state/store";
+import { linesOf, useStore, liveCodes, type Segment } from "../state/store";
 import { viewTranscripts } from "../lineText";
 import { earcon } from "../earcons";
 import { Resizer } from "./Resizer";
@@ -307,9 +307,11 @@ export function AssistView() {
   const notices = useMemo(() => {
     const out: Notice[] = [];
     for (const pid of allPids) {
-      const t = transcripts[pid];
-      if (!t) continue;
-      for (const l of t.lines) {
+      if (!transcripts[pid]) continue;
+      // the reading language, like the transcript: a mark is hashed against the
+      // text it was made on, so asking in the other reading showed an empty
+      // panel for marks that were on screen a tab away
+      for (const l of linesOf(transcripts, lang, pid)) {
         const f = aiFlags[`${pid}:${l.id}`];
         if (!f || !f.spans.length || f.hash !== hashLine(l.text)) continue;
         for (const sp of f.spans) {
@@ -320,7 +322,7 @@ export function AssistView() {
       }
     }
     return out;
-  }, [aiFlags, allPids, transcripts, segments]);
+  }, [aiFlags, allPids, transcripts, lang, segments]);
   const hasNotices = notices.length > 0;
 
   const observeLenses = LENSES.filter((l) => l.id !== "transcription");

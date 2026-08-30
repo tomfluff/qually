@@ -252,12 +252,35 @@ test("marks bought under an English reading are the marks that come back", async
   const csv = useStore.getState().exportNotices();
   expect(csv).toContain("really close");
   expect(csv).toContain("vague degree");
+  // written against the words the model actually saw
+  expect(csv).toContain("I zoom in really close.");
 
-  // and they are tied to the reading they were made in: back in the source the
-  // hash no longer matches, so the mark drops rather than sitting on words the
-  // model never saw
+  // and the file does not depend on which switch is thrown when it is written:
+  // a mark made in one reading is still in "every observation" from the other
   useStore.getState().setUi({ lang: "source" });
-  expect(useStore.getState().exportNotices()).not.toContain("vague degree");
+  const fromSource = useStore.getState().exportNotices();
+  expect(fromSource).toContain("vague degree");
+  expect(fromSource).toBe(csv);
 
-  useStore.getState().setUi({ lang: "source" });
+  // exactly once, though — an untranslated line is the same text in both
+  // readings, and both passes would otherwise write it out
+  expect(fromSource.split("vague degree").length - 1).toBe(1);
+});
+
+// The Apply-fix button announced "Fixed: X is now Y" whatever happened. On a
+// line being read as a translation the store refuses (a repair rewrites what
+// was SPOKEN and must never write the translation over it) — so the app was
+// telling the researcher it had changed the transcript when it had not.
+test("a repair says whether it actually happened", () => {
+  const st = useStore.getState();
+  const line = st.transcripts.SCAN.lines[0];
+  expect(line.text).toBe("\u62e1\u5927\u3057\u307e\u3059");
+
+  // a quote that is not in the spoken line — an English mark, or one an edit moved
+  expect(st.applyFix("SCAN", line.id, "really close", "very close")).toBe(false);
+  expect(useStore.getState().transcripts.SCAN.lines[0].text).toBe("\u62e1\u5927\u3057\u307e\u3059");
+
+  // and a real repair still reports true and lands
+  expect(useStore.getState().applyFix("SCAN", line.id, "\u62e1\u5927", "\u30ba\u30fc\u30e0")).toBe(true);
+  expect(useStore.getState().transcripts.SCAN.lines[0].text).toContain("\u30ba\u30fc\u30e0");
 });

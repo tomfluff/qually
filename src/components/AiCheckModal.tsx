@@ -63,14 +63,16 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
     return pids.filter((p) => transcripts[p]).map((p) => {
       const last = aiLog.filter((c) => c.task.startsWith("scan") && c.pid === p).at(-1);
       let obs = 0;
-      for (const l of transcripts[p].lines) {
+      // asked in the reading language, like the transcript and the panel: a
+      // count of 0 beside a transcript whose marks are on screen is a lie
+      for (const l of linesOf(transcripts, lang, p)) {
         const f = aiFlags[`${p}:${l.id}`];
         if (!f || f.hash !== hashLine(l.text)) continue; // stale marks aren't shown, don't count them
         obs += f.spans.filter((sp) => spanLens(sp) !== "transcription").length;
       }
       return { pid: p, n: transcripts[p].lines.length, at: last?.at.slice(0, 10) ?? null, obs };
     });
-  }, [choose, tabs, transcripts, aiLog, aiFlags]);
+  }, [choose, tabs, transcripts, lang, aiLog, aiFlags]);
 
   const toggleSpeaker = (sp: string) =>
     setExcluded((prev) => {
