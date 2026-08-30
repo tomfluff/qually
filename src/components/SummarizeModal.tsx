@@ -30,7 +30,7 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
   const ai = useStore((s) => s.ai);
   const [picked, setPicked] = useState(initial ?? "");
   const pid = picked;
-  const { events, excerpts } = useSummaryData(pid);
+  const { events, excerpts, sections } = useSummaryData(pid);
 
   // which material rides along — either alone is a valid session record
   const [incEvents, setIncEvents] = useState(true);
@@ -60,14 +60,14 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
     }));
   }, [choose, tabs, transcripts, markers, segments, summaries]);
 
-  const inTok = useMemo(() => estimateSummaryTokens(evSel, exSel, context, red),
-    [evSel, exSel, context, red]);
+  const inTok = useMemo(() => estimateSummaryTokens(evSel, exSel, context, red, sections),
+    [evSel, exSel, context, red, sections]);
   const redactions = useMemo(() =>
     evSel.reduce((n, e) => n + red.count(e.text) + red.count(e.type), 0)
     + exSel.reduce((n, x) => n + red.count(x.excerpt) + red.count(x.ref), 0)
     + red.count(context), [evSel, exSel, context, red]);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(2400))); // a summary runs a few hundred tokens out
-  const preview = renderSummaryPayload(evSel, exSel, context, red);
+  const preview = renderSummaryPayload(evSel, exSel, context, red, sections);
   const overwriting = !!summaries[pid]?.trim();
   const ready = !!pid && (evSel.length > 0 || exSel.length > 0);
 
@@ -84,7 +84,7 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
     try {
       const { summary, usage } = await summarize({
         key, model: model.id, events: evSel, excerpts: exSel, context, redaction: red,
-        signal: abort.current.signal,
+        sections, signal: abort.current.signal,
       });
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "summary", pid,

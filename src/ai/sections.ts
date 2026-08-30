@@ -44,6 +44,7 @@ Rules:
 - Sections need not tile the transcript. Lines that belong to no part of the study — setup chatter, an interruption, small talk — are simply left out. Leaving a gap is better than stretching a neighbour across it.
 - Prefer few, long sections over many short ones. You are finding the shape of the session, not annotating turns.
 - Every section carries a "why": ONE short sentence naming what in those lines marks the boundary — what the moderator says, what the participant starts doing. Quote a few words where that is the clearest answer. This is what the researcher reads to accept or reject you, so make it specific to these lines rather than restating the label.
+- ALREADY DECIDED, when present, lists sections of this transcript the researcher has settled — some marked, some offered before and turned down. Do not propose any of them again; spend the answer on parts of the session that are still open. A turned-down range is a decision, not a gap to fill.
 - If the transcript does not support a label, do not use it. An empty list is a fine answer: the session may not have the shape the brief expects, and saying so is more useful than guessing.
 - Text like [REDACTED_1] is a removed identifier; treat it as an opaque token.
 - An EVENTS block, when present, lists things the researcher or the recorder logged during the session, each placed after the transcript line it followed. These are the strongest evidence you have about where a part of the session begins or ends — a logged task start says more than the talk around it. Use them; do not treat them as sections in themselves, and do not invent one that is not listed.`;
@@ -55,7 +56,7 @@ Rules:
     it is about the study, and study prose names people. */
 export function renderSections(
   lines: Line[], vocab: Vocab, brief: string, r: Redaction,
-  markers: Marker[] = [], offset = 0, show = 0,
+  markers: Marker[] = [], offset = 0, show = 0, already: Stretch[] = [],
 ): string {
   const labels = vocab.axes.map((a) => `- ${a.dim}: ${a.values.join(", ")}`).join("\n");
   const prose = briefProse(brief);
@@ -66,7 +67,20 @@ export function renderSections(
   // read as a bug in the feature rather than in the preview.
   const shown = show > 0 ? lines.slice(0, show) : lines;
   const body = shown.map((l) => `${l.id}\t${r.redact(l.speaker)}\t${r.redact(l.text)}`).join("\n");
+  // What is already settled here. Without it the model spends its capped budget
+  // re-proposing boundaries the researcher has already ruled on, and
+  // sanitizeSections drops them AFTER the tokens are paid for — so the run
+  // returns fewer new sections than it was asked for, for no reason the
+  // researcher can see. Evidence AND rejections: a rejected boundary is a
+  // decision too, and re-offering it is exactly what rejecting it meant to stop.
+  const settled = already
+    .filter((x) => x.status !== "candidate")
+    .sort((a, b) => a.start - b.start)
+    .map((x) => `- ${x.dim}: ${x.value} (lines ${x.start}-${x.end})`
+      + (x.status === "rejected" ? " — offered before and turned down" : ""))
+    .join("\n");
   return `LABELS (the only ones that exist):\n${labels}\n\n`
+    + (settled ? `ALREADY DECIDED (do not propose these again):\n${settled}\n\n` : "")
     + (prose ? `BRIEF (the researcher's own words about this study):\n${r.redact(prose)}\n\n` : "")
     + (markers.length ? `EVENTS (logged during the session, each after the line it followed):\n${renderEvents(lines, markers, r, offset, show)}\n\n` : "")
     + `TRANSCRIPT:\n${body}`;
@@ -128,7 +142,9 @@ export const eventRedactions = (m: Marker, r: Redaction) => {
 
 export const estimateSectionsTokens = (
   lines: Line[], vocab: Vocab, brief: string, r: Redaction, markers: Marker[] = [], offset = 0,
-) => estimateTokens(SYSTEM) + estimateTokens(renderSections(lines, vocab, brief, r, markers, offset));
+  already: Stretch[] = [],
+) => estimateTokens(SYSTEM)
+  + estimateTokens(renderSections(lines, vocab, brief, r, markers, offset, 0, already));
 
 const SCHEMA = {
   type: "object",
@@ -169,7 +185,11 @@ export async function proposeSections(opts: {
     key: opts.key,
     model: opts.model,
     system: SYSTEM,
-    user: renderSections(opts.lines, opts.vocab, opts.brief, opts.redaction, opts.markers ?? [], opts.offset ?? 0),
+    // `existing` was already here for sanitizeSections to drop duplicates AFTER
+    // the fact; it now also goes INTO the request, so the budget is spent on
+    // what is still open rather than on answers that get discarded.
+    user: renderSections(opts.lines, opts.vocab, opts.brief, opts.redaction,
+      opts.markers ?? [], opts.offset ?? 0, 0, opts.existing.filter((x) => x.pid === opts.pid)),
     schemaName: "propose_sections",
     schema: SCHEMA,
     signal: opts.signal,

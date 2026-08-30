@@ -228,3 +228,38 @@ test("renaming a transcript carries the citations of every saved answer", () => 
   expect(a.points[0].refs).toEqual(["P07:2-3", "P07@00:00:12", "P01b:1"]);
   expect(a.scope.pids).toEqual(["P07", "P01b"]);
 });
+
+// Sections are the comparison axis of most study designs — without them
+// "what did people say in the baseline condition" cannot be answered from this
+// payload at all. They are listed once and referenced by id, because the axes
+// overlap and grouping the excerpts under one of them would hide the others.
+test("the payload says where in the session each excerpt sits", () => {
+  useStore.setState({
+    stretches: [
+      { pid: "P01", start: 1, end: 9, dim: "condition", value: "baseline", status: "accepted" },
+      { pid: "P01", start: 1, end: 3, dim: "phase", value: "warm-up" },
+      // unjudged: must not reach the model as the shape of the session
+      { pid: "P01", start: 4, end: 9, dim: "phase", value: "task", status: "candidate" },
+    ],
+  } as never);
+  const c = buildCorpus(useStore.getState(), all);
+  const payload = renderAskPayload("which condition was harder?", c, redactor([]));
+
+  expect(payload).toContain("SESSION STRUCTURE:");
+  expect(payload).toContain("condition: baseline");
+  expect(payload).toContain("phase: warm-up");
+  // the proposal is absent from the structure AND from every excerpt's tags
+  expect(payload).not.toContain("phase: task");
+
+  // the excerpt at lines 2-3 is inside both accepted sections, and says so
+  const line = payload.split("\n").find((l) => l.startsWith("[P01:2-3]"))!;
+  expect(line).toMatch(/\[S1, S2\]$/);
+});
+
+test("a study with no marked sections sends no structure block at all", () => {
+  useStore.setState({ stretches: [] } as never);
+  const payload = renderAskPayload("q", buildCorpus(useStore.getState(), all), redactor([]));
+  expect(payload).not.toContain("SESSION STRUCTURE");
+  // and no excerpt grows an empty tag
+  expect(payload).not.toContain("[]");
+});

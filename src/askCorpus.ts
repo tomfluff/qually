@@ -21,6 +21,7 @@ import { linesOf, type State } from "./state/store";
 import { anchorMarkers, fmtLike, markerKey } from "./markers";
 import { segExcerpt } from "./contract/excerpt";
 import { formatSegRef } from "./contract/segments";
+import { payloadSections, sectionIdsAt, type PayloadSection } from "./stretches";
 
 export interface AskScope {
   pids: string[];      // transcripts in scope (empty = none)
@@ -32,23 +33,31 @@ export interface AskScope {
 // `codes` is a LIST because one span is routinely coded twice — the excerpt is
 // one piece of evidence carrying two codes, not two excerpts. Merging them is
 // what keeps a ref unique, which is the whole contract.
-interface AskExcerpt { ref: string; pid: string; line: number; codes: string[]; speaker: string; time: string; text: string }
+interface AskExcerpt { ref: string; pid: string; line: number; codes: string[]; speaker: string; time: string; text: string;
+  /** ids of the sections these lines sit in — see payloadSections */
+  sections: string[] }
 interface AskEvent { ref: string; pid: string; line: number; time: string; type: string; text: string }
 export interface AskCorpus {
   excerpts: AskExcerpt[];
   events: AskEvent[];
+  /** the shape of the sessions in scope: what the excerpts and events sit inside */
+  sections: PayloadSection[];
   codes: { name: string; def: string }[];
   // ref -> where a citation click lands. Also the ALLOW-LIST a reply is filtered
   // against: a ref that isn't in here was invented.
   where: Map<string, { pid: string; line: number }>;
 }
 
-export const emptyCorpus = (): AskCorpus => ({ excerpts: [], events: [], codes: [], where: new Map() });
+export const emptyCorpus = (): AskCorpus => ({ excerpts: [], events: [], sections: [], codes: [], where: new Map() });
 
 export function buildCorpus(s: State, scope: AskScope): AskCorpus {
   const out = emptyCorpus();
   const pids = scope.pids.filter((p) => s.transcripts[p]);
   const codes = new Set(scope.codes);
+  // where in each session things were said. Accepted sections only (the helper
+  // enforces it), so a question is never answered against a boundary the
+  // researcher has not agreed to.
+  out.sections = payloadSections(s.stretches, pids);
 
   for (const pid of pids) {
     // the language the study is read in, so a question and its answer quote
@@ -76,6 +85,7 @@ export function buildCorpus(s: State, scope: AskScope): AskCorpus {
         byRef.set(ref, {
           ref, pid, line: seg.start, codes: [seg.code], speaker: ex.speaker,
           time: a ? (b && b !== a ? `${a}–${b}` : a) : "", text: ex.excerpt,
+          sections: sectionIdsAt(out.sections, pid, seg.start, seg.end),
         });
       }
       for (const x of byRef.values()) {

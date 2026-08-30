@@ -6,10 +6,11 @@
 // the consent preview would show a different session than the screen does.
 import { useMemo } from "react";
 import { linesOf, useStore, type Segment } from "./state/store";
+import { payloadSections } from "./stretches";
 import { useMarkers } from "./useMarkers";
 import { fmtLike, markerKey, type Marker } from "./markers";
 import { segExcerpt } from "./contract/excerpt";
-import type { SummaryEvent, SummaryExcerpt } from "./ai/summarize";
+import type { SummaryEvent, SummaryExcerpt, SummarySection } from "./ai/summarize";
 
 export type SumItem =
   | { kind: "e"; m: Marker; line: number | undefined }
@@ -74,5 +75,19 @@ export function useSummaryData(pid: string) {
     excerpt,
   })), [rows, pid]);
 
-  return { items, events, excerpts, lineOf, offset, tsSample };
+  // the parts of THIS session the researcher marked out, in the order they run.
+  // Times where the transcript has them, because the rest of this payload is
+  // anchored by time and a line id would be the odd one out.
+  const stretches = useStore((s) => s.stretches);
+  const sections = useMemo<SummarySection[]>(() => {
+    const ls = linesOf(transcripts, lang, pid);
+    const at = (id: number) => ls.find((l) => l.id === id)?.ts.trim() ?? "";
+    return payloadSections(stretches, [pid]).map((x) => {
+      const a = at(x.start), b = at(x.end);
+      return { dim: x.dim, value: x.value,
+        time: a ? (b && b !== a ? `${a}–${b}` : a) : "" };
+    });
+  }, [stretches, transcripts, lang, pid]);
+
+  return { items, events, excerpts, sections, lineOf, offset, tsSample };
 }

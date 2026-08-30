@@ -143,6 +143,42 @@ export function pendingAt(list: Stretch[], pid: string, start: number, end = sta
   return list.filter((s) => s.pid === pid && s.status === "candidate" && stretchOverlaps(s, start, end));
 }
 
+/** A section as an AI payload names it: the same stretch, plus a short id so an
+    excerpt can say which parts of the session it sits in without repeating the
+    label on every line.
+
+    Numbered rather than named because the axes OVERLAP by design — an excerpt is
+    routinely "phase: task 1" and "condition: assisted" at once — so excerpts
+    cannot simply be grouped under one heading without lying about the other
+    axes. One list, and a tag per excerpt, says the true thing.
+
+    EVIDENCE only, and the guard is here rather than at the call sites for the
+    same reason coverageOf's is: a payload that presented an unjudged proposal as
+    the shape of the session would have the model reasoning over a boundary the
+    researcher never accepted. */
+export interface PayloadSection {
+  id: string; pid: string; dim: string; value: string; start: number; end: number;
+}
+export function payloadSections(list: Stretch[], pids: readonly string[]): PayloadSection[] {
+  const out: PayloadSection[] = [];
+  for (const pid of pids) {
+    // by where they start, so the list reads down the session
+    const mine = evidence(list).filter((s) => s.pid === pid)
+      .sort((a, b) => a.start - b.start || a.end - b.end);
+    for (const s of mine) {
+      out.push({ id: `S${out.length + 1}`, pid, dim: s.dim, value: s.value, start: s.start, end: s.end });
+    }
+  }
+  return out;
+}
+
+/** which of those sections cover lines start..end of a transcript */
+export const sectionIdsAt = (
+  sections: readonly PayloadSection[], pid: string, start: number, end = start,
+): string[] => sections
+  .filter((s) => s.pid === pid && s.start <= end && s.end >= start)
+  .map((s) => s.id);
+
 /** the dims in play, stable order — each gets its own gutter column */
 export function stretchDims(list: Stretch[]): string[] {
   return [...new Set(list.map((s) => s.dim))].sort();

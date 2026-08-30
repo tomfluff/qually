@@ -2,9 +2,11 @@
 // Copyright (C) 2026 Yotam Sechayk
 // F7 wave 0: the study brief's closed vocabulary, and the status discipline
 // that keeps an unreviewed proposal out of every count.
-import { beforeAll, test, expect } from "vitest";
+import { beforeAll, describe, it, test, expect } from "vitest";
 import { parseBrief, briefProse, sanitizeSections, canonKey, vocabSays, SECTIONS_MAX } from "./sections";
 import { coverageOf, stretchesAt, pendingAt, evidence, visible, type Stretch } from "./stretches";
+import { renderSections } from "./ai/sections";
+import { redactor } from "./ai/redact";
 
 let useStore: typeof import("./state/store").useStore;
 
@@ -486,4 +488,36 @@ test("the reply's ceiling is enforced here, not only in the schema", async () =>
   expect(out).toHaveLength(SECTIONS_MAX);
   // and a reason is one sentence, not an essay that rides into every save
   expect(out[0].why.length).toBeLessThanOrEqual(600);
+});
+
+// The run's answer is capped, and sanitizeSections drops duplicates AFTER the
+// model has spent that cap on them — so re-running on a transcript already
+// worked through returned fewer NEW sections than it was asked for, for no
+// reason the researcher could see.
+describe("what the request says is already decided", () => {
+  const lines = [1, 2, 3].map((id) => ({ id, ts: "", speaker: "P", text: `line ${id}` }));
+  const vocab = parseBrief("- phase: warm-up, task");
+  const r = redactor([]);
+
+  it("names the settled sections so the run is spent on what is still open", () => {
+    const out = renderSections(lines, vocab, "", r, [], 0, 0, [
+      { pid: "P01", start: 1, end: 2, dim: "phase", value: "warm-up", status: "accepted" },
+      { pid: "P01", start: 3, end: 3, dim: "phase", value: "task", status: "rejected" },
+    ]);
+    expect(out).toContain("ALREADY DECIDED");
+    expect(out).toContain("phase: warm-up (lines 1-2)");
+    // a rejection is a decision too — re-offering it is what rejecting it stopped
+    expect(out).toContain("phase: task (lines 3-3) — offered before and turned down");
+  });
+
+  it("says nothing about an unjudged proposal, which is not decided", () => {
+    const out = renderSections(lines, vocab, "", r, [], 0, 0, [
+      { pid: "P01", start: 1, end: 2, dim: "phase", value: "warm-up", status: "candidate" },
+    ]);
+    expect(out).not.toContain("ALREADY DECIDED");
+  });
+
+  it("adds no block to a first run, where nothing is decided yet", () => {
+    expect(renderSections(lines, vocab, "", r, [], 0, 0, [])).not.toContain("ALREADY DECIDED");
+  });
 });

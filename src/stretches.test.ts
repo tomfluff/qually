@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { describe, it, expect } from "vitest";
-import { stretchColor, stretchColorOf, stretchesAt, stretchDims, coverageOf, type Stretch } from "./stretches";
+import { stretchColor, stretchColorOf, stretchesAt, stretchDims, coverageOf,
+  payloadSections, sectionIdsAt, type Stretch } from "./stretches";
 
 const st = (pid: string, start: number, end: number, value: string, dim = "condition"): Stretch =>
   ({ pid, start, end, dim, value });
@@ -147,5 +148,66 @@ describe("band contrast", () => {
   it("a hand-picked override still wins", () => {
     expect(stretchColorOf("baseline", { baseline: "#ff0000" }, true)).toBe("#ff0000");
     expect(stretchColorOf("baseline", {}, true)).toBe(stretchColor("baseline", true));
+  });
+});
+
+// ── what an AI payload is told about the shape of a session ──────────────
+// Numbered rather than grouped BECAUSE the axes overlap: an excerpt is
+// routinely inside a phase and a condition at once, so grouping excerpts under
+// one heading would hide the other axis.
+describe("payloadSections", () => {
+  const sec = (over: Partial<Stretch>): Stretch =>
+    ({ pid: "P01", start: 1, end: 10, dim: "phase", value: "warm-up", ...over });
+
+  it("numbers the accepted sections of the transcripts in scope, in reading order", () => {
+    const out = payloadSections([
+      sec({ start: 20, end: 30, value: "task" }),
+      sec({ start: 1, end: 19, value: "warm-up" }),
+      sec({ pid: "P02", start: 1, end: 5, value: "warm-up" }),
+    ], ["P01", "P02"]);
+    expect(out.map((x) => [x.id, x.pid, x.start])).toEqual([
+      ["S1", "P01", 1], ["S2", "P01", 20], ["S3", "P02", 1],
+    ]);
+  });
+
+  it("leaves out a transcript nobody asked about", () => {
+    const out = payloadSections([sec({}), sec({ pid: "P09" })], ["P01"]);
+    expect(out).toHaveLength(1);
+    expect(out[0].pid).toBe("P01");
+  });
+
+  // the guard that matters: a payload presenting an unjudged proposal as the
+  // shape of the session would have the model reasoning over a boundary the
+  // researcher never accepted — the one thing this app promises it does not do
+  it("sends only what the researcher settled, never a proposal or a rejection", () => {
+    const out = payloadSections([
+      sec({ status: "accepted", value: "kept" }),
+      sec({ start: 11, end: 20, status: "candidate", value: "unjudged" }),
+      sec({ start: 21, end: 30, status: "rejected", value: "refused" }),
+      sec({ start: 31, end: 40, value: "hand-drawn" }),   // no status = the researcher's own
+    ], ["P01"]);
+    expect(out.map((x) => x.value)).toEqual(["kept", "hand-drawn"]);
+  });
+
+  it("tags a line range with every section it sits in, across axes", () => {
+    const secs = payloadSections([
+      sec({ start: 1, end: 100, dim: "condition", value: "assisted" }),
+      sec({ start: 40, end: 60, dim: "phase", value: "task 1" }),
+      sec({ start: 61, end: 80, dim: "phase", value: "debrief" }),
+    ], ["P01"]);
+    // an excerpt inside task 1 is inside the condition too — both, not one
+    expect(sectionIdsAt(secs, "P01", 45, 50)).toEqual(["S1", "S2"]);
+    // one that straddles a phase boundary belongs to both phases
+    expect(sectionIdsAt(secs, "P01", 55, 65)).toEqual(["S1", "S2", "S3"]);
+    // and one in no marked phase still carries the condition
+    expect(sectionIdsAt(secs, "P01", 90, 95)).toEqual(["S1"]);
+    // a different transcript shares no ids
+    expect(sectionIdsAt(secs, "P02", 45, 50)).toEqual([]);
+  });
+
+  it("gives no tags where nothing is marked, rather than a false one", () => {
+    expect(sectionIdsAt([], "P01", 1, 5)).toEqual([]);
+    const secs = payloadSections([sec({ start: 10, end: 20 })], ["P01"]);
+    expect(sectionIdsAt(secs, "P01", 1, 9)).toEqual([]);
   });
 });

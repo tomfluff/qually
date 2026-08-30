@@ -89,9 +89,13 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   const vocab = useMemo(() => parseBrief(brief, stretches), [brief, stretches]);
   const declared = vocab.axes.reduce((n, a) => n + a.values.length, 0);
   const respelled = useMemo(() => vocabRespelled(brief, stretches), [brief, stretches]);
+  // what this transcript has already settled — marked or turned down. It rides
+  // in the request so the run is not spent re-proposing it, and in the estimate
+  // and the preview so the gate describes what actually leaves.
+  const settled = useMemo(() => stretches.filter((x) => x.pid === pid), [stretches, pid]);
 
   const inTok = useMemo(
-    () => (lines.length && declared ? estimateSectionsTokens(lines, vocab, brief, red, markers, offset) : 0),
+    () => (lines.length && declared ? estimateSectionsTokens(lines, vocab, brief, red, markers, offset, settled) : 0),
     [lines, vocab, brief, red, declared, markers, offset]);
   const tooBig = inTok > SECTIONS_TOKEN_CAP;
   // the brief's prose is part of the payload and is redacted too (see
@@ -113,7 +117,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
     // the FULL lines and markers, with `show` truncating the display: events
     // anchor against the whole transcript, so the preview's "after line N" is
     // the line the real request names
-    ? renderSections(lines, vocab, brief, red, markers, offset, 6) : "";
+    ? renderSections(lines, vocab, brief, red, markers, offset, 6, settled) : "";
 
   const choices = useMemo(() => {
     if (!choose) return [];
