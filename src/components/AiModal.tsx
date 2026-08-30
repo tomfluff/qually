@@ -58,8 +58,17 @@ export function AiModal({ title, busy, onClose, children }: {
     preview alone which of the two they are looking at. */
 export function LangFact() {
   const lang = useStore((s) => s.ui.lang);
+  const transcripts = useStore((s) => s.transcripts);
   if (lang !== "en") return null;
-  return <span className="ai-lang">sending the <b>English</b> translation</span>;
+  // "the English translation" alone would overstate a part-translated study:
+  // its untranslated lines go out as spoken, and a gate is the one place that
+  // may not round off what is actually leaving the machine.
+  const gaps = Object.values(transcripts).some((t) => t.lines.some((l) => !l.en?.trim()));
+  return (
+    <span className="ai-lang">
+      sending the <b>English</b> translation{gaps && ", untranslated lines as spoken"}
+    </span>
+  );
 }
 
 // The per-run model override, identical in every AI modal. The Settings default

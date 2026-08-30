@@ -112,7 +112,7 @@ export function BrowseView() {
   // the selection, and sids, which a new project hands out from 1 again. The
   // Code map registers the same forget-me for the same reason.
   useEffect(() => onProjectSwap(() => {
-    setSelected(new Set()); setAnchor(null); setExpanded(new Set()); setSourceOpen(new Set()); setSourceOpen(new Set());
+    setSelected(new Set()); setAnchor(null); setExpanded(new Set()); setSourceOpen(new Set());
   }), []);
 
   const counts = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
@@ -152,11 +152,13 @@ export function BrowseView() {
     const slice = [];
     for (let i = lo; i < lines.length && lines[i].id <= s.end; i++) slice.push(lines[i]);
     const r = segExcerpt(s, slice);
-    // The same excerpt rule over the same lines, read in the source language —
-    // viewLines preserves order and length, so the found index range holds for
-    // both arrays and the two readings quote the same dominant speaker.
+    // The same lines with the spoken text put back — not a second slice of the
+    // stored array, which only lined up by an index coincidence. Dominance is
+    // weighed on `src` in both runs, so the original quotes the same speaker
+    // the excerpt above it does; without that the "original" of a
+    // participant's quote could be the interviewer's line.
     const source = lang === "source" ? ""
-      : segExcerpt(s, t.lines.slice(lo, lo + slice.length)).excerpt;
+      : segExcerpt(s, slice.map((l) => ({ ...l, text: l.src ?? l.text }))).excerpt;
     return { text: r.excerpt, speaker: r.speaker, dropped: r.dropped, closeCall: r.closeCall,
       lines: slice, source };
   };

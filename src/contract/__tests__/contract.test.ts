@@ -126,3 +126,43 @@ test("a losing speaker with an empty line is still reported, at zero characters"
   expect(r.excerpt).toBe("something worth reading");
   expect(r.dropped).toEqual([{ speaker: "R", lines: 1, chars: 0 }]);
 });
+
+// ── a translation must not change who dominated the talk ────────────
+// The dominance rule counts CHARACTERS, and a translation changes how many a
+// turn takes: Japanese says in twelve characters what English needs forty for.
+// Without weighing the spoken text, a display switch decided whose words a code
+// quotes — the excerpt flipped from the participant to the interviewer, [R:]
+// prefix and all.
+const JA: ExLine[] = [
+  { speaker: "R", text: "\u4f7f\u3044\u307e\u3059\u304b\uff1f" },
+  { speaker: "P", text: "\u62e1\u5927\u3057\u3066\u3001\u7dda\u3092\u8ffd\u3044\u307e\u3059\u3002" },
+];
+const EN: ExLine[] = [
+  { speaker: "R", text: "Do you usually use a screen reader for this?" },
+  { speaker: "P", text: "I zoom in." },
+];
+
+test("the spoken text decides the speaker, even while a translation is shown", () => {
+  // read on its own, the English hands the excerpt to the interviewer
+  expect(excerptOf(EN).speaker).toBe("R");
+  // carrying `src`, the same lines keep the participant — and quote their English
+  const resolved = EN.map((l, i) => ({ ...l, src: JA[i].text }));
+  const r = excerptOf(resolved);
+  expect(r.speaker).toBe("P");
+  expect(r.excerpt).toBe("I zoom in.");
+  expect(r.excerpt.startsWith("[R:]")).toBe(false);
+});
+
+test("the same speaker wins whichever language is being read", () => {
+  const en = EN.map((l, i) => ({ ...l, src: JA[i].text }));
+  const ja = JA.map((l) => ({ ...l, src: l.text }));
+  expect(excerptOf(en).speaker).toBe(excerptOf(ja).speaker);
+  // and the same losing speaker is reported on both sides
+  expect(excerptOf(en).dropped.map((d) => d.speaker))
+    .toEqual(excerptOf(ja).dropped.map((d) => d.speaker));
+});
+
+test("with no translation the visible text is weighed, exactly as before", () => {
+  expect(excerptOf(EN).speaker).toBe("R");
+  expect(excerptOf(JA).speaker).toBe("P");
+});

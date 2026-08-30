@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { linesOf, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -25,7 +25,9 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
   const aiLog = useStore((s) => s.aiLog);
   const [picked, setPicked] = useState(initial ?? ""); // "" = nothing picked yet
   const pid = picked;
-  const allLines = transcripts[pid]?.lines ?? [];
+  const lang = useStore((s) => s.ui.lang);
+  // the gate below says which language this sends; it has to be true
+  const allLines = linesOf(transcripts, lang, pid);
   const ai = useStore((s) => s.ai);
   const setAi = useStore((s) => s.setAi);
   const aiFlags = useStore((s) => s.aiFlags);

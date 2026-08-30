@@ -9,7 +9,7 @@
 // Two callers, two scopes, as everywhere: a transcript's own sidebar locks the
 // scope to that transcript; the Assist tab passes `choose` and picks in here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AI_PROPOSED_BY_PREFIX, useStore } from "../state/store";
+import { linesOf, AI_PROPOSED_BY_PREFIX, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -32,7 +32,8 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
   const ai = useStore((s) => s.ai);
   const [picked, setPicked] = useState(initial ?? "");
   const pid = picked;
-  const lines = useMemo(() => transcripts[pid]?.lines ?? [], [transcripts, pid]);
+  const lang = useStore((s) => s.ui.lang);
+  const lines = useMemo(() => linesOf(transcripts, lang, pid), [transcripts, lang, pid]);
   // This transcript's session events ride along: a researcher who logged
   // "task 2 starts" has already said where a boundary is, more reliably than
   // the talk around it. Their labels are the researcher's own words, so they

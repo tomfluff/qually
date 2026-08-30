@@ -568,6 +568,8 @@ export function TranscriptView() {
   // downstream re-renders and nothing is copied.
   const lang = useStore((s) => s.ui.lang);
   const viewed = useMemo(() => viewLines(transcript?.lines ?? [], lang), [transcript, lang]);
+  // showing words nobody spoke — the inline editor is disabled while this holds
+  const readingTranslated = viewed !== (transcript?.lines ?? viewed);
   const groups = useMemo(() => mergeGroups(viewed as Line[], mergeLines, mergeGap), [viewed, mergeLines, mergeGap]);
   // speaker focus (the target button, bottom right) — per transcript. A stale
   // focus name no longer in THIS transcript is ignored rather than dimming
@@ -1179,6 +1181,7 @@ export function TranscriptView() {
               onEditStart={setEditingId}
               onEditEnd={() => setEditingId(null)}
               flagsByLine={flagsByLine}
+              readingTranslated={readingTranslated}
               nextTsOf={(id) => {
                 const ls = transcript.lines;
                 const i = ls.findIndex((l) => l.id === id);
@@ -1643,7 +1646,7 @@ function StretchCell({ ctx }: { ctx: StretchCtx }) {
   return <span className="stretchCell" style={{ width: ctx.width }} aria-hidden="true" />;
 }
 
-function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowContext, stretchCtx, onLaneClick, onLaneMenu, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, inSearch, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine }: {
+function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowContext, stretchCtx, onLaneClick, onLaneMenu, onGripDown, onLaneHover, hl, closeCallSids, warnCls, lanePattern, spkColor, weight, showLid, speakerNames, shortName, searchQuery, inSearch, current, editingId, onEditStart, onEditEnd, nextTsOf, flagsByLine, readingTranslated }: {
   group: Group;
   /** right-click on the row body — the parent decides between "add event" and
       the stretch menu (a selection is the stretch gesture's handle) */
@@ -1669,6 +1672,8 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
   speakerNames: "full" | "short";
   shortName: string;
   searchQuery: string;
+  /** reading a translation: the inline transcript editor is not the tool for it */
+  readingTranslated: boolean;
   inSearch: (l: Line) => boolean; // the search filter: which lines may be marked
   current: { line: number; occ: number } | null;
   editingId: number | null;
@@ -1816,7 +1821,20 @@ function Row({ group, selected, spkOff, cols, laned, codebook, onRowDown, onRowC
             ) : (
               // no title= on this span: a native tip on every line is noise while reading,
               // and it would fire behind the custom tooltips on the spans inside it
-              <span onDoubleClick={(e) => { e.preventDefault(); onEditStart(l.id); }}>
+              // Correcting a TRANSLATION is not correcting a transcript, and
+              // editLine writes the spoken text: under an English reading the
+              // editor would have saved the translation over what was said,
+              // leaving the display unchanged (so the edit looked ignored)
+              // while the evidence was gone. Reading the source is the way in.
+              // the no-title rule above holds for READING; this tip exists only
+              // in the one mode where double-click does nothing, so it is an
+              // explanation of a refusal rather than noise on every line
+              <span title={readingTranslated ? "Switch to Source to correct the transcript" : undefined}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  if (readingTranslated) { announce("Switch to Source to correct the transcript"); return; }
+                  onEditStart(l.id);
+                }}>
                 {searchQuery && inSearch(l)
                   ? searchHighlight(l.text, searchQuery, current && current.line === l.id ? current.occ : -1)
                   : flagsByLine.has(l.id)

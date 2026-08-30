@@ -10,7 +10,16 @@
 export interface ExLine {
   text: string;
   speaker: string;
+  /** What was SPOKEN, when `text` is a translation of it (see lineText.ts).
+      Who dominated a stretch of talk is a fact about the recording, so the
+      weighing below counts this and not the words on screen — otherwise a
+      display switch changes whose words a code quotes, because Japanese says
+      in twelve characters what English needs forty for. Absent everywhere
+      else, which is every project that carries no translation. */
+  src?: string;
 }
+// what the dominance rule counts: the spoken text where there is one
+const weigh = (l: ExLine) => l.src ?? l.text;
 
 export interface DroppedSpeaker {
   speaker: string;
@@ -53,7 +62,7 @@ export function excerptOf(lines: ExLine[]): ExcerptResult {
   for (const l of lines) {
     const sp = l.speaker.trim();
     if (!chars.has(sp)) { chars.set(sp, 0); lineCounts.set(sp, 0); order.push(sp); }
-    chars.set(sp, chars.get(sp)! + l.text.trim().length);
+    chars.set(sp, chars.get(sp)! + weigh(l).trim().length);
     lineCounts.set(sp, lineCounts.get(sp)! + 1);
   }
   if (!order.length) return { excerpt: "", closeCall: false, speaker: "", dropped: [] };

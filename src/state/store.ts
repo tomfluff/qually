@@ -62,7 +62,9 @@ export interface Answer {
 
 // en (optional text_en column) is a translation of `text`. Which of the two a
 // surface uses is decided in ONE place — see lineText.ts — never re-derived.
-export interface Line { id: number; ts: string; speaker: string; text: string; end?: string; orig?: string; en?: string; }
+// `src` is never stored or exported — viewLines adds it to a RESOLVED line to
+// carry what was spoken alongside the words being shown (see lineText.ts).
+export interface Line { id: number; ts: string; speaker: string; text: string; end?: string; orig?: string; en?: string; src?: string; }
 
 /** A transcript's lines in the language the study is being read in.
     Every surface that turns lines into evidence — an excerpt, an export, an AI
@@ -247,6 +249,11 @@ const DEFAULT_UI: Ui = {
 
 // Persist only keys in today's schema. Deriving the allowlist from the defaults
 // means deleting the next Ui field also deletes its stale persisted value.
+// A hand-edited or older persisted ui can carry anything here. Anything that is
+// not "en" reads as the source everywhere else; clamping it means the export
+// cannot grow an excerpt_source column that merely duplicates excerpt.
+export const asLang = (v: unknown): Lang => (v === "en" ? "en" : "source");
+
 const currentUi = (ui: Ui): Ui => Object.fromEntries(
   (Object.keys(DEFAULT_UI) as (keyof Ui)[]).map((key) => [key, ui[key] ?? DEFAULT_UI[key]]),
 ) as unknown as Ui;
@@ -2904,10 +2911,15 @@ export const useStore = create<State>()(
 
       exportCSV: () => {
         const s = get();
-        const excerptFor = (seg: Segment, lang: Lang) =>
-          excerptOf(linesOf(s.transcripts, lang, seg.pid)
-            .filter((l) => l.id >= seg.start && l.id <= seg.end)
-            .map((l) => ({ text: l.text, speaker: l.speaker }))).excerpt;
+        // `src` rides along so the dominance rule weighs the spoken text in both
+        // runs — otherwise excerpt and excerpt_source could quote two different
+        // speakers on the same row, which is a mislabel nothing would catch.
+        const rowLines = (seg: Segment) => linesOf(s.transcripts, s.ui.lang, seg.pid)
+          .filter((l) => l.id >= seg.start && l.id <= seg.end)
+          .map((l) => ({ text: l.text, speaker: l.speaker, src: l.src }));
+        const excerptFor = (seg: Segment) => excerptOf(rowLines(seg)).excerpt;
+        const sourceFor = (seg: Segment) =>
+          excerptOf(rowLines(seg).map((l) => ({ ...l, text: l.src ?? l.text }))).excerpt;
         // Only a study actually being read in a translation earns the second
         // column: adding an empty one to every other export would tell a reader
         // that a source text was looked for and not found.
@@ -2923,8 +2935,8 @@ export const useStore = create<State>()(
           // and `excerpt_source` below carries what was actually said — an
           // export is the evidence trail, so it may never hold only a
           // translation (the column is omitted entirely when there is none)
-          excerpt: excerptFor(seg, s.ui.lang),
-          excerpt_source: transcribed ? excerptFor(seg, "source") : "",
+          excerpt: excerptFor(seg),
+          excerpt_source: transcribed ? sourceFor(seg) : "",
           // never-empty invariant enforced at the write edge, whatever the source
           code: seg.code, proposed_by: seg.proposedBy.trim() || "(default)", status: seg.status, notes: seg.notes,
         })).concat(s.extSegRows.map((r) => ({ ...r, proposed_by: (r.proposed_by || "").trim() || "(default)" })) as never[]);
@@ -3033,6 +3045,7 @@ export const useStore = create<State>()(
         s.ui.coderName ??= "";
         s.ui.mergeGapOn ??= false;
         s.ui.mergeGap ??= 3;
+        s.ui.lang = asLang(s.ui.lang);
         s.ui = currentUi(s.ui);
         // never-empty invariant: rows written empty by an earlier build become "(default)"
         s.segments = s.segments.map((x) => (x.proposedBy?.trim() ? x : { ...x, proposedBy: "(default)" }));

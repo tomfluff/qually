@@ -57,7 +57,7 @@ export function TellApartModal({ codes, survivor, newName, source, model, onClos
   const readOf = useMemo(() => (code: string) => segments
     .filter((s) => norm(s.code) === norm(code) && s.status === "accepted" && transcripts[s.pid])
     .map((s) => ({ pid: s.pid, ...segExcerpt(s, linesOf(transcripts, lang, s.pid)) }))
-    .filter((x) => x.excerpt), [segments, transcripts]);
+    .filter((x) => x.excerpt), [segments, transcripts, lang]);
   const left = useMemo(() => readOf(a), [readOf, a]);
   const right = useMemo(() => readOf(b), [readOf, b]);
 

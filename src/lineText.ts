@@ -55,7 +55,7 @@ export function untranslated(lines: readonly { en?: string }[]): number {
 //    lines array — an import, an edit — is a new key, so the cache cannot go
 //    stale; a WeakMap so it dies with the transcript it describes.
 const cache = new WeakMap<object, Map<Lang, readonly TextLine[]>>();
-interface TextLine { text: string; en?: string }
+interface TextLine { text: string; en?: string; src?: string }
 export function viewLines<T extends TextLine>(lines: readonly T[], lang: Lang): readonly T[] {
   if (lang === "source") return lines;
   let byLang = cache.get(lines);
@@ -64,7 +64,13 @@ export function viewLines<T extends TextLine>(lines: readonly T[], lang: Lang): 
   if (hit) return hit as readonly T[];
   // an untranslated transcript resolves to itself: same array, same identity,
   // so switching language on a file with no translation changes nothing at all
-  const out = hasTranslation(lines) ? lines.map((l) => ({ ...l, text: lineText(l, lang) })) : lines;
+  // `src` carries what was SPOKEN alongside the words being shown. The excerpt
+  // rule weighs it rather than the translation, so which speaker a code quotes
+  // is a fact about the recording and not about a display switch; and it lets a
+  // surface rebuild the source excerpt without re-indexing the stored array.
+  const out = hasTranslation(lines)
+    ? lines.map((l) => ({ ...l, text: lineText(l, lang), src: l.text }))
+    : lines;
   byLang.set(lang, out);
   return out;
 }

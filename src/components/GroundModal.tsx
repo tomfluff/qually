@@ -44,9 +44,18 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
       return { sid: s.sid, code: s.code, def: codebook[s.code]?.def ?? "", excerpt };
     })
     .filter((it) => !!it.excerpt),
-  [segments, transcripts, codebook]);
+  [segments, transcripts, lang, codebook]);
   const alreadyGrounded = useMemo(
     () => eligible.filter((it) => aiGrounds[it.sid]?.hash === groundHash(it.code, it.excerpt)).length,
+    [eligible, aiGrounds]);
+  // Grounding is keyed to the excerpt it was computed against, and there is one
+  // slot per segment. Read in another language the excerpt is different text,
+  // so those records read as "not grounded" here — and running would spend
+  // money to overwrite the ones already held. Counted and said out loud rather
+  // than discovered afterwards; the flip itself loses nothing, this run would.
+  const otherLangGrounded = useMemo(
+    () => eligible.filter((it) => aiGrounds[it.sid]
+      && aiGrounds[it.sid].hash !== groundHash(it.code, it.excerpt)).length,
     [eligible, aiGrounds]);
   const todo = useMemo<GroundItem[]>(() => reground ? eligible
     : eligible.filter((it) => aiGrounds[it.sid]?.hash !== groundHash(it.code, it.excerpt)),
@@ -161,6 +170,15 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                   already {alreadyGrounded === 1 ? "has" : "have"} a grounding{" "}
                   <em>replaces the current quotes</em></span>
                 </label>
+              )}
+              {otherLangGrounded > 0 && (
+                <div className="settings-note" style={{ marginBottom: 8 }}>
+                  {otherLangGrounded === 1 ? "1 segment is" : `${otherLangGrounded} segments are`} already
+                  grounded against {otherLangGrounded === 1 ? "its" : "their"} excerpt in the other
+                  reading language. Grounding is held per segment, not per language, so running
+                  now pays for {otherLangGrounded === 1 ? "it" : "them"} again and replaces
+                  what {otherLangGrounded === 1 ? "is" : "are"} there.
+                </div>
               )}
               {todo.length === 0 ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
