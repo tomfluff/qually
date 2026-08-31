@@ -172,7 +172,10 @@
 .ai-seg button + button { border-left:1px solid var(--line); }
 .ai-seg button:hover { background:var(--panel); }
 .ai-seg button.on { background:var(--accent); color:#fff; font-weight:600; }
-.ai-seg button:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
+ /* NOT accent-on-accent: on the selected button the ring is the same colour as
+    the fill it sits inside and reads as no ring at all. The page background is
+    the one colour guaranteed to differ from both states. */
+.ai-seg button:focus-visible { outline:2px solid var(--fg); outline-offset:-4px; }
 
 /* the codebook as a pick-list; capped so it scrolls rather than pushing the
    cost and the Send button off the bottom of a long book */
@@ -204,7 +207,10 @@
 .ai-voices .vN { color:var(--muted); font-size:.86em; font-variant-numeric:tabular-nums; }
 .ai-voices .voice.code { border-color:var(--accent);
   background:color-mix(in srgb, var(--accent) 12%, transparent); }
-.ai-voices .voice.exclude { opacity:.7; }
+/* NOT opacity: fading the row took the muted line count to about 2.7:1, under
+   AA, and the state is already carried by the select's own value. A dashed edge
+   says "set aside" without touching any text colour. */
+.ai-voices .voice.exclude { border-style:dashed; background:var(--panel); }
 
 /* AI consent gate — the payload preview */
 /* the one sentence in the app that says participant data is about to leave the device,

@@ -322,6 +322,9 @@ export interface AiCall {
       reads as "not known" rather than as zero cached — same discipline as
       `outcome` below. */
   cachedTok?: number;
+  /** Of `inTok`, how many were WRITTEN to the cache on this request — billed at
+      1.25x. Also a subset, also absent on older rows. */
+  writeTok?: number;
   /** How the run ENDED. Absent means it completed — which is what every entry
       written before this field existed was. A request that was dispatched and
       then aborted, or that failed after dispatch, still sent the transcript: the

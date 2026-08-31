@@ -614,3 +614,20 @@ describe("splitting the payload for the cache", () => {
     expect(worthCaching(big, 2)).toBe(true);
   });
 });
+
+// A cache READ bills at 0.1x and a cache WRITE at 1.25x. Counting a write as
+// ordinary input made the first request of every cached run — the one that
+// always pays the premium — read cheaper than it was.
+describe("what a cached request cost", () => {
+  const m = modelOf(DEFAULT_MODEL);
+  it("prices fresh, cached and written input separately", () => {
+    const fresh = costOf(m, 1000, 0);
+    expect(costOf(m, 1000, 0, 1000)).toBeCloseTo(fresh * 0.1, 10);   // all read
+    expect(costOf(m, 1000, 0, 0, 1000)).toBeCloseTo(fresh * 1.25, 10); // all written
+  });
+
+  it("never prices a subset larger than the input it came from", () => {
+    expect(costOf(m, 100, 0, 999, 999)).toBeCloseTo(costOf(m, 100, 0, 100, 0), 10);
+    expect(costOf(m, 0, 0, 50, 50)).toBe(0);
+  });
+});

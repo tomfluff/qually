@@ -103,7 +103,7 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "summary", pid,
         lines: evSel.length + exSel.length, redactions,
-        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
           costUsd: +usage.costUsd.toFixed(5),
       });
       setDraft({ text: summary, cost: usage.costUsd });

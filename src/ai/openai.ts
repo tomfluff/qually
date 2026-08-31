@@ -46,17 +46,29 @@ export const estimateTokens = (text: string) => {
     Nothing here asks for caching yet; this is what makes the LOG honest when the
     API reports that some of the input was served from cache. */
 export const CACHE_READ_RATE = 0.1;
+/** And a cache WRITE bills at 1.25x. Counting it as ordinary input made the
+    first request of every cached run read cheaper than it was — the one request
+    that always pays the premium. */
+export const CACHE_WRITE_RATE = 1.25;
 
 /** `cachedTok` is a SUBSET of inTok, not an addition to it — that is how the API
     reports it, and adding the two would double-count the request. */
-export const costOf = (m: Model, inTok: number, outTok: number, cachedTok = 0) => {
-  const cached = Math.min(Math.max(cachedTok, 0), Math.max(inTok, 0));
-  const fresh = Math.max(inTok, 0) - cached;
-  return (fresh / 1e6) * m.in + (cached / 1e6) * m.in * CACHE_READ_RATE
+export const costOf = (
+  m: Model, inTok: number, outTok: number, cachedTok = 0, writeTok = 0,
+) => {
+  const total = Math.max(inTok, 0);
+  const cached = Math.min(Math.max(cachedTok, 0), total);
+  const written = Math.min(Math.max(writeTok, 0), total - cached);
+  const fresh = total - cached - written;
+  return (fresh / 1e6) * m.in
+    + (cached / 1e6) * m.in * CACHE_READ_RATE
+    + (written / 1e6) * m.in * CACHE_WRITE_RATE
     + (outTok / 1e6) * m.out;
 };
 
-export interface Usage { inTok: number; outTok: number; cachedTok: number; costUsd: number }
+export interface Usage {
+  inTok: number; outTok: number; cachedTok: number; writeTok: number; costUsd: number;
+}
 
 export class AiError extends Error {}
 
@@ -186,8 +198,15 @@ export async function callJson<T>(opts: {
   // subset of input_tokens; absent on older responses and on any model that
   // does not cache, which reads as none rather than as an error.
   const cachedTok = u.input_tokens_details?.cached_tokens ?? 0;
+  // Written to the cache on this request, billed at 1.25x. Absent where the
+  // model does not cache or the field is not reported, which reads as none —
+  // the same discipline as cachedTok above.
+  const writeTok = u.input_tokens_details?.cache_write_tokens ?? 0;
   return {
     data,
-    usage: { inTok, outTok, cachedTok, costUsd: costOf(modelOf(opts.model), inTok, outTok, cachedTok) },
+    usage: {
+      inTok, outTok, cachedTok, writeTok,
+      costUsd: costOf(modelOf(opts.model), inTok, outTok, cachedTok, writeTok),
+    },
   };
 }

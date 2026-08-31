@@ -156,7 +156,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "sections", pid,
         lines: lines.length, redactions,
-        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
           costUsd: +usage.costUsd.toFixed(5),
       });
       setDone({ added, cost: usage.costUsd });

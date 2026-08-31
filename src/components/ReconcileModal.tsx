@@ -135,7 +135,7 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
         pid: focusMode ? `(focus: ${codes.length} codes)`
           : scope === "all" ? "(codebook)" : `(island: ${groups[scope as number]?.name})`,
         lines: codes.length + contextCodes.length, redactions,
-        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
           costUsd: +usage.costUsd.toFixed(5),
       });
       // the model that produced these rides along, so a decision made from

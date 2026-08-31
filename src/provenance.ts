@@ -173,12 +173,14 @@ export interface AiSpend {
   /** of inTok, how many the API served from its prompt cache — a subset, and 0
       where no row recorded it (every row written before it was logged) */
   cachedTok: number;
+  /** of inTok, how many were written to the cache — billed at 1.25x */
+  writeTok: number;
 }
 export function aiSpend(log: readonly AiCall[]): AiSpend {
   // parseProject fills a missing aiLog with [] but does not check that a
   // present one IS a list; iterating a number throws where the panel renders.
   const rows = Array.isArray(log) ? log : [];
-  const out: AiSpend = { calls: rows.length, unfinished: 0, inTok: 0, outTok: 0, cachedTok: 0, costUsd: 0 };
+  const out: AiSpend = { calls: rows.length, unfinished: 0, inTok: 0, outTok: 0, cachedTok: 0, writeTok: 0, costUsd: 0 };
   for (const c of rows) {
     // aborted and failed both DISPATCHED — the transcript went out either way,
     // and the API may have charged for it while reporting nothing back
@@ -186,6 +188,7 @@ export function aiSpend(log: readonly AiCall[]): AiSpend {
     out.inTok += num(c.inTok);
     out.outTok += num(c.outTok);
     out.cachedTok += num(c.cachedTok);
+    out.writeTok += num(c.writeTok);
     out.costUsd += num(c.costUsd);
   }
   return out;

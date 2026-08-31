@@ -127,7 +127,7 @@ export function DescribeModal({ initial, onClose }: {
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "describe", pid: "(codebook)",
         lines: sent.length, redactions,
-        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
           costUsd: +usage.costUsd.toFixed(5),
       });
       // written straight in, as one undo step — editing happens afterwards in

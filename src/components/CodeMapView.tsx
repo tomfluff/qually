@@ -1884,7 +1884,7 @@ function MapInner() {
           (c.cid === cid ? { ...c, desc: glimpse, descCodes: [...c.codes] } : c)));
       s2.logAiCall({
         at: new Date().toISOString(), ...call,
-        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
           costUsd: +usage.costUsd.toFixed(5),
       });
       announce("Group description ready.");
@@ -1929,7 +1929,7 @@ function MapInner() {
           (c.cid === cid ? { ...c, against, againstWeak: weak, againstCodes: [...c.codes] } : c)));
       s2.logAiCall({
         at: new Date().toISOString(), ...call,
-        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
           costUsd: +usage.costUsd.toFixed(5),
       });
       announce(weak ? "No real case against this merge." : "The case against this merge is on the card.");

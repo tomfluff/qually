@@ -329,7 +329,7 @@ describe("what the model cost", () => {
 
   it("adds up the log and counts what a request cost nothing to report", () => {
     expect(aiSpend([call(), call({ inTok: 50, outTok: 5, costUsd: 0.0004 })]))
-      .toEqual({ calls: 2, unfinished: 0, inTok: 150, outTok: 25, cachedTok: 0, costUsd: 0.0014 });
+      .toEqual({ calls: 2, unfinished: 0, inTok: 150, outTok: 25, cachedTok: 0, writeTok: 0, costUsd: 0.0014 });
   });
 
   // A row from a build that did not record it is not a row that cached nothing;
@@ -364,14 +364,14 @@ describe("what the model cost", () => {
   });
 
   it("has nothing to show for a study that never asked a model anything", () => {
-    expect(aiSpend([])).toEqual({ calls: 0, unfinished: 0, inTok: 0, outTok: 0, cachedTok: 0, costUsd: 0 });
+    expect(aiSpend([])).toEqual({ calls: 0, unfinished: 0, inTok: 0, outTok: 0, cachedTok: 0, writeTok: 0, costUsd: 0 });
   });
 
   // parseProject fills a MISSING aiLog with [], but does not check that a
   // present one is a list — and iterating a number throws where this renders.
   it("reads a log that is not a list as no log at all", () => {
     expect(aiSpend(42 as unknown as AiCall[]))
-      .toEqual({ calls: 0, unfinished: 0, inTok: 0, outTok: 0, cachedTok: 0, costUsd: 0 });
+      .toEqual({ calls: 0, unfinished: 0, inTok: 0, outTok: 0, cachedTok: 0, writeTok: 0, costUsd: 0 });
     expect(aiSpend({ a: 1 } as unknown as AiCall[])).toMatchObject({ calls: 0 });
   });
 });

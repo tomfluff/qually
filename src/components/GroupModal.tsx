@@ -78,7 +78,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "group", pid: "(codebook)",
         lines: codes.length, redactions,
-        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
           costUsd: +usage.costUsd.toFixed(5),
       });
       onGroups(groups);

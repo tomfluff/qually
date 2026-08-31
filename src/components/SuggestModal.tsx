@@ -188,7 +188,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
           lines: chunks[i].length,
           redactions: chunks[i].reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
             + codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
-          inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+          inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
           costUsd: +usage.costUsd.toFixed(5),
         });
         cost += usage.costUsd;

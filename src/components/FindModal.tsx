@@ -36,6 +36,7 @@ import { norm } from "../contract/segments";
 import { chunksOf, estimateSuggestTokens, renderSuggestChunk, suggestChunk,
   overlapsExisting, SUGGEST_EXEMPLARS, type SuggestCode } from "../ai/suggest";
 import { findChunksOf, estimateFindTokens, renderFindChunk, findChunk } from "../ai/find";
+import { lineSize, WINDOW_PACK } from "../ai/pack";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, LangFact, ModelPicker } from "./AiModal";
@@ -203,9 +204,23 @@ export function FindModal({ initialCodes = [], onClose }: {
     // request would be paid for and its answer thrown away. Not sent at all.
     const usable = lines.some((l) => !context.has(l.speaker.trim()));
     if (!usable) return { pid: p, lines: [] as Line[], chunks: [] as Line[][], tok: 0, usable };
-    const chunks = mode === "codes"
-      ? chunksOf(lines as Line[], red, context)
-      : findChunksOf(lines as Line[], red, context);
+    // Withholding a speaker leaves GAPS, and a gap must break the window rather
+    // than be packed across it. Lines 10=P, 11=R, 12=P with R withheld arrive at
+    // the model as 10 and 12 adjacent; it answers 10–12, both endpoints are real
+    // ids so the sanitizer accepts it, and addSegment then codes line 11 —
+    // speech that was deliberately never sent. SuggestModal documents this exact
+    // rule for a discontiguous selection; the same reason applies here.
+    const pos = new Map(linesOf(transcripts, lang, p).map((l, i) => [l.id, i]));
+    const runs: Line[][] = [];
+    let run: Line[] = [];
+    for (const l of lines as Line[]) {
+      if (run.length && pos.get(l.id) !== pos.get(run[run.length - 1].id)! + 1) { runs.push(run); run = []; }
+      run.push(l);
+    }
+    if (run.length) runs.push(run);
+    const chunks = runs.flatMap((r) => (mode === "codes"
+      ? chunksOf(r, red, context)
+      : findChunksOf(r, red, context)));
     const tok = chunks.reduce((n, c) => n + (mode === "codes"
       ? estimateSuggestTokens(c, codes, red, context)
       : estimateFindTokens(c, question, red, context)), 0);
@@ -226,6 +241,14 @@ export function FindModal({ initialCodes = [], onClose }: {
     n + x.lines.reduce((m, l) => m + red.count(l.text) + red.count(l.speaker), 0), 0)
     // the stable half rides EVERY request, so the gate counts it per request
     + askedRedactions * requestCount(perPid), [perPid, red, askedRedactions]);
+
+  // A single line whose own rendered size passes the hard cap is still sent —
+  // dropping it would lose coverage — but it goes alone and may not fit the
+  // model's context. packRun names these; nothing was surfacing them, so the
+  // gate enabled Send on a request that could only fail after consent.
+  const oversize = useMemo(() => perPid.flatMap((x) =>
+    x.lines.filter((l) => lineSize(l, red, context) > WINDOW_PACK.hardCap)
+      .map((l) => `${x.pid}:${l.id}`)), [perPid, red, context]);
 
   const first = perPid.find((x) => x.chunks.length);
   const preview = !first ? ""
@@ -258,7 +281,7 @@ export function FindModal({ initialCodes = [], onClose }: {
     // created here so a hit has somewhere to land, and left behind empty if the
     // search finds nothing, exactly like any code they make and never use.
     let added = 0, skipped = 0, unusable = 0, cost = 0, pushed = false, sent = 0;
-    const label = mode === "codes" ? null : name.trim();
+    let label = mode === "codes" ? null : name.trim();
     if (label) {
       // Up front, not on the first hit: the claim this feature rests on is that
       // the code is yours before the model reads a line. Made here, a search
@@ -269,7 +292,10 @@ export function FindModal({ initialCodes = [], onClose }: {
       st.pushUndo(); pushed = true;
       // one step: setDef pushes an undo of its own, so creating and defining
       // separately made the run two entries with a def-less code between them
-      st.createDefined(label, about.trim());
+      // the CANONICAL name: createDefined resolves "giving   up" onto an
+      // existing "Giving Up" and returns that, and coding under the raw string
+      // would land segments on a codebook key that does not exist
+      label = st.createDefined(label, about.trim());
     }
     let job: { pid: string; chunk: Line[] } | null = null;
     try {
@@ -307,7 +333,7 @@ export function FindModal({ initialCodes = [], onClose }: {
             at: new Date().toISOString(), model: model.id, task: "find", pid: t.pid,
             lines: c.length,
             redactions: c.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0) + askedRedactions,
-            inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+            inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
             costUsd: +usage.costUsd.toFixed(5),
           });
           cost += usage.costUsd;
@@ -527,6 +553,16 @@ export function FindModal({ initialCodes = [], onClose }: {
               </>
             )}
           </div>
+
+          {oversize.length > 0 && (
+            <div className="ai-warn" role="alert">
+              <b>{oversize.length === 1 ? "One line is" : `${oversize.length} lines are`} too long to fit
+              a request</b> ({oversize.slice(0, 3).join(", ")}{oversize.length > 3 ? "…" : ""}).
+              {oversize.length === 1 ? " It goes" : " Each goes"} in a request of its own and may be
+              refused by the model. Splitting {oversize.length === 1 ? "it" : "them"} in the transcript
+              is the fix.
+            </div>
+          )}
 
           {err && <div className="ai-err">{err}</div>}
 
