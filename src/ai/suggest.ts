@@ -54,8 +54,8 @@ export const estimateSuggestTokens = (lines: Line[], codes: SuggestCode[], r: Re
 // nine times the system prompt), so the number of windows is what this run
 // costs. Packing to a token budget is worth about 8x here — more than any
 // trimming of the codebook itself, which still gets paid once per request.
-export const chunksOf = (lines: Line[]): Line[][] =>
-  packChunks(lines, lineSize, WINDOW_PACK);
+export const chunksOf = (lines: Line[], r?: Redaction, context?: Set<string>): Line[][] =>
+  packChunks(lines, (l) => lineSize(l, r, context), WINDOW_PACK);
 
 const SCHEMA = {
   type: "object",
@@ -81,7 +81,7 @@ const SCHEMA = {
 export async function suggestChunk(opts: {
   key: string; model: string; lines: Line[]; codes: SuggestCode[]; redaction: Redaction;
   context?: Set<string>; signal?: AbortSignal;
-}): Promise<{ proposals: SuggestProposal[]; usage: Usage }> {
+}): Promise<{ proposals: SuggestProposal[]; rejected: number; usage: Usage }> {
   const { data, usage } = await callJson<{ proposals: { line_start: number; line_end: number; code: string }[] }>({
     key: opts.key,
     model: opts.model,
@@ -91,7 +91,14 @@ export async function suggestChunk(opts: {
     schema: SCHEMA,
     signal: opts.signal,
   });
-  return { proposals: sanitizeSuggestReply(opts.codes, opts.lines, data.proposals ?? [], opts.context), usage };
+  const reply = data.proposals ?? [];
+  const proposals = sanitizeSuggestReply(opts.codes, opts.lines, reply, opts.context);
+  // What the guard threw away. A window of 200 lines is five times the old
+  // exposure to the model answering with a line id it was never shown, and
+  // sanitizeSuggestReply drops those without a word — which reads to the
+  // researcher as "nothing here" rather than as an answer we could not use.
+  // Counting them is what makes a wide window safe to run at all.
+  return { proposals, rejected: Math.max(0, reply.length - proposals.length), usage };
 }
 
 // The trust boundary, testable without the network. A proposal is only usable if

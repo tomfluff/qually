@@ -71,7 +71,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   const codebook = useStore((s) => s.codebook);
   const ai = useStore((s) => s.ai);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ added: number; skipped: number; cost: number } | null>(null);
+  const [done, setDone] = useState<{ added: number; skipped: number; unusable: number; cost: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const abort = useRef<AbortController | null>(null);
@@ -114,7 +114,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   }, [choose, tabs, transcripts, aiLog, segments]);
 
   const chunks = useMemo(() => {
-    if (!scoped) return chunksOf(lines);
+    if (!scoped) return chunksOf(lines, red, context);
     // a discontiguous ctrl-click selection is SEPARATE windows: packed into
     // one, the model reads the gap as adjacency and can answer with a span
     // bridging lines it never saw — which addSegment would then code
@@ -126,8 +126,8 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
       run.push(l);
     }
     if (run.length) runs.push(run);
-    return runs.flatMap(chunksOf);
-  }, [lines, scoped, allLines]);
+    return runs.flatMap((r) => chunksOf(r, red, context));
+  }, [lines, scoped, allLines, red, context]);
   const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, codes, red, context), 0), [chunks, codes, red, context]);
   const redactions = useMemo(() => {
     const book = codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0);
@@ -149,7 +149,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     earcon.aiStart();
     abort.current = new AbortController();
     const by = AI_PROPOSED_BY_PREFIX + model.name;
-    let added = 0, skipped = 0, cost = 0, pushed = false;
+    let added = 0, skipped = 0, unusable = 0, cost = 0, pushed = false;
     // hoisted out of the loop so the catch can name the one chunk in flight
     let i = 0;
     try {
@@ -158,9 +158,10 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
         // AbortError without dispatching, and the catch would then disclose
         // lines that never left. Nothing more is sent, so nothing more is logged.
         if (abort.current.signal.aborted) return;
-        const { proposals, usage } = await suggestChunk({
+        const { proposals, rejected, usage } = await suggestChunk({
           key, model: model.id, lines: chunks[i], codes, redaction: red, context, signal: abort.current.signal,
         });
+        unusable += rejected;
         for (const p of proposals) {
           // read live each time: catches candidates added earlier in THIS run and
           // any the user accepted/added in another view during the async run
@@ -184,7 +185,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
         cost += usage.costUsd;
         setProgress(i + 1);
       }
-      setDone({ added, skipped, cost });
+      setDone({ added, skipped, unusable, cost });
       earcon.aiDone();
       announce(`Suggestions complete: ${added} candidate coding${added === 1 ? "" : "s"} added.`);
     } catch (e) {
@@ -226,6 +227,17 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                     {done.skipped > 0 && <> ({done.skipped} skipped as already coded)</>} — review them in the{" "}
                     <b>Assist</b> tab's <b>Suggest codes</b> panel, or striped in the transcript.</>}
               </p>
+              {/* A proposal the guard could not verify — a line id outside the
+                  window, a code that is not in the book — is dropped, and
+                  dropping it in silence reads as "nothing here". Say it, so a
+                  window too wide for the model to answer accurately looks like
+                  what it is rather than like an empty transcript. */}
+              {done.unusable > 0 && (
+                <p className="about-lede">
+                  {done.unusable} answer{done.unusable === 1 ? " was" : "s were"} discarded as
+                  unusable — the model named a line or a code that was not in the request.
+                </p>
+              )}
               <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
             </div>
             <div className="imp-actions"><button className="btn primary" onClick={onClose}>Done</button></div>
@@ -307,7 +319,13 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                       <span className="eyebrow">Exactly what leaves your device</span>
                       <span className="ai-model">{model.id}</span>
                     </div>
-                    <pre className="nicescroll">{preview}{chunks[0].length > 8 ? "\n…" : ""}</pre>
+                    <pre className="nicescroll">{preview}{chunks[0].length > 8 || chunks.length > 1 ? "\n…" : ""}</pre>
+                    {/* the box is headed "exactly what leaves your device" and shows
+                        ONE request; with variable packing two singleton chunks used to
+                        render with no ellipsis and no hint that more was going */}
+                    {chunks.length > 1 && (
+                      <p className="ai-payload-more">First of <b>{chunks.length}</b> requests — the rest carry the same shape.</p>
+                    )}
                   </div>
                   <div className="ai-facts">
                     <span>lines <b>{lines.length}</b></span>

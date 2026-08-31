@@ -26,12 +26,15 @@ Text like [REDACTED_1] is a removed identifier; never include it in a passage.`;
 // requests vary with them: 759 tokens for twelve short ones against 4218 for
 // twelve long ones, measured. An excerpt is judged on its own, so unlike a
 // transcript window it needs no neighbours for context and takes no floor.
-export const chunksOfItems = (items: GroundItem[]): GroundItem[][] =>
-  packChunks(items, groundItemSize, ITEM_PACK);
+export const chunksOfItems = (items: GroundItem[], r?: Redaction): GroundItem[][] =>
+  packChunks(items, (it) => groundItemSize(it, r), ITEM_PACK);
 
-// as renderGroundChunk writes it; raw rather than redacted, for the reason in pack.ts
-const groundItemSize = (it: GroundItem): number =>
-  estimateTokens(`#${it.sid} CODE: ${it.code}${it.def ? ` \u2014 ${it.def}` : ""}\n${it.excerpt}`);
+// exactly as renderGroundChunk writes it, redaction included — packing raw text
+// and sending redacted text is how a chunk lands several times its measured size
+const groundItemSize = (it: GroundItem, r?: Redaction): number => {
+  const red = r ? r.redact.bind(r) : (s: string) => s;
+  return estimateTokens(`#${it.sid} CODE: ${it.code}${it.def ? ` \u2014 ${red(it.def)}` : ""}\n${red(it.excerpt)}`);
+};
 
 // exactly what gets sent for one chunk — also what the consent preview shows
 export const renderGroundChunk = (items: GroundItem[], r: Redaction): string =>
@@ -82,9 +85,16 @@ export async function groundChunk(opts: {
   return { recs: sanitizeGroundReply(opts.items, data.items ?? [], opts.redaction), usage };
 }
 
-// The trust boundary, separated so it's testable without the network. EVERY sent
-// item gets a record (even an empty one) — like the scan cache, a clean item
-// with no record would look unscanned and be re-sent next run.
+// The trust boundary, separated so it's testable without the network.
+//
+// Only an item the model ANSWERED gets a record. An earlier version pre-filled
+// every sent item with an empty one, on the reasoning that an item with no
+// record looks ungrounded and would be re-sent; the cost of that was silence
+// being indistinguishable from "no evidence here". An item the model simply
+// omitted was written down as grounded-with-nothing, excluded from every later
+// run, and reported to the researcher as having no evidence for their own
+// coding. Being re-sent is the right outcome for an unanswered item: it costs a
+// second look, where the alternative quietly retires a question nobody answered.
 export function sanitizeGroundReply(
   items: GroundItem[],
   reply: { sid: number; quotes: string[] }[],
@@ -92,7 +102,6 @@ export function sanitizeGroundReply(
 ): Record<number, GroundRec> {
   const bySid = new Map(items.map((it) => [it.sid, it]));
   const recs: Record<number, GroundRec> = {};
-  for (const it of items) recs[it.sid] = { hash: groundHash(it.code, it.excerpt), quotes: [] };
   for (const r of reply) {
     const it = bySid.get(r.sid);
     if (!it) continue; // an invented id grounds nothing

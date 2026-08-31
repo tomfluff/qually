@@ -67,7 +67,7 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
     : eligible.filter((it) => aiGrounds[it.sid]?.hash !== groundHash(it.code, it.excerpt)),
   [eligible, aiGrounds, reground]);
 
-  const chunks = useMemo(() => chunksOfItems(todo), [todo]);
+  const chunks = useMemo(() => chunksOfItems(todo, red), [todo, red]);
   const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateGroundTokens(c, red), 0), [chunks, red]);
   const redactions = useMemo(() => todo.reduce((n, it) => n + red.count(it.excerpt) + red.count(it.def), 0), [todo, red]);
   // verdicts are short but EVERY chunk bills its own low-effort reasoning at
@@ -200,7 +200,13 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                       <span className="eyebrow">Exactly what leaves your device</span>
                       <span className="ai-model">{model.id}</span>
                     </div>
-                    <pre className="nicescroll">{preview}{chunks[0].length > 3 ? "\n…" : ""}</pre>
+                    <pre className="nicescroll">{preview}{chunks[0].length > 3 || chunks.length > 1 ? "\n…" : ""}</pre>
+                    {/* the box is headed "exactly what leaves your device" and shows
+                        ONE request; with variable packing two singleton chunks used to
+                        render with no ellipsis and no hint that more was going */}
+                    {chunks.length > 1 && (
+                      <p className="ai-payload-more">First of <b>{chunks.length}</b> requests — the rest carry the same shape.</p>
+                    )}
                   </div>
                   <div className="ai-facts">
                     <span>excerpts <b>{todo.length}</b></span>

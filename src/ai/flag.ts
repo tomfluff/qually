@@ -119,8 +119,10 @@ const schemaFor = (lensIds: string[]) => ({
   additionalProperties: false,
 });
 
-export const chunksOf = (lines: Line[]): Line[][] =>
-  packChunks(lines, lineSize, WINDOW_PACK);
+// `r` is the redaction the request will carry: packing raw text and sending
+// redacted text is how a window lands at several times its measured size.
+export const chunksOf = (lines: Line[], r?: Redaction): Line[][] =>
+  packChunks(lines, (l) => lineSize(l, r), WINDOW_PACK);
 
 // exactly what gets sent for one chunk — also what the preview shows the user.
 // the speaker label is redacted too: transcripts often carry real names in that

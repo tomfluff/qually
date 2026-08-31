@@ -14,31 +14,42 @@ Build order: **F1 → F2 → F3** (as originally listed).
 - `callJson` structured output, redaction, per-request approval preview
   (AiCheckModal pattern: what's sent, cost estimate), `aiLog` for the methods
   appendix, model tiers (Terra/Sol hinted for interpretive tasks).
-- **How a run splits into requests** (`ai/pack.ts`, 2026-08-31). Every chunker
-  used to count items — 40 lines, 12 excerpts — which is a proxy for size that a
-  real transcript breaks both ways. Measured on 2400 short utterances against a
-  60-code book, a suggest run sent **60 requests that were 97% overhead**: 4.4k
-  tokens of codebook and system prompt to carry 114 tokens of transcript, paid
-  sixty times. Budgeting on `estimateTokens` instead sends 12 requests for the
-  same words — 300k tokens down to 68k. Three rules, in the order they win:
-  `maxItems` (the model echoes line ids back, and `sanitizeSuggestReply` drops
-  ranges it cannot verify *silently*, so drift reads as "found nothing");
-  `minItems` (a window is the context the model judges from — pure size-packing
-  gives a dense transcript three-line windows: cheaper requests, worse answers);
-  then `budget`. An item larger than the budget goes alone rather than being
-  dropped — losing it would be uncoded text the run reports as read.
-  Grounding takes no floor (an excerpt is judged on its own) and gains nothing in
-  cost, but its request sizes stop varying 5.6x with excerpt length.
+- **How a run splits into requests** (`ai/pack.ts`, 2026-08-31; corrected after
+  review 2026-09-01). Every chunker used to count items — 40 lines, 12 excerpts
+  — which is a proxy for size that a real transcript breaks both ways. Measured
+  on 2400 short utterances against a 60-code book, a suggest run sent **60
+  requests that were 97% overhead**: 4.4k tokens of codebook and system prompt
+  to carry 114 tokens of transcript, paid sixty times. Budgeting on
+  `estimateTokens` instead sends 12 requests for the same words — 300k tokens
+  down to 68k. Sizing uses the REDACTED rendering, because a one-character
+  redaction term becomes a twelve-character placeholder and packing what is not
+  sent misses by multiples.
+  Four rules, in the order they win: `hardCap` (a request the model cannot read
+  is worse than an expensive one, and `callJson` has no preflight — this beats
+  the floor); `maxItems`; `minItems` (a window is the context the model judges
+  from — pure size-packing gives a dense transcript three-line windows: cheaper
+  requests, worse answers); then `budget`. An item larger than the cap on its
+  own is still sent, alone, and named in `oversize` — losing it would be uncoded
+  text the run reports as read.
+  **The wide window is only safe because the guard now speaks.** 200 lines is
+  five times the old exposure to the model answering with a line id it was never
+  shown, and `sanitizeSuggestReply` drops those without a word — which reads as
+  "nothing here". `suggestChunk` returns `rejected` and the modal reports it. The
+  ceiling itself is not empirically validated; the count is what makes finding
+  out safe.
+  Grounding takes no floor (an excerpt is judged on its own) and gains nothing
+  in cost, but its request sizes stop varying 5.6x with excerpt length. Its
+  sanitizer also stopped pre-filling an empty record for every sent item: an
+  item the model never mentioned was being written down as grounded-with-nothing
+  and retired permanently, which is not the same claim as "no evidence here".
   Boundaries move, so re-running over an already-swept transcript proposes
   differently for the same lines; `overlapsExisting` is keyed on span+code, so
   accepted and rejected memory still holds.
-  Not fixed here: `summarize` and `ask` are single unchunked calls with **no
-  token cap at all** — the `SECTIONS_TOKEN_CAP` problem, unsolved in two more
-  places. Trimming the codebook was measured and rejected: 1.4x on its own
-  against packing's 8x, and it costs the exemplars that anchor a code's meaning.
-- Segments already carry `proposedBy` + `candidate/accepted/rejected`;
-  candidate lanes render striped; Accept/Reject lives in the segment popover
-  and Browse. Exports carry `proposed_by` (the intercoder column).
+  Not fixed here: `summarize` sends the whole corpus in one request with **no
+  token cap** — the `SECTIONS_TOKEN_CAP` problem, unsolved in one more place.
+  (`ask` does have one: `MAX_TOK` = 120k in AskModal.) Trimming the codebook was
+  measured and rejected: 1.4x on its own against packing's 8x, and it costs the
+  exemplars that anchor a code's meaning.
 
 ## Where runs start (Assist tab)
 
@@ -89,8 +100,9 @@ undoable `mergeCode`. Honesty copy (README + Settings → AI) updated to
 Two launch surfaces, one modal: a transcript's code sidebar (scope locked to that
 transcript) and the Assist tab's Suggest panel — its "AI code suggestion…" button
 (nothing preselected) or the sparkle on any transcript row (that one preselected).
-ai/suggest.ts chunks ONE transcript into 40-line windows, each sent with the
-codebook (name + def + up to 2 exemplars). SuggestModal is the consent gate
+ai/suggest.ts chunks ONE transcript into token-budgeted windows (see pack.ts;
+was a flat 40 lines), each sent with the codebook (name + def + up to 2
+exemplars). SuggestModal is the consent gate
 (transcript picker when launched from Assist — lines, last run and candidates per
 row from aiLog; payload preview, cost, per-run model picker, Terra hint).
 Proposals land as candidate segments (proposedBy "AI · <model>", status
@@ -265,8 +277,8 @@ suppress the default (**[review]**).
 
 ### The call
 
-- **Whole transcript, one call.** A 40-line window (F3's shape) cannot see a
-  boundary, let alone the arc of a session. ~1,500 lines ≈ 31k tokens ≈ 3 cents
+- **Whole transcript, one call.** A window (F3's shape, whatever its size)
+  cannot see a boundary, let alone the arc of a session. ~1,500 lines ≈ 31k tokens ≈ 3 cents
   of Luna input; output and reasoning bill on top, and Terra/Sol are 2.5× and 5×
   that. The honest claim is "pennies on Luna", not a total (**[review]**).
 - **A bounded reply.** The schema caps the list at `SECTIONS_MAX`, and the

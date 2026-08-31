@@ -14,70 +14,117 @@
 // no context preflight, so an oversized request is a failure the researcher has
 // already consented to and may be billed for.
 //
-// So: budget on the ESTIMATE, not on characters. estimateTokens counts CJK at
-// one token per character against a quarter for Latin, and a byte-count budget
+// Budget on the ESTIMATE, not on characters. estimateTokens counts CJK at one
+// token per character against a quarter for Latin, and a byte-count budget
 // would make a Japanese window roughly four times its intended size — the exact
-// failure that estimator was written to avoid.
+// failure that estimator was written to avoid. Size each item as it will
+// actually be RENDERED, redaction included: a one-character redaction term
+// expands to "[REDACTED_1]" and can triple a chunk between packing it and
+// sending it.
 //
-// Three rules, in the order they win:
+// Four rules, in the order they win:
 //
-//   maxItems  — a ceiling on COUNT, because the model echoes line ids back and
-//               a very long window invites it to lose track. sanitizeSuggestReply
-//               drops ranges it cannot verify SILENTLY, so that drift would read
-//               as "found nothing" rather than as an error.
+//   hardCap   — a request this size risks the model's context window, which
+//               callJson cannot preflight. Nothing overrides it, not even the
+//               floor. An item bigger than the cap ON ITS OWN is still sent
+//               rather than dropped, alone, and `oversize` names it so the
+//               caller can warn before the researcher consents.
+//   maxItems  — a ceiling on COUNT, because the model answers with line ids and
+//               a very long window invites it to drift. sanitizeSuggestReply
+//               drops ranges it cannot verify, so drift is only safe while the
+//               caller REPORTS what was dropped (see suggestChunk's `rejected`).
 //   minItems  — a floor on COUNT, because for a windowed read the chunk is not
 //               only a payload unit, it is the context the model judges from.
 //               Pure size-packing gives a dense transcript three-line windows:
-//               cheaper requests, worse answers. The floor beats the budget.
-//   budget    — the ceiling on estimated tokens for the ITEMS, excluding the
-//               fixed system/codebook part, which the caller pays per request
-//               whatever this returns.
+//               cheaper requests, worse answers. The floor beats the budget and
+//               nothing else.
+//   budget    — the soft target for the ITEMS, excluding the fixed
+//               system/codebook part, which the caller pays per request whatever
+//               this returns.
 //
-// An item bigger than the whole budget is never dropped — it lands in a chunk of
-// its own. Silently discarding it would lose coverage while still rendering as
-// coverage, which is the one failure a consent gate cannot describe.
+// An item is never dropped. Silently discarding one would lose coverage while
+// still rendering as coverage, which is the one failure a consent gate cannot
+// describe.
 
 import { estimateTokens } from "./openai";
 
 /** A transcript line as renderChunk and renderSuggestChunk will write it.
-    Sized on the RAW text: redaction substitutes names for [REDACTED_n] and can
-    move the count either way, but this drives how a run is split, not what the
-    consent gate reports — that is estimated from the rendered payload itself. */
-export const lineSize = (l: { id: number; speaker: string; text: string }): number =>
-  estimateTokens(`${l.id}\t${l.speaker}\t${l.text}`);
+    Takes the same redaction the request will, because packing what is not sent
+    is how a chunk lands three times its measured size (a one-character term
+    becomes a twelve-character placeholder). `context` reproduces the
+    "[context] " speaker prefix that renderSuggestChunk adds. */
+export const lineSize = (
+  l: { id: number; speaker: string; text: string },
+  r?: { redact: (s: string) => string },
+  context?: Set<string>,
+): number => {
+  const red = r ? r.redact.bind(r) : (s: string) => s;
+  const tag = context?.has(l.speaker.trim()) ? "[context] " : "";
+  return estimateTokens(`${l.id}\t${tag}${red(l.speaker)}\t${red(l.text)}`);
+};
 
 export interface PackOpts {
-  /** estimated tokens of ITEMS per request (the fixed part rides on top) */
+  /** soft target: estimated tokens of ITEMS per request (the fixed part rides on top) */
   budget: number;
   /** never close a chunk smaller than this — context for a windowed read */
   minItems: number;
-  /** never let a chunk grow past this — ids the model has to track */
+  /** never let a chunk grow past this — ids the model has to answer with */
   maxItems: number;
+  /** absolute ceiling; beats the floor, because no amount of context is worth a
+      request the model cannot read */
+  hardCap: number;
 }
 
 /** Lines are read as a window: neighbours are the context, so keep a floor. */
-export const WINDOW_PACK: PackOpts = { budget: 2500, minItems: 15, maxItems: 200 };
+export const WINDOW_PACK: PackOpts = { budget: 2500, minItems: 15, maxItems: 200, hardCap: 24_000 };
 
 /** Excerpts stand alone — no floor, and a tighter ceiling since each is big. */
-export const ITEM_PACK: PackOpts = { budget: 2500, minItems: 1, maxItems: 24 };
+export const ITEM_PACK: PackOpts = { budget: 2500, minItems: 1, maxItems: 24, hardCap: 24_000 };
 
-export function packChunks<T>(items: readonly T[], size: (x: T) => number, o: PackOpts): T[][] {
-  const out: T[][] = [];
+export interface Packed<T> {
+  chunks: T[][];
+  /** items whose own rendered size exceeds hardCap. They are still sent, each
+      alone, because dropping one loses coverage — but the caller has to say so
+      before the researcher consents to a request that may not fit. */
+  oversize: T[];
+}
+
+/** The full result. `packChunks` is the common case that only wants the chunks. */
+export function packRun<T>(items: readonly T[], size: (x: T) => number, o: PackOpts): Packed<T> {
+  if (!(o.budget > 0) || !(o.hardCap > 0)) throw new Error("pack: budget and hardCap must be positive");
+  if (!Number.isInteger(o.minItems) || !Number.isInteger(o.maxItems)
+    || o.minItems < 1 || o.maxItems < o.minItems) {
+    throw new Error("pack: need 1 <= minItems <= maxItems");
+  }
+  const chunks: T[][] = [];
+  const oversize: T[] = [];
   let cur: T[] = [];
   let tok = 0;
+  const flush = () => { if (cur.length) { chunks.push(cur); cur = []; tok = 0; } };
   for (const it of items) {
-    const t = size(it);
-    // `cur.length &&` is what keeps an oversized item: with nothing gathered
-    // yet there is no chunk to close, so it goes in alone rather than nowhere.
-    if (cur.length && (cur.length >= o.maxItems
-      || (cur.length >= o.minItems && tok + t > o.budget))) {
-      out.push(cur);
-      cur = [];
-      tok = 0;
+    // A size function that cannot answer must not silently disable the budget:
+    // NaN poisons every comparison, so every chunk would grow to maxItems.
+    const raw = size(it);
+    const t = Number.isFinite(raw) && raw > 0 ? raw : 0;
+    // Alone over the cap: it cannot share a request with anything, and it is
+    // still sent — the caller warns, this does not drop it.
+    if (t > o.hardCap) {
+      flush();
+      chunks.push([it]);
+      oversize.push(it);
+      continue;
     }
+    if (cur.length && (
+      cur.length >= o.maxItems
+      || tok + t > o.hardCap                                 // beats the floor
+      || (cur.length >= o.minItems && tok + t > o.budget)    // floor beats the budget
+    )) flush();
     cur.push(it);
     tok += t;
   }
-  if (cur.length) out.push(cur);
-  return out;
+  flush();
+  return { chunks, oversize };
 }
+
+export const packChunks = <T>(items: readonly T[], size: (x: T) => number, o: PackOpts): T[][] =>
+  packRun(items, size, o).chunks;

@@ -11,15 +11,34 @@ const items: GroundItem[] = [
 ];
 const red = redactor([]);
 
-test("valid quotes pass; hallucinated and empty ones drop; every item gets a record", () => {
+test("valid quotes pass; hallucinated and empty ones drop; an invented id grounds nothing", () => {
   const recs = sanitizeGroundReply(items, [
     { sid: 1, quotes: ["zoomed in", "not in the excerpt at all", "  "] },
     { sid: 99, quotes: ["zoomed in"] }, // invented id
   ], red);
   expect(recs[1].quotes).toEqual(["zoomed in"]);
-  expect(recs[2]).toBeDefined();          // sent but unanswered -> empty record
-  expect(recs[2].quotes).toEqual([]);     // so it won't be re-sent next run
   expect(recs[99]).toBeUndefined();
+});
+
+// An item the model did not mention is not an item with no evidence. Recording
+// it as grounded-with-nothing retires the question permanently: it carries a
+// current hash, so it never becomes eligible again, and the run reports it to
+// the researcher as having no evidence for their own coding. Leaving it
+// unrecorded costs a second look, which is the cheaper mistake by far.
+test("an item the model never answered gets no record, so it stays eligible", () => {
+  const recs = sanitizeGroundReply(items, [{ sid: 1, quotes: ["zoomed in"] }], red);
+  expect(recs[1]).toBeDefined();
+  expect(recs[2]).toBeUndefined();
+});
+
+// ...and an item the model DID answer with nothing is a real answer: it says
+// no single span carries the code, and it should not be paid for twice.
+test("an explicit empty answer is recorded, and is not the same as silence", () => {
+  const recs = sanitizeGroundReply(items, [
+    { sid: 1, quotes: ["zoomed in"] }, { sid: 2, quotes: [] },
+  ], red);
+  expect(recs[2]).toBeDefined();
+  expect(recs[2].quotes).toEqual([]);
 });
 
 test("an item with no quotes field gets an empty record, not a crash", () => {

@@ -8,6 +8,7 @@ import { redactor } from "./redact";
 import { hashLine, renderChunk, chunksOf, scanChunk, buildSystem, LENSES } from "./flag";
 import { MODELS, DEFAULT_MODEL, modelOf, costOf } from "./openai";
 import type { Line } from "../state/store";
+import { sanitizeSuggestReply } from "./suggest";
 
 const L = (id: number, text: string, speaker = "P"): Line => ({ id, ts: "", speaker, text });
 
@@ -65,6 +66,24 @@ describe("content hash", () => {
   });
   it("is stable for identical text", () => {
     expect(hashLine("same words")).toBe(hashLine("same words"));
+  });
+});
+
+// A wide window is only safe while the guard SAYS what it threw away: a line id
+// outside the window is dropped without a word, and to the researcher that is
+// indistinguishable from a transcript with nothing in it.
+describe("answers the guard could not use", () => {
+  it("counts a dropped proposal rather than passing it off as nothing found", () => {
+    const codes = [{ name: "difficulty", def: "", excerpts: [] }];
+    const lines = [L(1, "a"), L(2, "b")];
+    const reply = [
+      { line_start: 1, line_end: 2, code: "difficulty" },   // usable
+      { line_start: 1, line_end: 99, code: "difficulty" },  // id never sent
+      { line_start: 1, line_end: 2, code: "invented" },     // code never sent
+    ];
+    const kept = sanitizeSuggestReply(codes, lines, reply);
+    expect(kept).toHaveLength(1);
+    expect(reply.length - kept.length).toBe(2);   // what suggestChunk reports as `rejected`
   });
 });
 

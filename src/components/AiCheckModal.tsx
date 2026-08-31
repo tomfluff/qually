@@ -109,7 +109,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
     return !lenses.every((x) => scanned.includes(x));
   }), [lines, excluded, aiFlags, pid, lenses]);
 
-  const chunks = useMemo(() => chunksOf(todo), [todo]);
+  const chunks = useMemo(() => chunksOf(todo, red), [todo, red]);
   const inTok = useMemo(
     () => chunks.reduce((n, c) => n + estimateChunkTokens(c, red, lenses), 0),
     [chunks, red, lenses]
@@ -283,7 +283,13 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
                       <span className="eyebrow">Exactly what leaves your device</span>
                       <span className="ai-model">{model.id}</span>
                     </div>
-                    <pre className="nicescroll">{preview}{chunks[0].length > 6 ? "\n…" : ""}</pre>
+                    <pre className="nicescroll">{preview}{chunks[0].length > 6 || chunks.length > 1 ? "\n…" : ""}</pre>
+                    {/* the box is headed "exactly what leaves your device" and shows
+                        ONE request; with variable packing two singleton chunks used to
+                        render with no ellipsis and no hint that more was going */}
+                    {chunks.length > 1 && (
+                      <p className="ai-payload-more">First of <b>{chunks.length}</b> requests — the rest carry the same shape.</p>
+                    )}
                   </div>
 
                   <div className="ai-facts">

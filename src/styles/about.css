@@ -177,6 +177,13 @@
 .ai-model { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.7em; color:var(--muted); }
 .ai-payload pre { margin:0; padding:10px; max-height:13em; overflow:auto; white-space:pre;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72em; line-height:1.6; }
+/* Inside the payload box, under the sample: it is a fact ABOUT the sample
+   ("this is one of several"), so it must not read as another summary stat in
+   the facts row below. em, like everything else in this box, so it keeps up
+   with the text-size setting. */
+.ai-payload-more { margin:0; padding:6px 10px; border-top:1px solid var(--line);
+  background:var(--panel); font-size:.78em; color:var(--muted); }
+.ai-payload-more b { color:var(--fg); font-variant-numeric:tabular-nums; }
 .ai-facts { display:flex; flex-wrap:wrap; gap:14px; padding:10px 2px 0;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72em; color:var(--muted); }
 .ai-facts b { color:var(--fg); font-variant-numeric:tabular-nums; }
