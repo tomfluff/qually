@@ -6,7 +6,7 @@
 // segments (proposedBy "AI · <model>") for the researcher to accept or reject —
 // the AI never invents a code, and nothing is applied without a verdict.
 import type { Line } from "../state/store";
-import { callJson, estimateTokens, type Usage } from "./openai";
+import { callJson, estimateTokens, worthCaching, type Usage } from "./openai";
 import type { Redaction } from "./redact";
 import { packChunks, WINDOW_PACK, lineSize } from "./pack";
 
@@ -34,18 +34,29 @@ Rules:
 // `context` = speakers whose lines ride along as background (tagged [context] in the
 // speaker field) but must never THEMSELVES be coded — the researcher's questions
 // stay visible to the model without becoming codeable data.
-export const renderSuggestChunk = (lines: Line[], codes: SuggestCode[], r: Redaction, context?: Set<string>): string => {
+// Split in two because the codebook is IDENTICAL across every window of a run
+// and the transcript is not: that boundary is where a cache breakpoint goes
+// (see callJson's CachePrefix). Joined, the two halves are byte-for-byte the
+// string this has always sent, which is what the consent preview still shows.
+export const renderCodebook = (codes: SuggestCode[], r: Redaction): string => {
   const book = codes.map((c) => {
     const head = `- ${c.name}${c.def ? `: ${r.redact(c.def)}` : ""}`;
     const ex = c.excerpts.map((e) => `    e.g. ${r.redact(e)}`).join("\n");
     return ex ? `${head}\n${ex}` : head;
   }).join("\n");
+  return `CODEBOOK:\n${book}`;
+};
+
+export const renderWindow = (lines: Line[], r: Redaction, context?: Set<string>): string => {
   const window = lines.map((l) => {
     const tag = context?.has(l.speaker.trim()) ? "[context] " : "";
     return `${l.id}\t${tag}${r.redact(l.speaker)}\t${r.redact(l.text)}`;
   }).join("\n");
-  return `CODEBOOK:\n${book}\n\nTRANSCRIPT:\n${window}`;
+  return `TRANSCRIPT:\n${window}`;
 };
+
+export const renderSuggestChunk = (lines: Line[], codes: SuggestCode[], r: Redaction, context?: Set<string>): string =>
+  `${renderCodebook(codes, r)}\n\n${renderWindow(lines, r, context)}`;
 
 export const estimateSuggestTokens = (lines: Line[], codes: SuggestCode[], r: Redaction, context?: Set<string>) =>
   estimateTokens(SYSTEM) + estimateTokens(renderSuggestChunk(lines, codes, r, context));
@@ -80,13 +91,23 @@ const SCHEMA = {
 
 export async function suggestChunk(opts: {
   key: string; model: string; lines: Line[]; codes: SuggestCode[]; redaction: Redaction;
-  context?: Set<string>; signal?: AbortSignal;
+  context?: Set<string>;
+  /** Set only when the run has more than one request: a cache WRITE bills at
+      1.25x, so asking for it on a single request costs more than not asking. */
+  cacheKey?: string;
+  signal?: AbortSignal;
 }): Promise<{ proposals: SuggestProposal[]; rejected: number; usage: Usage }> {
+  const book = renderCodebook(opts.codes, opts.redaction);
+  const cache = opts.cacheKey && worthCaching(book, 2) ? { text: book, key: opts.cacheKey } : undefined;
   const { data, usage } = await callJson<{ proposals: { line_start: number; line_end: number; code: string }[] }>({
     key: opts.key,
     model: opts.model,
     system: SYSTEM,
-    user: renderSuggestChunk(opts.lines, opts.codes, opts.redaction, opts.context),
+    // the same bytes either way — split in two only so the stable half can carry
+    // the breakpoint the API needs to reuse it
+    user: cache ? renderWindow(opts.lines, opts.redaction, opts.context)
+      : renderSuggestChunk(opts.lines, opts.codes, opts.redaction, opts.context),
+    cache,
     schemaName: "suggest_codes",
     schema: SCHEMA,
     signal: opts.signal,

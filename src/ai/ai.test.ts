@@ -6,9 +6,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { redactor } from "./redact";
 import { hashLine, renderChunk, chunksOf, scanChunk, buildSystem, LENSES } from "./flag";
-import { MODELS, DEFAULT_MODEL, modelOf, costOf } from "./openai";
+import { MODELS, DEFAULT_MODEL, modelOf, costOf, worthCaching, MIN_CACHEABLE_TOKENS } from "./openai";
 import type { Line } from "../state/store";
-import { sanitizeSuggestReply } from "./suggest";
+import { sanitizeSuggestReply, renderCodebook, renderWindow, renderSuggestChunk } from "./suggest";
 
 const L = (id: number, text: string, speaker = "P"): Line => ({ id, ts: "", speaker, text });
 
@@ -561,5 +561,35 @@ describe("what a consolidation run is allowed to propose", () => {
       expect(all.plan.clusters).toHaveLength(1);
       expect(all.plan.actions.map((a) => a.action).sort()).toEqual(["rename"]); // "a" is clustered, so no separate action
     } finally { globalThis.fetch = orig; }
+  });
+});
+
+// The codebook is split out of the window so it can carry a cache breakpoint.
+// The consent gate still previews the joined string, so the split is only
+// honest while the two halves are byte-for-byte what was always sent.
+describe("splitting the payload for the cache", () => {
+  const red = redactor([]);
+  const codes = [{ name: "difficulty", def: "cannot read it", excerpts: ["I zoom in"] }];
+  const lines = [L(1, "I zoom right in"), L(2, "the labels blur")];
+
+  it("joins back to exactly the string the preview shows", () => {
+    expect(`${renderCodebook(codes, red)}\n\n${renderWindow(lines, red)}`)
+      .toBe(renderSuggestChunk(lines, codes, red));
+  });
+
+  it("keeps the [context] tag on the window half, where the guard reads it", () => {
+    const ctx = new Set(["P"]);
+    expect(renderWindow(lines, red, ctx)).toContain("[context]");
+    expect(renderCodebook(codes, red)).not.toContain("[context]");
+  });
+
+  // A write bills at 1.25x against a read at 0.1x, so asking on one request
+  // costs more than not asking; and below the API's minimum the breakpoint is
+  // accepted but never hits, which is the write premium for nothing.
+  it("only asks for caching where it can pay for itself", () => {
+    const big = "x".repeat(MIN_CACHEABLE_TOKENS * 4 + 40);
+    expect(worthCaching(big, 1)).toBe(false);      // single request
+    expect(worthCaching("tiny", 9)).toBe(false);   // under the minimum
+    expect(worthCaching(big, 2)).toBe(true);
   });
 });

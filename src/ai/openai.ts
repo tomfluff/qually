@@ -60,6 +60,35 @@ export interface Usage { inTok: number; outTok: number; cachedTok: number; costU
 
 export class AiError extends Error {}
 
+/** A block of text that is IDENTICAL across the requests of one run — a
+    codebook, a definition list — which the API can bill at the cache rate
+    instead of the full one after the first request.
+
+    Verified against OpenAI's prompt-caching guide (2026-08-31). Two facts shape
+    this:
+      - A cache entry is a PREFIX, and reuse needs the whole prefix to match. On
+        GPT-5.6 the implicit breakpoint lands at the end of the latest eligible
+        message, so a request that concatenates a stable codebook and a changing
+        window into one user message caches through the changing part and never
+        hits. The docs name that exact shape as a gotcha, and it is the shape
+        this app was sending: every run got zero reuse.
+      - A read bills at 0.1x, a WRITE at 1.25x. So this is only worth asking for
+        on a run of more than one request — at N=1 it costs 25% MORE. Callers
+        must not pass `cache` for a single-request action.
+    `key` groups the run's requests so they reach the same machine; the guide
+    warns that above 15 requests a minute they can otherwise be routed apart. */
+export interface CachePrefix { text: string; key: string }
+
+/** The smallest prefix the API will cache on GPT-5.6 and later. Below it the
+    breakpoint is accepted and simply never produces a hit, so asking would pay
+    the write premium for nothing. */
+export const MIN_CACHEABLE_TOKENS = 1024;
+
+/** Whether asking for caching can pay for itself: a prefix large enough to be
+    cached at all, over more than one request. */
+export const worthCaching = (prefixText: string, requests: number) =>
+  requests > 1 && estimateTokens(prefixText) >= MIN_CACHEABLE_TOKENS;
+
 // One structured-output call. Returns the parsed object plus what it actually cost.
 export async function callJson<T>(opts: {
   key: string;
@@ -68,6 +97,8 @@ export async function callJson<T>(opts: {
   user: string;
   schemaName: string;
   schema: object;
+  /** Omit to send exactly what this app has always sent. */
+  cache?: CachePrefix;
   signal?: AbortSignal;
 }): Promise<{ data: T; usage: Usage }> {
   let res: Response;
@@ -78,10 +109,34 @@ export async function callJson<T>(opts: {
       signal: opts.signal,
       body: JSON.stringify({
         model: opts.model,
-        input: [
-          { role: "system", content: opts.system },
-          { role: "user", content: opts.user },
-        ],
+        // Without `cache`, byte-identical to what this app has always sent.
+        // With it, the stable block becomes its own message carrying an explicit
+        // breakpoint, so the changing part below it cannot spoil the prefix.
+        input: opts.cache
+          ? [
+            { role: "system", content: opts.system },
+            {
+              role: "developer",
+              content: [{
+                type: "input_text",
+                text: opts.cache.text,
+                prompt_cache_breakpoint: { mode: "explicit" },
+              }],
+            },
+            { role: "user", content: opts.user },
+          ]
+          : [
+            { role: "system", content: opts.system },
+            { role: "user", content: opts.user },
+          ],
+        ...(opts.cache
+          ? {
+            prompt_cache_key: opts.cache.key,
+            // explicit-only: do not also write the changing suffix, which would
+            // pay the 1.25x write premium for a prefix nothing can reuse
+            prompt_cache_options: { mode: "explicit" },
+          }
+          : {}),
         // reasoning tokens bill at the OUTPUT rate; these tasks are shallow, so
         // don't pay for deliberation we don't need
         reasoning: { effort: "low" },

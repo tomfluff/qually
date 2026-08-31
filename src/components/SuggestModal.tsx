@@ -75,6 +75,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const abort = useRef<AbortController | null>(null);
+  const runSeq = useRef(0);
   useEffect(() => () => abort.current?.abort(), []);
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
@@ -149,6 +150,9 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     earcon.aiStart();
     abort.current = new AbortController();
     const by = AI_PROPOSED_BY_PREFIX + model.name;
+    // stable for this run, distinct between runs: the codebook is what is
+    // cached, so a run with a different book must not land on the same entry
+    const cacheKey = `suggest:${model.id}:${pid}:${codes.length}:${runSeq.current++}`;
     let added = 0, skipped = 0, unusable = 0, cost = 0, pushed = false;
     // hoisted out of the loop so the catch can name the one chunk in flight
     let i = 0;
@@ -159,7 +163,12 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
         // lines that never left. Nothing more is sent, so nothing more is logged.
         if (abort.current.signal.aborted) return;
         const { proposals, rejected, usage } = await suggestChunk({
-          key, model: model.id, lines: chunks[i], codes, redaction: red, context, signal: abort.current.signal,
+          key, model: model.id, lines: chunks[i], codes, redaction: red, context,
+          // only across a run of more than one request: a cache write bills at
+          // 1.25x, so asking on a single request costs more than not asking.
+          // Keyed on the run so its windows reach the same machine.
+          cacheKey: chunks.length > 1 ? cacheKey : undefined,
+          signal: abort.current.signal,
         });
         unusable += rejected;
         for (const p of proposals) {
