@@ -398,8 +398,13 @@ export function FindModal({ initialCodes = [], onClose }: {
                     <b>Codes I already have</b> and tick it, or give this one another name.
                   </div>
                 )}
+                {/* The app has a second free-text box — Assist → Ask — with a
+                    different contract: Ask answers FROM work already coded, this
+                    reads the raw transcript. Two question boxes that behave
+                    differently is a trap, so each says which it is. */}
                 <p className="settings-note">
-                  Kept as a code of your own. Anything found lands as a candidate coding under it.
+                  Kept as a code of your own; hits land under it as candidates.
+                  <em> Ask answers from work you have already coded — this reads the transcripts.</em>
                 </p>
               </>
             )}

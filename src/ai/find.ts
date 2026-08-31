@@ -21,12 +21,16 @@
 // and the schema has nowhere to put a name so the model cannot volunteer one.
 import type { Line } from "../state/store";
 import { callJson, estimateTokens, worthCaching, type Usage } from "./openai";
-import { restore, type Redaction } from "./redact";
+import type { Redaction } from "./redact";
 import { packChunks, lineSize, WINDOW_PACK } from "./pack";
 
-/** A passage the model says bears on the question. `why` is one short phrase —
-    it is a pointer for the researcher's eye, never a finding in itself. */
-export interface FindHit { startLine: number; endLine: number; why: string }
+/** A passage the model says bears on the question. A range and nothing else.
+    An earlier version also asked for a one-phrase `why`. It was never shown, so
+    it was output tokens — which bill at six times the input rate — paid for and
+    thrown away; and it was the one channel through which the model could offer
+    an interpretation ("this shows learned helplessness") before the researcher
+    had read the passage. The passage is its own evidence. */
+export interface FindHit { startLine: number; endLine: number }
 
 const SYSTEM = `You are helping a qualitative researcher search interview transcripts. You are given a QUESTION describing what they are looking for, and a window of numbered transcript lines. Return the line ranges where the transcript bears on that question.
 
@@ -39,7 +43,7 @@ Rules:
 - Return only clear, defensible hits. A window with nothing relevant is a good answer: return an empty list. A researcher would rather read five real passages than thirty plausible ones.
 - Match on meaning, not on vocabulary. A passage that uses the question's words but is about something else is not a hit; a passage that never uses them but describes exactly what was asked is.
 - A disfluency is never a hit BY ITSELF: never return a range whose only content is fillers (um, uh, er, hmm, "you know"), false starts, stammers, or word repetitions.
-- "why" is at most one short phrase naming what in the passage bears on the question. Do NOT propose a code, a theme, a label, or a name for it — naming belongs to the researcher, not to you. Do not evaluate the participant.
+- Return ranges only. Do NOT propose a code, a theme, a label, a name, or an interpretation for what you find — naming belongs to the researcher, not to you. Do not evaluate the participant.
 - Text like [REDACTED_1] is a removed identifier; treat it as an opaque token and never quote it back.`;
 
 /** The stable half of the request — the question, which is identical across
@@ -76,9 +80,8 @@ const SCHEMA = {
         properties: {
           line_start: { type: "integer", description: "first line id of the range (inclusive)" },
           line_end: { type: "integer", description: "last line id of the range (inclusive)" },
-          why: { type: "string", description: "one short phrase: what in this passage bears on the question" },
         },
-        required: ["line_start", "line_end", "why"],
+        required: ["line_start", "line_end"],
         additionalProperties: false,
       },
     },
@@ -96,7 +99,7 @@ export async function findChunk(opts: {
   // the API's minimum cacheable length — worthCaching says so rather than paying
   // the write premium for a prefix that can never be reused.
   const cache = opts.cacheKey && worthCaching(q, 2) ? { text: q, key: opts.cacheKey } : undefined;
-  const { data, usage } = await callJson<{ hits: { line_start: number; line_end: number; why: string }[] }>({
+  const { data, usage } = await callJson<{ hits: { line_start: number; line_end: number }[] }>({
     key: opts.key,
     model: opts.model,
     system: SYSTEM,
@@ -108,7 +111,7 @@ export async function findChunk(opts: {
     signal: opts.signal,
   });
   const reply = data.hits ?? [];
-  const hits = sanitizeFindReply(opts.lines, reply, opts.redaction, opts.context);
+  const hits = sanitizeFindReply(opts.lines, reply, opts.context);
   // Same reason as suggestChunk's: a hit the guard cannot verify is dropped, and
   // dropping it in silence reads as "nothing in this transcript".
   return { hits, rejected: Math.max(0, reply.length - hits.length), usage };
@@ -121,8 +124,7 @@ export async function findChunk(opts: {
 // Everything else is dropped, never guessed at.
 export function sanitizeFindReply(
   lines: Line[],
-  reply: { line_start: number; line_end: number; why: string }[],
-  r?: Redaction,
+  reply: { line_start: number; line_end: number }[],
   context?: Set<string>,
 ): FindHit[] {
   const ids = new Set(lines.map((l) => l.id));
@@ -138,10 +140,7 @@ export function sanitizeFindReply(
     const key = `${startLine}-${endLine}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    // restored through the redaction map, because a `why` that still carries a
-    // placeholder would show the researcher [REDACTED_1] where their own
-    // participant's name belongs
-    out.push({ startLine, endLine, why: restore(r, (h.why ?? "").trim()) });
+    out.push({ startLine, endLine });
   }
   return out;
 }
