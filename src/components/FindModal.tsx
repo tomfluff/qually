@@ -499,7 +499,10 @@ export function FindModal({ initialCodes = [], onClose }: {
                 : ready ? `Send ${requests} request${requests === 1 ? "" : "s"} to OpenAI`
                   : mode === "codes" && !focus.size ? "Pick at least one code"
                     : mode === "question" && !named ? "Name it and describe it"
-                      : "Pick at least one transcript"}
+                      : !chosen.length ? "Pick at least one transcript"
+                        /* transcripts ARE picked; every speaker in them is
+                           context-only, so nothing in them can be a hit */
+                        : "Set at least one speaker to searched"}
             </button>
             <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
               {busy ? "Stop" : "Cancel — send nothing"}
