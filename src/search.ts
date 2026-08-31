@@ -5,10 +5,20 @@ import { tsToSec } from "./video/seek";
 export function findMatches(text: string, query: string): [number, number][] {
   if (!query) return [];
   const q = query.toLowerCase();
-  const lower = text.toLowerCase();
   const out: [number, number][] = [];
-  let i = 0;
-  while ((i = lower.indexOf(q, i)) !== -1) { out.push([i, i + q.length]); i += q.length; }
+  // Scanned in TEXT coordinates, not in text.toLowerCase(). toLowerCase is not
+  // length-preserving — Turkish dotted capital I (U+0130) lowercases to two
+  // UTF-16 units — so offsets taken from the lowered string drift by one for
+  // everything after it, and here that drift lands on a WRITE: replaceAllIn
+  // sliced the original text with them and ate a character.
+  // "Istanbul was mentioned" (with U+0130) replacing "was" produced "wXmentioned".
+  // Lines are short; comparing per position costs nothing and is right for
+  // every input, including the ones where a case fold changes length.
+  const n = query.length;
+  if (!n) return out;
+  for (let i = 0; i + n <= text.length; i++) {
+    if (text.slice(i, i + n).toLowerCase() === q) { out.push([i, i + n]); i += n - 1; }
+  }
   return out;
 }
 

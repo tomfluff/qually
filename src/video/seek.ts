@@ -44,6 +44,14 @@ export const isLooping = () => loopActive;
 export function tsToSec(ts: string): number | null {
   const p = (ts || "").split(".")[0].split(":").map(Number);
   if (!p.length || p.some(isNaN)) return null;
+  // At most H:M:S. A fourth field is SMPTE frames (00:01:20:15), and folding it
+  // in as another sixty read that as 4815 seconds rather than 80 — a normal
+  // broadcast timestamp silently placing every event 60x too far into the
+  // session. Number("") is 0, not NaN, so "1::20" passed the isNaN guard too;
+  // and a negative field made a negative time. Reject all three rather than
+  // guess, keeping the documented "" -> 0 leniency.
+  if (p.length > 3 || p.some((n) => n < 0)) return null;
+  if (p.length > 1 && p.slice(1).some((n) => !Number.isFinite(n) || n >= 60)) return null;
   return p.reduce((a, b) => a * 60 + b, 0);
 }
 

@@ -13,8 +13,14 @@
   background:var(--bg); color:var(--muted); cursor:pointer;
   display:flex; align-items:center; justify-content:center; }
 .searchclose:hover { color:var(--fg); background:var(--panel); }
+/* font-SIZE as well as family: an <input> inherits neither, and base.css's
+   reset is family-only and buttons-only, so the field you type Ctrl+F into
+   rendered at the UA's ~13.3px — the smallest text in the instrument, sitting
+   between two controls that both set .92em. Its siblings .searchsel and
+   .searchscope .seg had it; this did not. */
 .searchinput { flex:1; min-width:0; padding:5px 8px; border:1px solid var(--line);
-  border-radius:6px; background:var(--panel); color:var(--fg); font-family:inherit; }
+  border-radius:6px; background:var(--panel); color:var(--fg);
+  font-family:inherit; font-size:inherit; }
 .searchcount { min-width:3ch; text-align:center; font-size:12px; color:var(--muted);
   font-variant-numeric:tabular-nums; }
 /* every control in the bar stands the same height as the This tab / All

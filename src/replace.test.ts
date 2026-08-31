@@ -111,3 +111,19 @@ test("undoing a sweep on a closed tab brings the transcript back into view", () 
   expect(after.active).toBe("P01");
   expect(after.transcripts.P01.lines[2].text).toBe("the second system never lost my place");
 });
+
+// toLowerCase is not length-preserving: Turkish dotted capital I (U+0130)
+// lowercases to two UTF-16 units. Offsets taken from the lowered string drift
+// by one for everything after it, and in replaceAllIn that drift landed on a
+// WRITE — it ate a character and still reported a successful replacement.
+test("a case fold that changes length still replaces the right span", () => {
+  expect(replaceAllIn("İstanbul was mentioned", "was", "X"))
+    .toEqual({ text: "İstanbul X mentioned", n: 1 });
+  expect(replaceAllIn("Ordu İl was there", "was", "X"))
+    .toEqual({ text: "Ordu İl X there", n: 1 });
+});
+
+test("and finds it at the right offset in the first place", () => {
+  expect(findMatches("İstanbul was mentioned", "was")).toEqual([[9, 12]]);
+  expect(findMatches("İstanbul", "İst")).toEqual([[0, 3]]);
+});

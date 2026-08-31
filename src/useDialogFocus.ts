@@ -39,7 +39,29 @@ export function useDialogFocus<T extends HTMLElement = HTMLDivElement>(
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     };
+    // A control that DISABLES itself while focused hands focus to <body>, and
+    // this trap listens on the dialog element — a keydown on <body> never
+    // reaches it, so Tab then walks the page behind an aria-modal dialog. Every
+    // AI consent gate does exactly that: Send is disabled={busy}, so pressing
+    // it strands the researcher outside the dialog for the whole run, with Stop
+    // — the only way to abort something they are paying for — unreachable by
+    // the trap. Catch it where it happens rather than in nine components.
+    const onOut = () => {
+      // after the browser has moved focus, and only if it went nowhere
+      queueMicrotask(() => {
+        if (!el.isConnected) return;
+        const now = document.activeElement;
+        if (now && now !== document.body && el.contains(now)) return;
+        if (now && now !== document.body) return;   // something outside claimed it deliberately
+        (focusables()[0] ?? el).focus();
+      });
+    };
     el.addEventListener("keydown", onKey);
-    return () => { el.removeEventListener("keydown", onKey); opener?.focus?.(); };
+    el.addEventListener("focusout", onOut);
+    return () => {
+      el.removeEventListener("keydown", onKey);
+      el.removeEventListener("focusout", onOut);
+      opener?.focus?.();
+    };
   }, [initial]);
 }
