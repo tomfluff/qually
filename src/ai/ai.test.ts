@@ -73,6 +73,27 @@ describe("content hash", () => {
 // outside the window is dropped without a word, and to the researcher that is
 // indistinguishable from a transcript with nothing in it.
 describe("answers the guard could not use", () => {
+  // The scan is the app's oldest and most-used AI run, and all four of its drops
+  // were silent: a reply of nothing but hallucinated quotes reported "nothing
+  // marked", which reads as a quiet transcript rather than an unusable answer.
+  it("counts a scan mark the guard threw away", async () => {
+    const line = L(1, "I zoom right in on the chart");
+    const reply = [
+      { line_id: 1, lens: "emotion", quote: "zoom right in", note: "ok" },   // usable
+      { line_id: 9, lens: "emotion", quote: "zoom", note: "no such line" },
+      { line_id: 1, lens: "emotion", quote: "never said this", note: "not a substring" },
+    ];
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ flags: reply }) }] }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }), { status: 200 }));
+    const r = await scanChunk({
+      key: "k", model: DEFAULT_MODEL, lines: [line], lenses: ["emotion"], redaction: redactor([]),
+    });
+    expect(Object.values(r.flags).flat()).toHaveLength(1);
+    expect(r.dropped).toBe(2);
+  });
+
   it("counts a dropped proposal rather than passing it off as nothing found", () => {
     const codes = [{ name: "difficulty", def: "", excerpts: [] }];
     const lines = [L(1, "a"), L(2, "b")];

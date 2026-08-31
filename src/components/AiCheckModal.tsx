@@ -32,7 +32,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
   const setAi = useStore((s) => s.setAi);
   const aiFlags = useStore((s) => s.aiFlags);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ errors: number; notices: number; cost: number } | null>(null);
+  const [done, setDone] = useState<{ errors: number; notices: number; unusable: number; cost: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   // The denominator has to be FROZEN when the run starts. `chunks` is derived
@@ -138,7 +138,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
     abort.current = new AbortController();
     setTotal(chunks.length);
     const st = useStore.getState();
-    let errors = 0, notices = 0, cost = 0;
+    let errors = 0, notices = 0, unusable = 0, cost = 0;
     // hoisted out of the loop so the catch can name the one chunk in flight
     let i = 0;
     try {
@@ -147,9 +147,10 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
         // AbortError without dispatching, and the catch would then disclose
         // lines that never left. Nothing more is sent, so nothing more is logged.
         if (abort.current.signal.aborted) return;
-        const { flags, usage } = await scanChunk({
+        const { flags, dropped, usage } = await scanChunk({
           key, model: model.id, lines: chunks[i], lenses, redaction: red, signal: abort.current.signal,
         });
+        unusable += dropped;
         st.addFlags(pid, flags, chunks[i], lenses);
         st.logAiCall({
           at: new Date().toISOString(), model: model.id, task: `scan:${[...lenses].sort().join("+")}`, pid,
@@ -162,7 +163,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
         cost += usage.costUsd;
         setProgress(i + 1);
       }
-      setDone({ errors, notices, cost });
+      setDone({ errors, notices, unusable, cost });
       earcon.aiDone();
       announce(errors + notices === 0
         ? "AI scan complete. Nothing marked."
@@ -190,11 +191,17 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
 
   const doneMsg = () => {
     if (!done) return null;
+    // `unusable` matters most in exactly the case that used to look like a quiet
+    // transcript: the model answered, and the guard could not use a word of it.
+    const unusable = done.unusable > 0
+      ? <> {done.unusable} unusable answer{done.unusable === 1 ? "" : "s"} discarded.</>
+      : null;
     if (done.errors + done.notices === 0)
-      return <>Nothing marked. That's a fine result — the scans only mark what's clearly there.</>;
+      return <>Nothing marked. That's a fine result — the scans only mark what's clearly there.{unusable}</>;
     return <>
       {done.errors > 0 && <>Flagged <b>{done.errors} possible transcription error{done.errors === 1 ? "" : "s"}</b> (amber, dotted) — double-click a line to fix it against the audio. </>}
       {done.notices > 0 && <>Marked <b>{done.notices} observation{done.notices === 1 ? "" : "s"}</b> for your review — hover for the lens, Alt-click to dismiss, or hide them all with the eye button to read blind. Go over them together in the <b>Assist</b> tab.</>}
+      {unusable}
     </>;
   };
 

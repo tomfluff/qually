@@ -135,7 +135,7 @@ export const estimateChunkTokens = (lines: Line[], r: Redaction, lensIds: string
 
 export async function scanChunk(opts: {
   key: string; model: string; lines: Line[]; lenses: string[]; redaction: Redaction; signal?: AbortSignal;
-}): Promise<{ flags: Record<number, Flag[]>; usage: Usage }> {
+}): Promise<{ flags: Record<number, Flag[]>; dropped: number; usage: Usage }> {
   const { data, usage } = await callJson<{ flags: { line_id: number; lens: string; quote: string; note: string; fix?: string }[] }>({
     key: opts.key,
     model: opts.model,
@@ -148,17 +148,23 @@ export async function scanChunk(opts: {
 
   const byId = new Map(opts.lines.map((l) => [l.id, l]));
   const flags: Record<number, Flag[]> = {};
-  for (const f of data.flags ?? []) {
+  // Four things below drop a mark, and every one of them used to drop it in
+  // silence: a run where the model quoted text that is not in the transcript
+  // reported "3 notices added" and looked like a quiet transcript rather than an
+  // answer we could not use. Count them so the result can say so.
+  let dropped = 0;
+  const reply = data.flags ?? [];
+  for (const f of reply) {
     const line = byId.get(f.line_id);
-    if (!line) continue;
-    if (!opts.lenses.includes(f.lens)) continue; // schema enum should prevent this; belt and braces
+    if (!line) { dropped++; continue; }
+    if (!opts.lenses.includes(f.lens)) { dropped++; continue; } // schema enum should prevent this; belt and braces
     // A mark ON a placeholder is meaningless — the model never saw the real term, so
     // it cannot judge it. Restoring one would highlight the participant's actual name.
-    if (opts.redaction.hasPlaceholder(f.quote)) continue;
+    if (opts.redaction.hasPlaceholder(f.quote)) { dropped++; continue; }
     // Otherwise map the quote back to the real text and DROP anything that isn't a
     // genuine substring — a hallucinated quote would highlight text that isn't there.
     const quote = opts.redaction.restore(f.quote);
-    if (!quote || !line.text.includes(quote)) continue;
+    if (!quote || !line.text.includes(quote)) { dropped++; continue; }
     // the fix rides only on transcription flags, restored through the same
     // redaction map; a fix that still contains a placeholder (or equals the
     // quote) is no fix at all. Lines are the data model's unit, so a fix must
@@ -177,5 +183,5 @@ export async function scanChunk(opts: {
       ...(fixOk ? { fix } : {}),
     });
   }
-  return { flags, usage };
+  return { flags, dropped, usage };
 }
