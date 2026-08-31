@@ -5,8 +5,8 @@
 import { hashLine } from "./flag";
 import { callJson, estimateTokens, type Usage } from "./openai";
 import type { Redaction } from "./redact";
+import { packChunks, ITEM_PACK } from "./pack";
 
-const GROUND_CHUNK = 12; // excerpts per request — longer than scan lines
 
 // A segment's grounding is valid only while its code AND its excerpt text are
 // what the model saw — recode, merge, resize, or a line edit all change the
@@ -22,11 +22,16 @@ Example — excerpt: "I like our current plan, but I do think your first item in
 
 Text like [REDACTED_1] is a removed identifier; never include it in a passage.`;
 
-export const chunksOfItems = (items: GroundItem[]): GroundItem[][] => {
-  const out: GroundItem[][] = [];
-  for (let i = 0; i < items.length; i += GROUND_CHUNK) out.push(items.slice(i, i + GROUND_CHUNK));
-  return out;
-};
+// Excerpts vary enormously in length, and a fixed twelve-per-request made the
+// requests vary with them: 759 tokens for twelve short ones against 4218 for
+// twelve long ones, measured. An excerpt is judged on its own, so unlike a
+// transcript window it needs no neighbours for context and takes no floor.
+export const chunksOfItems = (items: GroundItem[]): GroundItem[][] =>
+  packChunks(items, groundItemSize, ITEM_PACK);
+
+// as renderGroundChunk writes it; raw rather than redacted, for the reason in pack.ts
+const groundItemSize = (it: GroundItem): number =>
+  estimateTokens(`#${it.sid} CODE: ${it.code}${it.def ? ` \u2014 ${it.def}` : ""}\n${it.excerpt}`);
 
 // exactly what gets sent for one chunk — also what the consent preview shows
 export const renderGroundChunk = (items: GroundItem[], r: Redaction): string =>

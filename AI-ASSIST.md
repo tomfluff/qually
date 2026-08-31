@@ -14,6 +14,28 @@ Build order: **F1 → F2 → F3** (as originally listed).
 - `callJson` structured output, redaction, per-request approval preview
   (AiCheckModal pattern: what's sent, cost estimate), `aiLog` for the methods
   appendix, model tiers (Terra/Sol hinted for interpretive tasks).
+- **How a run splits into requests** (`ai/pack.ts`, 2026-08-31). Every chunker
+  used to count items — 40 lines, 12 excerpts — which is a proxy for size that a
+  real transcript breaks both ways. Measured on 2400 short utterances against a
+  60-code book, a suggest run sent **60 requests that were 97% overhead**: 4.4k
+  tokens of codebook and system prompt to carry 114 tokens of transcript, paid
+  sixty times. Budgeting on `estimateTokens` instead sends 12 requests for the
+  same words — 300k tokens down to 68k. Three rules, in the order they win:
+  `maxItems` (the model echoes line ids back, and `sanitizeSuggestReply` drops
+  ranges it cannot verify *silently*, so drift reads as "found nothing");
+  `minItems` (a window is the context the model judges from — pure size-packing
+  gives a dense transcript three-line windows: cheaper requests, worse answers);
+  then `budget`. An item larger than the budget goes alone rather than being
+  dropped — losing it would be uncoded text the run reports as read.
+  Grounding takes no floor (an excerpt is judged on its own) and gains nothing in
+  cost, but its request sizes stop varying 5.6x with excerpt length.
+  Boundaries move, so re-running over an already-swept transcript proposes
+  differently for the same lines; `overlapsExisting` is keyed on span+code, so
+  accepted and rejected memory still holds.
+  Not fixed here: `summarize` and `ask` are single unchunked calls with **no
+  token cap at all** — the `SECTIONS_TOKEN_CAP` problem, unsolved in two more
+  places. Trimming the codebook was measured and rejected: 1.4x on its own
+  against packing's 8x, and it costs the exemplars that anchor a code's meaning.
 - Segments already carry `proposedBy` + `candidate/accepted/rejected`;
   candidate lanes render striped; Accept/Reject lives in the segment popover
   and Browse. Exports carry `proposed_by` (the intercoder column).

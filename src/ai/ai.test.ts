@@ -5,7 +5,7 @@
 // quote being rendered over text that doesn't exist.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { redactor } from "./redact";
-import { hashLine, renderChunk, chunksOf, scanChunk, buildSystem, LENSES, CHUNK } from "./flag";
+import { hashLine, renderChunk, chunksOf, scanChunk, buildSystem, LENSES } from "./flag";
 import { MODELS, DEFAULT_MODEL, modelOf, costOf } from "./openai";
 import type { Line } from "../state/store";
 
@@ -70,11 +70,14 @@ describe("content hash", () => {
 
 describe("chunking", () => {
   it("splits a transcript into windows, never sending the corpus at once", () => {
-    const lines = Array.from({ length: CHUNK * 2 + 5 }, (_, i) => L(i + 1, "hi"));
+    // sized in tokens now, not counted in lines (see pack.ts) — so the property
+    // that matters is that a long transcript is split at all, and that every
+    // line survives the split exactly once and in order
+    const lines = Array.from({ length: 600 }, (_, i) =>
+      L(i + 1, "I zoom right in on the chart and trace along each bar because the labels blur"));
     const cs = chunksOf(lines);
-    expect(cs).toHaveLength(3);
-    expect(cs[0]).toHaveLength(CHUNK);
-    expect(cs[2]).toHaveLength(5);
+    expect(cs.length).toBeGreaterThan(1);
+    expect(cs.flat().map((l) => l.id)).toEqual(lines.map((l) => l.id));
   });
 
   it("sends redacted text, with ids so flags can be mapped back", () => {

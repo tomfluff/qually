@@ -10,8 +10,12 @@
 import type { Line } from "../state/store";
 import { callJson, estimateTokens, type Usage } from "./openai";
 import type { Redaction } from "./redact";
+import { packChunks, WINDOW_PACK, lineSize } from "./pack";
 
-export const CHUNK = 40; // lines per request — the unit of work is a window, never the corpus
+// The unit of work is still a window, never the corpus — what changed is that
+// the window is measured in tokens rather than counted in lines, so a transcript
+// of short utterances stops sending sixty requests that are 79% system prompt.
+// There is no CHUNK constant any more: a count was the thing that was wrong.
 
 // Cheap content hash (FNV-1a). Spans are stored against the hash of the line they
 // were made on, so correcting a line silently invalidates them — no cache
@@ -115,11 +119,8 @@ const schemaFor = (lensIds: string[]) => ({
   additionalProperties: false,
 });
 
-export const chunksOf = (lines: Line[]): Line[][] => {
-  const out: Line[][] = [];
-  for (let i = 0; i < lines.length; i += CHUNK) out.push(lines.slice(i, i + CHUNK));
-  return out;
-};
+export const chunksOf = (lines: Line[]): Line[][] =>
+  packChunks(lines, lineSize, WINDOW_PACK);
 
 // exactly what gets sent for one chunk — also what the preview shows the user.
 // the speaker label is redacted too: transcripts often carry real names in that

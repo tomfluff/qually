@@ -8,8 +8,8 @@
 import type { Line } from "../state/store";
 import { callJson, estimateTokens, type Usage } from "./openai";
 import type { Redaction } from "./redact";
+import { packChunks, WINDOW_PACK, lineSize } from "./pack";
 
-const SUGGEST_CHUNK = 40;    // transcript lines per request (a window, not the corpus)
 export const SUGGEST_EXEMPLARS = 2; // sample coded excerpts sent per code, to anchor its meaning
 
 export interface SuggestCode { name: string; def: string; excerpts: string[] }
@@ -50,11 +50,12 @@ export const renderSuggestChunk = (lines: Line[], codes: SuggestCode[], r: Redac
 export const estimateSuggestTokens = (lines: Line[], codes: SuggestCode[], r: Redaction, context?: Set<string>) =>
   estimateTokens(SYSTEM) + estimateTokens(renderSuggestChunk(lines, codes, r, context));
 
-export const chunksOf = (lines: Line[]): Line[][] => {
-  const out: Line[][] = [];
-  for (let i = 0; i < lines.length; i += SUGGEST_CHUNK) out.push(lines.slice(i, i + SUGGEST_CHUNK));
-  return out;
-};
+// The codebook rides EVERY window (measured at 4.4k tokens for a 60-code book,
+// nine times the system prompt), so the number of windows is what this run
+// costs. Packing to a token budget is worth about 8x here — more than any
+// trimming of the codebook itself, which still gets paid once per request.
+export const chunksOf = (lines: Line[]): Line[][] =>
+  packChunks(lines, lineSize, WINDOW_PACK);
 
 const SCHEMA = {
   type: "object",
