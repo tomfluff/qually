@@ -158,6 +158,53 @@
 .ai-trow em { font-style:normal; color:var(--muted); font-size:.86em; margin-left:auto;
   font-variant-numeric:tabular-nums; }
 
+/* ── F8: find across the corpus ─────────────────────────────────────────
+   The one run that can span a whole study, so its gate carries more controls
+   than any other. Everything here is em-based: this dialog takes .about's 1rem
+   floor and a low-vision researcher raises the browser zoom, which must grow
+   the hit targets and not only the text. */
+
+/* what to look for: two mutually exclusive readings of the same run */
+.ai-seg { display:flex; gap:0; margin:0 0 12px; border:1px solid var(--line);
+  border-radius:8px; overflow:hidden; }
+.ai-seg button { flex:1; font:inherit; padding:8px 10px; border:0; background:var(--bg);
+  color:var(--fg); cursor:pointer; line-height:1.3; }
+.ai-seg button + button { border-left:1px solid var(--line); }
+.ai-seg button:hover { background:var(--panel); }
+.ai-seg button.on { background:var(--accent); color:#fff; font-weight:600; }
+.ai-seg button:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
+
+/* the codebook as a pick-list; capped so it scrolls rather than pushing the
+   cost and the Send button off the bottom of a long book */
+.ai-cbox { display:flex; flex-direction:column; gap:1px; max-height:11em; overflow:auto;
+  margin-bottom:10px; border:1px solid var(--line); border-radius:8px; padding:4px; }
+
+.findName { font:inherit; width:100%; box-sizing:border-box; padding:7px 9px; margin-bottom:6px;
+  border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--fg); }
+
+.ai-rowbtns { display:flex; gap:6px; margin:2px 0 10px; }
+.ai-rowbtns .btn { padding:3px 12px; font-size:.86em; }
+
+.ai-trow .tMeta { margin-left:auto; color:var(--muted); font-size:.86em;
+  font-variant-numeric:tabular-nums; }
+
+/* Three states, one control. A tri-state button rather than three radios per
+   speaker: the states are ordered (searched > context > not sent) and a
+   researcher flips one speaker, not a grid. The state is spelled out in the
+   label AND in the accessible name, never carried by colour alone. */
+.ai-voices { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+.ai-voices .voice { font:inherit; display:flex; align-items:center; gap:7px;
+  padding:5px 10px; border-radius:999px; cursor:pointer; line-height:1.3;
+  border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+.ai-voices .voice:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.ai-voices .vN { color:var(--muted); font-size:.86em; font-variant-numeric:tabular-nums; }
+.ai-voices .vState { font-size:.86em; }
+.ai-voices .voice.code { border-color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 12%, transparent); }
+.ai-voices .voice.context { border-style:dashed; }
+.ai-voices .voice.exclude { opacity:.65; }
+.ai-voices .voice.exclude .vName { text-decoration:line-through; }
+
 /* AI consent gate — the payload preview */
 /* the one sentence in the app that says participant data is about to leave the device,
    so it outranks the body text around it rather than matching it. This is hierarchy,

@@ -17,6 +17,7 @@ import { DescribeModal } from "./DescribeModal";
 import { AskModal } from "./AskModal";
 import { AskList, ScopeGroup } from "./AskPanel";
 import { SuggestModal } from "./SuggestModal";
+import { FindModal } from "./FindModal";
 import { SectionsModal } from "./SectionsModal";
 import { stretchColorOf, isEvidence } from "../stretches";
 import { AiCheckModal } from "./AiCheckModal";
@@ -105,6 +106,7 @@ export function AssistView() {
   const [describeOpen, setDescribeOpen] = useState(false);
   // null = closed; "" = open with nothing picked; a pid = open on that transcript
   const [suggestFor, setSuggestFor] = useState<string | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
   const [sectionsFor, setSectionsFor] = useState<string | null>(null);
   const [scanFor, setScanFor] = useState<string | null>(null);
   const [sumFor, setSumFor] = useState<string | null>(null);
@@ -569,6 +571,13 @@ export function AssistView() {
                 : "Add a code first — suggestions apply your existing codes"}>
               <Icon name="sparkle" size={15} /> AI code suggestion
             </button>
+            {/* The other axis. Suggest reads ONE transcript against the whole
+                codebook; this reads chosen codes — or something not in the book
+                at all — across as many transcripts as you pick. */}
+            <button className="btn groundBtn" onClick={() => setFindOpen(true)}
+              title="Search chosen transcripts for one or more of your codes, or for something you describe (sends them to OpenAI after your approval)">
+              <Icon name="search" size={15} /> Find across transcripts
+            </button>
             <ClearSuggestions pid={suggestBy === "transcript" ? liveSuggestSel : null} />
             {/* two equal halves rather than the pill pair that sized to its own
                 text and left a dead rail on the right; the label says GROUPING,
@@ -680,6 +689,7 @@ export function AssistView() {
       {describeOpen && <DescribeModal initial={shownDefCodes} onClose={() => setDescribeOpen(false)} />}
       {askOpen && <AskModal question={askQ.trim()} scope={askScope}
         onAsked={() => setAskQ("")} onClose={() => setAskOpen(false)} />}
+      {findOpen && <FindModal onClose={() => setFindOpen(false)} />}
       {suggestFor !== null && <SuggestModal pid={suggestFor} choose
         onClose={() => setSuggestFor(null)} />}
       {sectionsFor !== null && <SectionsModal pid={sectionsFor} choose

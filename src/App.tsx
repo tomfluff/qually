@@ -24,6 +24,7 @@ import { Welcome } from "./components/Welcome";
 import { Tooltip } from "./components/Tooltip";
 import { ColorPickerHost } from "./colorPicker";
 import { DefineHost } from "./components/CodeDef";
+import { FindHost } from "./components/FindModal";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
@@ -315,6 +316,7 @@ export function App() {
       <SaveWarning />
       <ColorPickerHost />
       <DefineHost />
+      <FindHost />
       <Tooltip />
     </div>
   );

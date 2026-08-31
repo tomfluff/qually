@@ -439,3 +439,73 @@ listbox, a contract the implementation deliberately rejected).
 - Automatic re-run on re-import. Stretches remap to new line ids on Update and
   drop on Replace, candidates included; a re-run is the researcher's call.
 - Windowing for very long transcripts (bounded by the ceiling above instead).
+
+---
+
+## F8 — Find passages across the corpus (SHIPPED 2026-09-01)
+
+Same line once more: **the AI proposes, the researcher decides.**
+
+Every other AI read in this app is anchored to one transcript. F8 flips the
+axis — say what you are looking for, then say where to look — which makes it
+the first run that can span a whole study.
+
+### Two ways to ask, one landing
+
+- **Codes I already have.** One or more codes from the codebook. The saturation
+  question a researcher asks late in coding: *where else does this apply?* Goes
+  through `ai/suggest.ts` unchanged — it already answers exactly this for one
+  transcript, so only the scope is new.
+- **Something new.** A name and a description for something not in the codebook
+  yet. `ai/find.ts`, its own prompt and its own sanitizer.
+
+Both land as **candidate segments**, reviewed in the machinery that already
+exists: the Assist worklist, accept/reject, striping in the transcript,
+`overlapsExisting` as rejection memory (already keyed on pid+span+code, so it
+was corpus-wide before this feature existed).
+
+**Why the second mode does not invent a third kind of object.** An earlier draft
+gave question hits their own `finding` type, their own dismissal memory and
+their own export column. But naming the thing you are looking for is what a
+codebook entry IS — a name and a definition — so a question search is a code
+search for a code that does not exist yet. The researcher writes both fields
+before the model reads a line, which keeps F3's rule (*the AI never invents a
+code*) by construction rather than by a guard, and everything downstream — undo,
+exports, the ledger, the methods paragraph — works without knowing F8 happened.
+The code is created when the run starts; a search that finds nothing leaves an
+empty code behind, exactly like any code a researcher makes and never uses.
+
+### Scope
+
+- **Transcripts**: multi-select, All / None, each row showing **its own** request
+  count and token estimate. One total would hide which file is expensive, and
+  this is the run where that matters.
+- **Speakers**: three states, not two — `searched` / `context only` / `not sent`.
+  The third is not a cost control: it is the only way to keep a speaker's words
+  off the wire, which is a consent question. One setting across the selection
+  rather than per transcript — speakers are consistent between files of a study
+  far more often than not, and a per-file grid is a lot to operate at a large
+  text size for a distinction almost nobody draws. A label absent from a
+  transcript simply does not apply there. The interviewer defaults to context by
+  the same `guessQuiet` whole-label guess the speaker map uses, and a default is
+  never allowed to overwrite a choice already made.
+
+### Guards
+
+`sanitizeFindReply` is the trust boundary for question mode, the same shape as
+`sanitizeSuggestReply`: both endpoints must be real line ids **in that window**,
+a hit made only of `[context]` speech is dropped, ranges normalise and dedupe,
+and `why` is restored through the redaction map so it can never show the
+researcher `[REDACTED_1]` where their participant's name belongs. The schema has
+nowhere to put a code, a theme or a label, so the model cannot volunteer one.
+Both modes report `rejected` — an answer the guard could not use is not the same
+as an empty transcript.
+
+### Where it opens
+
+The Assist tab's Suggest panel (beside *AI code suggestion*, which reads the
+other axis), and **Find more of this…** in any code's own menu, which preselects
+that code. The menu route goes through `FindHost`, which captures the opener
+before the dialog attaches — the same pattern and the same reason as
+`DefineHost`, and it is what keeps a menu-launched dialog from dropping a
+keyboard user on `<body>` when it closes.

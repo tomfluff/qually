@@ -7,6 +7,7 @@ import { norm } from "../contract/segments";
 import { Icon } from "./Icon";
 import { openColorPicker } from "../colorPicker";
 import { openDefine } from "./CodeDef";
+import { openFind } from "./FindModal";
 import { useDismiss, useClampToViewport, useMenuFocus, useMenuArrows } from "../usePopover";
 
 export function CodeMenu({ code, x, y, onClose }: {
@@ -94,6 +95,11 @@ export function CodeMenu({ code, x, y, onClose }: {
               runs to a paragraph and a menu row can only show three lines of it */}
           <button onClick={() => { openDefine(code); onClose(); }}><Icon name="text" size={15} />Edit definition</button>
           <button onClick={pickColor}><Icon name="droplet" size={15} />Change color</button>
+          {/* the saturation question, asked from the code itself: where ELSE
+              does this apply, across transcripts you have not looked at again */}
+          <button onClick={() => { openFind([code]); onClose(); }}>
+            <Icon name="search" size={15} />Find more of this…
+          </button>
           {/* aria-disabled, not disabled: a disabled button is unfocusable, so the
               why-is-this-off hint was mouse-only. This stays in the arrow walk and
               announces as disabled; data-tip shows the hint on hover AND focus. */}
