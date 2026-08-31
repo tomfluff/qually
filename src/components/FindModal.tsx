@@ -32,6 +32,7 @@ import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
+import { norm } from "../contract/segments";
 import { chunksOf, estimateSuggestTokens, renderSuggestChunk, suggestChunk,
   overlapsExisting, SUGGEST_EXEMPLARS, type SuggestCode } from "../ai/suggest";
 import { findChunksOf, estimateFindTokens, renderFindChunk, findChunk } from "../ai/find";
@@ -157,6 +158,11 @@ export function FindModal({ initialCodes = [], onClose }: {
     ? bookFor([...focus])
     : [{ name: name.trim(), def: about.trim(), excerpts: [] }]), [mode, focus, bookFor, name, about]);
 
+  // ONE construction, used by the estimate, the preview and the request. They
+  // were built separately and differed by the trim, so the gate previewed bytes
+  // that were not quite the bytes that left.
+  const question = `${name.trim()}\n${about.trim()}`;
+
   // Per transcript: the lines that will actually be sent, and how they pack.
   const perPid = useMemo(() => chosen.map((p) => {
     const lines = linesOf(transcripts, lang, p).filter((l) => !excluded.has(l.speaker.trim()));
@@ -165,25 +171,37 @@ export function FindModal({ initialCodes = [], onClose }: {
       : findChunksOf(lines as Line[], red, context);
     const tok = chunks.reduce((n, c) => n + (mode === "codes"
       ? estimateSuggestTokens(c, codes, red, context)
-      : estimateFindTokens(c, `${name}\n${about}`, red, context)), 0);
+      : estimateFindTokens(c, question, red, context)), 0);
     return { pid: p, lines, chunks, tok };
-  }), [chosen, transcripts, lang, excluded, mode, red, context, codes, name, about]);
+  }), [chosen, transcripts, lang, excluded, mode, red, context, codes, question]);
 
-  const requests = perPid.reduce((n, x) => n + x.chunks.length, 0);
+  const requests = requestCount(perPid);
   const inTok = perPid.reduce((n, x) => n + x.tok, 0);
   const sentLines = perPid.reduce((n, x) => n + x.lines.length, 0);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(sentLines * 6)));
+  // What the STABLE half of each request substitutes — the codebook in one mode,
+  // the researcher's own name and description in the other. Defined once so the
+  // gate, the success row and the failure row cannot disagree about it.
+  const askedRedactions = useMemo(() => (mode === "codes"
+    ? codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0)
+    : red.count(question)), [mode, codes, red, question]);
   const redactions = useMemo(() => perPid.reduce((n, x) =>
-    n + x.lines.reduce((m, l) => m + red.count(l.text) + red.count(l.speaker), 0), 0), [perPid, red]);
+    n + x.lines.reduce((m, l) => m + red.count(l.text) + red.count(l.speaker), 0), 0)
+    // the stable half rides EVERY request, so the gate counts it per request
+    + askedRedactions * requestCount(perPid), [perPid, red, askedRedactions]);
 
   const first = perPid.find((x) => x.chunks.length);
   const preview = !first ? ""
     : mode === "codes"
       ? renderSuggestChunk(first.chunks[0].slice(0, 6), codes, red, context)
-      : renderFindChunk(first.chunks[0].slice(0, 6), `${name}\n${about}`, red, context);
+      : renderFindChunk(first.chunks[0].slice(0, 6), question, red, context);
 
   const named = name.trim().length > 0 && about.trim().length > 0;
-  const clash = mode === "question" && !!codebook[name.trim()];
+  // norm() is the store's collision rule (trim, collapse spaces, lowercase), so
+  // a raw lookup let "Giving Up" through beside an existing "giving up" and
+  // ensureCode then had to reconcile two names for one code.
+  const clash = mode === "question"
+    && Object.keys(codebook).some((c) => norm(c) === norm(name));
   const ready = chosen.length > 0 && requests > 0
     && (mode === "codes" ? focus.size > 0 : named && !clash);
 
@@ -202,8 +220,19 @@ export function FindModal({ initialCodes = [], onClose }: {
     // The code is the researcher's, written before the model read anything —
     // created here so a hit has somewhere to land, and left behind empty if the
     // search finds nothing, exactly like any code they make and never use.
-    const label = mode === "codes" ? null : name.trim();
     let added = 0, skipped = 0, unusable = 0, cost = 0, pushed = false, sent = 0;
+    const label = mode === "codes" ? null : name.trim();
+    if (label) {
+      // Up front, not on the first hit: the claim this feature rests on is that
+      // the code is yours before the model reads a line. Made here, a search
+      // that finds nothing leaves an empty code behind — the same thing that
+      // happens whenever anyone makes a code and does not use it, and far
+      // better than the name they typed vanishing.
+      const st = useStore.getState();
+      st.pushUndo(); pushed = true;
+      st.ensureCode(label);
+      st.setDef(label, about.trim());
+    }
     let job: { pid: string; chunk: Line[] } | null = null;
     try {
       for (const t of perPid) {
@@ -220,7 +249,7 @@ export function FindModal({ initialCodes = [], onClose }: {
             props = r.proposals; rejected = r.rejected; usage = r.usage;
           } else {
             const r = await findChunk({
-              key, model: model.id, lines: c, question: `${name.trim()}\n${about.trim()}`,
+              key, model: model.id, lines: c, question,
               redaction: red, context,
               cacheKey: requests > 1 ? cacheKey : undefined, signal: abort.current.signal,
             });
@@ -231,8 +260,7 @@ export function FindModal({ initialCodes = [], onClose }: {
           for (const p of props) {
             const st = useStore.getState();
             if (!pushed) { st.pushUndo(); pushed = true; }   // one undo entry for the whole run
-            if (label && !st.codebook[label]) { st.ensureCode(label); st.setDef(label, about.trim()); }
-            if (mode === "codes" && !st.codebook[p.code]) { skipped++; continue; }  // renamed mid-run
+            if (!st.codebook[p.code]) { skipped++; continue; }   // renamed or deleted mid-run
             if (overlapsExisting(st.segments, t.pid, p)) { skipped++; continue; }
             st.addSegment(t.pid, p.startLine, p.endLine, p.code, by, "candidate");
             added++;
@@ -240,9 +268,7 @@ export function FindModal({ initialCodes = [], onClose }: {
           useStore.getState().logAiCall({
             at: new Date().toISOString(), model: model.id, task: "find", pid: t.pid,
             lines: c.length,
-            redactions: c.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
-              + codes.reduce((n, cd) => n + red.count(cd.def)
-                + cd.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
+            redactions: c.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0) + askedRedactions,
             inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
             costUsd: +usage.costUsd.toFixed(5),
           });
@@ -261,8 +287,7 @@ export function FindModal({ initialCodes = [], onClose }: {
         model: model.id, task: "find", pid: job.pid,
         lines: job.chunk.length,
         redactions: job.chunk.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
-          + codes.reduce((n, cd) => n + red.count(cd.def)
-            + cd.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
+          + askedRedactions,
       });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
@@ -283,7 +308,8 @@ export function FindModal({ initialCodes = [], onClose }: {
           <div className="ai-body">
             <p className="about-lede">
               {done.added === 0
-                ? <>Nothing new found{done.skipped > 0 && <> ({done.skipped} already coded)</>}.</>
+                ? <>Nothing new found{done.skipped > 0 && <> ({done.skipped} already coded)</>}.
+                  {mode === "question" && <> <b>{name.trim()}</b> is in your codebook — delete it if you don't want it.</>}</>
                 : <>Added <b>{done.added} candidate coding{done.added === 1 ? "" : "s"}</b>
                   {done.skipped > 0 && <> ({done.skipped} already coded)</>} — review them in{" "}
                   <b>Assist → Suggest codes</b>, or striped in each transcript.</>}
@@ -450,6 +476,8 @@ export function FindModal({ initialCodes = [], onClose }: {
     </AiModal>
   );
 }
+
+const requestCount = (per: { chunks: unknown[] }[]) => per.reduce((n, x) => n + x.chunks.length, 0);
 
 /** One word each, because this label is read aloud on every arrow key. */
 const VOICE_SAYS: Record<Voice, string> = {
