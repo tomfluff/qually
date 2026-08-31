@@ -3400,20 +3400,6 @@ function MapInner() {
           <button role="menuitem" onClick={() => { openInCodebook(menu.sel); setMenu(null); }}>
             Open {menu.sel.length === 1 ? menu.sel[0] : `${menu.sel.length} codes`} in Codebook
           </button>
-          {/* The code's OWN actions — rename, define, recolour, merge, delete —
-              the same menu the sidebar row and a transcript's lane bar open. The
-              menu around it is about the MAP (grouping, areas, where a code
-              belongs), so this is a row into the other one rather than a
-              replacement: nothing here would survive being swapped out for it.
-              One code only: every item in it acts on a single code. */}
-          {menu.sel.length === 1 && (
-            <button role="menuitem" onClick={() => {
-              const c = menu.sel[0], { x, y } = menu;
-              setMenu(null); setCodeActions({ code: c, x, y });
-            }}>
-              <Icon name="dots" size={16} /> Rename, define, recolour…
-            </button>
-          )}
           {/* only where its actions (merge, capsule) can land — the derived
               grouping views are read-only piles, so the panel would be a
               list of buttons that do nothing there */}
@@ -3468,6 +3454,21 @@ function MapInner() {
                 <span className="mapDot" style={{ background: codebook[c]?.color || "#999" }} /> {c}
               </button>
             ))}
+          </>}
+          {/* Last, under a rule: everything above is about the MAP — where a
+              code sits, what it groups with, what it might merge into — and this
+              leaves for the code's own menu, the one the sidebar row and a
+              transcript's lane bar open. A door out of this menu belongs at the
+              end of it, not among the things it does itself.
+              One code only: every item behind it acts on a single code. */}
+          {menu.sel.length === 1 && <>
+            <div className="ctxdiv" />
+            <button role="menuitem" onClick={() => {
+              const c = menu.sel[0], { x, y } = menu;
+              setMenu(null); setCodeActions({ code: c, x, y });
+            }}>
+              <Icon name="dots" size={16} /> Other actions…
+            </button>
           </>}
         </div>
       )}
