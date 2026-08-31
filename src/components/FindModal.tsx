@@ -68,7 +68,13 @@ export function FindHost() {
   return (
     <FindModal initialCodes={open.codes} onClose={() => {
       setOpen(null);
-      if (opener.current?.isConnected) opener.current.focus();
+      // The opener is often ALREADY GONE: from a code's menu it is the menu item,
+      // which unmounts with the menu in the same commit this dialog mounts. So
+      // fall back to a home the way useMenuFocus does, rather than leaving a
+      // keyboard user on <body> with Tab restarting from the top of the page.
+      if (opener.current?.isConnected) { opener.current.focus(); return; }
+      document.querySelector<HTMLElement>(
+        ".cbList, .cbSide, .sideList, .codeList, [role=listbox], .mapCanvas")?.focus();
     }} />
   );
 }
@@ -86,6 +92,12 @@ export function FindModal({ initialCodes = [], onClose }: {
   const model = modelOf(modelId);
 
   const [mode, setMode] = useState<"codes" | "question">("codes");
+  // Every transcript ticked to start with. SuggestModal deliberately preselects
+  // NOTHING, "so a reflex click can't spend money" — waived here on purpose,
+  // because the corpus IS the point of this run and an empty selection would
+  // make the common case a chore. What keeps the principle is that Send always
+  // carries the request count, and the per-transcript rows say where it comes
+  // from before anything is sent.
   const [pids, setPids] = useState<Set<string>>(() => new Set(Object.keys(transcripts)));
   const [focus, setFocus] = useState<Set<string>>(() => new Set(initialCodes));
   const [name, setName] = useState("");
@@ -97,6 +109,14 @@ export function FindModal({ initialCodes = [], onClose }: {
   const [done, setDone] = useState<{ added: number; skipped: number; unusable: number; cost: number } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const runSeq = useRef(0);
+  // Send disables itself the instant it is pressed, so the focused element
+  // vanishes and focus falls to <body> — and the dialog's trap listens on the
+  // dialog, so Tab then walks the page BEHIND an aria-modal dialog for the whole
+  // run. Hand focus to whatever replaced it: Stop while running, Done at the end.
+  const stopRef = useRef<HTMLButtonElement>(null);
+  const doneRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (busy) stopRef.current?.focus(); }, [busy]);
+  useEffect(() => { if (done) doneRef.current?.focus(); }, [done]);
   useEffect(() => () => abort.current?.abort(), []);
 
   const all = useMemo(() => Object.keys(transcripts).sort(), [transcripts]);
@@ -247,8 +267,9 @@ export function FindModal({ initialCodes = [], onClose }: {
       // better than the name they typed vanishing.
       const st = useStore.getState();
       st.pushUndo(); pushed = true;
-      st.ensureCode(label);
-      st.setDef(label, about.trim());
+      // one step: setDef pushes an undo of its own, so creating and defining
+      // separately made the run two entries with a def-less code between them
+      st.createDefined(label, about.trim());
     }
     let job: { pid: string; chunk: Line[] } | null = null;
     try {
@@ -323,20 +344,28 @@ export function FindModal({ initialCodes = [], onClose }: {
             <p className="about-lede">
               {done.added === 0
                 ? <>Nothing new found{done.skipped > 0 && <> ({done.skipped} already coded)</>}.
-                  {mode === "question" && <> <b>{name.trim()}</b> is in your codebook — delete it if you don't want it.</>}</>
+                  {mode === "question" && <> <b>{name.trim()}</b> is in your codebook.</>}</>
                 : <>Added <b>{done.added} candidate coding{done.added === 1 ? "" : "s"}</b>
                   {done.skipped > 0 && <> ({done.skipped} already coded)</>} — review them in{" "}
-                  <b>Assist → Suggest codes</b>, or striped in each transcript.</>}
+                  <b>Assist → Suggest codes</b>.</>}
             </p>
             {done.unusable > 0 && (
               <p className="about-lede">
-                {done.unusable} answer{done.unusable === 1 ? " was" : "s were"} discarded as unusable —
-                the model named a line that was not in the request.
+                {done.unusable} unusable answer{done.unusable === 1 ? "" : "s"} discarded.
               </p>
             )}
             <div className="imp-stats"><div>Cost: <b>${done.cost.toFixed(4)}</b> · logged to the AI log</div></div>
           </div>
-          <div className="imp-actions"><button className="btn primary" onClick={onClose}>Done</button></div>
+          <div className="imp-actions">
+            <button ref={doneRef} className="btn primary" onClick={onClose}>Done</button>
+            {/* naming before seeing evidence is the cost of this mode; undoing
+                that has to be one gesture from here, not a hunt in the codebook */}
+            {done.added === 0 && mode === "question" && !!useStore.getState().codebook[name.trim()] && (
+              <button className="btn" onClick={() => { useStore.getState().deleteCode(name.trim()); onClose(); }}>
+                Delete “{name.trim()}”
+              </button>
+            )}
+          </div>
         </>
       ) : (
         <>
@@ -349,12 +378,17 @@ export function FindModal({ initialCodes = [], onClose }: {
               </div>
             )}
 
-            <div className="ai-seg" role="radiogroup" aria-label="What to look for">
-              <button role="radio" aria-checked={mode === "codes"} disabled={busy}
+            {/* role=group with aria-pressed, not a radiogroup: role="radio"
+                promises arrow-key navigation and a roving tabindex, and a
+                keyboard user who presses Down on a radio that does not move
+                concludes the control is broken. Same pattern as AssistView's
+                segmented controls, which make no promise they cannot keep. */}
+            <div className="ai-seg" role="group" aria-label="What to look for">
+              <button aria-pressed={mode === "codes"} disabled={busy}
                 className={mode === "codes" ? "on" : ""} onClick={() => setMode("codes")}>
                 Codes I already have
               </button>
-              <button role="radio" aria-checked={mode === "question"} disabled={busy}
+              <button aria-pressed={mode === "question"} disabled={busy}
                 className={mode === "question" ? "on" : ""} onClick={() => setMode("question")}>
                 Something new
               </button>
@@ -411,7 +445,9 @@ export function FindModal({ initialCodes = [], onClose }: {
 
             <div className="eyebrow">Where to look</div>
             <div className="ai-tlist" role="group" aria-label="Transcripts to search">
-              {all.map((p) => (
+              {all.map((p) => {
+                const row = perPid.find((x) => x.pid === p);
+                return (
                 <label key={p} className={"ai-trow" + (pids.has(p) ? " on" : "")}>
                   <input type="checkbox" checked={pids.has(p)} disabled={busy}
                     onChange={() => setPids((s) => {
@@ -421,16 +457,17 @@ export function FindModal({ initialCodes = [], onClose }: {
                   {/* per transcript, not just a total: this is the one run that
                       can span a study, and one number hides which file is dear */}
                   <span className="tMeta">
-                    {perPid.find((x) => x.pid === p)?.chunks.length
-                      ? <>{perPid.find((x) => x.pid === p)!.chunks.length} req ·{" "}
-                        {perPid.find((x) => x.pid === p)!.tok.toLocaleString()} tok</>
+                    {row?.chunks.length
+                      ? <>{row.chunks.length} request{row.chunks.length === 1 ? "" : "s"} ·{" "}
+                        {row.tok.toLocaleString()} tokens</>
                       /* every speaker in it is context-only or withheld, so the
                          guard would drop any hit — sending it would cost money
                          for an answer that cannot be used */
                       : <em>nothing to search</em>}
                   </span>
                 </label>
-              ))}
+                );
+              })}
             </div>
             <div className="ai-rowbtns">
               <button className="btn" disabled={busy} onClick={() => setPids(new Set(all))}>All</button>
@@ -504,7 +541,7 @@ export function FindModal({ initialCodes = [], onClose }: {
                            context-only, so nothing in them can be a hit */
                         : "Set at least one speaker to searched"}
             </button>
-            <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
+            <button ref={stopRef} className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
               {busy ? "Stop" : "Cancel — send nothing"}
             </button>
           </div>

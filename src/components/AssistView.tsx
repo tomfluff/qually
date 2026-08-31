@@ -575,7 +575,7 @@ export function AssistView() {
                 codebook; this reads chosen codes — or something not in the book
                 at all — across as many transcripts as you pick. */}
             <button className="btn groundBtn" onClick={() => setFindOpen(true)}
-              title="Search chosen transcripts for one or more of your codes, or for something you describe (sends them to OpenAI after your approval)">
+              title="Search transcripts for a code, or for something you describe (asks before sending to OpenAI)">
               <Icon name="search" size={15} /> Find across transcripts
             </button>
             <ClearSuggestions pid={suggestBy === "transcript" ? liveSuggestSel : null} />

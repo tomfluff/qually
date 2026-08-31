@@ -494,10 +494,12 @@ empty code behind, exactly like any code a researcher makes and never uses.
 
 `sanitizeFindReply` is the trust boundary for question mode, the same shape as
 `sanitizeSuggestReply`: both endpoints must be real line ids **in that window**,
-a hit made only of `[context]` speech is dropped, ranges normalise and dedupe,
-and `why` is restored through the redaction map so it can never show the
-researcher `[REDACTED_1]` where their participant's name belongs. The schema has
-nowhere to put a code, a theme or a label, so the model cannot volunteer one.
+a hit made only of `[context]` speech is dropped, and ranges normalise and
+dedupe. The reply is a RANGE AND NOTHING ELSE: an earlier version also asked for
+a one-phrase `why`, which was never displayed (output tokens at 6x, paid for and
+thrown away) and was the one channel through which the model could offer an
+interpretation before the researcher had read the passage. The schema has
+nowhere to put a code, a theme, a label or a reason, so it cannot volunteer one.
 Both modes report `rejected` — an answer the guard could not use is not the same
 as an empty transcript.
 
@@ -507,5 +509,8 @@ The Assist tab's Suggest panel (beside *AI code suggestion*, which reads the
 other axis), and **Find more of this…** in any code's own menu, which preselects
 that code. The menu route goes through `FindHost`, which captures the opener
 before the dialog attaches — the same pattern and the same reason as
-`DefineHost`, and it is what keeps a menu-launched dialog from dropping a
-keyboard user on `<body>` when it closes.
+`DefineHost`. Capturing is not enough on its own: opened from a code's menu the
+opener IS the menu item, which unmounts with the menu in the same commit this
+dialog mounts, so by closing time it is detached and cannot take focus. There is
+a fallback to the same list of homes `useMenuFocus` uses, which is what actually
+keeps a keyboard user off `<body>`.

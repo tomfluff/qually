@@ -504,6 +504,11 @@ export interface State {
   resolveImportSign: (name: string | null) => void;
   resolveCoderAsk: (name: string | null) => void;
   ensureCode: (code: string) => string;
+  /** Create a code AND its definition as one step, pushing nothing. For a
+      caller that has already snapshotted (F8 runs the whole search as one undo
+      entry): ensureCode + setDef is two undo entries, and the state between them
+      is a code with no definition, so one Ctrl+Z left the code behind def-less. */
+  createDefined: (code: string, def: string) => string;
   /** returns false when the span was already coded that way (a dedup) */
   addSegment: (pid: string, start: number, end: number, code: string,
     proposedBy?: string, status?: string, notes?: string) => boolean;
@@ -1301,6 +1306,17 @@ export const useStore = create<State>()(
       },
 
       ensureCode: (code) => ensureCode(get, set, code),
+      createDefined: (code, def) => {
+        const name = ensureCode(get, set, code);
+        const cur = get().codebook[name];
+        // defAi false: these words are the researcher's own, typed before any
+        // request was made — that is the whole basis of F8's claim that the code
+        // is theirs and not the model's
+        if (cur && def && cur.def !== def) {
+          set({ codebook: { ...get().codebook, [name]: { ...cur, def, defAi: false } } });
+        }
+        return name;
+      },
 
       addSegment: (pid, start, end, code, proposedBy, status = "accepted", notes = "") => {
         const s = get();

@@ -22,7 +22,6 @@
 import type { Line } from "../state/store";
 import { callJson, estimateTokens, worthCaching, type Usage } from "./openai";
 import type { Redaction } from "./redact";
-import { packChunks, lineSize, WINDOW_PACK } from "./pack";
 
 /** A passage the model says bears on the question. A range and nothing else.
     An earlier version also asked for a one-phrase `why`. It was never shown, so
@@ -67,8 +66,9 @@ export const estimateFindTokens = (
   lines: Line[], question: string, r: Redaction, context?: Set<string>,
 ) => estimateTokens(SYSTEM) + estimateTokens(renderFindChunk(lines, question, r, context));
 
-export const findChunksOf = (lines: Line[], r?: Redaction, context?: Set<string>): Line[][] =>
-  packChunks(lines, (l) => lineSize(l, r, context), WINDOW_PACK);
+// A window is a window: this was a byte-identical copy of suggest.ts's chunksOf,
+// and two copies of the packing rule is two places for it to drift.
+export { chunksOf as findChunksOf } from "./suggest";
 
 const SCHEMA = {
   type: "object",
