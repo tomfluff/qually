@@ -35,6 +35,13 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
   const [done, setDone] = useState<{ errors: number; notices: number; cost: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  // The denominator has to be FROZEN when the run starts. `chunks` is derived
+  // from `todo`, which subscribes to the store the run itself writes to, so it
+  // shrinks between requests while `progress` counts the run closure's own
+  // snapshot: the button, and a screen reader reading it on focus, could say
+  // "8/4". A count that goes backwards mid-run is worse than no count.
+  const [total, setTotal] = useState(0);
+
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -129,6 +136,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
     announce(`Scanning “${pid}” with AI, ${chunks.length} chunk${chunks.length === 1 ? "" : "s"}…`);
     earcon.aiStart();
     abort.current = new AbortController();
+    setTotal(chunks.length);
     const st = useStore.getState();
     let errors = 0, notices = 0, cost = 0;
     // hoisted out of the loop so the catch can name the one chunk in flight
@@ -323,7 +331,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
             ) : (
               <div className="imp-actions">
                 <button className="btn primary" onClick={run} disabled={busy}>
-                  {busy ? `Scanning… ${progress}/${chunks.length}` : `Send ${chunks.length} request${chunks.length === 1 ? "" : "s"} to OpenAI`}
+                  {busy ? `Scanning… ${progress}/${total}` : `Send ${chunks.length} request${chunks.length === 1 ? "" : "s"} to OpenAI`}
                 </button>
                 <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
                   {busy ? "Stop" : "Cancel — send nothing"}

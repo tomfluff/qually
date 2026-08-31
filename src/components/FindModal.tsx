@@ -138,18 +138,30 @@ export function FindModal({ initialCodes = [], onClose }: {
   const excluded = useMemo(
     () => new Set(Object.entries(voice).filter(([, v]) => v === "exclude").map(([s]) => s)), [voice]);
 
-  // The codebook as the model reads it, exactly as SuggestModal builds it —
-  // definitions plus a couple of real excerpts to anchor each code's meaning.
+  // The codebook as the model reads it — definitions plus a couple of real
+  // excerpts to anchor each code's meaning.
+  //
+  // The exemplars are DRAWN FROM SCOPE, which SuggestModal does not have to
+  // worry about because it only ever reads one transcript. Here the scope is a
+  // choice the researcher made, and an exemplar is participant speech: pulling
+  // one from the whole project would send quotes out of transcripts they did not
+  // tick, and out of the mouth of a speaker they set to "not sent", inside the
+  // codebook that rides every request. The gate promises what leaves; this is
+  // what makes the promise true rather than nearly true.
   const bookFor = useMemo(() => (names: string[]): SuggestCode[] => names.map((n) => {
     const ex: string[] = [];
     for (const s of segments) {
-      if (s.status !== "accepted" || s.code !== n || !transcripts[s.pid]) continue;
-      const e = segExcerpt(s, linesOf(transcripts, lang, s.pid)).excerpt;
+      if (s.status !== "accepted" || s.code !== n) continue;
+      if (!pids.has(s.pid) || !transcripts[s.pid]) continue;          // only where they chose to look
+      const ls = linesOf(transcripts, lang, s.pid);
+      // and never a quote whose speech they withheld
+      if (ls.some((l) => l.id >= s.start && l.id <= s.end && excluded.has(l.speaker.trim()))) continue;
+      const e = segExcerpt(s, ls).excerpt;
       if (e) ex.push(e);
       if (ex.length === SUGGEST_EXEMPLARS) break;
     }
     return { name: n, def: codebook[n]?.def ?? "", excerpts: ex };
-  }), [segments, transcripts, lang, codebook]);
+  }), [segments, transcripts, lang, codebook, pids, excluded]);
 
   // In question mode the code does not exist yet, so it has no excerpts to
   // anchor it — the researcher's own description is the whole definition, which
@@ -166,13 +178,18 @@ export function FindModal({ initialCodes = [], onClose }: {
   // Per transcript: the lines that will actually be sent, and how they pack.
   const perPid = useMemo(() => chosen.map((p) => {
     const lines = linesOf(transcripts, lang, p).filter((l) => !excluded.has(l.speaker.trim()));
+    // A transcript where every remaining speaker is context-only cannot yield
+    // anything: the sanitizer drops a hit made only of background speech, so the
+    // request would be paid for and its answer thrown away. Not sent at all.
+    const usable = lines.some((l) => !context.has(l.speaker.trim()));
+    if (!usable) return { pid: p, lines: [] as Line[], chunks: [] as Line[][], tok: 0, usable };
     const chunks = mode === "codes"
       ? chunksOf(lines as Line[], red, context)
       : findChunksOf(lines as Line[], red, context);
     const tok = chunks.reduce((n, c) => n + (mode === "codes"
       ? estimateSuggestTokens(c, codes, red, context)
       : estimateFindTokens(c, question, red, context)), 0);
-    return { pid: p, lines, chunks, tok };
+    return { pid: p, lines, chunks, tok, usable };
   }), [chosen, transcripts, lang, excluded, mode, red, context, codes, question]);
 
   const requests = requestCount(perPid);
@@ -399,8 +416,13 @@ export function FindModal({ initialCodes = [], onClose }: {
                   {/* per transcript, not just a total: this is the one run that
                       can span a study, and one number hides which file is dear */}
                   <span className="tMeta">
-                    {perPid.find((x) => x.pid === p)?.chunks.length ?? 0} req ·{" "}
-                    {(perPid.find((x) => x.pid === p)?.tok ?? 0).toLocaleString()} tok
+                    {perPid.find((x) => x.pid === p)?.chunks.length
+                      ? <>{perPid.find((x) => x.pid === p)!.chunks.length} req ·{" "}
+                        {perPid.find((x) => x.pid === p)!.tok.toLocaleString()} tok</>
+                      /* every speaker in it is context-only or withheld, so the
+                         guard would drop any hit — sending it would cost money
+                         for an answer that cannot be used */
+                      : <em>nothing to search</em>}
                   </span>
                 </label>
               ))}

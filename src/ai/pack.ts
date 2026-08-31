@@ -97,10 +97,16 @@ export function packRun<T>(items: readonly T[], size: (x: T) => number, o: PackO
     throw new Error("pack: need 1 <= minItems <= maxItems");
   }
   const chunks: T[][] = [];
+  const sizes: number[] = [];          // token total per chunk, for the tail rebalance
+  const solo: boolean[] = [];          // chunk holds one item too big to share
   const oversize: T[] = [];
   let cur: T[] = [];
   let tok = 0;
-  const flush = () => { if (cur.length) { chunks.push(cur); cur = []; tok = 0; } };
+  const flush = () => {
+    if (!cur.length) return;
+    chunks.push(cur); sizes.push(tok); solo.push(false);
+    cur = []; tok = 0;
+  };
   for (const it of items) {
     // A size function that cannot answer must not silently disable the budget:
     // NaN poisons every comparison, so every chunk would grow to maxItems.
@@ -110,7 +116,7 @@ export function packRun<T>(items: readonly T[], size: (x: T) => number, o: PackO
     // still sent — the caller warns, this does not drop it.
     if (t > o.hardCap) {
       flush();
-      chunks.push([it]);
+      chunks.push([it]); sizes.push(t); solo.push(true);
       oversize.push(it);
       continue;
     }
@@ -122,7 +128,40 @@ export function packRun<T>(items: readonly T[], size: (x: T) => number, o: PackO
     cur.push(it);
     tok += t;
   }
+
+  // The leftover is the one chunk nothing above bounds. A 2401-line transcript
+  // packed 200 at a time ends with a window of ONE line that still carries the
+  // whole codebook and system prompt — the 97%-overhead request this module
+  // exists to prevent — and hands the model a line with no neighbours, which is
+  // what minItems forbids everywhere else.
+  //
+  // Two ways out, in order, and BOTH may be refused: the previous chunk may be a
+  // lone oversized item that can share with nothing, or already be at a ceiling.
+  // A short tail is worth less than a request that cannot be read, so when
+  // neither is safe the tail simply ships short.
+  const prev = chunks.length - 1;
+  const canTouch = prev >= 0 && !solo[prev];
+  if (cur.length && cur.length < o.minItems && canTouch) {
+    const need = o.minItems - cur.length;
+    const back = chunks[prev].slice(chunks[prev].length - need);
+    const backTok = back.reduce((n, x) => {
+      const r = size(x); return n + (Number.isFinite(r) && r > 0 ? r : 0);
+    }, 0);
+    if (chunks[prev].length - need >= o.minItems && tok + backTok <= o.hardCap) {
+      // borrow the tail of the previous chunk, keeping order
+      chunks[prev].splice(chunks[prev].length - need, need);
+      sizes[prev] -= backTok;
+      cur = [...back, ...cur];
+      tok += backTok;
+    } else if (chunks[prev].length + cur.length <= o.maxItems
+      && sizes[prev] + tok <= o.hardCap) {
+      chunks[prev].push(...cur);
+      sizes[prev] += tok;
+      cur = []; tok = 0;
+    }
+  }
   flush();
+
   return { chunks, oversize };
 }
 

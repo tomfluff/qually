@@ -90,14 +90,19 @@ describe("the transcript shapes that motivated this", () => {
     expect(out.every((c) => c.length <= WINDOW_PACK.maxItems)).toBe(true);
   });
 
-  it("keeps a window of long lines within budget instead of counting to forty", () => {
+  // With lines this long the floor, not the budget, decides the window: fifteen
+  // of them is already several times the soft target. That is the trade minItems
+  // exists to make, and hardCap is the bound that actually protects the request.
+  it("keeps a window of long lines under the hard cap, floor or no floor", () => {
     const long = Array.from({ length: 200 }, (_, i) =>
       line(i + 1, "I zoom right in on the chart and trace along each bar. ".repeat(40)));
     const out = packChunks(long, (l) => lineSize(l), WINDOW_PACK);
+    expect(out.flat()).toHaveLength(200);
     for (const c of out) {
       const tok = c.reduce((n, l) => n + lineSize(l), 0);
-      expect(tok <= WINDOW_PACK.budget || c.length <= WINDOW_PACK.minItems).toBe(true);
       expect(tok).toBeLessThanOrEqual(WINDOW_PACK.hardCap);
+      // over the soft budget only where the floor (or a folded tail) forced it
+      if (tok > WINDOW_PACK.budget) expect(c.length).toBeGreaterThanOrEqual(WINDOW_PACK.minItems);
     }
   });
 
@@ -121,5 +126,28 @@ describe("sizing what will actually be sent", () => {
   it("counts the [context] prefix that the window will carry", () => {
     const l = { id: 1, speaker: "R", text: "so you prefer magnification" };
     expect(lineSize(l, undefined, new Set(["R"]))).toBeGreaterThan(lineSize(l));
+  });
+});
+
+// The leftover at the end is the one chunk nothing else bounds, and no test
+// used to look at it: every assertion above reads out[0].
+describe("the last chunk", () => {
+  it("does not leave a context-free tail carrying a whole codebook", () => {
+    const out = packChunks(nums(2401), () => 3, WINDOW_PACK);   // 200/window by count
+    expect(out[out.length - 1].length).toBeGreaterThanOrEqual(WINDOW_PACK.minItems);
+    expect(out.flat()).toHaveLength(2401);
+  });
+
+  it("still ships a short run that never had a full chunk to fold into", () => {
+    const out = packChunks(nums(3), () => 3, WINDOW_PACK);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toHaveLength(3);
+  });
+
+  // folding must not push the previous chunk past its own ceiling
+  it("keeps the fold inside maxItems", () => {
+    const out = packChunks(nums(205), () => 3, WINDOW_PACK);
+    expect(out.every((c) => c.length <= WINDOW_PACK.maxItems)).toBe(true);
+    expect(out.flat()).toHaveLength(205);
   });
 });
