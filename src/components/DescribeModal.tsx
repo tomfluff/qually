@@ -186,10 +186,9 @@ export function DescribeModal({ initial, onClose }: {
         <>
           <div className="ai-body nicescroll">
             <p className="about-lede">
-              The AI reads each code's name, its current definition, and a few excerpts you
-              coded with it, then drafts a definition grounded in that usage. The drafts are
-              written straight into the codebook, marked AI until you edit them —
-              one <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes the whole run back.
+              Drafts each definition from the excerpts you coded with it. Drafts go straight
+              into the codebook, marked AI until you edit them — one <kbd>Ctrl</kbd>+<kbd>Z</kbd>{" "}
+              takes the whole run back.
             </p>
             {codes.length === 0 ? (
               <p className="about-lede" style={{ marginTop: 10 }}>

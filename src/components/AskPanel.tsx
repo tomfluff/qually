@@ -96,9 +96,8 @@ export function AskList({ answers, question, setQuestion, onAsk, canAsk, why }: 
 
       {answers.length === 0 ? (
         <div className="empty">
-          No questions yet. Ask one above and the AI answers from your codes, excerpts and
-          events — every point carrying the refs it rests on, so you can check each one.
-          It has not read your transcripts, only what you coded.
+          No questions yet. Answers come from what you coded, never the raw transcripts,
+          and every point carries the refs it rests on.
         </div>
       ) : (
         <div className="mList">

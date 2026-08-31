@@ -163,9 +163,8 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
           <>
             <div className="ai-body nicescroll">
               <p className="about-lede">
-                For each coded excerpt, the AI quotes the passages a coder would point to
-                as the reason the code applies — the evidence for <b>your</b> coding. It
-                proposes nothing.
+                Quotes the passage that earned each code — the evidence for <b>your</b>{" "}
+                coding. It proposes nothing.
               </p>
               {/* above the controls, not below them: at a normal window size this box
                   scrolled out of the scrolling body while Send stayed visible and

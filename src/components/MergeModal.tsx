@@ -111,9 +111,8 @@ export function MergeModal({ onProposals, onClose }: {
           <>
             <div className="ai-body nicescroll">
               <p className="about-lede">
-                The AI reads your codebook — definitions and a few excerpts per code — and
-                proposes pairs that look like one concept under two labels. You accept each
-                merge yourself.
+                Proposes pairs that look like one concept under two labels. You accept
+                each merge yourself.
               </p>
               {/* above the controls, not below them: at a normal window size this box
                   scrolled out of the scrolling body while Send stayed visible and

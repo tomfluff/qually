@@ -100,9 +100,8 @@ export function SimilarModal({ focus, book, onMatches, onClose }: {
         <>
           <div className="ai-body nicescroll">
             <p className="about-lede">
-              The local wording pass has already checked for names that overlap. This optional AI pass
-              looks for the same idea under different words and adds its ranked suggestions to the
-              map panel. Nothing is merged, renamed, or regrouped.
+              The offline pass already caught overlapping names. This one looks for the same
+              idea under different words. Nothing is merged, renamed or regrouped.
             </p>
             {ready && (
               <div className="ai-warn">

@@ -125,9 +125,8 @@ export function AskModal({ question, scope, onAsked, onClose }: {
     <AiModal title="Ask your coded material" busy={busy} onClose={onClose}>
       <div className="ai-body nicescroll">
         <p className="about-lede">
-          The AI answers from your codebook, the excerpts you coded and your event log —
-          it has not read the transcripts. Each point comes back with the refs it rests on,
-          and a ref that wasn't in what you sent is thrown away rather than shown.
+          Answers from your codes, excerpts and events — not from the transcripts.
+          Every point carries the refs it rests on.
         </p>
         <div className="ai-warn">
           <b>This sends {items} item{items === 1 ? "" : "s"} — {corpus.excerpts.length} coded

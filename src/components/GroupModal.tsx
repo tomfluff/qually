@@ -124,7 +124,7 @@ export function GroupModal({ transient = false, onGroups, onReconcileInstead, on
           <>
             <div className="ai-body nicescroll">
               <p className="about-lede">
-                The AI reads your codebook — definitions and a few excerpts per code — and proposes {transient
+                Proposes, from your codebook, {transient
                   ? <>a handful of broad areas: shelves for finding your way around a long
                     codebook. A way of looking — nothing is renamed, merged, or saved.</>
                   : <>THEME groups: codes that belong together analytically. They land on the
