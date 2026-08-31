@@ -45,9 +45,10 @@ Build order: **F1 → F2 → F3** (as originally listed).
   Boundaries move, so re-running over an already-swept transcript proposes
   differently for the same lines; `overlapsExisting` is keyed on span+code, so
   accepted and rejected memory still holds.
-  Not fixed here: `summarize` sends the whole corpus in one request with **no
-  token cap** — the `SECTIONS_TOKEN_CAP` problem, unsolved in one more place.
-  (`ask` does have one: `MAX_TOK` = 120k in AskModal.) Trimming the codebook was
+  `summarize` was the last run with no token cap at all — one call over the
+  whole selection, no window to fall back to — and now carries the same 120k
+  ceiling as `ask`, so every AI run in the app is bounded before it is consented
+  to. Trimming the codebook was
   measured and rejected: 1.4x on its own against packing's 8x, and it costs the
   exemplars that anchor a code's meaning.
 

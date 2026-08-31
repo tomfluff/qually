@@ -19,6 +19,13 @@ import { earcon } from "../earcons";
 import { AiModal, LangFact, ModelPicker } from "./AiModal";
 import { openSummary } from "./SummaryView";
 
+/** The most estimated input tokens one summary may send. A summary reads the
+    whole selection in ONE call — there is no window to fall back to — so the
+    ceiling is the only thing standing between a large study and a request that
+    fails after consent. Matches AskModal's MAX_TOK; SECTIONS_TOKEN_CAP is
+    higher because a transcript is one file where this is the whole corpus. */
+const MAX_TOK = 120_000;
+
 export function SummarizeModal({ pid: initial, choose, onClose }: {
   pid?: string; choose?: boolean; onClose: () => void;
 }) {
@@ -60,6 +67,11 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
     }));
   }, [choose, tabs, transcripts, markers, segments, summaries]);
 
+  // Like SECTIONS_TOKEN_CAP and AskModal's MAX_TOK: callJson has no context
+  // preflight, so without a ceiling an oversized study becomes a failed request
+  // the researcher has already consented to and may be billed for. A summary is
+  // one call over everything selected, so the only way back under is to select
+  // less — which is what the warning says.
   const inTok = useMemo(() => estimateSummaryTokens(evSel, exSel, context, red, sections),
     [evSel, exSel, context, red, sections]);
   const redactions = useMemo(() =>
@@ -70,6 +82,7 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(2400))); // a summary runs a few hundred tokens out
   const preview = renderSummaryPayload(evSel, exSel, context, red, sections);
   const overwriting = !!summaries[pid]?.trim();
+  const tooBig = inTok > MAX_TOK;
   const ready = !!pid && (evSel.length > 0 || exSel.length > 0);
 
   const run = async () => {
@@ -245,14 +258,24 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
               <button className="btn" onClick={onClose}>Close</button>
             </div>
           ) : (
+            <>
+            {tooBig && (
+              <div className="ai-warn" role="alert">
+                <b>This is too much to summarise in one request</b> (about {Math.round(inTok / 1000)}k
+                tokens; the limit is {Math.round(MAX_TOK / 1000)}k). A summary reads everything at
+                once, so there is no window to fall back to — untick events or codes above, or
+                summarise one transcript at a time.
+              </div>
+            )}
             <div className="imp-actions">
-              <button className="btn primary" onClick={run} disabled={busy}>
+              <button className="btn primary" onClick={run} disabled={busy || tooBig}>
                 {busy ? "Drafting…" : "Send 1 request to OpenAI"}
               </button>
               <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
                 {busy ? "Stop" : "Cancel — send nothing"}
               </button>
             </div>
+            </>
           )}
         </>
       )}
