@@ -188,22 +188,23 @@
 .ai-trow .tMeta { margin-left:auto; color:var(--muted); font-size:.86em;
   font-variant-numeric:tabular-nums; }
 
-/* Three states, one control. A tri-state button rather than three radios per
-   speaker: the states are ordered (searched > context > not sent) and a
-   researcher flips one speaker, not a grid. The state is spelled out in the
-   label AND in the accessible name, never carried by colour alone. */
+/* One-of-three per speaker, as a native select — see FindModal. The state is
+   the select's own value, so it is never carried by colour alone; the tinting
+   below is reinforcement for a sighted reader scanning the row, nothing more.
+   font:inherit on the select because a form control does not inherit font-size,
+   and without it this lands at the UA's ~13px while the dialog scales past it. */
 .ai-voices { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
-.ai-voices .voice { font:inherit; display:flex; align-items:center; gap:7px;
-  padding:5px 10px; border-radius:999px; cursor:pointer; line-height:1.3;
+.ai-voices .voice { display:flex; align-items:center; gap:7px;
+  padding:4px 8px 4px 10px; border-radius:8px; line-height:1.3;
   border:1px solid var(--line); background:var(--bg); color:var(--fg); }
-.ai-voices .voice:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.ai-voices .voice select { font:inherit; padding:3px 6px; border-radius:6px;
+  border:1px solid var(--line); background:var(--panel); color:var(--fg); }
+.ai-voices .voice select:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.ai-voices .vName { font-weight:600; }
 .ai-voices .vN { color:var(--muted); font-size:.86em; font-variant-numeric:tabular-nums; }
-.ai-voices .vState { font-size:.86em; }
 .ai-voices .voice.code { border-color:var(--accent);
   background:color-mix(in srgb, var(--accent) 12%, transparent); }
-.ai-voices .voice.context { border-style:dashed; }
-.ai-voices .voice.exclude { opacity:.65; }
-.ai-voices .voice.exclude .vName { text-decoration:line-through; }
+.ai-voices .voice.exclude { opacity:.7; }
 
 /* AI consent gate — the payload preview */
 /* the one sentence in the app that says participant data is about to leave the device,

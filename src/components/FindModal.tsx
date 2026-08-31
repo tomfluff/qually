@@ -298,9 +298,6 @@ export function FindModal({ initialCodes = [], onClose }: {
     }
   };
 
-  const cycle = (s: string) =>
-    setVoice((v) => ({ ...v, [s]: v[s] === "code" ? "context" : v[s] === "context" ? "exclude" : "code" }));
-
   return (
     <AiModal title="Find passages across transcripts" busy={busy} onClose={onClose}>
       {done ? (
@@ -416,15 +413,25 @@ export function FindModal({ initialCodes = [], onClose }: {
             {voices.length > 0 && (
               <>
                 <div className="eyebrow">Whose speech</div>
+                {/* A native select, not a button cycling three states. This is
+                    one-of-three, which is what a select IS: it announces the
+                    change on pick (a cycling button changes its own name and a
+                    screen reader may never say so), it has the platform's own
+                    keyboard handling, and it grows with browser zoom without
+                    any of this code knowing. */}
                 <div className="ai-voices">
                   {voices.map(([s, n]) => (
-                    <button key={s} className={"voice " + (voice[s] ?? "code")} disabled={busy}
-                      onClick={() => cycle(s)}
-                      aria-label={`${s}, ${n} lines: ${VOICE_SAYS[voice[s] ?? "code"]}. Activate to change.`}>
+                    <label key={s} className={"voice " + (voice[s] ?? "code")}>
                       <span className="vName">{s}</span>
-                      <span className="vN">{n}</span>
-                      <span className="vState">{VOICE_SAYS[voice[s] ?? "code"]}</span>
-                    </button>
+                      <span className="vN">{n} lines</span>
+                      <select value={voice[s] ?? "code"} disabled={busy}
+                        aria-label={`What to do with ${s}'s speech`}
+                        onChange={(e) => setVoice((v) => ({ ...v, [s]: e.target.value as Voice }))}>
+                        <option value="code">searched</option>
+                        <option value="context">context only</option>
+                        <option value="exclude">not sent</option>
+                      </select>
+                    </label>
                   ))}
                 </div>
               </>
@@ -479,9 +486,3 @@ export function FindModal({ initialCodes = [], onClose }: {
 
 const requestCount = (per: { chunks: unknown[] }[]) => per.reduce((n, x) => n + x.chunks.length, 0);
 
-/** One word each, because this label is read aloud on every arrow key. */
-const VOICE_SAYS: Record<Voice, string> = {
-  code: "searched",
-  context: "context only",
-  exclude: "not sent",
-};
