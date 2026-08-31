@@ -150,7 +150,7 @@ export function SettingsButton() {
                 {/* "Sidebar text" undersold it: the same value sizes the code list, tabs,
                     menus, popovers, tooltips, the event list, the Browse and Summary panes
                     and the video dock. Naming one of nine made the other eight surprises. */}
-                <div className="settings-note">Everything except the transcript: code list, tabs, menus, popovers, tooltips, video dock. For buttons and icons too, use browser zoom (<kbd>Ctrl</kbd> <kbd>+</kbd> / <kbd>Ctrl</kbd> <kbd>-</kbd>, <kbd>Ctrl</kbd> <kbd>0</kbd> resets).</div>
+                <div className="settings-note">Everything except the transcript. For buttons and icons too, use browser zoom (<kbd>Ctrl</kbd> <kbd>+</kbd> / <kbd>Ctrl</kbd> <kbd>-</kbd>, <kbd>Ctrl</kbd> <kbd>0</kbd> resets).</div>
                 <div className="srow">
                   <span>Reading font</span>
                   <div className="segmented fontseg">
@@ -186,7 +186,7 @@ export function SettingsButton() {
                     <button className={"seg" + (mergeLines ? " on" : "")} onClick={() => setUi({ mergeLines: true })}>On</button>
                   </div>
                 </div>
-                <div className="settings-note">Joins a speaker's unfinished lines into one reading unit. A line counts as finished when it ends in a sentence mark — <code>. ? ! …</code> and the equivalents in other scripts (<code>。？！</code>, <code>؟</code>, <code>।</code>, <code>።</code>…), with any closing quote or bracket after it.</div>
+                <div className="settings-note">Joins a speaker's unfinished lines into one reading unit — a line is finished when it ends in a sentence mark, in any script.</div>
                 <div className="srow">
                   <span>Merge by pause</span>
                   <div className="segmented">
@@ -203,7 +203,7 @@ export function SettingsButton() {
                     <button className="sreset" onClick={(e) => { e.preventDefault(); setUi({ mergeGap: 3 }); }} title="Reset to 3s">Reset</button>
                   </label>
                 )}
-                <div className="settings-note">Also joins consecutive lines from one speaker when the pause between them fits the gap. Line ends come from <code>end_timestamp</code> if the import had one, otherwise estimated from length.</div>
+                <div className="settings-note">Also joins one speaker's consecutive lines when the pause between them fits the gap.</div>
                 <div className="srow">
                   <span>Minimap</span>
                   <div className="segmented">
