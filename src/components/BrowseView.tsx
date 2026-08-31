@@ -440,6 +440,13 @@ export function BrowseView() {
                   onContextMenu={(e) => {
                     // the rename field keeps its native menu (paste)
                     if ((e.target as HTMLElement).closest("input")) return;
+                    // and so does a SELECTION over the heading: the name is real
+                    // prose someone may be quoting, and taking Copy away from a
+                    // highlighted phrase to offer Rename is the wrong answer to
+                    // a right-click that plainly meant "copy this"
+                    const sel = window.getSelection();
+                    if (sel && !sel.isCollapsed && sel.toString().trim()
+                      && e.currentTarget.contains(sel.anchorNode)) return;
                     e.preventDefault(); setMenu({ code, x: e.clientX, y: e.clientY });
                   }}>
                   <CodeTitle code={code} defOpen={defEditing === code}

@@ -1993,10 +1993,16 @@ function MapInner() {
   const takeSimilar = useCallback((mode: "merge" | "group" | "area") => {
     const cur = similar;
     if (!cur) return;
-    const picked = [...cur.ticked];
-    if (!picked.length) return;
-    const members = [cur.source, ...picked];
     const st = useStore.getState();
+    // The panel is a snapshot: a code can be renamed, merged, deleted or set
+    // aside while it is open — from the map's own menu, a keystroke away — and
+    // acting on a name that is no longer in the book writes a cluster or a group
+    // around something that does not exist. Checked against the book as it is
+    // NOW, not as it was when the search ran.
+    const live = new Set(liveCodes(st.codebook));
+    const picked = [...cur.ticked].filter((c) => live.has(c));
+    if (!picked.length || !live.has(cur.source)) return;
+    const members = [cur.source, ...picked];
     if (mode === "merge") {
       const clusters = st.codeClusters
         .map((c) => ({ ...c, codes: c.codes.filter((x) => !members.includes(x)) }))

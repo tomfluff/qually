@@ -41,11 +41,26 @@ export function CodeMenu({ code, x, y, onClose }: {
   // .codeList is the transcript sidebar's list — this menu opens from there too,
   // and deleting or renaming from it detaches the row the same way
   // Where focus lands when the opener is gone by the time this closes — the
-  // list this menu was opened from. #codemap is here because the map opens it
+  // list this menu was opened from. .mapCanvas is here because the map opens it
   // from a row of its OWN menu, which unmounts in the same commit this one
   // mounts: there is no opener to go back to, and without a home a keyboard
-  // user is dropped on <body> after every rename made from the map.
-  useMenuFocus(ref, { home: ".cbList, .cbSide, .sideList, .codeList, [role=listbox], #codemap" });
+  // user is dropped on <body> after every rename made from the map. The CANVAS,
+  // not #codemap: it already carries a tabIndex and an accessible label, where
+  // the outer div is an unnamed box that would take the caret and say nothing.
+  useMenuFocus(ref, { home: ".cbList, .cbSide, .sideList, .codeList, [role=listbox], .mapCanvas" });
+
+  // Every mode swaps this menu's contents, so the control that was focused
+  // unmounts and nothing claims the caret: opening "Merge into", or coming Back
+  // from it, dropped a keyboard user on <body> with the dialog still open and
+  // the arrows dead. useMenuFocus only runs on MOUNT — the modes need their own.
+  // Rename is already covered by its field's autoFocus, which the guard honours.
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }  // mount is useMenuFocus's job
+    const el = ref.current;
+    if (!el || el.contains(document.activeElement)) return;    // something already took it
+    el.querySelector<HTMLElement>("button:not([disabled]), input, [href]")?.focus();
+  }, [mode]);
 
   // Escape peels one layer (a sub-form goes back to the menu); an outside click
   // closes outright whatever the mode

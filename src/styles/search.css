@@ -62,8 +62,12 @@
    the two kinds apart in the menu */
 .noticemenu label.lensdiv { border-bottom:1px solid var(--line); border-radius:6px 6px 0 0;
   padding-bottom:.5em; margin-bottom:.35em; }
-/* native checkboxes don't inherit font-size — em them so they grow with the menu */
-.noticemenu input[type=checkbox] { width:1em; height:1em; flex-shrink:0;
+/* Native checkboxes don't inherit font-size — which is exactly why em-ing them
+   was not enough on its own: 1em resolves against the control's OWN size, so it
+   stayed the UA's ~13px however far the menu's text was turned up. font-size
+   first, THEN the em means something. (The comment here named the problem and
+   then did the thing that does not fix it; see .cbMenu, .tabScroll, .clrsw.) */
+.noticemenu input[type=checkbox] { font-size:inherit; width:1em; height:1em; flex-shrink:0;
   accent-color:var(--accent); }
 .noticemenu .lensdot { width:.7em; height:.7em; border-radius:50%; flex-shrink:0; }
 .noticemenu-note { color:var(--muted); font-size:.85em; padding:.25em .4em; }
