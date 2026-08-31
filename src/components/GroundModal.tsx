@@ -104,7 +104,8 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
         st.logAiCall({
           at: new Date().toISOString(), model: model.id, task: "ground", pid: pids.join("+"),
           lines: chunks[i].length, redactions: chunks[i].reduce((n, it) => n + red.count(it.excerpt) + red.count(it.def), 0),
-          inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
+          inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+          costUsd: +usage.costUsd.toFixed(5),
         });
         for (const r of Object.values(recs)) r.quotes.length ? grounded++ : empty++;
         cost += usage.costUsd;

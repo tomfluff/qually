@@ -166,8 +166,8 @@ function Proposals({ what, counts }: { what: "coding" | "section"; counts: Propo
 // The bill, from the AI log — the same rows the exported ai-provenance.csv
 // carries, added up. The token counts are what the API reported; the money is
 // NOT, and cannot be: costOf prices them from a table baked into this build
-// (ai/openai.ts), which knows nothing about cached-input discounts or any price
-// change since it shipped. An offline app cannot know today's rates, so the
+// (ai/openai.ts), which prices a cached input token at the published 0.1x but
+// knows nothing of any price change since it shipped. An offline app cannot know today's rates, so the
 // figure is named an estimate rather than quietly presented as an invoice.
 function Spend({ spend }: { spend: AiSpend }) {
   if (!spend.calls) return null;
@@ -178,6 +178,9 @@ function Spend({ spend }: { spend: AiSpend }) {
       <dl className="dvSpend">
         <dt>Requests</dt><dd>{n(spend.calls)}</dd>
         <dt>Tokens in</dt><dd>{n(spend.inTok)}</dd>
+        {/* only where something was cached: a 0 here would read as a cache that
+            missed, when the truth is usually that the row predates the field */}
+        {spend.cachedTok > 0 && <><dt>…from cache</dt><dd>{n(spend.cachedTok)}</dd></>}
         <dt>Tokens out</dt><dd>{n(spend.outTok)}</dd>
         <dt>Est. cost</dt><dd className="dvCost">${spend.costUsd.toFixed(4)}</dd>
       </dl>

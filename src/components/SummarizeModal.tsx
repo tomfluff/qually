@@ -90,7 +90,8 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "summary", pid,
         lines: evSel.length + exSel.length, redactions,
-        inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+          costUsd: +usage.costUsd.toFixed(5),
       });
       setDraft({ text: summary, cost: usage.costUsd });
       earcon.aiDone();

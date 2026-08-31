@@ -60,7 +60,8 @@ export function SimilarModal({ focus, book, onMatches, onClose }: {
       });
       useStore.getState().logAiCall({
         at: new Date().toISOString(), ...call,
-        inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+          costUsd: +usage.costUsd.toFixed(5),
       });
       onMatches(matches, usage.costUsd);
       setDone({ found: matches.length, cost: usage.costUsd });

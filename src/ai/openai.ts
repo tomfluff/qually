@@ -39,10 +39,24 @@ export const estimateTokens = (text: string) => {
   return Math.ceil(dense + (text.length - dense) / 4);
 };
 
-export const costOf = (m: Model, inTok: number, outTok: number) =>
-  (inTok / 1e6) * m.in + (outTok / 1e6) * m.out;
+/** What a cached input token costs against an uncached one. Verified against
+    OpenAI's prompt-caching guide 2026-08-31: on GPT-5.6 and later a cache READ
+    bills at 0.1x the uncached input rate (a cache WRITE bills at 1.25x, which is
+    why caching is only worth asking for on a run of more than one request).
+    Nothing here asks for caching yet; this is what makes the LOG honest when the
+    API reports that some of the input was served from cache. */
+export const CACHE_READ_RATE = 0.1;
 
-export interface Usage { inTok: number; outTok: number; costUsd: number }
+/** `cachedTok` is a SUBSET of inTok, not an addition to it — that is how the API
+    reports it, and adding the two would double-count the request. */
+export const costOf = (m: Model, inTok: number, outTok: number, cachedTok = 0) => {
+  const cached = Math.min(Math.max(cachedTok, 0), Math.max(inTok, 0));
+  const fresh = Math.max(inTok, 0) - cached;
+  return (fresh / 1e6) * m.in + (cached / 1e6) * m.in * CACHE_READ_RATE
+    + (outTok / 1e6) * m.out;
+};
+
+export interface Usage { inTok: number; outTok: number; cachedTok: number; costUsd: number }
 
 export class AiError extends Error {}
 
@@ -113,5 +127,12 @@ export async function callJson<T>(opts: {
 
   const u = json.usage ?? {};
   const inTok = u.input_tokens ?? 0, outTok = u.output_tokens ?? 0;
-  return { data, usage: { inTok, outTok, costUsd: costOf(modelOf(opts.model), inTok, outTok) } };
+  // How much of the input the API served from its prompt cache. Reported as a
+  // subset of input_tokens; absent on older responses and on any model that
+  // does not cache, which reads as none rather than as an error.
+  const cachedTok = u.input_tokens_details?.cached_tokens ?? 0;
+  return {
+    data,
+    usage: { inTok, outTok, cachedTok, costUsd: costOf(modelOf(opts.model), inTok, outTok, cachedTok) },
+  };
 }

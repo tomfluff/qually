@@ -170,18 +170,22 @@ export function proposalCounts(
     belongs must read as nothing rather than throw inside render. */
 export interface AiSpend {
   calls: number; unfinished: number; inTok: number; outTok: number; costUsd: number;
+  /** of inTok, how many the API served from its prompt cache — a subset, and 0
+      where no row recorded it (every row written before it was logged) */
+  cachedTok: number;
 }
 export function aiSpend(log: readonly AiCall[]): AiSpend {
   // parseProject fills a missing aiLog with [] but does not check that a
   // present one IS a list; iterating a number throws where the panel renders.
   const rows = Array.isArray(log) ? log : [];
-  const out: AiSpend = { calls: rows.length, unfinished: 0, inTok: 0, outTok: 0, costUsd: 0 };
+  const out: AiSpend = { calls: rows.length, unfinished: 0, inTok: 0, outTok: 0, cachedTok: 0, costUsd: 0 };
   for (const c of rows) {
     // aborted and failed both DISPATCHED — the transcript went out either way,
     // and the API may have charged for it while reporting nothing back
     if (c.outcome === "aborted" || c.outcome === "failed") out.unfinished++;
     out.inTok += num(c.inTok);
     out.outTok += num(c.outTok);
+    out.cachedTok += num(c.cachedTok);
     out.costUsd += num(c.costUsd);
   }
   return out;

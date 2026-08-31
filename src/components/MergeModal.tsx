@@ -68,7 +68,8 @@ export function MergeModal({ onProposals, onClose }: {
       useStore.getState().logAiCall({
         at: new Date().toISOString(), model: model.id, task: "merge", pid: "(codebook)",
         lines: codes.length, redactions,
-        inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+          costUsd: +usage.costUsd.toFixed(5),
       });
       onProposals(proposals.map((x) => ({ ...x, model: model.id })));
       setDone({ found: proposals.length, cost: usage.costUsd });

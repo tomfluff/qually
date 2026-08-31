@@ -317,6 +317,11 @@ export interface LineFlags { hash: string; lenses?: string[]; spans: Flag[] }
 export interface AiCall {
   at: string; model: string; task: string; pid: string;
   lines: number; redactions: number; inTok: number; outTok: number; costUsd: number;
+  /** Of `inTok`, how many the API served from its prompt cache (a subset, never
+      an addition). Absent on every row written before this was recorded, which
+      reads as "not known" rather than as zero cached — same discipline as
+      `outcome` below. */
+  cachedTok?: number;
   /** How the run ENDED. Absent means it completed — which is what every entry
       written before this field existed was. A request that was dispatched and
       then aborted, or that failed after dispatch, still sent the transcript: the

@@ -146,7 +146,8 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
         st.logAiCall({
           at: new Date().toISOString(), model: model.id, task: `scan:${[...lenses].sort().join("+")}`, pid,
           lines: chunks[i].length, redactions: chunks[i].reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0),
-          inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
+          inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+          costUsd: +usage.costUsd.toFixed(5),
         });
         for (const spans of Object.values(flags))
           for (const sp of spans) sp.lens === "transcription" ? errors++ : notices++;

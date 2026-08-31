@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore, liveCodes, type CodeGroup } from "../state/store";
 import { getKey } from "../ai/key";
-import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { modelOf, estimateTokens, costOf, AiError, type Usage } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { renderMergePayload, type MergeCodeInput } from "../ai/dedupe";
 import { gatherCodeEvidence } from "../codeEvidence";
@@ -107,7 +107,7 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
     earcon.aiStart();
     abort.current = new AbortController();
     try {
-      let plan: ReconcilePlan; let usage: { inTok: number; outTok: number; costUsd: number };
+      let plan: ReconcilePlan; let usage: Usage;
       let fresh: { clusters: number; actions: number } | undefined;
       let meta: { replaced: number; unreviewed: string[]; model?: string } | undefined;
       if (focusMode) {
@@ -135,7 +135,8 @@ export function ReconcileModal({ groups, initialScope = "all", selected = [], on
         pid: focusMode ? `(focus: ${codes.length} codes)`
           : scope === "all" ? "(codebook)" : `(island: ${groups[scope as number]?.name})`,
         lines: codes.length + contextCodes.length, redactions,
-        inTok: usage.inTok, outTok: usage.outTok, costUsd: +usage.costUsd.toFixed(5),
+        inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok,
+          costUsd: +usage.costUsd.toFixed(5),
       });
       // the model that produced these rides along, so a decision made from
       // them a week later can still name it
