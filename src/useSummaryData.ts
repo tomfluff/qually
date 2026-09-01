@@ -61,7 +61,7 @@ export function useSummaryData(pid: string) {
       const [x, y] = [key(a), key(b)];
       return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
     });
-  }, [list, lineOf, rows]);
+  }, [list, rows, anchor]);
 
   // the same material, shaped for the AI payload
   const events = useMemo<SummaryEvent[]>(() => list.map((m) => ({

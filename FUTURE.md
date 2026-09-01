@@ -226,3 +226,23 @@ Shipped items get moved to the "Done" list with the commit.
 1. ~~In-app close-call warnings~~ — **done.**
 2. Group-by-code excerpt export (directly feeds writing).
 3. localStorage snapshot/backup (cheap insurance).
+
+## The five hook dependencies still suppressed (2026-09-01)
+
+`npm run lint` is clean and CI gates on it, so a NEW stale dependency fails the
+push. Five existing ones are suppressed in place rather than fixed, each with a
+comment saying why. They are all in canvas/layout code where adding a dependency
+changes when a redraw or a re-layout happens, which wants reading the code with
+the map on screen — not obeying the rule:
+
+- `CodeMapView.tsx` — the node memo (`spec.take`), two `showNodes` callbacks,
+  and the viewport settle's `topicGroups.length`, which the rule calls
+  unnecessary but which is plausibly what should re-settle after a regroup.
+- `Minimap.tsx` — `syncFromList` and `ui`, both reached through refs precisely
+  so the effect does not re-run on them.
+
+The class they belong to has already bitten five times and been fixed: four
+memos calling `linesOf(transcripts, lang, pid)` without `lang` (SearchBar,
+CodeMapView, DescribeModal, SuggestModal), BrowseView's excerpt facets for the
+same reason, and SectionsModal's token estimate missing `settled`. So these five
+are worth a real pass, not a permanent shrug.

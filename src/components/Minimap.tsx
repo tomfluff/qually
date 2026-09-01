@@ -374,6 +374,10 @@ export const Minimap = forwardRef<MinimapHandle, {
     draw();
     syncFromList();
     drawRef.current = draw; syncRef.current = syncFromList; // the mount-only observer calls through these
+    // syncFromList and ui are reached through the refs above precisely so this
+    // does not re-run on them; adding them would redraw the whole minimap on
+    // every ui change. Not judged beyond that — see FUTURE.md.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, laned, cols, codebook, closeCallSids, flagsByLine, detail, N,
       stretches, stretchDimList, // the strips redraw when spans are (un)marked
       ui.speakerColors, ui.speakerWeight, // recolour the rail when the speaker map changes
@@ -390,7 +394,6 @@ export const Minimap = forwardRef<MinimapHandle, {
     const ro = new ResizeObserver(() => { drawRef.current?.(); syncRef.current?.(); });
     ro.observe(wrap);
     return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const scrubTo = (clientY: number) => {

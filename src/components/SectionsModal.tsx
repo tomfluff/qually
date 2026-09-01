@@ -96,7 +96,7 @@ export function SectionsModal({ pid: initial, choose, onClose }: {
 
   const inTok = useMemo(
     () => (lines.length && declared ? estimateSectionsTokens(lines, vocab, brief, red, markers, offset, settled) : 0),
-    [lines, vocab, brief, red, declared, markers, offset]);
+    [lines, vocab, brief, red, declared, markers, offset, settled]);
   const tooBig = inTok > SECTIONS_TOKEN_CAP;
   // the brief's prose is part of the payload and is redacted too (see
   // renderSections), so a name caught there belongs in this count — it is what

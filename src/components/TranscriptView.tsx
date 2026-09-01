@@ -531,7 +531,7 @@ export function TranscriptView() {
   const [addEv, setAddEv] = useState<{ t: number; lid: number } | { m: Marker } | null>(null);
   const eventAt = useStore((s) => s.eventAt);
   const setEventAt = useStore((s) => s.setEventAt);
-  useEffect(() => { setEditingId(null); setAiPop(null); setAddEv(null); setEventAt(null); }, [active]);
+  useEffect(() => { setEditingId(null); setAiPop(null); setAddEv(null); setEventAt(null); }, [active, setEventAt]);
 
   // "After this line" as a default time: the next timed line's start − 1s, clamped
   // to the line's own start so a rapid-fire transcript can't push it before the
@@ -745,7 +745,7 @@ export function TranscriptView() {
       positioning.current = false;
     });
     return () => { cancelAnimationFrame(raf); positioning.current = false; };
-  }, [active, pad]);
+  }, [active, pad, stopAnims]);
 
   // With a viewport-sized top pad, offset 0 is a blank screen: "the top" now means
   // the first line parked at the top of the viewport, which is index 1 (0 = the pad).
@@ -875,7 +875,7 @@ export function TranscriptView() {
     if (idx !== undefined) { stopAnims(); vref.current?.scrollToIndex(idx + 1, { align: "center" }); } // +1 for the top vpad
     positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
     clearJump();
-  }, [jump, active, transcript, itemIdx, clearJump, pad]);
+  }, [jump, active, transcript, itemIdx, clearJump, pad, stopAnims]);
 
   // Keep the moving end of the selection on screen. Without this, arrowing past the
   // viewport edge walks the selection off-screen and the keyboard user is coding

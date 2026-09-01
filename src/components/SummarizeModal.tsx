@@ -26,6 +26,10 @@ import { openSummary } from "./SummaryView";
     higher because a transcript is one file where this is the whole corpus. */
 const MAX_TOK = 120_000;
 
+/** Stable empties — see evSel/exSel below. */
+const NONE_EV: never[] = [];
+const NONE_EX: never[] = [];
+
 export function SummarizeModal({ pid: initial, choose, onClose }: {
   pid?: string; choose?: boolean; onClose: () => void;
 }) {
@@ -43,8 +47,11 @@ export function SummarizeModal({ pid: initial, choose, onClose }: {
   const [incEvents, setIncEvents] = useState(true);
   const [incCodes, setIncCodes] = useState(true);
   const [context, setContext] = useState("");
-  const evSel = incEvents ? events : [];
-  const exSel = incCodes ? excerpts : [];
+  // ONE empty array, not a fresh one per render: these feed two useMemos below,
+  // and a new [] each time made both of them re-run on every keystroke in the
+  // context box for as long as the toggle was off
+  const evSel = incEvents ? events : NONE_EV;
+  const exSel = incCodes ? excerpts : NONE_EX;
 
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<{ text: string; cost: number } | null>(null);

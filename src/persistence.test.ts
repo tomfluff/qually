@@ -15,6 +15,8 @@ it("opens autosave after an empty IndexedDB read even when legacy storage is blo
 
   const db = {
     transaction: () => {
+      // forward declaration: `store` below closes over it, so it cannot be const
+      // eslint-disable-next-line prefer-const
       let tx: { objectStore: () => typeof store; oncomplete?: () => void; onerror?: () => void; error: null };
       const store = {
         get: () => {

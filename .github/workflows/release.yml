@@ -29,6 +29,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # Lint gates the PUSH, not the local build. `npm run build` stays
+      # tsc + vite so iteration is fast; anything that reaches main has passed
+      # the hooks rules, which is what stops the stale-dependency class from
+      # growing back. The five suppressions in the tree are each justified in
+      # place and listed in FUTURE.md.
+      - run: npm run lint
       - run: npm run release
       - name: Commit rebuilt single-file if it changed
         run: |

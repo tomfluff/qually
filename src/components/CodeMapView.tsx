@@ -1673,6 +1673,11 @@ function MapInner() {
     for (const c of looseFree) children.push(chipNode(c, { x: 0, y: 0 }));
     // parents strictly before children (RF sub-flow requirement)
     return { nodes: withSimilar([...islands, ...children] as MapNode[]) };
+    // `spec.take` left out deliberately: this memo re-packs every chip and halo
+    // on the map, and the effect at the bottom of this file excludes
+    // similar.ticked for the same reason — ticking one checkbox must not
+    // re-layout a 178-code map. NOT audited beyond that; see FUTURE.md.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [codes, codebook, stats, cooc, codeGroups, plan, clusters, view, slot, mapPositions, mapIslandPos, openCards, genCi, segments, transcripts, topicGroups, similar, simTokens, bucketRev, stretches, activeDims]);
   const build = useCallback(() => layout.nodes, [layout]);
 
@@ -2048,6 +2053,9 @@ function MapInner() {
       showNodes([`island:${useStore.getState().codeGroups.length - 1}`], "themes", null);
     }
     setSimilar(null);
+    // showNodes is re-made per render; listing it would re-run this on every
+    // render. Not judged further — see FUTURE.md.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [similar]);
 
   // the focus run, inline: gather evidence, send, land the plan, and SAY what
@@ -2107,6 +2115,8 @@ function MapInner() {
     // take the researcher to what just appeared, or the map looks unchanged
     requestAnimationFrame(() =>
       showNodes(haloIdsFor(useStore.getState().codeClusters, fresh), "reconcile", null));
+    // mount-only on purpose: this subscribes once and reads the store live.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A hand-made area: same shape as the AI's, same rule as the similar panel's
@@ -2330,6 +2340,10 @@ function MapInner() {
       el.focus({ preventScroll: true });
     };
     settleFrame.current = requestAnimationFrame(settle);
+    // topicGroups.length is not read in here, but it is what should re-settle
+    // the viewport when grouping changes the layout. Removing it may be right
+    // and may drop a needed re-settle; not judged — see FUTURE.md.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, topicGroups.length, getNodes, getViewport, setViewport, codes.length]);
   // the Map tab's menu picked a view while the map is on screen
   useEffect(() => {

@@ -192,7 +192,12 @@ export function BrowseView() {
       });
     }
     return bySid;
-  }, [segments, transcripts, excerptFacetsOn]);
+    // excerptFor is re-made every render, so listing it would run this on every
+    // render and the memo would do nothing. `lang` is what it actually reads and
+    // what was actually stale — the facets kept the previous reading's excerpts
+    // after a language switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segments, transcripts, lang, excerptFacetsOn]);
 
   // a segment's grounding quotes, but only while the hash still matches what the
   // model saw (recode/resize/edit invalidates — same trick as the scan marks)
