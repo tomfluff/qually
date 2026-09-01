@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AI_PROPOSED_BY_PREFIX, guessQuiet, linesOf, liveCodes, useStore } from "../state/store";
 import { getKey } from "../ai/key";
-import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { modelOf, estimateTokens, costOf, AiError, runKey } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { chunksOf, renderSuggestChunk, estimateSuggestTokens, suggestChunk, overlapsExisting,
@@ -77,7 +77,6 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const abort = useRef<AbortController | null>(null);
-  const runSeq = useRef(0);
   useEffect(() => () => abort.current?.abort(), []);
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
@@ -107,6 +106,13 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   // fraction of the tokens as well as a narrower question.
   const [pick, setPick] = useState<Set<string> | null>(null);
   const chosen = useMemo(() => (pick ? book.filter((c) => pick.has(c.name)) : book), [book, pick]);
+  // A selection is a list of NAMES, and a rename while this dialog is open
+  // leaves one pointing at nothing: the code is still in the book under its new
+  // name, but silently stops being part of the run. Say so rather than quietly
+  // sending less than the researcher chose.
+  const stale = useMemo(() => (pick
+    ? [...pick].filter((n) => !book.some((c) => c.name === n))
+    : []), [pick, book]);
   const [codeQuery, setCodeQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("name");
 
@@ -131,9 +137,10 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     const stats = Object.fromEntries(rows.map((r) => [r.name, { segs: r.segs, pids: r.pids }]));
     return sortCodes(rows.map((r) => r.name), stats, sortBy)
       .map((n) => rows.find((r) => r.name === n)!)
-      // a ticked code stays listed whatever the filter says
-      .filter((r) => !q || (pick ?? new Set(book.map((c) => c.name))).has(r.name)
-        || r.name.toLowerCase().includes(q));
+      // "a ticked code stays listed" applies to an EXPLICIT selection only.
+      // With the default (null = all ticked) it kept every code, so typing in
+      // the filter did nothing at all until you had unticked something.
+      .filter((r) => !q || pick?.has(r.name) || r.name.toLowerCase().includes(q));
   }, [rows, codeQuery, sortBy, pick, book]);
 
   const on = (name: string) => (pick ? pick.has(name) : true);
@@ -158,21 +165,17 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     });
   }, [choose, tabs, transcripts, aiLog, segments]);
 
-  const chunks = useMemo(() => {
-    if (!scoped) return chunksOf(lines, red, context);
-    // a discontiguous ctrl-click selection is SEPARATE windows: packed into
-    // one, the model reads the gap as adjacency and can answer with a span
-    // bridging lines it never saw — which addSegment would then code
-    const pos = new Map(allLines.map((l, i) => [l.id, i]));
-    const runs: (typeof lines)[] = [];
-    let run: typeof lines = [];
-    for (const l of lines) {
-      if (run.length && pos.get(l.id) !== pos.get(run[run.length - 1].id)! + 1) { runs.push(run); run = []; }
-      run.push(l);
-    }
-    if (run.length) runs.push(run);
-    return runs.flatMap((r) => chunksOf(r, red, context));
-  }, [lines, scoped, allLines, red, context]);
+  // A discontiguous selection leaves gaps, and a proposal must never bridge one
+  // — the model would be answering across lines it was never shown. That used to
+  // be enforced by splitting the selection into one window per run of adjacent
+  // lines, which is correct and ruinously expensive: every other line selected
+  // in a 300-line transcript meant 150 requests, each repeating the system
+  // prompt and the whole codebook. The rule lives in sanitizeSuggestReply now
+  // (`omitted`), so the selection packs normally.
+  const chunks = useMemo(() => chunksOf(lines, red, context), [lines, red, context]);
+  const omitted = useMemo(() => (scoped
+    ? new Set(allLines.filter((l) => !selIds!.has(l.id)).map((l) => l.id))
+    : undefined), [scoped, allLines, selIds]);
   const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, chosen, red, context), 0), [chunks, chosen, red, context]);
   const redactions = useMemo(() => {
     const perBook = chosen.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0);
@@ -196,9 +199,13 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     const by = AI_PROPOSED_BY_PREFIX + model.name;
     // stable for this run, distinct between runs: the codebook is what is
     // cached, so a run with a different book must not land on the same entry
-    // the SELECTION, not the whole book: the codebook is the cached prefix, so a
-    // run over a different subset must not land on the previous run's entry
-    const cacheKey = `suggest:${model.id}:${pid}:${chosen.length}:${runSeq.current++}`;
+    // OPAQUE. This string is a request field, and it was carrying the pid —
+    // which is a filename the researcher chose and is very often a participant
+    // identifier. Redaction never touched it, the payload preview never showed
+    // it, and the gate's "redacted N" never counted it, so a transcript called
+    // "Jane Doe" left the device in the clear from a dialog promising otherwise.
+    // The key only has to group one run's requests, and a nonce does that.
+    const cacheKey = runKey();
     let added = 0, skipped = 0, unusable = 0, cost = 0, pushed = false;
     // hoisted out of the loop so the catch can name the one chunk in flight
     let i = 0;
@@ -209,7 +216,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
         // lines that never left. Nothing more is sent, so nothing more is logged.
         if (abort.current.signal.aborted) return;
         const { proposals, rejected, usage } = await suggestChunk({
-          key, model: model.id, lines: chunks[i], codes: chosen, redaction: red, context,
+          key, model: model.id, lines: chunks[i], codes: chosen, redaction: red, context, omitted,
           // only across a run of more than one request: a cache write bills at
           // 1.25x, so asking on a single request costs more than not asking.
           // Keyed on the run so its windows reach the same machine.
@@ -221,7 +228,12 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
           // read live each time: catches candidates added earlier in THIS run and
           // any the user accepted/added in another view during the async run
           const st = useStore.getState();
-          if (!st.codebook[p.code]) { skipped++; continue; }              // code renamed/deleted mid-run
+          // hasOwn, not truthiness: a code legitimately named "toString" or
+            // "constructor" still resolves through Object.prototype after it is
+            // deleted, so the check passed and a candidate landed for a code
+            // that is no longer in the book. Parked counts as gone too — a
+            // proposal for a code you set aside is one you asked not to see.
+            if (!Object.hasOwn(st.codebook, p.code) || st.codebook[p.code]?.parked) { skipped++; continue; }              // code renamed/deleted mid-run
           if (overlapsExisting(st.segments, pid, p)) { skipped++; continue; }
           if (!pushed) { st.pushUndo(); pushed = true; }                  // one undo entry for the whole run
           st.addSegment(pid, p.startLine, p.endLine, p.code, by, "candidate");
@@ -344,6 +356,15 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
 
+              {stale.length > 0 && (
+                <div className="settings-note" role="alert">
+                  {stale.length === 1
+                    ? <>You picked <b>{stale[0]}</b>, and it has since been renamed or removed —
+                      it is not in this run.</>
+                    : <>{stale.length} codes you picked have since been renamed or removed and are
+                      not in this run: {stale.join(", ")}.</>}
+                </div>
+              )}
               {book.length > 0 && (
                 <>
                   <div className="ai-sec">Codes the AI may propose{" "}
@@ -351,7 +372,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                   <input className="findName" value={codeQuery} disabled={busy}
                     placeholder="Filter codes…" aria-label="Filter the code list by name"
                     onChange={(e) => setCodeQuery(e.target.value)} />
-                  <CodePickBar sortBy={sortBy} onSort={setSortBy} onPick={[
+                  <CodePickBar sortBy={sortBy} onSort={setSortBy} disabled={busy} onPick={[
                     { label: "All", run: () => setPick(null) },
                     { label: "None", run: () => setPick(new Set()) },
                   ]}>
@@ -365,7 +386,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                     )}
                     {shownCodes.map((c) => (
                       <CodePickRow key={c.name} code={c} color={codebook[c.name]?.color ?? ""}
-                        on={on(c.name)} onToggle={() => toggle(c.name)} />
+                        on={on(c.name)} disabled={busy} onToggle={() => toggle(c.name)} />
                     ))}
                   </div>
                 </>

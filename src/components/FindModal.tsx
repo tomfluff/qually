@@ -29,7 +29,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { linesOf, liveCodes, useStore, guessQuiet, type Line } from "../state/store";
 import { getKey } from "../ai/key";
-import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
+import { modelOf, estimateTokens, costOf, AiError, runKey } from "../ai/openai";
 import { redactor } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { norm } from "../contract/segments";
@@ -113,7 +113,6 @@ export function FindModal({ initialCodes = [], onClose }: {
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<{ added: number; skipped: number; unusable: number; cost: number } | null>(null);
   const abort = useRef<AbortController | null>(null);
-  const runSeq = useRef(0);
   // Send disables itself the instant it is pressed, so the focused element
   // vanishes and focus falls to <body> — and the dialog's trap listens on the
   // dialog, so Tab then walks the page BEHIND an aria-modal dialog for the whole
@@ -303,7 +302,7 @@ export function FindModal({ initialCodes = [], onClose }: {
     earcon.aiStart();
     abort.current = new AbortController();
     const by = `AI · ${model.name}`;
-    const cacheKey = `find:${model.id}:${runSeq.current++}`;
+    const cacheKey = runKey();   // opaque: see SuggestModal — never researcher data
     // The code is the researcher's, written before the model read anything —
     // created here so a hit has somewhere to land, and left behind empty if the
     // search finds nothing, exactly like any code they make and never use.
@@ -351,7 +350,12 @@ export function FindModal({ initialCodes = [], onClose }: {
           for (const p of props) {
             const st = useStore.getState();
             if (!pushed) { st.pushUndo(); pushed = true; }   // one undo entry for the whole run
-            if (!st.codebook[p.code]) { skipped++; continue; }   // renamed or deleted mid-run
+            // hasOwn, not truthiness: a code legitimately named "toString" or
+            // "constructor" still resolves through Object.prototype after it is
+            // deleted, so the check passed and a candidate landed for a code
+            // that is no longer in the book. Parked counts as gone too — a
+            // proposal for a code you set aside is one you asked not to see.
+            if (!Object.hasOwn(st.codebook, p.code) || st.codebook[p.code]?.parked) { skipped++; continue; }   // renamed or deleted mid-run
             if (overlapsExisting(st.segments, t.pid, p)) { skipped++; continue; }
             st.addSegment(t.pid, p.startLine, p.endLine, p.code, by, "candidate");
             added++;
@@ -467,7 +471,7 @@ export function FindModal({ initialCodes = [], onClose }: {
                         way back without hunting for them */}
                     {/* the same bar as Draft definitions: bulk picks on the
                         left, sort on the right, ticks surviving a re-sort */}
-                    <CodePickBar sortBy={sortBy} onSort={setSortBy} onPick={[
+                    <CodePickBar sortBy={sortBy} onSort={setSortBy} disabled={busy} onPick={[
                       { label: "All shown", run: () => setFocus(new Set(shown.map((c) => c.name))) },
                       { label: "None", run: () => setFocus(new Set()) },
                     ]}>
@@ -481,7 +485,7 @@ export function FindModal({ initialCodes = [], onClose }: {
                     )}
                     {shown.map((c) => (
                       <CodePickRow key={c.name} code={c} color={codebook[c.name]?.color ?? ""}
-                        on={focus.has(c.name)} onToggle={() => setFocus((f) => {
+                        on={focus.has(c.name)} disabled={busy} onToggle={() => setFocus((f) => {
                           const n = new Set(f); n.has(c.name) ? n.delete(c.name) : n.add(c.name); return n;
                         })} />
                     ))}

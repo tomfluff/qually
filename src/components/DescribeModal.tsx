@@ -219,7 +219,7 @@ export function DescribeModal({ initial, onClose }: {
                 )}
                 <ModelPicker modelId={modelId} onPick={setModelId} />
                 <div className="ai-sec">Codes <span className="ai-sec-hint">tick the ones to draft a definition for</span></div>
-                <CodePickBar sortBy={sortBy} onSort={setSortBy} onPick={[
+                <CodePickBar sortBy={sortBy} onSort={setSortBy} disabled={busy} onPick={[
                   { label: "All", run: () => pick("all") },
                   { label: "Undefined", run: () => pick("undefined") },
                   { label: "Defined", run: () => pick("defined") },
@@ -228,7 +228,7 @@ export function DescribeModal({ initial, onClose }: {
                 <div className="cpickList" role="group" aria-label="Codes to draft definitions for">
                   {codes.map((c) => (
                     <CodePickRow key={c.name} code={c} color={codebook[c.name]?.color ?? ""}
-                      on={on.has(c.name)} onToggle={() => toggle(c.name)} />
+                      on={on.has(c.name)} disabled={busy} onToggle={() => toggle(c.name)} />
                   ))}
                 </div>
                 <div className="ai-payload">

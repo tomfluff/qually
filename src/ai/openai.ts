@@ -91,6 +91,13 @@ export class AiError extends Error {}
     warns that above 15 requests a minute they can otherwise be routed apart. */
 export interface CachePrefix { text: string; key: string }
 
+/** Groups one run's requests so they reach the same machine, and says nothing
+    else. It must never carry researcher data: this is a REQUEST FIELD, so it is
+    not covered by the redactor, does not appear in the payload preview, and is
+    not counted in the gate's redaction total — anything put here leaves the
+    device in the clear from a dialog that promised to show what leaves. */
+export const runKey = () => `run_${crypto.randomUUID()}`;
+
 /** The smallest prefix the API will cache on GPT-5.6 and later. Below it the
     breakpoint is accepted and simply never produces a hit, so asking would pay
     the write premium for nothing. */
