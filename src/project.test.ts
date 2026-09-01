@@ -639,3 +639,38 @@ test("a parked row keeps only values the export can write", () => {
   expect(p.extSegRows).toHaveLength(1);
   expect(p.extSegRows[0]).toEqual({ segment_ref: "P09:1", code: "c" });
 });
+
+// The full circle the researcher actually performs: export, parse, OPEN, and
+// export again. The cleaners added at the boundary sit on this path, and a
+// field they quietly drop is a field lost from the only copy on the second save
+// rather than the first — which is the failure that never announces itself.
+test("a project converges: what one open repairs, the next leaves alone", () => {
+  const s = () => useStore.getState();
+  // The first pass MAY repair — a tab whose transcript is no longer loaded is
+  // dropped, because it cannot open. What must not happen is a file that keeps
+  // changing every time it is opened and saved: that is a project drifting under
+  // the researcher, and it is the failure a byte-equality check on pass one
+  // would have hidden behind an expected repair.
+  s().openProject(parseProject(s().exportProject()));
+  const a = JSON.parse(s().exportProject());
+  s().openProject(parseProject(s().exportProject()));
+  const b = JSON.parse(s().exportProject());
+
+  // savedAt is stamped per export, so it is expected to differ; nothing else is
+  delete a.savedAt; delete b.savedAt;
+  expect(b).toEqual(a);
+  // and no coding was lost on the way through
+  expect(b.segments.length).toBe(a.segments.length);
+  expect(Object.keys(b.codebook).length).toBe(Object.keys(a.codebook).length);
+});
+
+// The three fields the boundary learned to validate this week are the three
+// most likely to be dropped on the way back in.
+test("tabs, pins and the active view come back as they went out", () => {
+  const s = () => useStore.getState();
+  const before = { tabs: s().tabs, pinned: s().pinnedTabs, active: s().active,
+    parked: s().extSegRows.length, segs: s().segments.length };
+  s().openProject(parseProject(s().exportProject()));
+  expect({ tabs: s().tabs, pinned: s().pinnedTabs, active: s().active,
+    parked: s().extSegRows.length, segs: s().segments.length }).toEqual(before);
+});
