@@ -169,6 +169,15 @@
 .about input:focus-visible,
 .about textarea:focus-visible,
 .about select:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+/* INSIDE the border box for the fields that sit in the scrolling body. That
+   body is `overflow-y:auto` with padding on the right only, and setting one
+   overflow axis makes the other clip too — so a full-width field's outset ring
+   was sliced off flat against the left edge. A negative offset cannot be
+   clipped by an ancestor at any padding, which is why the map canvas and the
+   codebook menu rows already use one. */
+.ai-body input:focus-visible,
+.ai-body textarea:focus-visible,
+.ai-body select:focus-visible { outline-offset:-2px; }
 
 /* ── F8: find across the corpus ─────────────────────────────────────────
    The one run that can span a whole study, so its gate carries more controls
