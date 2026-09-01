@@ -318,8 +318,10 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
    tooltip nobody hovers */
 .bSideNote.defHint { margin-top:10px; padding-top:8px; border-top:1px solid var(--line);
   line-height:1.5; }
+/* em, not px: a text-only zoom grows the rows and a fixed cap would show
+   fewer and fewer of them. Matches the .ai-cbox twins. */
 .cpickList { display:flex; flex-direction:column; gap:2px; margin-bottom:10px;
-  max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:4px; }
+  max-height:17em; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:4px; }
 .cpickRow { display:flex; align-items:center; gap:7px; padding:4px 6px; border-radius:6px;
   cursor:pointer; }
 .cpickRow:hover { background:var(--panel); }

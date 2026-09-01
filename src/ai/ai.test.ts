@@ -631,3 +631,36 @@ describe("what a cached request cost", () => {
     expect(costOf(m, 0, 0, 50, 50)).toBe(0);
   });
 });
+
+// The guard that lets a withheld speaker (or a discontiguous selection) be
+// packed as one window instead of one request per surviving line. Its twin in
+// find.test.ts was tested; this one shipped without a test, which is the rule I
+// wrote down after the last time an untested claim turned out to be false.
+describe("a proposal must not span lines that were not sent", () => {
+  const codes = [{ name: "difficulty", def: "", excerpts: [] }];
+  const sent = [L(10, "I zoom in"), L(12, "then I give up")];   // 11 withheld
+  const omitted = new Set([11]);
+  const p = (a: number, b: number) => ({ line_start: a, line_end: b, code: "difficulty" });
+
+  it("drops a proposal that bridges a withheld line", () => {
+    expect(sanitizeSuggestReply(codes, sent, [p(10, 12)], undefined, omitted)).toEqual([]);
+  });
+
+  it("keeps the same proposal when nothing was withheld", () => {
+    expect(sanitizeSuggestReply(codes, sent, [p(10, 12)])).toHaveLength(1);
+  });
+
+  it("keeps single-line proposals either side of the gap", () => {
+    expect(sanitizeSuggestReply(codes, sent, [p(10, 10), p(12, 12)], undefined, omitted)).toHaveLength(2);
+  });
+});
+
+// A code name that is also an Object.prototype member resolves through the
+// prototype after it is deleted, so a truthiness check said it still existed.
+describe("a code named like an Object member", () => {
+  it("is not treated as present just because Object.prototype has it", () => {
+    const book: Record<string, unknown> = {};
+    expect(!!book["toString"]).toBe(true);          // the bug, in one line
+    expect(Object.hasOwn(book, "toString")).toBe(false);  // the guard
+  });
+});

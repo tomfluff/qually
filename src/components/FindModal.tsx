@@ -190,9 +190,19 @@ export function FindModal({ initialCodes = [], onClose }: {
   // In question mode the code does not exist yet, so it has no excerpts to
   // anchor it — the researcher's own description is the whole definition, which
   // is why the field is not optional.
+  // A selection is a list of NAMES. Renaming a picked code while this dialog is
+  // open used to leave the old name in `focus`, and bookFor mapped it
+  // unconditionally — so a request went out for a code that no longer exists,
+  // with no definition and no exemplars, and every proposal it produced was
+  // then thrown away by the hasOwn guard. Money spent, nothing added, counts
+  // wrong. Only live names are sent; the ones that vanished are named below.
+  const live = useMemo(() => new Set(liveCodes(codebook)), [codebook]);
+  const picked = useMemo(() => [...focus].filter((c) => live.has(c)), [focus, live]);
+  const stale = useMemo(() => [...focus].filter((c) => !live.has(c)), [focus, live]);
+
   const codes = useMemo<SuggestCode[]>(() => (mode === "codes"
-    ? bookFor([...focus])
-    : [{ name: name.trim(), def: about.trim(), excerpts: [] }]), [mode, focus, bookFor, name, about]);
+    ? bookFor(picked)
+    : [{ name: name.trim(), def: about.trim(), excerpts: [] }]), [mode, picked, bookFor, name, about]);
 
   // ONE construction, used by the estimate, the preview and the request. They
   // were built separately and differed by the trim, so the gate previewed bytes
@@ -289,7 +299,7 @@ export function FindModal({ initialCodes = [], onClose }: {
   const clash = mode === "question"
     && Object.keys(codebook).some((c) => norm(c) === norm(name));
   const ready = chosen.length > 0 && requests > 0
-    && (mode === "codes" ? focus.size > 0 : named && !clash);
+    && (mode === "codes" ? picked.length > 0 : named && !clash);
 
   const run = async () => {
     const key = getKey();
@@ -454,6 +464,13 @@ export function FindModal({ initialCodes = [], onClose }: {
             {mode === "codes" ? (
               <>
                 <div className="eyebrow">Look for</div>
+                {stale.length > 0 && (
+                  <div className="settings-note" role="alert">
+                    {stale.length === 1
+                      ? <><b>{stale[0]}</b> was renamed or removed — not in this run.</>
+                      : <>Renamed or removed, not in this run: {stale.join(", ")}.</>}
+                  </div>
+                )}
                 {Object.keys(codebook).length === 0 ? (
                   <p className="about-lede">Your codebook is empty — switch to <b>Something new</b> to
                     describe what you are looking for.</p>
@@ -471,11 +488,14 @@ export function FindModal({ initialCodes = [], onClose }: {
                         way back without hunting for them */}
                     {/* the same bar as Draft definitions: bulk picks on the
                         left, sort on the right, ticks surviving a re-sort */}
-                    <CodePickBar sortBy={sortBy} onSort={setSortBy} disabled={busy} onPick={[
+                    <CodePickBar sortBy={sortBy} onSort={setSortBy} disabled={busy}
+                      live={codeQuery.trim() ? `${shown.length} codes shown` : undefined}
+                      onPick={[
                       { label: "All shown", run: () => setFocus(new Set(shown.map((c) => c.name))) },
                       { label: "None", run: () => setFocus(new Set()) },
                     ]}>
-                      {focus.size > 0 && <span className="tMeta">{focus.size} picked</span>}
+                      {focus.size > 0 && <span className="tMeta">{focus.size} picked
+                        <span className="sr-only"> codes</span></span>}
                     </CodePickBar>
                   <div className="ai-cbox" role="group" aria-label="Codes to look for">
                     {shown.length === 0 && (

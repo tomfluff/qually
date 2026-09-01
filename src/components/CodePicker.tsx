@@ -14,13 +14,16 @@ import { SORTS, type SortBy } from "../codeStats";
 /** What a row needs to describe a code. `def` may be empty. */
 export interface CodePick { name: string; def: string; segs: number; pids: number }
 
-export function CodePickBar({ sortBy, onSort, onPick, disabled, children }: {
+export function CodePickBar({ sortBy, onSort, onPick, disabled, live, children }: {
   sortBy: SortBy;
   onSort: (s: SortBy) => void;
   /** bulk selections this dialog offers; each gets a button */
   onPick?: { label: string; run: () => void }[];
   /** true while a run is in flight — see CodePickRow */
   disabled?: boolean;
+  /** announced politely as the list narrows: filtering is silent otherwise, so
+      a screen reader user types and hears nothing back */
+  live?: string;
   children?: React.ReactNode;
 }) {
   return (
@@ -29,6 +32,7 @@ export function CodePickBar({ sortBy, onSort, onPick, disabled, children }: {
         <button key={p.label} className="btn" disabled={disabled} onClick={p.run}>{p.label}</button>
       ))}
       {children}
+      {live && <span className="sr-only" aria-live="polite">{live}</span>}
       {/* ticks survive a re-sort: the order is a view, not the selection */}
       <span className="cpickSort">
         <span className="cpickSortLabel" id="cpickSortLabel">Sort</span>
@@ -65,7 +69,10 @@ export function CodePickRow({ code, color, on, disabled, onToggle }: {
           role, so a screen reader was reading the label as "9·5" and nothing
           more. The sentence goes in the label's own text, hidden visually; the
           digits are hidden FROM the name so it is not read twice. */}
-      <span className="cpickN" aria-hidden="true">{code.segs}·{code.pids}</span>
+      {/* title as well: the sr-only sentence below serves a screen reader, and
+          without this a sighted reader has "9·5" and nowhere to learn what it
+          means. A title on an aria-hidden element still shows, and is not read. */}
+      <span className="cpickN" aria-hidden="true" title={n}>{code.segs}·{code.pids}</span>
       <span className="sr-only">{n}</span>
     </label>
   );

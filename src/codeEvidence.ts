@@ -32,7 +32,7 @@ export function gatherCodeEvidence(
     }
   }
   const names = includeEmpty && only
-    ? [...only].filter((name) => name in codebook && !codebook[name].parked)
+    ? [...only].filter((name) => Object.hasOwn(codebook, name) && !codebook[name].parked)
     : [...byCode.keys()];
   return names.map((name) => ({
     name,

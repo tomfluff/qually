@@ -83,7 +83,7 @@ export function TellApartModal({ codes, survivor, newName, source, model, onClos
     st.mergeCode(from, into, "Could not write a sentence that separates them", source ?? "you", model);
     // the capsule may have been renamed on the map, and the card above says
     // what the merged code will be called — so it is called that
-    const named = newName && newName !== into && !st.codebook[newName] ? newName : null;
+    const named = newName && newName !== into && !Object.hasOwn(st.codebook, newName) ? newName : null;
     // part of the SAME gesture as the merge above — mergeCode pushed the one
     // undo entry, so the rename rides it instead of pushing a second
     if (named) useStore.getState().renameCode(into, named, "The name this merge was proposed under", source ?? "you", model, false);

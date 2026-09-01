@@ -42,6 +42,12 @@ export function DescribeModal({ initial, onClose }: {
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [err, setErr] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
+  // Send disables itself the instant it is pressed, so focus falls to <body> —
+  // and useDialogFocus's Tab trap listens on the dialog, where a keydown on
+  // <body> never arrives. Hand focus to whatever replaced it. Same fix, and
+  // same reason, as FindModal.
+  const stopRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (busy) stopRef.current?.focus(); }, [busy]);
   useEffect(() => () => abort.current?.abort(), []);
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
@@ -217,7 +223,7 @@ export function DescribeModal({ initial, onClose }: {
                         coded excerpts yet and {dropped.length === 1 ? "is" : "are"} not listed: {dropped.join(", ")}.</>}
                   </p>
                 )}
-                <ModelPicker modelId={modelId} onPick={setModelId} />
+                <ModelPicker modelId={modelId} onPick={setModelId} disabled={busy} />
                 <div className="ai-sec">Codes <span className="ai-sec-hint">tick the ones to draft a definition for</span></div>
                 <CodePickBar sortBy={sortBy} onSort={setSortBy} disabled={busy} onPick={[
                   { label: "All", run: () => pick("all") },
@@ -262,7 +268,7 @@ export function DescribeModal({ initial, onClose }: {
                 title={enough ? undefined : "Tick at least one code"}>
                 {busy ? "Drafting…" : "Send 1 request to OpenAI"}
               </button>
-              <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
+              <button ref={stopRef} className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
                 {busy ? "Stop" : "Cancel — send nothing"}
               </button>
             </div>

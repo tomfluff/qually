@@ -76,7 +76,17 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
   const [done, setDone] = useState<{ added: number; skipped: number; unusable: number; cost: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  // frozen at Send: `chunks` is a live memo, so a control changing mid-run moved
+  // the denominator under a numerator that only climbs — the button, and a
+  // screen reader reading it, could say "3/1"
+  const [total, setTotal] = useState(0);
   const abort = useRef<AbortController | null>(null);
+  // Send disables itself the instant it is pressed, so focus falls to <body> —
+  // and useDialogFocus's Tab trap listens on the dialog, where a keydown on
+  // <body> never arrives. Hand focus to whatever replaced it. Same fix, and
+  // same reason, as FindModal.
+  const stopRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (busy) stopRef.current?.focus(); }, [busy]);
   useEffect(() => () => abort.current?.abort(), []);
 
   const red = useMemo(() => redactor(ai.redactTerms), [ai.redactTerms]);
@@ -141,7 +151,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
       // With the default (null = all ticked) it kept every code, so typing in
       // the filter did nothing at all until you had unticked something.
       .filter((r) => !q || pick?.has(r.name) || r.name.toLowerCase().includes(q));
-  }, [rows, codeQuery, sortBy, pick, book]);
+  }, [rows, codeQuery, sortBy, pick]);
 
   const on = (name: string) => (pick ? pick.has(name) : true);
   const toggle = (name: string) => setPick((cur) => {
@@ -196,6 +206,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     announce(`Suggesting codes for ${pid} across ${chunks.length} window${chunks.length === 1 ? "" : "s"}…`);
     earcon.aiStart();
     abort.current = new AbortController();
+    setTotal(chunks.length);
     const by = AI_PROPOSED_BY_PREFIX + model.name;
     // stable for this run, distinct between runs: the codebook is what is
     // cached, so a run with a different book must not land on the same entry
@@ -349,12 +360,13 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
               )}
               {selIds && (
                 <label className="ai-spk" style={{ margin: "8px 0" }}>
-                  <input type="checkbox" checked={onlySel} onChange={() => setOnlySel((v) => !v)} />
+                  <input type="checkbox" checked={onlySel} disabled={busy}
+                      onChange={() => setOnlySel((v) => !v)} />
                   <span>Only the {selIds.size} line{selIds.size === 1 ? "" : "s"} you selected{" "}
                   <em>suggestions land only there, and the rest of {pid} is not sent</em></span>
                 </label>
               )}
-              <ModelPicker modelId={modelId} onPick={setModelId} />
+              <ModelPicker modelId={modelId} onPick={setModelId} disabled={busy} />
 
               {stale.length > 0 && (
                 <div className="settings-note" role="alert">
@@ -367,18 +379,21 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
               )}
               {book.length > 0 && (
                 <>
-                  <div className="ai-sec">Codes the AI may propose{" "}
-                    <span className="ai-sec-hint">all of them unless you narrow it</span></div>
+                  {/* the bar's "60 of 60" already says the default is all */}
+                  <div className="ai-sec" id="suggestCodesLabel">Codes the AI may propose</div>
                   <input className="findName" value={codeQuery} disabled={busy}
                     placeholder="Filter codes…" aria-label="Filter the code list by name"
                     onChange={(e) => setCodeQuery(e.target.value)} />
-                  <CodePickBar sortBy={sortBy} onSort={setSortBy} disabled={busy} onPick={[
+                  <CodePickBar sortBy={sortBy} onSort={setSortBy} disabled={busy}
+                    live={codeQuery.trim() ? `${shownCodes.length} of ${book.length} codes shown` : undefined}
+                    onPick={[
                     { label: "All", run: () => setPick(null) },
                     { label: "None", run: () => setPick(new Set()) },
                   ]}>
-                    <span className="tMeta">{chosen.length} of {book.length}</span>
+                    <span className="tMeta">{chosen.length} of {book.length}
+                      <span className="sr-only"> codes ticked</span></span>
                   </CodePickBar>
-                  <div className="ai-cbox" role="group" aria-label="Codes the AI may propose">
+                  <div className="ai-cbox" role="group" aria-labelledby="suggestCodesLabel">
                     {shownCodes.length === 0 && (
                       <p className="settings-note" style={{ margin: "6px 8px" }}>
                         No code matches “{codeQuery.trim()}”.
@@ -417,7 +432,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                       // FROM is not a transcript with nothing in it, and saying
                       // the latter sends you looking in the wrong place
                       : chosen.length === 0
-                        ? "No codes ticked — the AI has nothing to propose from. Tick at least one above."
+                        ? "No codes ticked — tick at least one above."
                         : "This transcript has no lines to scan."}
                 </p>
               ) : (
@@ -463,9 +478,9 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
             ) : (
               <div className="imp-actions">
                 <button className="btn primary" onClick={run} disabled={busy}>
-                  {busy ? `Suggesting… ${progress}/${chunks.length}` : `Send ${chunks.length} request${chunks.length === 1 ? "" : "s"} to OpenAI`}
+                  {busy ? `Suggesting… ${progress}/${total}` : `Send ${chunks.length} request${chunks.length === 1 ? "" : "s"} to OpenAI`}
                 </button>
-                <button className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
+                <button ref={stopRef} className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
                   {busy ? "Stop" : "Cancel — send nothing"}
                 </button>
               </div>
