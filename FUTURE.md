@@ -239,7 +239,8 @@ the map on screen — not obeying the rule:
   and the viewport settle's `topicGroups.length`, which the rule calls
   unnecessary but which is plausibly what should re-settle after a regroup.
 - `Minimap.tsx` — `syncFromList` and `ui`, both reached through refs precisely
-  so the effect does not re-run on them.
+  so the effect does not re-run on them. (The theme-flip bug that looked like it
+  lived here did not: it was effect order in App, fixed 2026-09-01.)
 
 The class they belong to has already bitten five times and been fixed: four
 memos calling `linesOf(transcripts, lang, pid)` without `lang` (SearchBar,

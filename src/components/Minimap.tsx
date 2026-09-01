@@ -376,7 +376,11 @@ export const Minimap = forwardRef<MinimapHandle, {
     drawRef.current = draw; syncRef.current = syncFromList; // the mount-only observer calls through these
     // syncFromList and ui are reached through the refs above precisely so this
     // does not re-run on them; adding them would redraw the whole minimap on
-    // every ui change. Not judged beyond that — see FUTURE.md.
+    // every ui change. The specific ui fields that MUST repaint are listed
+    // below, ui.dark among them — the theme bug this looked like belonged to
+    // was effect ORDER, not this list: App wrote data-theme in a passive effect,
+    // which React runs after every child's, so this canvas read the previous
+    // theme's variables. App uses a layout effect now.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, laned, cols, codebook, closeCallSids, flagsByLine, detail, N,
       stretches, stretchDimList, // the strips redraw when spans are (un)marked

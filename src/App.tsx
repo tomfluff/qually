@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useEffect, useState } from "react";
+import { useEffect, useState, useLayoutEffect } from "react";
 import { installScrollSpeed } from "./scrollSpeed";
 import { setSounds, setVolume } from "./earcons";
 import { useStore, isTranscriptView } from "./state/store";
@@ -127,7 +127,14 @@ export function App() {
   // Codebook and Assist are non-transcript views; transcript-only chrome hides on both.
   const onTranscript = isTranscriptView(active);
 
-  useEffect(() => {
+  // useLayoutEffect, NOT useEffect: React runs effects child-first, so every
+  // canvas in the app painted BEFORE this attribute was written and read the
+  // OLD theme's custom properties out of getComputedStyle. The minimap kept the
+  // previous theme's background until something else made it redraw — switching
+  // tabs — which is exactly what it looked like. A layout effect runs in the
+  // commit phase, before any passive effect anywhere, so the variables are right
+  // by the time anything reads them.
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "";
     // chosen primary for this theme; CSS derives every other chromatic tint from it
     document.documentElement.style.setProperty("--accent", accentFor(accent, dark));
