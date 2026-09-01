@@ -468,3 +468,55 @@ test("the same replace under a Source reading never touches a translation", asyn
   expect(l.en).toBe("beacon there");     // untouched
   expect(l.enOrig).toBeUndefined();
 });
+
+// The three fields the boundary used to wave straight through, and the three
+// that white-screen hardest: Tabs.tsx maps over `tabs` every render,
+// ExportMenu's SELECTORS read segment.proposedBy.trim(), and BrowseView reads
+// codebook[c].parked. A throw inside render is permanent — persist rehydrates
+// the same value on reload — and openProject has already replaced the workspace
+// by then, so the researcher is left with neither project.
+const hostile = (over: Record<string, unknown>) => parseProject(JSON.stringify({
+  format: FORMAT, version: VERSION, savedAt: "",
+  transcripts: { P01: { lines: [{ id: 1, ts: "0:01", speaker: "P", text: "hi" }] } },
+  segments: [], codebook: {}, ...over,
+}));
+
+test("a segment with wrong-typed fields is repaired, not loaded as-is", () => {
+  const p = hostile({ segments: [
+    null,
+    { sid: "x", pid: "P01", start: 1, end: 2 },          // no usable id
+    { sid: 2, pid: 5, start: 1, end: 2 },                 // no usable pid
+    { sid: 3, pid: "P01", start: 4, end: 2, code: 9, notes: { a: 1 }, proposedBy: "  " },
+  ] });
+  expect(p.segments).toHaveLength(1);
+  const s = p.segments[0];
+  expect(s.sid).toBe(3);
+  expect([s.start, s.end]).toEqual([2, 4]);        // normalised low -> high
+  expect(s.code).toBe("");                          // a number is not a code name
+  expect(s.notes).toBe("");                         // an object would throw in render
+  expect(s.proposedBy).toBe("(default)");           // never blank: it is the intercoder column
+  expect(s.status).toBe("accepted");
+});
+
+test("a codebook entry that is not an object is dropped, and a partial one is filled", () => {
+  const p = hostile({ codebook: { a: null, b: { color: 1, def: 2 }, c: { color: "#123456", def: "d" } } });
+  expect(Object.keys(p.codebook)).toEqual(["b", "c"]);
+  expect(p.codebook.b.color).toBe("#888888");
+  expect(p.codebook.b.def).toBe("");
+  expect(p.codebook.c.color).toBe("#123456");
+});
+
+test("tabs that are not a list of loaded transcripts cannot reach Tabs.map", () => {
+  expect(hostile({ tabs: "nope" }).tabs).toEqual(["P01"]);
+  expect(hostile({ tabs: [1, "P01", "P01", "gone"] }).tabs).toEqual(["P01"]);
+  expect(hostile({ extSegRows: "nope" }).extSegRows).toEqual([]);
+});
+
+// nextSid is derived as max(sid)+1; a single non-numeric sid used to make it
+// NaN, and then every new segment got sid NaN, deleteSegment matched nothing,
+// and every grounding collided on one key.
+test("no surviving segment can poison nextSid", () => {
+  const p = hostile({ segments: [{ sid: "x", pid: "P01", start: 1, end: 1 }, { pid: "P01", start: 1, end: 1 }] });
+  expect(p.segments).toEqual([]);
+  expect(p.segments.every((s) => Number.isSafeInteger(s.sid))).toBe(true);
+});

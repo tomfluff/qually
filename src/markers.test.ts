@@ -226,3 +226,41 @@ test("renaming a transcript takes its events with it", () => {
   expect(s().renameTranscript("P01", "P01-final")).toBe(null);
   expect(s().markers.every((m) => m.pid === "P01-final")).toBe(true);
 });
+
+// exportMarkers writes EVERY transcript's events to one file. Without a pid
+// column, re-importing that file onto a tab stamped the target's pid on every
+// row, so P02's events silently became P01's and the toast read as success.
+// DATA-FORMAT.md promised the round-trip was a no-op; for any study with more
+// than one transcript, it was not.
+test("an events export names the transcript each row came from", () => {
+  const { rows, fields } = markerRows([
+    { mid: 1, pid: "P01", event: "trial", code: "a", label: "one", t: 10, detail: "", raw: {} },
+    { mid: 2, pid: "P02", event: "trial", code: "b", label: "two", t: 20, detail: "", raw: {} },
+  ]);
+  expect(fields).toContain("pid");
+  expect(rows.map((r) => r.pid)).toEqual(["P01", "P02"]);
+});
+
+test("re-importing a whole-study export does not move one transcript's events onto another", () => {
+  const s = () => useStore.getState();
+  // the shape exportMarkers writes: every transcript's rows in one file, each
+  // naming its own. Dropped on P01's tab, P02's row must not become P01's.
+  const whole = markerRows([
+    { mid: 90, pid: "P01", event: "trial", code: "", label: "mine", t: 111, detail: "", raw: {} },
+    { mid: 91, pid: "P02", event: "trial", code: "", label: "belongs to P02", t: 222, detail: "", raw: {} },
+  ]).rows;
+  s().importMarkers("P01", whole);
+  const landed = s().markers.filter((m) => m.label === "belongs to P02" || m.label === "mine");
+  expect(landed.map((m) => m.label)).toEqual(["mine"]);
+  expect(s().markers.some((m) => m.t === 222)).toBe(false);
+});
+
+// An export made before the pid column existed can only mean the tab it was
+// dropped on — those must still load, or every old events file breaks.
+test("a row with no pid still loads onto the tab it was dropped on", () => {
+  const s = () => useStore.getState();
+  const before = s().markers.length;
+  expect(s().importMarkers("P01", [{ video_time_s: "44", event: "trial", label: "no pid column" }]))
+    .toEqual({ added: 1, skipped: 0 });
+  expect(s().markers.length).toBe(before + 1);
+});

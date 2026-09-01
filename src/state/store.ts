@@ -1232,7 +1232,11 @@ export const useStore = create<State>()(
         const segments = get().segments
           .map((s) => (target.has(s.sid) ? { ...s, proposedBy: by } : s))
           .filter((s) => {
-            const k = `${s.pid}|${s.start}|${s.end}|${norm(s.code)}|${s.proposedBy}`;
+            // status IS part of the identity: a span may carry the same code
+            // from the same coder both accepted and rejected — mergeInto keeps
+            // both deliberately, and dropping it here meant signing your work
+            // silently deleted a "no" you had recorded.
+            const k = `${s.pid}|${s.start}|${s.end}|${norm(s.code)}|${s.proposedBy}|${s.status}`;
             return seen.has(k) ? false : (seen.add(k), true);
           });
         set({ segments });
@@ -1328,8 +1332,15 @@ export const useStore = create<State>()(
         // empty field reads as a bug. claimUnattributed sweeps these into a real name
         // once you commit one; export nudges you before it ships.
         const by = proposedBy ?? (s.ui.coderName.trim() || "(default)");
-        // dedup is per coder: two coders holding the same span+code is agreement data, not a dupe
-        if (s.segments.some((x) => x.pid === pid && x.start === start && x.end === end && norm(x.code) === norm(code) && x.proposedBy === by)) return false;
+        // dedup is per coder: two coders holding the same span+code is agreement data, not a dupe.
+        // Status is part of it too, for the same reason it is in mergeInto's key: a
+        // span you REJECTED and then decided to code is not a duplicate of the
+        // rejection, it is a verdict you changed your mind about, and both belong
+        // on the record. Without it, re-coding a rejected span was refused with
+        // "Already coded as X" while the lane bar showed it struck through — a
+        // false message with no way past it.
+        if (s.segments.some((x) => x.pid === pid && x.start === start && x.end === end
+          && norm(x.code) === norm(code) && x.proposedBy === by && x.status === status)) return false;
         set({ segments: [...s.segments, { sid: s.nextSid, pid, start, end, code, notes, proposedBy: by, status }], nextSid: s.nextSid + 1 });
         return true;
       },
@@ -1935,7 +1946,13 @@ export const useStore = create<State>()(
       // no readable time are counted as skipped, not silently lost.
       importMarkers: (pid, rows) => {
         const s = get();
-        const parsed = parseMarkers(rows, pid, s.nextMid);
+        // A row that NAMES a different transcript belongs to that one, and
+        // stamping this tab's pid on it would move another participant's events
+        // onto this participant's timeline. A row with no pid at all is from an
+        // export made before the column existed, and the only thing that can be
+        // meant is the tab it was dropped on — so those still load.
+        const mine = rows.filter((r) => !r.pid?.trim() || r.pid.trim() === pid);
+        const parsed = parseMarkers(mine, pid, s.nextMid);
         const seen = new Set(s.markers.map(markerIdent));
         const fresh = parsed.filter((m) => !seen.has(markerIdent(m)));
         if (fresh.length) {
@@ -3006,7 +3023,11 @@ export const useStore = create<State>()(
         const segments = get().segments
           .map((s) => (s.proposedBy.trim() && s.proposedBy !== "(default)" ? s : { ...s, proposedBy: by }))
           .filter((s) => {
-            const k = `${s.pid}|${s.start}|${s.end}|${norm(s.code)}|${s.proposedBy}`;
+            // status IS part of the identity: a span may carry the same code
+            // from the same coder both accepted and rejected — mergeInto keeps
+            // both deliberately, and dropping it here meant signing your work
+            // silently deleted a "no" you had recorded.
+            const k = `${s.pid}|${s.start}|${s.end}|${norm(s.code)}|${s.proposedBy}|${s.status}`;
             return seen.has(k) ? false : (seen.add(k), true);
           });
         set({ segments });
@@ -3035,6 +3056,15 @@ export const useStore = create<State>()(
         const fields = ["segment_ref", "pid", "excerpt",
           ...(transcribed ? ["excerpt_source"] : []),
           "code", "proposed_by", "status", "notes"];
+        // A parked row belongs to a transcript this workspace has not loaded, and
+        // DATA-FORMAT.md promises it passes through untouched. toCSV emits only
+        // `fields`, so any column outside this list was being dropped — including
+        // excerpt_source, which is in the list only when YOUR OWN workspace is
+        // being read in a translation. A colleague's row from a translated study
+        // therefore exported as English-only under a header calling it `excerpt`:
+        // a wrong quote in an appendix, not a missing column. Same union
+        // markerRows already does for events.
+        for (const r of s.extSegRows) for (const k of Object.keys(r)) if (!fields.includes(k)) fields.push(k);
         const rows = s.segments.map((seg) => ({
           segment_ref: formatSegRef(seg.pid, seg.start, seg.end),
           pid: seg.pid,

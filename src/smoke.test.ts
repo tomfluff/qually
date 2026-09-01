@@ -546,3 +546,42 @@ test("with merge on, selections built by the store cover whole display units", a
   expect([...useStore.getState().selection.lines].sort((a, b) => a - b)).toEqual([1, 2, 3]);
   useStore.getState().setUi({ mergeLines: false });
 });
+
+// Signing your work deduped on pid|span|code|coder but NOT status, while
+// mergeInto keeps both rows deliberately — a span can carry the same code from
+// the same coder both accepted and rejected, and that disagreement is the data.
+// So claiming (default) collapsed the two and silently deleted the "no".
+test("signing your work keeps a rejection you recorded", () => {
+  const st = () => useStore.getState();
+  st().setUi({ coderName: "" });
+  st().addSegment("SIGNKEEP", 1, 2, "delay", undefined, "accepted");
+  st().addSegment("SIGNKEEP", 1, 2, "delay", undefined, "rejected");
+  const before = st().segments.filter((s) => s.pid === "SIGNKEEP");
+  expect(before).toHaveLength(2);
+
+  st().setUi({ coderName: "sam" });
+  st().claimUnattributed();
+
+  const after = st().segments.filter((s) => s.pid === "SIGNKEEP");
+  expect(after).toHaveLength(2);
+  expect(after.map((s) => s.status).sort()).toEqual(["accepted", "rejected"]);
+  expect(after.every((s) => s.proposedBy === "sam")).toBe(true);
+});
+
+// A parked row belongs to a transcript this workspace never loaded, and
+// DATA-FORMAT.md promises it passes through untouched. toCSV emits only the
+// canonical field list, so a colleague's excerpt_source was dropped and their
+// row exported as English-only under a header calling it `excerpt`.
+test("a parked row keeps columns this workspace does not have", () => {
+  const st = () => useStore.getState();
+  useStore.setState({ extSegRows: [{
+    segment_ref: "P09:1-2", pid: "P09", excerpt: "I zoom in",
+    excerpt_source: "拡大します", code: "zoom",
+    proposed_by: "colleague", status: "accepted", notes: "", their_column: "kept",
+  }] });
+  const csv = st().exportCSV();
+  const head = csv.split("\r\n")[0];
+  expect(head).toContain("excerpt_source");
+  expect(head).toContain("their_column");
+  expect(csv).toContain("拡大します");
+});

@@ -175,13 +175,19 @@ export function anchorMarkers(markers: Marker[], lines: Line[], offset: number):
 // Export: every column the imported rows carried, in first-appearance order, with
 // the in-app edits (label, code) winning over the stored copy. A marker that never
 // came from a file still writes the canonical columns.
-const CORE = ["event", "code", "label", "video_time_s", "video_time_hms", "detail"];
+// `pid` FIRST and always. exportMarkers writes every transcript's events to one
+// file; without a pid column, re-importing that file onto a tab stamped the
+// target's pid on every row, so P02's events silently became P01's and the toast
+// read as success. DATA-FORMAT.md promised the round-trip was a no-op, and for
+// any study with more than one transcript it was not.
+const CORE = ["pid", "event", "code", "label", "video_time_s", "video_time_hms", "detail"];
 export function markerRows(markers: Marker[]): { rows: Record<string, string>[]; fields: string[] } {
   const fields: string[] = [];
   for (const m of markers) for (const k of Object.keys(m.raw)) if (!fields.includes(k)) fields.push(k);
   for (const c of CORE) if (!fields.includes(c)) fields.push(c);
   const rows = markers.map((m) => ({
     ...m.raw,
+    pid: m.pid,
     event: m.event, code: m.code, label: m.label, detail: m.detail,
     // the in-app time wins, like every other edited field above: keeping the
     // source row's copy meant retiming an imported event exported (and

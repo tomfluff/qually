@@ -177,6 +177,72 @@ function cleanTranscripts(t: Project["transcripts"]): Project["transcripts"] {
 
 export class ProjectError extends Error {}
 
+// The three the filters above forgot, and the three that white-screen hardest.
+// A project file is hand-editable and nothing else validates it: a wrong-typed
+// value that reaches .trim() or .map() INSIDE render throws on every frame, and
+// persist then rehydrates the same value, so the app never comes back. Worse
+// here than anywhere: openProject has already replaced the workspace by the time
+// render throws, so the researcher is left with neither project.
+//
+// Everything is repaired rather than dropped where a repair is obvious, because
+// a segment IS someone's coding — losing it silently is the thing this whole
+// module exists to prevent. Only a row with no usable identity goes.
+const text = (v: unknown, fallback = "") => str(v) ?? fallback;
+const int = (v: unknown) => (typeof v === "number" && Number.isSafeInteger(v) ? v : null);
+
+function cleanSegments(v: unknown): Segment[] {
+  if (!Array.isArray(v)) return [];
+  const out: Segment[] = [];
+  for (const r of v) {
+    if (!r || typeof r !== "object") continue;
+    const x = r as Record<string, unknown>;
+    const start = int(x.start), end = int(x.end), sid = int(x.sid);
+    // no span and no id is not a coding anyone can act on or undo
+    if (start === null || end === null || sid === null) continue;
+    const pid = text(x.pid);
+    if (!pid) continue;
+    out.push({
+      sid, pid, start: Math.min(start, end), end: Math.max(start, end),
+      code: text(x.code), notes: text(x.notes),
+      // the same repair onRehydrateStorage makes: an unsigned row reads as a
+      // bug in the intercoder column, never as an empty string
+      proposedBy: text(x.proposedBy).trim() || "(default)",
+      status: text(x.status) || "accepted",
+    });
+  }
+  return out;
+}
+
+function cleanCodebook(v: unknown): Project["codebook"] {
+  const out: Project["codebook"] = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+  for (const [name, e] of Object.entries(v as Record<string, unknown>)) {
+    if (!name || !e || typeof e !== "object") continue;
+    const x = e as Record<string, unknown>;
+    out[name] = {
+      color: text(x.color) || "#888888",
+      def: text(x.def),
+      status: text(x.status) || "candidate",
+      ...(typeof x.colorLock === "boolean" ? { colorLock: x.colorLock } : {}),
+      ...(typeof x.defAi === "boolean" ? { defAi: x.defAi } : {}),
+      ...(typeof x.parked === "boolean" ? { parked: x.parked } : {}),
+    };
+  }
+  return out;
+}
+
+// Tabs.tsx maps over this every render, so a string here is a white screen.
+// Names that no longer have a transcript are dropped rather than kept as a tab
+// that cannot open.
+function cleanTabs(v: unknown, transcripts: unknown): string[] {
+  const have = transcripts && typeof transcripts === "object" ? transcripts as object : {};
+  const known = new Set(Object.keys(have));
+  if (!Array.isArray(v)) return [...known];
+  const seen = new Set<string>();
+  return v.filter((t): t is string =>
+    typeof t === "string" && known.has(t) && !seen.has(t) && !!seen.add(t));
+}
+
 // Refuse rather than corrupt: a file from a newer QuAlly may carry state this build
 // doesn't understand, and half-loading it would silently lose work.
 export function parseProject(text: string): Project {
@@ -195,9 +261,11 @@ export function parseProject(text: string): Project {
   // tolerate fields added after v1 being absent
   return {
     format: FORMAT, version: p.version, savedAt: p.savedAt ?? "",
-    transcripts: cleanTranscripts(p.transcripts), segments: p.segments, codebook: p.codebook,
-    extSegRows: p.extSegRows ?? [],
-    tabs: p.tabs ?? Object.keys(p.transcripts),
+    transcripts: cleanTranscripts(p.transcripts),
+    segments: cleanSegments(p.segments),
+    codebook: cleanCodebook(p.codebook),
+    extSegRows: Array.isArray(p.extSegRows) ? p.extSegRows : [],
+    tabs: cleanTabs(p.tabs, p.transcripts),
     active: p.active ?? "browse",
     hotbar: p.hotbar ?? { mode: "auto", pinned: [] },
     video: p.video ?? {},
