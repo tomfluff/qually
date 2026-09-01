@@ -158,6 +158,18 @@
 .ai-trow em { font-style:normal; color:var(--muted); font-size:.86em; margin-left:auto;
   font-variant-numeric:tabular-nums; }
 
+/* Every field inside a dialog, once, instead of per class.
+   There is no global focus style in this app — each control carries its own
+   `outline:2px solid var(--accent)` — so a NEW field silently fell back to the
+   browser's default ring, which is blue and belongs to no theme here. That has
+   now happened twice, which makes it a class rather than a bug: scoped to the
+   dialog so any field added later is covered the day it is added.
+   Buttons are deliberately excluded — .ai-seg's selected state needs --fg,
+   because an accent ring inside an accent fill reads as no ring at all. */
+.about input:focus-visible,
+.about textarea:focus-visible,
+.about select:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+
 /* ── F8: find across the corpus ─────────────────────────────────────────
    The one run that can span a whole study, so its gate carries more controls
    than any other. Everything here is em-based: this dialog takes .about's 1rem
