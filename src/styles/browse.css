@@ -284,12 +284,12 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
 .descDropped { color:var(--muted); font-size:.92em; line-height:1.45; margin:8px 0 0; }
 
 /* DescribeModal's code picker: quick-select row + one checkbox row per code */
-.descPicks { display:flex; align-items:center; gap:6px; margin:8px 0 6px; flex-wrap:wrap; }
-.descPicks .btn { padding:3px 10px; font-size:.88em; }
+.cpickBar { display:flex; align-items:center; gap:6px; margin:8px 0 6px; flex-wrap:wrap; }
+.cpickBar .btn { padding:3px 10px; font-size:.88em; }
 /* sort sits apart from the select-these buttons: it changes the ORDER, not the
    ticks, and reading them as one row of four+three invites that confusion */
-.descSort { display:flex; align-items:center; gap:6px; margin-left:auto; }
-.descSortLabel { color:var(--muted); font-size:.85em; margin:0; line-height:1; }
+.cpickSort { display:flex; align-items:center; gap:6px; margin-left:auto; }
+.cpickSortLabel { color:var(--muted); font-size:.85em; margin:0; line-height:1; }
 /* the Definitions panel's own sort bar, above the list it orders */
 .descListBar .nCount { margin-left:auto; }
 /* an empty group still says so, indented under its heading */
@@ -318,17 +318,17 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
    tooltip nobody hovers */
 .bSideNote.defHint { margin-top:10px; padding-top:8px; border-top:1px solid var(--line);
   line-height:1.5; }
-.descCodes { display:flex; flex-direction:column; gap:2px; margin-bottom:10px;
+.cpickList { display:flex; flex-direction:column; gap:2px; margin-bottom:10px;
   max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:4px; }
-.descPickRow { display:flex; align-items:center; gap:7px; padding:4px 6px; border-radius:6px;
+.cpickRow { display:flex; align-items:center; gap:7px; padding:4px 6px; border-radius:6px;
   cursor:pointer; }
-.descPickRow:hover { background:var(--panel); }
-.descPickRow input { margin:0; flex:none; }
-.descPickName { font-weight:600; flex:none; }
-.descPickDef { color:var(--muted); font-size:.85em; overflow:hidden; text-overflow:ellipsis;
+.cpickRow:hover { background:var(--panel); }
+.cpickRow input { margin:0; flex:none; }
+.cpickName { font-weight:600; flex:none; }
+.cpickDef { color:var(--muted); font-size:.85em; overflow:hidden; text-overflow:ellipsis;
   white-space:nowrap; flex:1; }
-.descPickDef.none { font-style:italic; }
-.descPickN { color:var(--muted); font-size:.85em; font-variant-numeric:tabular-nums; flex:none; }
+.cpickDef.none { font-style:italic; }
+.cpickN { color:var(--muted); font-size:.85em; font-variant-numeric:tabular-nums; flex:none; }
 
 /* definition provenance pills: AI = untouched model text, edited = human input */
 /* .8em, not .66: at the default reading size this was the smallest text on the

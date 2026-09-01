@@ -193,7 +193,10 @@
 
 /* the codebook as a pick-list; capped so it scrolls rather than pushing the
    cost and the Send button off the bottom of a long book */
-.ai-cbox { display:flex; flex-direction:column; gap:1px; max-height:11em; overflow:auto;
+/* taller than it was: a row now carries a definition and an evidence count, so
+   four rows of it is a keyhole. Still capped, so the cost and the Send button
+   cannot be pushed off the bottom by a long codebook. */
+.ai-cbox { display:flex; flex-direction:column; gap:1px; max-height:17em; overflow:auto;
   margin-bottom:10px; border:1px solid var(--line); border-radius:8px; padding:4px; }
 
 .findName { font:inherit; width:100%; box-sizing:border-box; padding:7px 9px; margin-bottom:6px;

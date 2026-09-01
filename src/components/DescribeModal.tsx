@@ -16,7 +16,8 @@ import { describeCodes, renderDescribePayload, estimateDescribeTokens, DESC_EXEM
   type DescCodeInput } from "../ai/describe";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
-import { SORTS, sortCodes, type SortBy } from "../codeStats";
+import { sortCodes, type SortBy } from "../codeStats";
+import { CodePickBar, CodePickRow } from "./CodePicker";
 import { AiModal, LangFact, ModelPicker } from "./AiModal";
 
 export function DescribeModal({ initial, onClose }: {
@@ -218,35 +219,16 @@ export function DescribeModal({ initial, onClose }: {
                 )}
                 <ModelPicker modelId={modelId} onPick={setModelId} />
                 <div className="ai-sec">Codes <span className="ai-sec-hint">tick the ones to draft a definition for</span></div>
-                <div className="descPicks">
-                  <button className="btn" onClick={() => pick("all")}>All</button>
-                  <button className="btn" onClick={() => pick("undefined")}>Undefined</button>
-                  <button className="btn" onClick={() => pick("defined")}>Defined</button>
-                  <button className="btn" onClick={() => pick("none")}>None</button>
-                  {/* ticks survive a re-sort: the order is a view, not the selection */}
-                  <span className="descSort">
-                    <span className="descSortLabel" id="descSortLabel">Sort</span>
-                    <span className="segmented sortseg" role="group" aria-labelledby="descSortLabel">
-                      {SORTS.map((s) => (
-                        <button key={s.id} className={"seg" + (sortBy === s.id ? " on" : "")}
-                          aria-pressed={sortBy === s.id} onClick={() => setSortBy(s.id)}>{s.label}</button>
-                      ))}
-                    </span>
-                  </span>
-                </div>
-                <div className="descCodes" role="group" aria-label="Codes to draft definitions for">
+                <CodePickBar sortBy={sortBy} onSort={setSortBy} onPick={[
+                  { label: "All", run: () => pick("all") },
+                  { label: "Undefined", run: () => pick("undefined") },
+                  { label: "Defined", run: () => pick("defined") },
+                  { label: "None", run: () => pick("none") },
+                ]} />
+                <div className="cpickList" role="group" aria-label="Codes to draft definitions for">
                   {codes.map((c) => (
-                    <label key={c.name} className={"descPickRow" + (on.has(c.name) ? " on" : "")}>
-                      <input type="checkbox" checked={on.has(c.name)} onChange={() => toggle(c.name)} />
-                      <span className="mSw" style={{ background: codebook[c.name]?.color || "#999" }} />
-                      <span className="descPickName">{c.name}</span>
-                      {c.def
-                        ? <span className="descPickDef" title={c.def}>{c.def}</span>
-                        : <span className="descPickDef none">no definition yet</span>}
-                      <span className="descPickN" title={`${c.segs} excerpt${c.segs === 1 ? "" : "s"} in ${c.pids} transcript${c.pids === 1 ? "" : "s"}`}>
-                        {c.segs}·{c.pids}
-                      </span>
-                    </label>
+                    <CodePickRow key={c.name} code={c} color={codebook[c.name]?.color ?? ""}
+                      on={on.has(c.name)} onToggle={() => toggle(c.name)} />
                   ))}
                 </div>
                 <div className="ai-payload">

@@ -27,7 +27,7 @@
 // (the worklist, accept/reject, rejection memory, undo, exports, the ledger)
 // works without knowing this feature happened.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { linesOf, useStore, guessQuiet, type Line } from "../state/store";
+import { linesOf, liveCodes, useStore, guessQuiet, type Line } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -40,6 +40,8 @@ import { lineSize, WINDOW_PACK } from "../ai/pack";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, LangFact, ModelPicker } from "./AiModal";
+import { CodePickBar, CodePickRow, type CodePick } from "./CodePicker";
+import { sortCodes, type SortBy } from "../codeStats";
 
 /** Whose speech may carry a hit, ride along as context, or not be sent at all.
     The third state is not a cost control: it is the only way to keep a
@@ -102,6 +104,7 @@ export function FindModal({ initialCodes = [], onClose }: {
   const [pids, setPids] = useState<Set<string>>(() => new Set(Object.keys(transcripts)));
   const [focus, setFocus] = useState<Set<string>>(() => new Set(initialCodes));
   const [codeQuery, setCodeQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("name");
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
 
@@ -257,11 +260,32 @@ export function FindModal({ initialCodes = [], onClose }: {
       ? renderSuggestChunk(first.chunks[0].slice(0, 6), codes, red, context)
       : renderFindChunk(first.chunks[0].slice(0, 6), question, red, context);
 
+  // Every live code with what it rests on. Counts come from ACCEPTED segments
+  // in loaded transcripts, the same basis the Draft-definitions list uses, so
+  // the two dialogs cannot disagree about how big a code is.
+  const rows = useMemo<CodePick[]>(() => {
+    const by = new Map<string, { segs: number; pids: Set<string> }>();
+    for (const s of segments) {
+      if (s.status !== "accepted" || !transcripts[s.pid]) continue;
+      const e = by.get(s.code) ?? { segs: 0, pids: new Set<string>() };
+      e.segs++; e.pids.add(s.pid);
+      by.set(s.code, e);
+    }
+    return liveCodes(codebook).map((name: string) => ({
+      name, def: codebook[name]?.def ?? "",
+      segs: by.get(name)?.segs ?? 0, pids: by.get(name)?.pids.size ?? 0,
+    }));
+  }, [segments, transcripts, codebook]);
+
   const shown = useMemo(() => {
     const q = codeQuery.trim().toLowerCase();
-    return Object.keys(codebook).sort()
-      .filter((c) => !q || focus.has(c) || c.toLowerCase().includes(q));
-  }, [codebook, codeQuery, focus]);
+    const stats = Object.fromEntries(rows.map((r) => [r.name, { segs: r.segs, pids: r.pids }]));
+    const order = sortCodes(rows.map((r) => r.name), stats, sortBy);
+    // a ticked code is always listed, whatever the filter says — narrowing the
+    // list must never hide a choice already made
+    return order.map((n) => rows.find((r) => r.name === n)!)
+      .filter((r) => !q || focus.has(r.name) || r.name.toLowerCase().includes(q));
+  }, [rows, codeQuery, focus, sortBy]);
 
   const named = name.trim().length > 0 && about.trim().length > 0;
   // norm() is the store's collision rule (trim, collapse spaces, lowercase), so
@@ -445,13 +469,14 @@ export function FindModal({ initialCodes = [], onClose }: {
                     {/* with a filter on, the ticked codes may be the only thing
                         NOT on screen — say how many are picked, and offer the
                         way back without hunting for them */}
-                    {focus.size > 0 && (
-                      <div className="ai-rowbtns">
-                        <span className="tMeta">{focus.size} picked</span>
-                        <button className="btn" disabled={busy}
-                          onClick={() => setFocus(new Set())}>Clear</button>
-                      </div>
-                    )}
+                    {/* the same bar as Draft definitions: bulk picks on the
+                        left, sort on the right, ticks surviving a re-sort */}
+                    <CodePickBar sortBy={sortBy} onSort={setSortBy} onPick={[
+                      { label: "All shown", run: () => setFocus(new Set(shown.map((c) => c.name))) },
+                      { label: "None", run: () => setFocus(new Set()) },
+                    ]}>
+                      {focus.size > 0 && <span className="tMeta">{focus.size} picked</span>}
+                    </CodePickBar>
                   <div className="ai-cbox" role="group" aria-label="Codes to look for">
                     {shown.length === 0 && (
                       <p className="settings-note" style={{ margin: "6px 8px" }}>
@@ -459,13 +484,10 @@ export function FindModal({ initialCodes = [], onClose }: {
                       </p>
                     )}
                     {shown.map((c) => (
-                      <label key={c} className="ai-spk">
-                        <input type="checkbox" checked={focus.has(c)} disabled={busy}
-                          onChange={() => setFocus((f) => {
-                            const n = new Set(f); n.has(c) ? n.delete(c) : n.add(c); return n;
-                          })} />
-                        <span><span className="swatch" style={{ background: codebook[c].color }} />{c}</span>
-                      </label>
+                      <CodePickRow key={c.name} code={c} color={codebook[c.name]?.color ?? ""}
+                        on={focus.has(c.name)} onToggle={() => setFocus((f) => {
+                          const n = new Set(f); n.has(c.name) ? n.delete(c.name) : n.add(c.name); return n;
+                        })} />
                     ))}
                   </div>
                   </>
