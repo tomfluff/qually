@@ -192,7 +192,13 @@
   color:var(--fg); cursor:pointer; line-height:1.3; }
 .ai-seg button + button { border-left:1px solid var(--line); }
 .ai-seg button:hover { background:var(--panel); }
+/* Ink follows the ground, exactly as .segmented .seg.on does in base.css — the
+   dark theme's accent is a LIGHT purple (#a78bfa), so white on it measures
+   2.72:1, well under AA, while a near-black measures about 7.7:1. Copying the
+   light-theme half of that pair and not the dark half is what made this the one
+   selected control in the app with white text on a pale fill. */
 .ai-seg button.on { background:var(--accent); color:#fff; font-weight:600; }
+[data-theme=dark] .ai-seg button.on { color:#12161a; }
  /* NOT accent-on-accent: on the selected button the ring is the same colour as
     the fill it sits inside and reads as no ring at all. The page background is
     the one colour guaranteed to differ from both states. */
