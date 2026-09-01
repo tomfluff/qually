@@ -495,17 +495,46 @@ test("a segment with wrong-typed fields is repaired, not loaded as-is", () => {
   expect(s.code).toBe("");                          // a number is not a code name
   expect(s.notes).toBe("");                         // an object would throw in render
   expect(s.proposedBy).toBe("(default)");           // never blank: it is the intercoder column
-  // an absent or unknown status is not a verdict: only an explicit "accepted"
-  // earns the solid bar, so a missing one lands as a candidate
-  expect(s.status).toBe("candidate");
+  // ABSENT means a file from before the field, which is accepted; PRESENT but
+  // unreadable is not a verdict anyone passed and must not become evidence
+  expect(s.status).toBe("accepted");
+  expect(hostile({ segments: [{ sid: 1, pid: "P01", start: 1, end: 2, status: { v: "rejected" } }] })
+    .segments[0].status).toBe("candidate");
 });
 
-test("a codebook entry that is not an object is dropped, and a partial one is filled", () => {
+// A usable KEY with an unusable value is still a code the researcher made, and
+// its segments still name it — dropping the entry strands them.
+test("a codebook entry with an unusable value is repaired, not dropped", () => {
   const p = hostile({ codebook: { a: null, b: { color: 1, def: 2 }, c: { color: "#123456", def: "d" } } });
-  expect(Object.keys(p.codebook)).toEqual(["b", "c"]);
-  expect(p.codebook.b.color).toBe("#888888");
+  expect(Object.keys(p.codebook).sort()).toEqual(["a", "b", "c"]);
+  expect(p.codebook.a.color).toBe("#888888");
   expect(p.codebook.b.def).toBe("");
   expect(p.codebook.c.color).toBe("#123456");
+});
+
+// "__proto__" is a name a person can type. Assigned into a plain object it
+// mutates the prototype instead of adding a key, and the code disappears.
+test("a code named __proto__ survives", () => {
+  // built as raw JSON on purpose: in an object LITERAL, __proto__ sets the
+  // prototype rather than a key, so a literal fixture never has one. JSON.parse
+  // makes it a real own property, which is what a hand-edited file would carry.
+  const p = parseProject(`{"format":${JSON.stringify(FORMAT)},"version":${VERSION},"savedAt":"",
+    "transcripts":{"P01":{"lines":[{"id":1,"ts":"0:01","speaker":"P","text":"hi"}]}},
+    "segments":[],
+    "codebook":{"__proto__":{"color":"#123456","def":"x","status":"candidate"}}}`);
+  expect(Object.keys(p.codebook)).toContain("__proto__");
+});
+
+// A newer build may write fields this one does not know. Rebuilding the object
+// from a whitelist deletes them on the next save — the rule cleanTranscripts
+// states, and which cleanSegments/cleanCodebook were breaking.
+test("fields a newer build wrote survive a round trip", () => {
+  const p = hostile({
+    segments: [{ sid: 1, pid: "P01", start: 1, end: 2, code: "c", futureField: "keep me" }],
+    codebook: { c: { color: "#123456", def: "", status: "candidate", futureFlag: true } },
+  });
+  expect((p.segments[0] as unknown as Record<string, unknown>).futureField).toBe("keep me");
+  expect((p.codebook.c as unknown as Record<string, unknown>).futureFlag).toBe(true);
 });
 
 test("tabs that are not a list of loaded transcripts cannot reach Tabs.map", () => {
@@ -558,4 +587,55 @@ test("numeric fields written as strings are read, not discarded", () => {
   const p = hostile({ segments: [{ sid: "5", pid: "P01", start: "3", end: "4", code: "c" }] });
   expect(p.segments).toHaveLength(1);
   expect([p.segments[0].sid, p.segments[0].start, p.segments[0].end]).toEqual([5, 3, 4]);
+});
+
+// `active` is read as transcripts[active] during render, so an object there
+// throws "Cannot convert object to primitive value" on every frame — and
+// persist rehydrates it, so the white screen never lifts.
+test("active can only be a view that exists", () => {
+  expect(hostile({ active: { toString: null } }).active).toBe("browse");
+  expect(hostile({ active: "gone" }).active).toBe("browse");
+  expect(hostile({ active: "P01" }).active).toBe("P01");
+  expect(hostile({ active: "summary" }).active).toBe("summary");
+});
+
+// Absent tabs means "open them all"; absent pinnedTabs means "none pinned".
+// Sharing cleanTabs's fallback pinned every transcript in every older file.
+test("a file with no pinnedTabs pins nothing", () => {
+  expect(hostile({}).pinnedTabs).toEqual([]);
+  expect(hostile({ pinnedTabs: ["P01", "gone"] }).pinnedTabs).toEqual(["P01"]);
+});
+
+// The same contract importSegments and remapSegment hold: a negative start
+// exports a ref the importer cannot parse, and a span of billions makes
+// remapSegment enumerate every integer in it and hang.
+test("a span the rest of the app cannot handle does not load", () => {
+  const p = hostile({ segments: [
+    { sid: 1, pid: "P01", start: -1, end: 2 },
+    { sid: 2, pid: "P01", start: 1, end: 500000 },
+    { sid: 3, pid: "P01", start: 1, end: 2 },
+  ] });
+  expect(p.segments.map((s) => s.sid)).toEqual([3]);
+  expect(p.warnings?.join(" ")).toContain("2 segment rows");
+});
+
+// One row carrying MAX_SAFE_INTEGER used to make every later id unsafe, after
+// which consecutive additions collided on the same one.
+test("a duplicate sid is given an id nothing else holds", () => {
+  const big = Number.MAX_SAFE_INTEGER;
+  const p = hostile({ segments: [
+    { sid: big, pid: "P01", start: 1, end: 2, code: "a" },
+    { sid: big, pid: "P01", start: 3, end: 4, code: "b" },
+  ] });
+  expect(p.segments).toHaveLength(2);
+  expect(new Set(p.segments.map((s) => s.sid)).size).toBe(2);
+  expect(p.segments.every((s) => Number.isSafeInteger(s.sid))).toBe(true);
+});
+
+// exportCSV unions parked-row keys into the header and trims proposed_by, so a
+// non-string value there is a TypeError inside the export.
+test("a parked row keeps only values the export can write", () => {
+  const p = hostile({ extSegRows: [null, "nope", { segment_ref: "P09:1", proposed_by: {}, code: "c" }] });
+  expect(p.extSegRows).toHaveLength(1);
+  expect(p.extSegRows[0]).toEqual({ segment_ref: "P09:1", code: "c" });
 });

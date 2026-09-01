@@ -1128,6 +1128,18 @@ export const useStore = create<State>()(
             const rows = parseCSV(await f.text());
             const cols = rows.length ? Object.keys(rows[0]) : [];
             if (cols.includes("segment_ref")) { mark(); importSegments(get, set, rows); }
+            // isMarkerRows FIRST: an events CSV is schema-loose and keeps every
+            // column its recorder wrote, so one carrying `code` and `status`
+            // satisfied the codebook signature below and was silently imported
+            // as a codebook — inventing codes out of event labels. The events
+            // test is a positive identification; the codebook one is a guess
+            // from two common column names.
+            else if (isMarkerRows(rows)) {
+              // Events belong to ONE transcript and this entry point can't know which:
+              // send the user to the door that does, rather than calling their file
+              // unrecognized when we recognized it perfectly well.
+              skipped.push(`${f.name} is a session events file — load it from the transcript tab's right-click menu (Load events…), so it attaches to the right participant`);
+            }
             else if (cols.includes("short_def") || (cols.includes("code") && cols.includes("status"))) {
               mark(); importCodebook(get, set, rows);
             } else if (cols.includes("line_id") && cols.includes("text")) {
@@ -1162,11 +1174,6 @@ export const useStore = create<State>()(
               } else {
                 mark(); importTranscript(get, set, pid, rows);
               }
-            } else if (isMarkerRows(rows)) {
-              // Events belong to ONE transcript and this entry point can't know which:
-              // send the user to the door that does, rather than calling their file
-              // unrecognized when we recognized it perfectly well.
-              skipped.push(`${f.name} is a session events file — load it from the transcript tab's right-click menu (Load events…), so it attaches to the right participant`);
             } else {
               // an unrecognized file must say so, not vanish without a trace
               skipped.push(rows.length
@@ -1953,10 +1960,20 @@ export const useStore = create<State>()(
         // onto this participant's timeline. A row with no pid at all is from an
         // export made before the column existed, and the only thing that can be
         // meant is the tab it was dropped on — so those still load.
-        const mine = rows.filter((r) => !r.pid?.trim() || r.pid.trim() === pid);
+        // exact compare: a transcript imported from " P01 .csv" IS named " P01 ",
+        // and trimming both sides made its own exported rows fail to match it.
+        // Only a genuinely absent or empty pid is the legacy case.
+        const mine = rows.filter((r) => !(r.pid ?? "").trim() || r.pid === pid);
         const parsed = parseMarkers(mine, pid, s.nextMid);
         const seen = new Set(s.markers.map(markerIdent));
-        const fresh = parsed.filter((m) => !seen.has(markerIdent(m)));
+        // added to as we go: without it two identical rows in ONE file both
+        // passed, because each was only compared against what was already held
+        const fresh = parsed.filter((m) => {
+          const k = markerIdent(m);
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
         if (fresh.length) {
           get().pushUndo(); // an import is an edit: undoable, and it invalidates redo
           // re-number from nextMid: the parse numbered every row, dupes included

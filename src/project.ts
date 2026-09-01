@@ -197,7 +197,17 @@ const text = (v: unknown, fallback = "") => str(v) ?? fallback;
 // hand-edit does to JSON, and dropping a whole coding over a pair of quotes is
 // exactly the silent loss this module exists to prevent. Anything that is not a
 // finite whole number still goes.
+/** The non-transcript views `active` may name, beside a loaded transcript. */
+const VIEWS = new Set(["browse", "summary", "notes", "assist", "map"]);
 const STATUSES = new Set(["accepted", "rejected", "candidate"]);
+/** The next id nothing else holds. `max + 1` is not enough on its own: one row
+    carrying MAX_SAFE_INTEGER makes every later id unsafe, and then consecutive
+    additions collide on the same one. */
+const nextFree = (taken: Set<number>, from: number) => {
+  let n = from + 1;
+  while (taken.has(n) || !Number.isSafeInteger(n)) n = Number.isSafeInteger(n) ? n + 1 : 1;
+  return n;
+};
 const int = (v: unknown) => {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
   return Number.isSafeInteger(n) ? n : null;
@@ -215,26 +225,38 @@ function cleanSegments(v: unknown, note?: (s: string) => void): Segment[] {
     const start = int(x.start), end = int(x.end), sid = int(x.sid);
     // no span and no id is not a coding anyone can act on or undo
     if (start === null || end === null || sid === null) { dropped++; continue; }
+    // the SAME contract importSegments and remapSegment hold: a negative start
+    // exports a segment_ref the importer cannot parse, and a span of billions
+    // makes remapSegment enumerate every integer in it and hang. Accepting a
+    // row here that those two refuse is how a file loads and then breaks later.
+    if (Math.min(start, end) < 0 || Math.abs(end - start) > 9999) { dropped++; continue; }
     const pid = text(x.pid);
     if (!pid) { dropped++; continue; }
     // Two rows sharing a sid is the same corruption class as the NaN one:
     // deleteSegment would remove both, setStatus flip both, and every grounding
     // collide on one key. Renumber rather than drop — the second row is still
     // someone's coding.
-    const id = sids.has(sid) ? ++maxSid : sid;
+    const id = sids.has(sid) ? nextFree(sids, maxSid) : sid;
     sids.add(id);
     maxSid = Math.max(maxSid, id);
     out.push({
+      // SPREAD FIRST, then fix the known fields — the rule cleanTranscripts
+      // states above and this function was breaking: building a fresh object
+      // deletes any field a NEWER build of QuAlly wrote, so opening a colleague's
+      // file and saving it stripped everything this build does not know about.
+      ...(r as object),
       sid: id, pid, start: Math.min(start, end), end: Math.max(start, end),
       code: text(x.code), notes: text(x.notes),
       // the same repair onRehydrateStorage makes: an unsigned row reads as a
       // bug in the intercoder column, never as an empty string
       proposedBy: text(x.proposedBy).trim() || "(default)",
       // Coerced to the set the app draws, like stretches below: TranscriptView
-      // gives only an explicit "accepted" the solid bar, so manufacturing one
-      // from an absent field would claim a verdict nobody passed — and a typo'd
-      // status travels into the export as a fact about the coding.
-      status: STATUSES.has(text(x.status)) ? text(x.status) : "candidate",
+      // gives only an explicit "accepted" the solid bar. An ABSENT status is a
+      // file from before the field and means accepted; a PRESENT but unreadable
+      // one is not a verdict anyone passed, and promoting it to accepted would
+      // add evidence to a code's counts and to the export.
+      status: x.status === undefined ? "accepted"
+        : STATUSES.has(text(x.status)) ? text(x.status) : "candidate",
     });
   }
   if (dropped) note?.(`${dropped} segment row${dropped === 1 ? "" : "s"} could not be read`);
@@ -242,12 +264,19 @@ function cleanSegments(v: unknown, note?: (s: string) => void): Segment[] {
 }
 
 function cleanCodebook(v: unknown): Project["codebook"] {
-  const out: Project["codebook"] = {};
-  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+  // A NULL-PROTOTYPE map: a code legitimately named "__proto__" assigned into a
+  // plain object mutates that object's prototype instead of adding a key, and
+  // the code vanishes. Rare, but it is a name someone can type.
+  const out = Object.create(null) as Project["codebook"];
+  if (!v || typeof v !== "object" || Array.isArray(v)) return { ...out };
   for (const [name, e] of Object.entries(v as Record<string, unknown>)) {
-    if (!name || !e || typeof e !== "object") continue;
-    const x = e as Record<string, unknown>;
+    if (!name) continue;
+    // A usable KEY with an unusable value is still a code the researcher made,
+    // and its segments still name it — dropping the entry would leave those
+    // segments pointing at nothing. Repair to defaults instead.
+    const x = (e && typeof e === "object" ? e : {}) as Record<string, unknown>;
     out[name] = {
+      ...(e && typeof e === "object" ? e : {}),   // keep a newer build's fields
       color: text(x.color) || "#888888",
       def: text(x.def),
       status: text(x.status) || "candidate",
@@ -256,7 +285,7 @@ function cleanCodebook(v: unknown): Project["codebook"] {
       ...(typeof x.parked === "boolean" ? { parked: x.parked } : {}),
     };
   }
-  return out;
+  return { ...out };
 }
 
 // Tabs.tsx maps over this every render, so a string here is a white screen.
@@ -303,15 +332,26 @@ export function parseProject(text: string): Project {
     // rows, not values: exportCSV now unions their KEYS into the header, so a
     // null or a string here is a TypeError inside the export rather than an odd
     // row — and a string would spread its char indices in as columns
+    // rows AND their values: exportCSV unions their keys into the header and
+    // calls .trim() on proposed_by, so a non-object row or a non-string value is
+    // a TypeError inside the export rather than an odd row
     extSegRows: (Array.isArray(p.extSegRows) ? p.extSegRows : [])
-      .filter((r): r is Record<string, string> =>
-        !!r && typeof r === "object" && !Array.isArray(r)),
+      .filter((r) => !!r && typeof r === "object" && !Array.isArray(r))
+      .map((r) => Object.fromEntries(Object.entries(r as object)
+        .filter(([, v]) => typeof v === "string")) as Record<string, string>),
     tabs: cleanTabs(p.tabs, p.transcripts),
-    // written by exportProject and never read back: openProject's
-    // `p.pinnedTabs ?? []` was always the fallback, so pin order died on every
-    // save-and-reopen. Same filter — a pin on a transcript that is gone is not a pin.
-    pinnedTabs: cleanTabs(p.pinnedTabs, p.transcripts),
-    active: p.active ?? "browse",
+    // written by exportProject and never read back, so pin order died on every
+    // save-and-reopen. NOT cleanTabs's fallback though: absent `tabs` means
+    // "open them all", while absent `pinnedTabs` means "none pinned" — reusing
+    // the fallback pinned every transcript in every older file.
+    pinnedTabs: Array.isArray(p.pinnedTabs) ? cleanTabs(p.pinnedTabs, p.transcripts) : [],
+    // read as transcripts[active] during render, so an object here throws
+    // "Cannot convert object to primitive value" on every frame — and persist
+    // rehydrates it, so the white screen never lifts. A name that is neither a
+    // reserved view nor a loaded transcript cannot open either.
+    active: typeof p.active === "string"
+      && (VIEWS.has(p.active) || (!!p.transcripts && p.active in p.transcripts))
+      ? p.active : "browse",
     hotbar: p.hotbar ?? { mode: "auto", pinned: [] },
     video: p.video ?? {},
     ai: p.ai ?? { model: "gpt-5.6-luna", redactTerms: [], lenses: ["transcription"] },

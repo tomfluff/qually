@@ -39,9 +39,11 @@ export default ts.config(
       // deliberate: the codebase uses `?? {}` and empty interfaces in places
       "@typescript-eslint/no-empty-object-type": "off",
       // `cond ? a() : b()` and `x && y()` as statements are this codebase's
-      // house style, used consistently and readably. A rule that flags 25 of
-      // them is a style opinion, and style is not what this config is for.
-      "@typescript-eslint/no-unused-expressions": "off",
+      // house style, used consistently and readably — allowed rather than the
+      // whole rule turned off, so a bare `set;` (which TypeScript does not
+      // reject either) is still an error.
+      "@typescript-eslint/no-unused-expressions":
+        ["error", { allowShortCircuit: true, allowTernary: true }],
 
     },
   },
