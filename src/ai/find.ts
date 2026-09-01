@@ -38,6 +38,7 @@ Each transcript line is three tab-separated fields: line_id<TAB>speaker<TAB>text
 A speaker field starting with [context] marks background speech (usually the interviewer): read those lines to follow the exchange, but the substance of a hit must come from the other lines — never return a range whose every line is [context].
 
 Rules:
+- Line ids may SKIP: speech the researcher withheld is not in the window, so 12 may follow 10. A hit must not span a skipped id — return 10 alone, or 12 alone, never 10 to 12.
 - A hit is a contiguous range of line ids (start to end, inclusive). Keep it to the lines that actually bear on the question — never stretch a range across unrelated lines to join two passages; return two hits instead.
 - Return only clear, defensible hits. A window with nothing relevant is a good answer: return an empty list. A researcher would rather read five real passages than thirty plausible ones.
 - Match on meaning, not on vocabulary. A passage that uses the question's words but is about something else is not a hit; a passage that never uses them but describes exactly what was asked is.
@@ -92,7 +93,7 @@ const SCHEMA = {
 
 export async function findChunk(opts: {
   key: string; model: string; lines: Line[]; question: string; redaction: Redaction;
-  context?: Set<string>; cacheKey?: string; signal?: AbortSignal;
+  context?: Set<string>; omitted?: Set<number>; cacheKey?: string; signal?: AbortSignal;
 }): Promise<{ hits: FindHit[]; rejected: number; usage: Usage }> {
   const q = renderQuestion(opts.question, opts.redaction);
   // The question is usually far shorter than a codebook, so it will rarely clear
@@ -111,7 +112,7 @@ export async function findChunk(opts: {
     signal: opts.signal,
   });
   const reply = data.hits ?? [];
-  const hits = sanitizeFindReply(opts.lines, reply, opts.context);
+  const hits = sanitizeFindReply(opts.lines, reply, opts.context, opts.omitted);
   // Same reason as suggestChunk's: a hit the guard cannot verify is dropped, and
   // dropping it in silence reads as "nothing in this transcript".
   return { hits, rejected: Math.max(0, reply.length - hits.length), usage };
@@ -126,6 +127,11 @@ export function sanitizeFindReply(
   lines: Line[],
   reply: { line_start: number; line_end: number }[],
   context?: Set<string>,
+  /** ids that exist in the transcript but were deliberately NOT sent. A range
+      spanning one would code speech the model never saw and the researcher
+      withheld — the guard that lets the window stay whole instead of being cut
+      at every gap, which turned 3 requests into 150. */
+  omitted?: Set<number>,
 ): FindHit[] {
   const ids = new Set(lines.map((l) => l.id));
   const seen = new Set<string>();
@@ -137,6 +143,11 @@ export function sanitizeFindReply(
     const endLine = Math.max(h.line_start, h.line_end);
     if (context?.size
       && !lines.some((l) => l.id >= startLine && l.id <= endLine && !context.has(l.speaker.trim()))) continue;
+    if (omitted?.size) {
+      let bridges = false;
+      for (const id of omitted) if (id > startLine && id < endLine) { bridges = true; break; }
+      if (bridges) continue;
+    }
     const key = `${startLine}-${endLine}`;
     if (seen.has(key)) continue;
     seen.add(key);

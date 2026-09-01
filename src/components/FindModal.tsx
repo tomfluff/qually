@@ -206,29 +206,25 @@ export function FindModal({ initialCodes = [], onClose }: {
     // A transcript where every remaining speaker is context-only cannot yield
     // anything: the sanitizer drops a hit made only of background speech, so the
     // request would be paid for and its answer thrown away. Not sent at all.
+    const omitted = new Set(linesOf(transcripts, lang, p)
+      .filter((l) => excluded.has(l.speaker.trim())).map((l) => l.id));
     const usable = lines.some((l) => !context.has(l.speaker.trim()));
-    if (!usable) return { pid: p, lines: [] as Line[], chunks: [] as Line[][], tok: 0, usable };
-    // Withholding a speaker leaves GAPS, and a gap must break the window rather
-    // than be packed across it. Lines 10=P, 11=R, 12=P with R withheld arrive at
-    // the model as 10 and 12 adjacent; it answers 10–12, both endpoints are real
-    // ids so the sanitizer accepts it, and addSegment then codes line 11 —
-    // speech that was deliberately never sent. SuggestModal documents this exact
-    // rule for a discontiguous selection; the same reason applies here.
-    const pos = new Map(linesOf(transcripts, lang, p).map((l, i) => [l.id, i]));
-    const runs: Line[][] = [];
-    let run: Line[] = [];
-    for (const l of lines as Line[]) {
-      if (run.length && pos.get(l.id) !== pos.get(run[run.length - 1].id)! + 1) { runs.push(run); run = []; }
-      run.push(l);
-    }
-    if (run.length) runs.push(run);
-    const chunks = runs.flatMap((r) => (mode === "codes"
-      ? chunksOf(r, red, context)
-      : findChunksOf(r, red, context)));
+    if (!usable) return { pid: p, lines: [] as Line[], chunks: [] as Line[][], tok: 0, usable, omitted };
+    // Withholding a speaker leaves GAPS, and a range must never span one — that
+    // would code speech the researcher deliberately kept off the wire. The first
+    // version enforced it by BREAKING the window at every gap, which is correct
+    // and ruinous: withholding an interleaved speaker turned 150 surviving lines
+    // into 150 one-line requests, each paying the full system prompt and prefix
+    // — 3 requests and 7.8k tokens became 150 and 70k, for half the transcript.
+    // The rule now lives in the sanitizer (`omitted`), where it costs nothing,
+    // and the prompt tells the model ids may skip. The window stays whole.
+    const chunks = mode === "codes"
+      ? chunksOf(lines as Line[], red, context)
+      : findChunksOf(lines as Line[], red, context);
     const tok = chunks.reduce((n, c) => n + (mode === "codes"
       ? estimateSuggestTokens(c, codes, red, context)
       : estimateFindTokens(c, question, red, context)), 0);
-    return { pid: p, lines, chunks, tok, usable };
+    return { pid: p, lines, chunks, tok, usable, omitted };
   }), [chosen, transcripts, lang, excluded, mode, red, context, codes, question]);
 
   const requests = requestCount(perPid);
@@ -338,14 +334,14 @@ export function FindModal({ initialCodes = [], onClose }: {
           let rejected: number, usage;
           if (mode === "codes") {
             const r = await suggestChunk({
-              key, model: model.id, lines: c, codes, redaction: red, context,
+              key, model: model.id, lines: c, codes, redaction: red, context, omitted: t.omitted,
               cacheKey: requests > 1 ? cacheKey : undefined, signal: abort.current.signal,
             });
             props = r.proposals; rejected = r.rejected; usage = r.usage;
           } else {
             const r = await findChunk({
               key, model: model.id, lines: c, question,
-              redaction: red, context,
+              redaction: red, context, omitted: t.omitted,
               cacheKey: requests > 1 ? cacheKey : undefined, signal: abort.current.signal,
             });
             props = r.hits.map((h) => ({ startLine: h.startLine, endLine: h.endLine, code: label! }));

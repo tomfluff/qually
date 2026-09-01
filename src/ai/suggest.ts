@@ -24,6 +24,7 @@ A speaker field starting with [context] marks background speech (usually the int
 Rules:
 - Use ONLY codes from the codebook, by their exact name. Never invent a code, theme, or new label — proposing a new code is the researcher's job, not yours.
 - Definitions decide where a code has one; a code without a definition is defined by its name and its example excerpts. Either way the excerpts illustrate meaning, not keywords — shared vocabulary alone is never a match.
+- Line ids may SKIP: speech the researcher withheld is not in the window, so 12 may follow 10. A proposal must not span a skipped id — propose 10 alone, or 12 alone, never 10 to 12.
 - A proposal is a contiguous range of line ids (start to end, inclusive) plus one code. Keep the range to the lines that actually carry the code — never stretch it across an unrelated line to join two passages; make two proposals instead.
 - Propose only clear, defensible applications. A window with nothing codeable is a fine answer: return an empty list.
 - A disfluency is never codeable BY ITSELF: never propose a range whose only content is fillers (um, uh, er, hmm, "you know"), false starts, stammers, or word repetitions — a line that is just "Hmm" carries no code. The meaning carried around or within them can still earn a code.
@@ -92,6 +93,7 @@ const SCHEMA = {
 export async function suggestChunk(opts: {
   key: string; model: string; lines: Line[]; codes: SuggestCode[]; redaction: Redaction;
   context?: Set<string>;
+  omitted?: Set<number>;
   /** Set only when the run has more than one request: a cache WRITE bills at
       1.25x, so asking for it on a single request costs more than not asking. */
   cacheKey?: string;
@@ -113,7 +115,7 @@ export async function suggestChunk(opts: {
     signal: opts.signal,
   });
   const reply = data.proposals ?? [];
-  const proposals = sanitizeSuggestReply(opts.codes, opts.lines, reply, opts.context);
+  const proposals = sanitizeSuggestReply(opts.codes, opts.lines, reply, opts.context, opts.omitted);
   // What the guard threw away. A window of 200 lines is five times the old
   // exposure to the model answering with a line id it was never shown, and
   // sanitizeSuggestReply drops those without a word — which reads to the
@@ -134,6 +136,9 @@ export function sanitizeSuggestReply(
   lines: Line[],
   reply: { line_start: number; line_end: number; code: string }[],
   context?: Set<string>,
+  /** ids in the transcript that were deliberately NOT sent — a range spanning
+      one would code speech the researcher withheld. See ai/find.ts. */
+  omitted?: Set<number>,
 ): SuggestProposal[] {
   const known = new Set(codes.map((c) => c.name));
   const ids = new Set(lines.map((l) => l.id));
@@ -147,6 +152,11 @@ export function sanitizeSuggestReply(
     const endLine = Math.max(p.line_start, p.line_end);
     if (context?.size
       && !lines.some((l) => l.id >= startLine && l.id <= endLine && !context.has(l.speaker.trim()))) continue;
+    if (omitted?.size) {
+      let bridges = false;
+      for (const id of omitted) if (id > startLine && id < endLine) { bridges = true; break; }
+      if (bridges) continue;
+    }
     const key = `${startLine}-${endLine}-${p.code}`;
     if (seen.has(key)) continue;
     seen.add(key);

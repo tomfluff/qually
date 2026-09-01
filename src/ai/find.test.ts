@@ -59,3 +59,31 @@ describe("what a question search sends", () => {
     expect(renderQuestion("where does Dana give up?", r)).not.toContain("Dana");
   });
 });
+
+// Withholding a speaker leaves gaps in what is sent. A range spanning a gap
+// would code speech the researcher deliberately kept off the wire. Enforcing
+// that by breaking the window at every gap was correct and ruinous — an
+// interleaved speaker turned 150 lines into 150 one-line requests — so the rule
+// lives here, where it costs nothing.
+describe("a range must not span speech that was withheld", () => {
+  const sent = [L(10, "I zoom in"), L(12, "then I give up")];   // 11 withheld
+  const omitted = new Set([11]);
+
+  it("drops a hit that bridges a withheld line", () => {
+    expect(sanitizeFindReply(sent, [hit(10, 12)], undefined, omitted)).toEqual([]);
+  });
+
+  it("keeps the same hit when nothing was withheld", () => {
+    expect(sanitizeFindReply(sent, [hit(10, 12)])).toHaveLength(1);
+  });
+
+  it("keeps single-line hits either side of the gap", () => {
+    expect(sanitizeFindReply(sent, [hit(10, 10), hit(12, 12)], undefined, omitted)).toHaveLength(2);
+  });
+
+  // the withheld id at an ENDPOINT cannot arrive — it was never in the window —
+  // but the endpoint check must still be what rejects it
+  it("drops a hit that starts on a withheld line", () => {
+    expect(sanitizeFindReply(sent, [hit(11, 12)], undefined, omitted)).toEqual([]);
+  });
+});
