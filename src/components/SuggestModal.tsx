@@ -97,7 +97,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
       }
       return { name, def: codebook[name]?.def ?? "", excerpts };
     });
-  }, [codebook, segments, transcripts]);
+  }, [codebook, segments, transcripts, lang]);
 
   // What you pick between, when the caller didn't decide: every LOADED transcript
   // (open tabs first, the store's own order for "all transcripts"), each with what

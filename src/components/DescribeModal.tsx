@@ -68,7 +68,7 @@ export function DescribeModal({ initial, onClose }: {
     const stats = Object.fromEntries(rows.map((r) => [r.name, { segs: r.segs, pids: r.pids }]));
     const order = sortCodes(rows.map((r) => r.name), stats, sortBy);
     return order.map((n) => rows.find((r) => r.name === n)!);
-  }, [segments, transcripts, codebook, sortBy]);
+  }, [segments, transcripts, lang, codebook, sortBy]);
 
   // The caller's codes and this dialog's are not the same set: it only lists
   // codes with accepted segments (the excerpts a definition is drafted from), so

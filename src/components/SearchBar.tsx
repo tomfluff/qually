@@ -122,7 +122,7 @@ export function SearchBar() {
       if (hits.length) groups.push({ pid, hits, total: hits.reduce((a, h) => a + h.count, 0) });
     }
     return groups;
-  }, [transcripts, query, scope, inScope]);
+  }, [transcripts, lang, query, scope, inScope]);
   const allTotal = allResults.reduce((a, g) => a + g.total, 0);
 
   if (!open) return null;

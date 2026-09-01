@@ -1050,7 +1050,7 @@ function MapInner() {
       if (ex) focus.excerpts.push(ex);
     }
     return { source: similarSource, focus, book };
-  }, [similarSource, codebook, segments, transcripts]);
+  }, [similarSource, codebook, segments, transcripts, lang]);
   const [similarGate, setSimilarGate] = useState<typeof similarRequest>(null);
   // the quote for the optional AI pass, using the request the gate will show
   const simTokens = useMemo(() => {
