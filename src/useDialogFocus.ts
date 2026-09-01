@@ -46,13 +46,21 @@ export function useDialogFocus<T extends HTMLElement = HTMLDivElement>(
     // it strands the researcher outside the dialog for the whole run, with Stop
     // — the only way to abort something they are paying for — unreachable by
     // the trap. Catch it where it happens rather than in nine components.
-    const onOut = () => {
-      // after the browser has moved focus, and only if it went nowhere
-      queueMicrotask(() => {
+    // relatedTarget, NOT a microtask reading document.activeElement: on a click
+    // the microtask runs BEFORE the browser has finished moving focus, so
+    // clicking into a text field looked like focus going nowhere and this
+    // yanked it to the close button — the field then could not be typed in at
+    // all. relatedTarget is the element focus is going TO, known at event time.
+    const onOut = (e: FocusEvent) => {
+      const to = e.relatedTarget as HTMLElement | null;
+      if (to) return;                    // something took it; not ours to fight
+      // Only when focus went NOWHERE, which is what a control disabling itself
+      // does — every AI gate's Send button, mid-run. Deferred one frame so a
+      // re-render that replaces the control has landed first.
+      requestAnimationFrame(() => {
         if (!el.isConnected) return;
         const now = document.activeElement;
-        if (now && now !== document.body && el.contains(now)) return;
-        if (now && now !== document.body) return;   // something outside claimed it deliberately
+        if (now && now !== document.body) return;
         (focusables()[0] ?? el).focus();
       });
     };

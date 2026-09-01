@@ -188,7 +188,14 @@ export class ProjectError extends Error {}
 // a segment IS someone's coding — losing it silently is the thing this whole
 // module exists to prevent. Only a row with no usable identity goes.
 const text = (v: unknown, fallback = "") => str(v) ?? fallback;
-const int = (v: unknown) => (typeof v === "number" && Number.isSafeInteger(v) ? v : null);
+// Coerced, not just type-checked: quoting a number is the commonest thing a
+// hand-edit does to JSON, and dropping a whole coding over a pair of quotes is
+// exactly the silent loss this module exists to prevent. Anything that is not a
+// finite whole number still goes.
+const int = (v: unknown) => {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
+  return Number.isSafeInteger(n) ? n : null;
+};
 
 function cleanSegments(v: unknown): Segment[] {
   if (!Array.isArray(v)) return [];
@@ -264,8 +271,17 @@ export function parseProject(text: string): Project {
     transcripts: cleanTranscripts(p.transcripts),
     segments: cleanSegments(p.segments),
     codebook: cleanCodebook(p.codebook),
-    extSegRows: Array.isArray(p.extSegRows) ? p.extSegRows : [],
+    // rows, not values: exportCSV now unions their KEYS into the header, so a
+    // null or a string here is a TypeError inside the export rather than an odd
+    // row — and a string would spread its char indices in as columns
+    extSegRows: (Array.isArray(p.extSegRows) ? p.extSegRows : [])
+      .filter((r): r is Record<string, string> =>
+        !!r && typeof r === "object" && !Array.isArray(r)),
     tabs: cleanTabs(p.tabs, p.transcripts),
+    // written by exportProject and never read back: openProject's
+    // `p.pinnedTabs ?? []` was always the fallback, so pin order died on every
+    // save-and-reopen. Same filter — a pin on a transcript that is gone is not a pin.
+    pinnedTabs: cleanTabs(p.pinnedTabs, p.transcripts),
     active: p.active ?? "browse",
     hotbar: p.hotbar ?? { mode: "auto", pinned: [] },
     video: p.video ?? {},

@@ -101,6 +101,7 @@ export function FindModal({ initialCodes = [], onClose }: {
   // from before anything is sent.
   const [pids, setPids] = useState<Set<string>>(() => new Set(Object.keys(transcripts)));
   const [focus, setFocus] = useState<Set<string>>(() => new Set(initialCodes));
+  const [codeQuery, setCodeQuery] = useState("");
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
 
@@ -255,6 +256,12 @@ export function FindModal({ initialCodes = [], onClose }: {
     : mode === "codes"
       ? renderSuggestChunk(first.chunks[0].slice(0, 6), codes, red, context)
       : renderFindChunk(first.chunks[0].slice(0, 6), question, red, context);
+
+  const shown = useMemo(() => {
+    const q = codeQuery.trim().toLowerCase();
+    return Object.keys(codebook).sort()
+      .filter((c) => !q || focus.has(c) || c.toLowerCase().includes(q));
+  }, [codebook, codeQuery, focus]);
 
   const named = name.trim().length > 0 && about.trim().length > 0;
   // norm() is the store's collision rule (trim, collapse spaces, lowercase), so
@@ -427,8 +434,31 @@ export function FindModal({ initialCodes = [], onClose }: {
                   <p className="about-lede">Your codebook is empty — switch to <b>Something new</b> to
                     describe what you are looking for.</p>
                 ) : (
+                  <>
+                    {/* A real codebook runs to a hundred-odd codes, and a bare
+                        checkbox list of those is a scroll hunt. Ticked codes are
+                        always shown, whatever the filter, so narrowing the list
+                        can never hide a choice already made. */}
+                    <input className="findName" value={codeQuery} disabled={busy}
+                      placeholder="Filter codes…" aria-label="Filter the code list by name"
+                      onChange={(e) => setCodeQuery(e.target.value)} />
+                    {/* with a filter on, the ticked codes may be the only thing
+                        NOT on screen — say how many are picked, and offer the
+                        way back without hunting for them */}
+                    {focus.size > 0 && (
+                      <div className="ai-rowbtns">
+                        <span className="tMeta">{focus.size} picked</span>
+                        <button className="btn" disabled={busy}
+                          onClick={() => setFocus(new Set())}>Clear</button>
+                      </div>
+                    )}
                   <div className="ai-cbox" role="group" aria-label="Codes to look for">
-                    {Object.keys(codebook).sort().map((c) => (
+                    {shown.length === 0 && (
+                      <p className="settings-note" style={{ margin: "6px 8px" }}>
+                        No code matches “{codeQuery.trim()}”.
+                      </p>
+                    )}
+                    {shown.map((c) => (
                       <label key={c} className="ai-spk">
                         <input type="checkbox" checked={focus.has(c)} disabled={busy}
                           onChange={() => setFocus((f) => {
@@ -438,6 +468,7 @@ export function FindModal({ initialCodes = [], onClose }: {
                       </label>
                     ))}
                   </div>
+                  </>
                 )}
               </>
             ) : (
