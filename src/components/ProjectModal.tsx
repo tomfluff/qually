@@ -43,6 +43,18 @@ export function ProjectModal() {
           {st.events > 0 && <div><b>{st.events}</b> session event{st.events === 1 ? "" : "s"}</div>}
         </div>
 
+        {/* The counts above are of the CLEANED project, so without this the
+            dialog confirms "480 segments" for a file that held 483 and the
+            researcher opens, works, and saves the loss over their only copy.
+            role=alert: this is the one thing on this screen they cannot get
+            back once they press Open. */}
+        {!!p.warnings?.length && (
+          <div className="ai-warn" role="alert">
+            <b>Part of this file could not be read.</b> {p.warnings.join("; ")}. The counts
+            above are what will load. The file on disk is untouched until you save.
+          </div>
+        )}
+
         {hasWork && (
           <div className="ai-warn">
             <b>This replaces everything currently open</b> — {cur.transcripts} transcript{cur.transcripts === 1 ? "" : "s"} and {cur.segments} segment{cur.segments === 1 ? "" : "s"}.

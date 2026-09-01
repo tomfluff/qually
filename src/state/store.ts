@@ -581,7 +581,7 @@ export interface State {
   exportCodebook: () => string;
   exportTranscript: (pid: string) => string;
   // events: imported against ONE transcript (the tab you right-clicked), never guessed
-  importMarkers: (pid: string, rows: Record<string, string>[]) => { added: number; skipped: number };
+  importMarkers: (pid: string, rows: Record<string, string>[]) => { added: number; skipped: number; foreign: number };
   editMarker: (mid: number, label: string) => void;
   // hand-added event (the add-event modal); t is on the VIDEO clock, like imports
   addMarker: (pid: string, m: { t: number; code: string; label: string }) => void;
@@ -1236,7 +1236,9 @@ export const useStore = create<State>()(
             // from the same coder both accepted and rejected — mergeInto keeps
             // both deliberately, and dropping it here meant signing your work
             // silently deleted a "no" you had recorded.
-            const k = `${s.pid}|${s.start}|${s.end}|${norm(s.code)}|${s.proposedBy}|${s.status}`;
+            // NUL-joined, like segKey and for the same reason: a code or coder
+            // name CONTAINING "|" must not collide two distinct rows into one key
+            const k = [s.pid, s.start, s.end, norm(s.code), s.proposedBy, s.status].join("\u0000");
             return seen.has(k) ? false : (seen.add(k), true);
           });
         set({ segments });
@@ -1962,7 +1964,13 @@ export const useStore = create<State>()(
           set({ markers: [...get().markers, ...added], nextMid: s.nextMid + added.length });
           earcon.mark(); // one mark for the batch, not one per row
         }
-        return { added: fresh.length, skipped: rows.length - fresh.length };
+        return {
+          added: fresh.length,
+          skipped: mine.length - fresh.length,
+          // counted apart from `skipped`: "already loaded, or no usable time" is
+          // a false explanation for a row that simply belongs to P02
+          foreign: rows.length - mine.length,
+        };
       },
       editMarker: (mid, label) => {
         const cur = get().markers.find((m) => m.mid === mid);
@@ -2294,7 +2302,18 @@ export const useStore = create<State>()(
         const s = get();
         const seg = s.segments.find((x) => x.sid === sid);
         get().pushUndo();
-        set({ segments: s.segments.map((x) => x.sid === sid ? { ...x, status } : x) });
+        // A span may hold the same code from the same coder under two verdicts —
+        // addSegment keeps that pair on purpose. Flipping one onto the verdict
+        // its twin already holds would leave two IDENTICAL rows, and nothing
+        // downstream dedupes: the hotbar and grounding counts would count the
+        // span twice and the export would write it twice. Merge into the twin
+        // rather than duplicate it; the whole thing is one undo entry either way.
+        const twin = seg && s.segments.find((x) => x.sid !== sid && x.pid === seg.pid
+          && x.start === seg.start && x.end === seg.end && norm(x.code) === norm(seg.code)
+          && x.proposedBy === seg.proposedBy && x.status === status);
+        set({ segments: twin
+          ? s.segments.filter((x) => x.sid !== sid)
+          : s.segments.map((x) => x.sid === sid ? { ...x, status } : x) });
         // The ledger is history, so changing an earlier verdict is a new row,
         // not an edit to the first one. Restricting this to the persisted AI
         // prefix keeps ordinary hand-marked status changes out of provenance.
@@ -3027,7 +3046,9 @@ export const useStore = create<State>()(
             // from the same coder both accepted and rejected — mergeInto keeps
             // both deliberately, and dropping it here meant signing your work
             // silently deleted a "no" you had recorded.
-            const k = `${s.pid}|${s.start}|${s.end}|${norm(s.code)}|${s.proposedBy}|${s.status}`;
+            // NUL-joined, like segKey and for the same reason: a code or coder
+            // name CONTAINING "|" must not collide two distinct rows into one key
+            const k = [s.pid, s.start, s.end, norm(s.code), s.proposedBy, s.status].join("\u0000");
             return seen.has(k) ? false : (seen.add(k), true);
           });
         set({ segments });
@@ -3378,10 +3399,27 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
     const k = segKey(x.pid, x.start, x.end, x.code, x.proposedBy);
     if (!bySeg.has(k)) bySeg.set(k, x);
   }
+  // Exact identity, status included. A span can carry the same code from the
+  // same coder both accepted and rejected — addSegment and mergeInto both keep
+  // the pair on purpose, because the disagreement IS the data — and without
+  // this the second row of that pair hit the first one's key and proposed
+  // FLIPPING it, so the pair could never survive the round trip
+  // DATA-FORMAT.md calls lossless.
+  const bySegExact = new Set(segments.map((x) =>
+    [segKey(x.pid, x.start, x.end, x.code, x.proposedBy), x.status].join("\u0000")));
+  // ...and whether the FILE is carrying more than one verdict for a logical row.
+  // Where it is, the rows are a pair to be completed, not a verdict change to
+  // be consented to; where it is not, the existing consent flow is right.
+  const fileVerdicts = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const k = [r.segment_ref || "", norm(r.code || ""), (r.proposed_by || "").trim()].join("\u0000");
+    (fileVerdicts.get(k) ?? fileVerdicts.set(k, new Set()).get(k)!).add(r.status || "accepted");
+  }
   // parked passthrough rows dedup too, or re-importing the same file grows
   // them without bound and export re-emits the duplicates
   const extKey = (x: Record<string, string>) =>
-    `${x.segment_ref}|${norm(x.code || "")}|${(x.proposed_by || "").trim()}`;
+    [x.segment_ref, norm(x.code || ""), (x.proposed_by || "").trim(), x.status || "accepted"]
+      .join("\u0000");
   const extSeen = new Set(extSegRows.map(extKey));
   const pendingSids = new Set(pendingSegUpdates.map((u) => u.sid));
   // first-wins, like the old Object.keys().find() — if two norm-equal keys ever
@@ -3413,7 +3451,11 @@ function importSegments(get: Get, set: Set_, rows: Record<string, string>[]) {
     // an imported row with no coder is NOT yours — mark it "(default)", never your name
     const coder = (r.proposed_by || "").trim() || "(default)";
     const status = r.status || "accepted", notes = r.notes || "";
-    const existing = bySeg.get(segKey(pid, start, end, canon, coder));
+    // already held, verdict and all: nothing to do, and nothing to consent to
+    if (bySegExact.has([segKey(pid, start, end, canon, coder), status].join("\u0000"))) continue;
+    const pairInFile = (fileVerdicts.get(
+      [r.segment_ref || "", norm(r.code || ""), (r.proposed_by || "").trim()].join("\u0000"))?.size ?? 0) > 1;
+    const existing = pairInFile ? undefined : bySeg.get(segKey(pid, start, end, canon, coder));
     if (existing) {
       // a re-imported row that only changed status/notes must not vanish into
       // the dedup — but it would OVERWRITE in-app review work, so it's parked

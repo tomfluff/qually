@@ -36,6 +36,11 @@ export const FORMAT = "qually-project";
 export const VERSION = 3;
 
 export interface Project {
+  /** What parseProject had to throw away to make this file loadable. Empty for
+      every well-formed file. Shown before the researcher commits to opening it,
+      because statsOf counts the CLEANED project and would otherwise confirm a
+      total that quietly excludes the rows that did not survive. */
+  warnings?: string[];
   format: string;
   version: number;
   savedAt: string;
@@ -192,31 +197,47 @@ const text = (v: unknown, fallback = "") => str(v) ?? fallback;
 // hand-edit does to JSON, and dropping a whole coding over a pair of quotes is
 // exactly the silent loss this module exists to prevent. Anything that is not a
 // finite whole number still goes.
+const STATUSES = new Set(["accepted", "rejected", "candidate"]);
 const int = (v: unknown) => {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
   return Number.isSafeInteger(n) ? n : null;
 };
 
-function cleanSegments(v: unknown): Segment[] {
+function cleanSegments(v: unknown, note?: (s: string) => void): Segment[] {
   if (!Array.isArray(v)) return [];
   const out: Segment[] = [];
+  const sids = new Set<number>();
+  let maxSid = 0;
+  let dropped = 0;
   for (const r of v) {
-    if (!r || typeof r !== "object") continue;
+    if (!r || typeof r !== "object") { dropped++; continue; }
     const x = r as Record<string, unknown>;
     const start = int(x.start), end = int(x.end), sid = int(x.sid);
     // no span and no id is not a coding anyone can act on or undo
-    if (start === null || end === null || sid === null) continue;
+    if (start === null || end === null || sid === null) { dropped++; continue; }
     const pid = text(x.pid);
-    if (!pid) continue;
+    if (!pid) { dropped++; continue; }
+    // Two rows sharing a sid is the same corruption class as the NaN one:
+    // deleteSegment would remove both, setStatus flip both, and every grounding
+    // collide on one key. Renumber rather than drop — the second row is still
+    // someone's coding.
+    const id = sids.has(sid) ? ++maxSid : sid;
+    sids.add(id);
+    maxSid = Math.max(maxSid, id);
     out.push({
-      sid, pid, start: Math.min(start, end), end: Math.max(start, end),
+      sid: id, pid, start: Math.min(start, end), end: Math.max(start, end),
       code: text(x.code), notes: text(x.notes),
       // the same repair onRehydrateStorage makes: an unsigned row reads as a
       // bug in the intercoder column, never as an empty string
       proposedBy: text(x.proposedBy).trim() || "(default)",
-      status: text(x.status) || "accepted",
+      // Coerced to the set the app draws, like stretches below: TranscriptView
+      // gives only an explicit "accepted" the solid bar, so manufacturing one
+      // from an absent field would claim a verdict nobody passed — and a typo'd
+      // status travels into the export as a fact about the coding.
+      status: STATUSES.has(text(x.status)) ? text(x.status) : "candidate",
     });
   }
+  if (dropped) note?.(`${dropped} segment row${dropped === 1 ? "" : "s"} could not be read`);
   return out;
 }
 
@@ -265,11 +286,19 @@ export function parseProject(text: string): Project {
   if (!p.transcripts || !Array.isArray(p.segments) || !p.codebook) {
     throw new ProjectError("This project file is missing its transcripts, segments, or codebook.");
   }
+  // What the filters above had to throw away. A dropped segment is someone's
+  // coding, and statsOf runs on the CLEANED project — so the open dialog would
+  // otherwise confirm "480 segments" for a file holding 483 and the researcher
+  // would open it, work, and save the loss over their only copy. The file on
+  // disk is untouched until they do, which is exactly why they have to be told
+  // before they get that far.
+  const warnings: string[] = [];
   // tolerate fields added after v1 being absent
   return {
+    warnings,
     format: FORMAT, version: p.version, savedAt: p.savedAt ?? "",
     transcripts: cleanTranscripts(p.transcripts),
-    segments: cleanSegments(p.segments),
+    segments: cleanSegments(p.segments, (m) => warnings.push(m)),
     codebook: cleanCodebook(p.codebook),
     // rows, not values: exportCSV now unions their KEYS into the header, so a
     // null or a string here is a TypeError inside the export rather than an odd

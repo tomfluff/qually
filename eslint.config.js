@@ -42,9 +42,15 @@ export default ts.config(
       // house style, used consistently and readably. A rule that flags 25 of
       // them is a style opinion, and style is not what this config is for.
       "@typescript-eslint/no-unused-expressions": "off",
-      // flag.ts matches control characters ON PURPOSE — a model-supplied "fix"
-      // carrying a newline or a bidi override must never reach a line
-      "no-control-regex": "off",
+
     },
+  },
+  {
+    // Scoped to the ONE file that needs it, not all of src: flag.ts matches
+    // control characters on purpose, so a model-supplied "fix" carrying a
+    // newline or a bidi override can never reach a line. Everywhere else, a
+    // control character in a regex is a typo worth hearing about.
+    files: ["src/ai/flag.ts"],
+    rules: { "no-control-regex": "off" },
   },
 );

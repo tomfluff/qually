@@ -495,7 +495,9 @@ test("a segment with wrong-typed fields is repaired, not loaded as-is", () => {
   expect(s.code).toBe("");                          // a number is not a code name
   expect(s.notes).toBe("");                         // an object would throw in render
   expect(s.proposedBy).toBe("(default)");           // never blank: it is the intercoder column
-  expect(s.status).toBe("accepted");
+  // an absent or unknown status is not a verdict: only an explicit "accepted"
+  // earns the solid bar, so a missing one lands as a candidate
+  expect(s.status).toBe("candidate");
 });
 
 test("a codebook entry that is not an object is dropped, and a partial one is filled", () => {
@@ -519,4 +521,41 @@ test("no surviving segment can poison nextSid", () => {
   const p = hostile({ segments: [{ sid: "x", pid: "P01", start: 1, end: 1 }, { pid: "P01", start: 1, end: 1 }] });
   expect(p.segments).toEqual([]);
   expect(p.segments.every((s) => Number.isSafeInteger(s.sid))).toBe(true);
+});
+
+// The counts in the open dialog are of the CLEANED project, so a file that
+// loses rows would otherwise be confirmed at a total that excludes them — and
+// the researcher opens, works, and saves the loss over their only copy.
+test("a file that loses rows says so before it is opened", () => {
+  const p = hostile({ segments: [
+    { sid: 1, pid: "P01", start: 1, end: 2 },
+    { sid: "x", pid: "P01", start: 1, end: 2 },
+    null,
+  ] });
+  expect(p.segments).toHaveLength(1);
+  expect(p.warnings?.join(" ")).toContain("2 segment rows");
+});
+
+test("a well-formed file carries no warnings at all", () => {
+  expect(hostile({ segments: [{ sid: 1, pid: "P01", start: 1, end: 2, code: "c" }] }).warnings)
+    .toEqual([]);
+});
+
+// Two rows sharing a sid is the corruption class the NaN case belongs to:
+// deleteSegment would remove both, setStatus flip both, groundings collide.
+test("a duplicated sid is renumbered rather than dropped", () => {
+  const p = hostile({ segments: [
+    { sid: 7, pid: "P01", start: 1, end: 2, code: "a" },
+    { sid: 7, pid: "P01", start: 3, end: 4, code: "b" },
+  ] });
+  expect(p.segments).toHaveLength(2);
+  expect(new Set(p.segments.map((s) => s.sid)).size).toBe(2);
+});
+
+// Quoting a number is the commonest thing a hand-edit does to JSON, and losing
+// a coding over a pair of quotes is exactly what this boundary exists to stop.
+test("numeric fields written as strings are read, not discarded", () => {
+  const p = hostile({ segments: [{ sid: "5", pid: "P01", start: "3", end: "4", code: "c" }] });
+  expect(p.segments).toHaveLength(1);
+  expect([p.segments[0].sid, p.segments[0].start, p.segments[0].end]).toEqual([5, 3, 4]);
 });

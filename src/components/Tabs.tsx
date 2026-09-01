@@ -392,11 +392,20 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
         setErr("Not an events CSV — it needs an “event” column and a time (video_time_s, rec_offset_s, or video_time_hms).");
         return;
       }
-      const { added, skipped } = useStore.getState().importMarkers(pid, rows);
-      // "skipped" is honest about both causes: rows already held, and rows with no
-      // readable time. Silence there would read as "all 39 imported" when it wasn't.
+      // An export written before the pid column existed cannot say which
+      // transcript its rows belong to, and the only thing that can be meant is
+      // the tab they were dropped on. For a MULTI-transcript study that is the
+      // old bug reproduced exactly, so say it before it happens rather than
+      // report a success that moved another participant's events.
+      const noPid = rows.length > 0 && !rows.some((r) => "pid" in r);
+      const many = Object.keys(useStore.getState().transcripts).length > 1;
+      const { added, skipped, foreign } = useStore.getState().importMarkers(pid, rows);
+      // each cause named separately: "already loaded, or no usable time" is a
+      // false explanation for a row that simply belongs to another transcript
       const msg = `${added} event${added === 1 ? "" : "s"} loaded onto ${pid}`
-        + (skipped ? `; ${skipped} skipped (already loaded, or no usable time)` : "");
+        + (skipped ? `; ${skipped} skipped (already loaded, or no usable time)` : "")
+        + (foreign ? `; ${foreign} belong to other transcripts` : "")
+        + (noPid && many ? `; this file names no transcript, so every row went to ${pid}` : "");
       announce(msg);
       if (added) onClose(); else setNote(msg);
     } catch (e) {

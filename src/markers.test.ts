@@ -140,9 +140,9 @@ beforeAll(async () => {
 
 test("importing the same events file twice adds nothing the second time", () => {
   const s = () => useStore.getState();
-  expect(s().importMarkers("P01", rows)).toEqual({ added: 3, skipped: 1 }); // 1 = no usable time
+  expect(s().importMarkers("P01", rows)).toMatchObject({ added: 3, skipped: 1 }); // 1 = no usable time
   expect(s().markers.length).toBe(3);
-  expect(s().importMarkers("P01", rows)).toEqual({ added: 0, skipped: 4 });
+  expect(s().importMarkers("P01", rows)).toMatchObject({ added: 0, skipped: 4 });
   expect(s().markers.length).toBe(3);
 });
 
@@ -165,7 +165,7 @@ test("events.csv re-imports as the same events", () => {
   const back = parseCSV(csv);
   expect(isMarkerRows(back)).toBe(true);
   // every event round-trips, so re-importing the export is a no-op
-  expect(s().importMarkers("P01", back)).toEqual({ added: 0, skipped: back.length });
+  expect(s().importMarkers("P01", back)).toMatchObject({ added: 0, skipped: back.length });
 });
 
 test("a hand-added event round-trips and dedupes like an imported one", () => {
@@ -261,6 +261,6 @@ test("a row with no pid still loads onto the tab it was dropped on", () => {
   const s = () => useStore.getState();
   const before = s().markers.length;
   expect(s().importMarkers("P01", [{ video_time_s: "44", event: "trial", label: "no pid column" }]))
-    .toEqual({ added: 1, skipped: 0 });
+    .toMatchObject({ added: 1, skipped: 0 });
   expect(s().markers.length).toBe(before + 1);
 });

@@ -39,6 +39,15 @@ flags, free-text observations — import as their own CSV, **per transcript**, f
 the tab's right-click menu → *Load events…*. It attaches to the tab you clicked,
 so a recorder's file is never guessed onto the wrong participant.
 
+*Export session events* writes **every** transcript's events to one file, so each
+row names its own transcript in a `pid` column. Re-importing that file onto a tab
+loads only the rows belonging to it and reports the rest as "belong to other
+transcripts" — the round trip is a no-op however many transcripts are open. A
+file with **no** `pid` column is from a recorder, or from an export written
+before the column existed: there is nothing in it that could say otherwise, so
+every row attaches to the tab you dropped it on, and the app says so when more
+than one transcript is loaded.
+
 The format is deliberately loose. Only three things are required:
 
 | Column | Meaning |
@@ -48,6 +57,7 @@ The format is deliberately loose. Only three things are required:
 | `label` | The note itself. Editable in the app. |
 | `code` | Groups and colours the events (`MAKE_PROGRESS`, `custom`, …). Optional — rows without one group under their `event`. |
 | `detail` | The recorder's own annotations (`slot=1;via=hotkey`). Shown on hover. |
+| `pid` | Which transcript the row belongs to. Written by the app's own export; optional on a recorder's file, where the drop target decides. |
 
 Every other column (`epoch_ms`, `session`, `local_time`, whatever your recorder
 writes) is kept verbatim and written back out by *Export session events*.
