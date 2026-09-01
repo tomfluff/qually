@@ -19,6 +19,8 @@ import { chunksOf, renderSuggestChunk, estimateSuggestTokens, suggestChunk, over
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, LangFact, ModelPicker } from "./AiModal";
+import { CodePickBar, CodePickRow, type CodePick } from "./CodePicker";
+import { sortCodes, type SortBy } from "../codeStats";
 
 export function SuggestModal({ pid: initial, choose, onClose }: {
   pid?: string; choose?: boolean; onClose: () => void;
@@ -84,7 +86,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
 
   // the codebook as the model sees it: name + def + up to N exemplar excerpts (from
   // this study's accepted segments), which anchor what each code actually means
-  const codes = useMemo<SuggestCode[]>(() => {
+  const book = useMemo<SuggestCode[]>(() => {
     // a set-aside code is not offered to the model either — it would come
     // back as candidate codings for a code you took out of the analysis
     return liveCodes(codebook).map((name) => {
@@ -98,6 +100,48 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
       return { name, def: codebook[name]?.def ?? "", excerpts };
     });
   }, [codebook, segments, transcripts, lang]);
+
+  // Which of them the model may propose. Defaults to ALL, so the run is what it
+  // has always been until you narrow it — and narrowing is worth doing: the
+  // codebook rides every window, so a run over six codes instead of sixty is a
+  // fraction of the tokens as well as a narrower question.
+  const [pick, setPick] = useState<Set<string> | null>(null);
+  const chosen = useMemo(() => (pick ? book.filter((c) => pick.has(c.name)) : book), [book, pick]);
+  const [codeQuery, setCodeQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("name");
+
+  // the same rows Draft definitions and Find show: colour, definition, and how
+  // much evidence the code already rests on
+  const rows = useMemo<CodePick[]>(() => {
+    const by = new Map<string, { segs: number; pids: Set<string> }>();
+    for (const s of segments) {
+      if (s.status !== "accepted" || !transcripts[s.pid]) continue;
+      const e = by.get(s.code) ?? { segs: 0, pids: new Set<string>() };
+      e.segs++; e.pids.add(s.pid);
+      by.set(s.code, e);
+    }
+    return book.map((c) => ({
+      name: c.name, def: c.def,
+      segs: by.get(c.name)?.segs ?? 0, pids: by.get(c.name)?.pids.size ?? 0,
+    }));
+  }, [book, segments, transcripts]);
+
+  const shownCodes = useMemo(() => {
+    const q = codeQuery.trim().toLowerCase();
+    const stats = Object.fromEntries(rows.map((r) => [r.name, { segs: r.segs, pids: r.pids }]));
+    return sortCodes(rows.map((r) => r.name), stats, sortBy)
+      .map((n) => rows.find((r) => r.name === n)!)
+      // a ticked code stays listed whatever the filter says
+      .filter((r) => !q || (pick ?? new Set(book.map((c) => c.name))).has(r.name)
+        || r.name.toLowerCase().includes(q));
+  }, [rows, codeQuery, sortBy, pick, book]);
+
+  const on = (name: string) => (pick ? pick.has(name) : true);
+  const toggle = (name: string) => setPick((cur) => {
+    const next = new Set(cur ?? book.map((c) => c.name));
+    next.has(name) ? next.delete(name) : next.add(name);
+    return next;
+  });
 
   // What you pick between, when the caller didn't decide: every LOADED transcript
   // (open tabs first, the store's own order for "all transcripts"), each with what
@@ -129,15 +173,15 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     if (run.length) runs.push(run);
     return runs.flatMap((r) => chunksOf(r, red, context));
   }, [lines, scoped, allLines, red, context]);
-  const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, codes, red, context), 0), [chunks, codes, red, context]);
+  const inTok = useMemo(() => chunks.reduce((n, c) => n + estimateSuggestTokens(c, chosen, red, context), 0), [chunks, chosen, red, context]);
   const redactions = useMemo(() => {
-    const book = codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0);
+    const perBook = chosen.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0);
     const win = lines.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0);
-    return book * chunks.length + win; // the codebook rides every chunk
-  }, [codes, lines, red, chunks.length]);
+    return perBook * chunks.length + win; // the codebook rides every chunk
+  }, [chosen, lines, red, chunks.length]);
   const estCost = costOf(model, inTok, estimateTokens(" ".repeat(lines.length * 6)));
-  const preview = chunks.length ? renderSuggestChunk(chunks[0].slice(0, 8), codes, red, context) : "";
-  const ready = codes.length > 0 && lines.length > 0;
+  const preview = chunks.length ? renderSuggestChunk(chunks[0].slice(0, 8), chosen, red, context) : "";
+  const ready = chosen.length > 0 && lines.length > 0;
 
   const run = async () => {
     const key = getKey();
@@ -152,7 +196,9 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
     const by = AI_PROPOSED_BY_PREFIX + model.name;
     // stable for this run, distinct between runs: the codebook is what is
     // cached, so a run with a different book must not land on the same entry
-    const cacheKey = `suggest:${model.id}:${pid}:${codes.length}:${runSeq.current++}`;
+    // the SELECTION, not the whole book: the codebook is the cached prefix, so a
+    // run over a different subset must not land on the previous run's entry
+    const cacheKey = `suggest:${model.id}:${pid}:${chosen.length}:${runSeq.current++}`;
     let added = 0, skipped = 0, unusable = 0, cost = 0, pushed = false;
     // hoisted out of the loop so the catch can name the one chunk in flight
     let i = 0;
@@ -163,7 +209,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
         // lines that never left. Nothing more is sent, so nothing more is logged.
         if (abort.current.signal.aborted) return;
         const { proposals, rejected, usage } = await suggestChunk({
-          key, model: model.id, lines: chunks[i], codes, redaction: red, context,
+          key, model: model.id, lines: chunks[i], codes: chosen, redaction: red, context,
           // only across a run of more than one request: a cache write bills at
           // 1.25x, so asking on a single request costs more than not asking.
           // Keyed on the run so its windows reach the same machine.
@@ -187,7 +233,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
           // count what the renderer actually replaces
           lines: chunks[i].length,
           redactions: chunks[i].reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
-            + codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
+            + chosen.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0),
           inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
           costUsd: +usage.costUsd.toFixed(5),
         });
@@ -211,7 +257,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
         // redactions for a request that carried a redacted definition
         lines: c.length,
         redactions: c.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
-          + codes.reduce((n, cd) => n + red.count(cd.def) + cd.excerpts.reduce((m, e2) => m + red.count(e2), 0), 0),
+          + chosen.reduce((n, cd) => n + red.count(cd.def) + cd.excerpts.reduce((m, e2) => m + red.count(e2), 0), 0),
       });
       if ((e as Error).name === "AbortError") return;
       const msg = e instanceof AiError ? e.message : `Unexpected error: ${(e as Error).message}`;
@@ -265,7 +311,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
               {ready && (
                 <div className="ai-warn">
                   <b>This sends {lines.length} {scoped ? "selected " : ""}line{lines.length === 1 ? "" : "s"} of “{pid}” plus your{" "}
-                  {codes.length}-code codebook (once per window) to OpenAI.</b> Interview transcripts
+                  {chosen.length}-code codebook (once per window) to OpenAI.</b> Interview transcripts
                   are participant data — make sure this is allowed by your consent form and ethics approval.
                 </div>
               )}
@@ -297,6 +343,33 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                 </label>
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
+
+              {book.length > 0 && (
+                <>
+                  <div className="ai-sec">Codes the AI may propose{" "}
+                    <span className="ai-sec-hint">all of them unless you narrow it</span></div>
+                  <input className="findName" value={codeQuery} disabled={busy}
+                    placeholder="Filter codes…" aria-label="Filter the code list by name"
+                    onChange={(e) => setCodeQuery(e.target.value)} />
+                  <CodePickBar sortBy={sortBy} onSort={setSortBy} onPick={[
+                    { label: "All", run: () => setPick(null) },
+                    { label: "None", run: () => setPick(new Set()) },
+                  ]}>
+                    <span className="tMeta">{chosen.length} of {book.length}</span>
+                  </CodePickBar>
+                  <div className="ai-cbox" role="group" aria-label="Codes the AI may propose">
+                    {shownCodes.length === 0 && (
+                      <p className="settings-note" style={{ margin: "6px 8px" }}>
+                        No code matches “{codeQuery.trim()}”.
+                      </p>
+                    )}
+                    {shownCodes.map((c) => (
+                      <CodePickRow key={c.name} code={c} color={codebook[c.name]?.color ?? ""}
+                        on={on(c.name)} onToggle={() => toggle(c.name)} />
+                    ))}
+                  </div>
+                </>
+              )}
               {/* every line still goes (the exchange needs its questions); unticking
                   only stops a speaker's lines from CARRYING a code */}
               {pid && speakers.length > 1 && (
@@ -315,11 +388,16 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
               )}
               {!ready ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
-                  {codes.length === 0
+                  {book.length === 0
                     ? "Your codebook is empty — add some codes first, and the AI can suggest where they apply."
                     : !pid
                       ? "Pick a transcript above and the payload, the token count and the price appear here."
-                      : "This transcript has no lines to scan."}
+                      // the codes are all unticked: a run with nothing to propose
+                      // FROM is not a transcript with nothing in it, and saying
+                      // the latter sends you looking in the wrong place
+                      : chosen.length === 0
+                        ? "No codes ticked — the AI has nothing to propose from. Tick at least one above."
+                        : "This transcript has no lines to scan."}
                 </p>
               ) : (
                 <>
@@ -338,7 +416,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
                   </div>
                   <div className="ai-facts">
                     <span>lines <b>{lines.length}</b></span>
-                    <span>codes <b>{codes.length}</b></span>
+                    <span>codes <b>{chosen.length}</b></span>
                     <span>windows <b>{chunks.length}</b></span>
                     <span>redacted <b>{redactions}</b></span>
                     <span>≈ <b>{inTok.toLocaleString()}</b> tokens</span>
@@ -358,7 +436,7 @@ export function SuggestModal({ pid: initial, choose, onClose }: {
 
             {!ready ? (
               <div className="imp-actions">
-                {codes.length > 0 && !pid && <button className="btn primary" disabled>Pick a transcript</button>}
+                {chosen.length > 0 && !pid && <button className="btn primary" disabled>Pick a transcript</button>}
                 <button className="btn" onClick={onClose}>Close</button>
               </div>
             ) : (
