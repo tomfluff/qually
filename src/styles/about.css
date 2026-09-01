@@ -164,8 +164,9 @@
    browser's default ring, which is blue and belongs to no theme here. That has
    now happened twice, which makes it a class rather than a bug: scoped to the
    dialog so any field added later is covered the day it is added.
-   Buttons are deliberately excluded — .ai-seg's selected state needs --fg,
-   because an accent ring inside an accent fill reads as no ring at all. */
+   Buttons are deliberately excluded — a selected segment needs a --fg ring,
+   because an accent ring inside an accent fill reads as no ring at all, and
+   .segmented carries its own. */
 .about input:focus-visible,
 .about textarea:focus-visible,
 .about select:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
@@ -179,30 +180,16 @@
 .ai-body textarea:focus-visible,
 .ai-body select:focus-visible { outline-offset:-2px; }
 
+/* the shared .segmented, with the gap under it this dialog's stacked sections
+   want — the control itself is base.css's now, not a second copy */
+.segmented.findMode { margin:0 0 12px; }
+
 /* ── F8: find across the corpus ─────────────────────────────────────────
    The one run that can span a whole study, so its gate carries more controls
    than any other. Everything here is em-based: this dialog takes .about's 1rem
    floor and a low-vision researcher raises the browser zoom, which must grow
    the hit targets and not only the text. */
 
-/* what to look for: two mutually exclusive readings of the same run */
-.ai-seg { display:flex; gap:0; margin:0 0 12px; border:1px solid var(--line);
-  border-radius:8px; overflow:hidden; }
-.ai-seg button { flex:1; font:inherit; padding:8px 10px; border:0; background:var(--bg);
-  color:var(--fg); cursor:pointer; line-height:1.3; }
-.ai-seg button + button { border-left:1px solid var(--line); }
-.ai-seg button:hover { background:var(--panel); }
-/* Ink follows the ground, exactly as .segmented .seg.on does in base.css — the
-   dark theme's accent is a LIGHT purple (#a78bfa), so white on it measures
-   2.72:1, well under AA, while a near-black measures about 7.7:1. Copying the
-   light-theme half of that pair and not the dark half is what made this the one
-   selected control in the app with white text on a pale fill. */
-.ai-seg button.on { background:var(--accent); color:#fff; font-weight:600; }
-[data-theme=dark] .ai-seg button.on { color:#12161a; }
- /* NOT accent-on-accent: on the selected button the ring is the same colour as
-    the fill it sits inside and reads as no ring at all. The page background is
-    the one colour guaranteed to differ from both states. */
-.ai-seg button:focus-visible { outline:2px solid var(--fg); outline-offset:-4px; }
 
 /* the codebook as a pick-list; capped so it scrolls rather than pushing the
    cost and the Send button off the bottom of a long book */

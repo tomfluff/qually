@@ -101,18 +101,36 @@ button { font-family:inherit; }
    layout switch, transcript search scope, the Assist sidebar's group-by and
    sort. Narrow panel headers use the cycling .sortchip instead (a three-way
    segment does not fit a 250px sidebar), and menus use native radio rows. */
-/* border --muted, not --line: a control's own boundary needs 3:1 (SC 1.4.11) and
-   --line on --bg measures 1.27:1 — the unselected half read as plain grey text */
+/* One segmented control for the whole app. This took the roomier treatment that
+   grew up in the F8 dialog: a full-strength label on every option rather than a
+   muted one, a ground change on hover instead of an ink change, and enough
+   padding to be a comfortable target at a large text size. The dense contexts —
+   the search bar, the map's settings menu, the Assist sort row — already set
+   their own padding and font-size and are unaffected.
+   Two copies of this control is what let one of them drift: the dialog version
+   was hand-copied from here and dropped the dark-theme ink line below, so it
+   spent a while as the only selected control in the app with white text on a
+   pale fill (2.72:1).
+   Border stays --muted, NOT the --line the dialog copy used: a control's own
+   boundary needs 3:1 (SC 1.4.11) and --line on --bg measures 1.27:1, which left
+   the unselected half reading as plain text with no control around it. That was
+   the second thing the hand-copied version had quietly reverted. */
 .segmented { display:flex; border:1px solid var(--muted); border-radius:8px; overflow:hidden; }
 .segmented .seg { flex:1 1 0; min-width:0; min-height:24px; border:0; background:var(--bg);
-  color:var(--muted); font:inherit; padding:4px 2px; cursor:pointer; white-space:nowrap; }
+  color:var(--fg); font:inherit; padding:8px 10px; cursor:pointer; white-space:nowrap;
+  line-height:1.3; }
 .segmented .seg + .seg { border-left:1px solid var(--muted); }
-.segmented .seg:hover { color:var(--fg); }
+/* :not(.on) — this sits before .seg.on's background, but a hover on the
+   SELECTED segment would still repaint it grey without the guard */
+.segmented .seg:not(.on):hover { background:var(--panel); }
 /* the selected segment takes its ink from the theme's accent, not a fixed white:
    dark's --accent is a light lavender, where near-black reads ~6.7:1 and white
-   only ~2.7:1 (same treatment as .nBtn.pri) */
+   only ~2.7:1 */
 .segmented .seg.on { background:var(--accent); color:#fff; font-weight:600; }
 [data-theme=dark] .segmented .seg.on { color:#12161a; }
+/* NOT accent-on-accent: on the selected segment a ring the colour of the fill
+   it sits inside reads as no ring at all. */
+.segmented .seg:focus-visible { outline:2px solid var(--fg); outline-offset:-4px; }
 
 /* ── count badge ────────────────────────────────────────────────────────────
    "how many" beside a name, wherever a list shows one: code rows, the events

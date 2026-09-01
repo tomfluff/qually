@@ -81,12 +81,13 @@
 .set-modal .segmented { width:9.4em; flex:none; }
 .set-modal .segmented .seg { padding:5px 0; font-weight:500;
   text-align:center; transition:background .12s, color .12s; }
-/* full-strength ink on the UNSELECTED option: it is the other choice you are
-   about to make, not helper text — muting it to 5.3:1 flattened ~40 labels.
-   :not(.on) so this can never beat .seg.on's accent ink. */
-.set-modal .segmented .seg:not(.on) { color:var(--fg); }
-/* :not(.on) — this rule sits after the shared .seg.on and would otherwise paint
-   the SELECTED segment grey the moment the pointer touched it */
+/* The full-strength-ink override that used to live here is gone: base.css now
+   paints every unselected segment at --fg, which is the conclusion this panel
+   reached first ("it is the other choice you are about to make, not helper
+   text — muting it to 5.3:1 flattened ~40 labels") and which the whole app now
+   follows. The hover rule stays :not(.on): it sits after the shared .seg.on and
+   would otherwise paint the SELECTED segment grey the moment the pointer
+   touched it. */
 .set-modal .segmented .seg:not(.on):hover { background:var(--panel); }
 /* the reading-font control has three uneven labels (one is "Atkinson"), so it
    sizes to its content rather than cramming into a 150px third */

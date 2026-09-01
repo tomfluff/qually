@@ -416,13 +416,13 @@ export function FindModal({ initialCodes = [], onClose }: {
                 keyboard user who presses Down on a radio that does not move
                 concludes the control is broken. Same pattern as AssistView's
                 segmented controls, which make no promise they cannot keep. */}
-            <div className="ai-seg" role="group" aria-label="What to look for">
-              <button aria-pressed={mode === "codes"} disabled={busy}
-                className={mode === "codes" ? "on" : ""} onClick={() => setMode("codes")}>
+            <div className="segmented findMode" role="group" aria-label="What to look for">
+              <button className={"seg" + (mode === "codes" ? " on" : "")}
+                aria-pressed={mode === "codes"} disabled={busy} onClick={() => setMode("codes")}>
                 Codes I already have
               </button>
-              <button aria-pressed={mode === "question"} disabled={busy}
-                className={mode === "question" ? "on" : ""} onClick={() => setMode("question")}>
+              <button className={"seg" + (mode === "question" ? " on" : "")}
+                aria-pressed={mode === "question"} disabled={busy} onClick={() => setMode("question")}>
                 Something new
               </button>
             </div>
