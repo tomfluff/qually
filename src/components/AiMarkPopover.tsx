@@ -19,10 +19,9 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose, onCycle }: {
   const sidebarFontSize = useStore((s) => s.ui.sidebarFontSize);
   const dismissNotice = useStore((s) => s.dismissNotice);
   const applyFix = useStore((s) => s.applyFix);
-  // reading words nobody spoke: the repair below writes the spoken line
+  // the repair follows the reading, so the mark and the text it corrects are
+  // always the same text — see applyFix
   const lang = useStore((s) => s.ui.lang);
-  const readingTranslated = useStore((s) =>
-    lang === "en" && !!s.transcripts[pid]?.lines.some((l) => l.en?.trim()));
   const ref = useRef<HTMLDivElement>(null);
   const dialogRef = useDialogFocus({ initialFocus: "container" });
   const setRef = useCallback((el: HTMLDivElement | null) => { ref.current = el; return dialogRef(el); }, [dialogRef]);
@@ -65,25 +64,17 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose, onCycle }: {
       <div className="aipop-reason">{span.reason}</div>
       {isError && span.fix && (
         <div className="row">
-          {/* A repair rewrites what was SPOKEN, so it cannot run while a
-              translation is on screen — the store refuses, which is what keeps
-              a translation out of the source. The button used to fire anyway
-              and announce "Fixed", so the app claimed to have changed the
-              transcript and had not. Now it says which switch to throw, and
-              the announcement follows what actually happened in every case,
-              including a mark whose quote an edit has since moved. */}
-          <button className="btn primary" disabled={readingTranslated}
-            title={readingTranslated ? "Switch to Source to correct the transcript" : undefined}
+          {/* The announcement follows what actually happened: a mark whose quote
+              an edit has since moved cannot be applied, and the button used to
+              say "Fixed" anyway. */}
+          <button className="btn primary"
             onClick={() => {
-              const done = applyFix(pid, line, span.quote, span.fix!);
+              const done = applyFix(pid, line, span.quote, span.fix!, lang);
               announce(done
                 ? `Fixed: “${span.quote}” is now “${span.fix}”`
                 : `Could not apply: “${span.quote}” is no longer in this line`);
               onClose();
             }}>Apply fix: “{span.fix}”</button>
-          {readingTranslated && (
-            <span className="aipop-note">Switch to <b>Source</b> to correct the transcript.</span>
-          )}
         </div>
       )}
     </div>

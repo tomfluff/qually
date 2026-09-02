@@ -17,7 +17,7 @@ import type { Stretch, StretchStatus } from "../stretches";
 import type { SectionProposal } from "../sections";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
-import { hasTranslation, viewLines, type Lang } from "../lineText";
+import { hasTranslation, lineText, viewLines, type Lang } from "../lineText";
 import { forgetScroll, renameScroll } from "../scrollMemory";
 import { projectSwapped } from "../sessionReset";
 import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
@@ -566,10 +566,12 @@ export interface State {
   addFlags: (pid: string, flags: Record<number, Flag[]>, lines: Line[], scanned: string[]) => void;
   addGrounds: (recs: Record<number, GroundRec>) => void;
   dismissNotice: (pid: string, id: number, lens: string, quote: string) => void;
-  /** Repairs the SPOKEN line. Returns false when the quote is not in it — the
-      mark was made against text that has since been edited, or against a
-      translation — so the caller can say what happened instead of guessing. */
-  applyFix: (pid: string, id: number, quote: string, fix: string) => boolean;
+  /** Repairs the line that was READ: the scan quotes the text on screen, so a
+      repair goes back to that same field — the translation under an English
+      reading, the spoken line otherwise, exactly as editLine resolves it.
+      Returns false when the quote is not in that text (an edit has since moved
+      it), so the caller can say what happened instead of guessing. */
+  applyFix: (pid: string, id: number, quote: string, fix: string, lang?: Lang) => boolean;
   logAiCall: (call: AiCall) => void;
   /** A run that reached OpenAI and did not come back — aborted, or failed after
       dispatch. The transcript went either way, so the log records it. */
@@ -1833,16 +1835,22 @@ export const useStore = create<State>()(
       // repair), then re-hashes the flag record against the corrected text with
       // only the applied span removed — an edit normally invalidates every mark
       // on the line, which would strand a second error until a re-scan.
-      applyFix: (pid, id, quote, fix) => {
-        // the STORED line, deliberately: a transcription repair rewrites what was
-        // said, and must never be able to write a translation over the source
+      applyFix: (pid, id, quote, fix, lang = "source") => {
         const l = get().transcripts[pid]?.lines.find((x) => x.id === id);
-        if (!l || !l.text.includes(quote)) return false;
+        if (!l) return false;
+        // The scan reads through viewLines, so a mark on a translated line quotes
+        // the TRANSLATION — repairing the source there would leave the misheard
+        // words on screen and rewrite a line the model never saw. Follow the
+        // reading, like editLine and replaceInTranscript, and a repair still
+        // never writes a translation over the source.
+        const field = lang === "en" && l.en?.trim() ? "en" : "text";
+        const was = lineText(l, lang);
+        if (!was.includes(quote)) return false;
         // replacer FUNCTION, not the string: in String.replace a string replacement
         // interprets $-sequences ($&, $', $`), so a fix containing them would write
         // something other than what the Apply button showed
-        const text = l.text.replace(quote, () => fix); // first occurrence — the one the mark underlines
-        get().editLine(pid, id, text);
+        const text = was.replace(quote, () => fix); // first occurrence — the one the mark underlines
+        get().editLine(pid, id, text, field);
         const key = `${pid}:${id}`;
         const cur = get().aiFlags[key];
         if (!cur) return true; // the line was repaired; there was simply no mark to retire

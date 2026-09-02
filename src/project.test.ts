@@ -267,16 +267,15 @@ test("marks bought under an English reading are the marks that come back", async
   expect(fromSource.split("vague degree").length - 1).toBe(1);
 });
 
-// The Apply-fix button announced "Fixed: X is now Y" whatever happened. On a
-// line being read as a translation the store refuses (a repair rewrites what
-// was SPOKEN and must never write the translation over it) — so the app was
+// The Apply-fix button announced "Fixed: X is now Y" whatever happened. A mark
+// whose quote an edit has since moved cannot be applied — so the app was
 // telling the researcher it had changed the transcript when it had not.
 test("a repair says whether it actually happened", () => {
   const st = useStore.getState();
   const line = st.transcripts.SCAN.lines[0];
   expect(line.text).toBe("\u62e1\u5927\u3057\u307e\u3059");
 
-  // a quote that is not in the spoken line — an English mark, or one an edit moved
+  // a quote that is not in the text being read — one an edit has moved
   expect(st.applyFix("SCAN", line.id, "really close", "very close")).toBe(false);
   expect(useStore.getState().transcripts.SCAN.lines[0].text).toBe("\u62e1\u5927\u3057\u307e\u3059");
 
@@ -673,4 +672,28 @@ test("tabs, pins and the active view come back as they went out", () => {
   s().openProject(parseProject(s().exportProject()));
   expect({ tabs: s().tabs, pinned: s().pinnedTabs, active: s().active,
     parked: s().extSegRows.length, segs: s().segments.length }).toEqual(before);
+});
+
+// The scan reads through viewLines, so a mark on a translated line quotes the
+// TRANSLATION. The repair used to write the spoken field, so it could never
+// find the quote and the Apply button was disabled outright — the researcher
+// was told to switch to Source to correct words that are only in the English.
+test("a repair under an English reading corrects the translation, not the source", async () => {
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text,text_en\n" +
+    "1,0:01,P,拡大します,I trying to understand fame below.\n" +
+    "2,0:05,P,はい,\n",
+  ], "FIX.csv")]);
+  const line = () => useStore.getState().transcripts.FIX.lines[0];
+
+  expect(useStore.getState().applyFix("FIX", 1, "fame below", "map below", "en")).toBe(true);
+  expect(line().en).toBe("I trying to understand map below.");
+  expect(line().text).toBe("拡大します");   // the spoken line is untouched
+
+  // an untranslated line read in English shows its source, so that IS the text
+  // being read — the repair lands on the source and not on an empty `en`
+  expect(useStore.getState().applyFix("FIX", 2, "はい", "いいえ", "en")).toBe(true);
+  const two = () => useStore.getState().transcripts.FIX.lines[1];
+  expect(two().text).toBe("いいえ");
+  expect(two().en).toBeUndefined();
 });
