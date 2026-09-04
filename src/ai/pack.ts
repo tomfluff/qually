@@ -54,14 +54,23 @@ import { estimateTokens } from "./openai";
     becomes a twelve-character placeholder). `context` reproduces the
     "[context] " speaker prefix that renderSuggestChunk adds. */
 export const lineSize = (
-  l: { id: number; speaker: string; text: string },
+  l: { id: number; speaker: string; text: string; coded?: string[] },
   r?: { redact: (s: string) => string },
   context?: Set<string>,
 ): number => {
   const red = r ? r.redact.bind(r) : (s: string) => s;
   const tag = context?.has(l.speaker.trim()) ? "[context] " : "";
-  return estimateTokens(`${l.id}\t${tag}${red(l.speaker)}\t${red(l.text)}`);
+  return estimateTokens(`${l.id}\t${tag}${red(l.speaker)}\t${red(l.text)}${codedField(l)}`);
 };
+
+/** The optional fourth field of a transcript line: the codes the researcher has
+    already given it. Set only by Find's "coded excerpts only" scope, where the
+    lines sent are exactly the coded ones and the model is told what they carry —
+    so it can propose what they do NOT yet carry. Code names go plain, as the
+    codebook's do. Absent means the field is not rendered at all, so every run
+    that does not use it sends the bytes it always sent. */
+export const codedField = (l: { coded?: string[] }) =>
+  l.coded?.length ? `\t[already coded: ${l.coded.join("; ")}]` : "";
 
 export interface PackOpts {
   /** soft target: estimated tokens of ITEMS per request (the fixed part rides on top) */

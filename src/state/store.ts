@@ -68,7 +68,10 @@ export interface Answer {
 // translation earns the same trail as correcting a transcription, because in a
 // study read in English the translation IS what the excerpts quote.
 export interface Line { id: number; ts: string; speaker: string; text: string; end?: string;
-  orig?: string; en?: string; enOrig?: string; src?: string; }
+  orig?: string; en?: string; enOrig?: string; src?: string;
+  /** never stored: set on a COPY by Find's coded-excerpts scope, read by the AI
+      renderers (see ai/pack.ts codedField) */
+  coded?: string[]; }
 
 /** A transcript's lines in the language the study is being read in.
     Every surface that turns lines into evidence — an excerpt, an export, an AI

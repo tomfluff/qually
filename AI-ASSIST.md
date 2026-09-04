@@ -76,6 +76,9 @@ What in a coded segment actually carries its code.
 - **Display (decided):** Browse excerpts emphasise the grounding quotes;
   segment popover shows them. The reading view is untouched.
 - **Cost:** small — excerpts only.
+- **Which codes** (2026-09-04): the same picker Find and Draft definitions use,
+  preselected with the codes ticked in the Codebook. It was every code or
+  nothing, and grounding two codes meant paying for the whole book.
 
 ## F2 — Merge near-duplicate codes (second) — SHIPPED
 
@@ -503,11 +506,25 @@ nowhere to put a code, a theme, a label or a reason, so it cannot volunteer one.
 Both modes report `rejected` — an answer the guard could not use is not the same
 as an empty transcript.
 
+### Scope, twice (2026-09-04)
+
+- **Set-aside codes** are out of the list by default and can be let in with one
+  checkbox — "take everything I set aside and look for more of it" is a real
+  question. On by default when the dialog was opened ON a set-aside code. Hits
+  land under the code as candidates; the code stays set aside.
+- **Coded excerpts only**: instead of whole transcripts, only the lines inside
+  an accepted excerpt, each sent once, carrying a fourth field
+  `[already coded: a; b]` (`codedField` in `ai/pack.ts`; the prompt says what
+  it means). "What else applies to what I have coded?" Uncoded lines never
+  leave the device, and they join `omitted`, so a hit cannot span one.
+  Candidates and rejections neither admit a line nor label it.
+
 ### Where it opens
 
 The Assist tab's Suggest panel (beside *AI code suggestion*, which reads the
-other axis), and **Find more of this…** in any code's own menu, which preselects
-that code. The menu route goes through `FindHost`, which captures the opener
+other axis), **Find more of this…** in any code's own menu, which preselects
+that code, and **Find more excerpts…** in the Codebook's AI menu, which
+preselects the codes ticked there — set-aside ones included. The menu route goes through `FindHost`, which captures the opener
 before the dialog attaches — the same pattern and the same reason as
 `DefineHost`. Capturing is not enough on its own: opened from a code's menu the
 opener IS the menu item, which unmounts with the menu in the same commit this

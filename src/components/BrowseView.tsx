@@ -16,6 +16,7 @@ import { openColorPicker } from "../colorPicker";
 import { DefLine } from "./CodeDef";
 import { groundHash } from "../ai/ground";
 import { GroundModal } from "./GroundModal";
+import { openFind } from "./FindModal";
 import { DescribeModal } from "./DescribeModal";
 import { useToggleMenu, useDismiss, useMenuArrows, useMenuFocus } from "../usePopover";
 import { Icon, countIconSize } from "./Icon";
@@ -308,6 +309,7 @@ export function BrowseView() {
           <input type="search" placeholder="Filter codes…" value={filter}
             onChange={(e) => setFilter(e.target.value)} />
           <CbAiMenu onGround={() => setGroundOpen(true)} onDescribe={() => setDescribeOpen(true)}
+            onFind={() => openFind(chosen)}
             fontSize={sidebarFontSize} />
           <CbViewMenu showRejected={showRejected} setShowRejected={setShowRejected}
             facets={facets} setFacets={changeFacets} ui={uiGround} setUi={setUi}
@@ -605,7 +607,7 @@ export function BrowseView() {
       </div>
       {menu && <CodeMenu code={menu.code} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />}
       {recolor && <RecolorConfirm x={recolor.x} y={recolor.y} onClose={() => setRecolor(null)} />}
-      {groundOpen && <GroundModal onClose={() => setGroundOpen(false)} />}
+      {groundOpen && <GroundModal initial={chosen.length ? chosen : undefined} onClose={() => setGroundOpen(false)} />}
       {describeOpen && <DescribeModal initial={chosen.length ? chosen : undefined} onClose={() => setDescribeOpen(false)} />}
     </div>
   );
@@ -731,8 +733,8 @@ function CodeTitle({ code, defOpen, takeFocus, onFocused, onRenamed }: {
 
 // The codebook's AI actions, in a sparkle menu that mirrors the transcript
 // sidebar's AI menu (same icon + chevron) — grounding and drafted definitions.
-function CbAiMenu({ onGround, onDescribe, fontSize }: {
-  onGround: () => void; onDescribe: () => void; fontSize: number;
+function CbAiMenu({ onGround, onDescribe, onFind, fontSize }: {
+  onGround: () => void; onDescribe: () => void; onFind: () => void; fontSize: number;
 }) {
   const { open, setOpen, btnRef, menuRef, arrows } = useToggleMenu();
   return (
@@ -749,6 +751,13 @@ function CbAiMenu({ onGround, onDescribe, fontSize }: {
           </button>
           <button role="menuitem" onClick={() => { onDescribe(); setOpen(false); }}>
             <Icon name="sparkle" size={fontSize} /> Draft definitions
+          </button>
+          {/* the corpus-wide search a code's own menu offers as "Find more of
+              this…" — here for the codes ticked in the list, set-aside ones
+              included, because "more of everything I set aside" is a question
+              only this view can ask */}
+          <button role="menuitem" onClick={() => { onFind(); setOpen(false); }}>
+            <Icon name="sparkle" size={fontSize} /> Find more excerpts…
           </button>
         </div>
       )}

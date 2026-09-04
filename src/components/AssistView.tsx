@@ -1340,12 +1340,16 @@ function pendingSubs(
 function ContextSide({ onRun }: { onRun: (pid: string) => void }) {
   const transcripts = useStore((s) => s.transcripts);
   const aiFlags = useStore((s) => s.aiFlags);
+  const aiLog = useStore((s) => s.aiLog);
   const lang = useStore((s) => s.ui.lang);
   const tabs = useStore((s) => s.tabs);
   const pids = useMemo(() => [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))]
     .filter((p) => transcripts[p]), [tabs, transcripts]);
   const pending = useMemo(() => pendingSubs(transcripts, aiFlags, lang, pids), [transcripts, aiFlags, lang, pids]);
   const n = (pid: string) => pending.filter((x) => x.pid === pid).length;
+  // when this transcript was last read — the row has to say so, or the only
+  // way to learn whether a file has been processed is to open the gate on it
+  const last = (pid: string) => aiLog.filter((c) => c.task === "contextualize" && c.pid === pid && !c.outcome).at(-1)?.at.slice(0, 10);
   return (
     <>
       <button className="btn groundBtn" onClick={() => onRun("")}
@@ -1355,11 +1359,13 @@ function ContextSide({ onRun }: { onRun: (pid: string) => void }) {
       {pids.length === 0 ? (
         <div className="bSideNote">No transcripts yet. Import one and its references can be resolved.</div>
       ) : pids.map((p) => (
-        <div key={p} className="nLens still">
-          <span className="nName">{p}</span>
-          <span className="cnt">{n(p) || "—"}</span>
+        <div key={p} className={"nLens still" + (last(p) ? "" : " none")}>
+          <span className="nName">{p}
+            <em className="nWhen">{last(p) ? `read ${last(p)}` : "not read yet"}</em>
+          </span>
+          <span className="cnt" title={n(p) ? `${n(p)} awaiting review` : "nothing awaiting review"}>{n(p) || "—"}</span>
           <button className="rowRun" aria-label={`AI contextualize ${p}`}
-            title={`AI contextualize ${p}`} onClick={() => onRun(p)}>
+            title={`AI contextualize ${p}${last(p) ? ` · last read ${last(p)}` : " · not read yet"}`} onClick={() => onRun(p)}>
             <Icon name="sparkle" size={14} />
           </button>
         </div>

@@ -27,7 +27,7 @@
 // (the worklist, accept/reject, rejection memory, undo, exports, the ledger)
 // works without knowing this feature happened.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { linesOf, liveCodes, useStore, guessQuiet, type Line } from "../state/store";
+import { linesOf, liveCodes, parkedCodes, useStore, guessQuiet, type Line } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError, runKey } from "../ai/openai";
 import { redactor } from "../ai/redact";
@@ -103,6 +103,15 @@ export function FindModal({ initialCodes = [], onClose }: {
   // from before anything is sent.
   const [pids, setPids] = useState<Set<string>>(() => new Set(Object.keys(transcripts)));
   const [focus, setFocus] = useState<Set<string>>(() => new Set(initialCodes));
+  // Set-aside codes are out of the working codebook, and out of this list by
+  // default — but "take everything I set aside and look for more of it" is a
+  // real question, so they can be let in. On by default when the caller opened
+  // this ON a set-aside code, or every code it named would read as "removed".
+  const [withParked, setWithParked] = useState(() => initialCodes.some((c) => codebook[c]?.parked));
+  // Where in a transcript to read: the whole of it, or only the lines already
+  // inside an accepted excerpt — sent once each, whatever they carry, with
+  // their codes named — for "what else applies to what I have coded?"
+  const [scope, setScope] = useState<"all" | "coded">("all");
   const [codeQuery, setCodeQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [name, setName] = useState("");
@@ -196,7 +205,8 @@ export function FindModal({ initialCodes = [], onClose }: {
   // with no definition and no exemplars, and every proposal it produced was
   // then thrown away by the hasOwn guard. Money spent, nothing added, counts
   // wrong. Only live names are sent; the ones that vanished are named below.
-  const live = useMemo(() => new Set(liveCodes(codebook)), [codebook]);
+  const live = useMemo(() => new Set(withParked ? Object.keys(codebook) : liveCodes(codebook)), [codebook, withParked]);
+  const parked = useMemo(() => parkedCodes(codebook), [codebook]);
   const picked = useMemo(() => [...focus].filter((c) => live.has(c)), [focus, live]);
   const stale = useMemo(() => [...focus].filter((c) => !live.has(c)), [focus, live]);
 
@@ -211,12 +221,29 @@ export function FindModal({ initialCodes = [], onClose }: {
 
   // Per transcript: the lines that will actually be sent, and how they pack.
   const perPid = useMemo(() => chosen.map((p) => {
-    const lines = linesOf(transcripts, lang, p).filter((l) => !excluded.has(l.speaker.trim()));
+    const everyLine = linesOf(transcripts, lang, p);
+    // coded scope: only lines inside an ACCEPTED excerpt, each once, carrying
+    // the names of every code over it (see codedField). Candidates and
+    // rejections are not evidence of what a line is about, so they neither
+    // admit a line nor label it.
+    const codedBy = new Map<number, string[]>();
+    if (scope === "coded") for (const sg of segments) {
+      if (sg.pid !== p || sg.status !== "accepted") continue;
+      for (let id = sg.start; id <= sg.end; id++) {
+        const have = codedBy.get(id) ?? [];
+        if (!have.includes(sg.code)) codedBy.set(id, [...have, sg.code]);
+      }
+    }
+    const lines = everyLine
+      .filter((l) => !excluded.has(l.speaker.trim()) && (scope === "all" || codedBy.has(l.id)))
+      .map((l) => (scope === "coded" ? { ...l, coded: codedBy.get(l.id) } : l));
     // A transcript where every remaining speaker is context-only cannot yield
     // anything: the sanitizer drops a hit made only of background speech, so the
     // request would be paid for and its answer thrown away. Not sent at all.
-    const omitted = new Set(linesOf(transcripts, lang, p)
-      .filter((l) => excluded.has(l.speaker.trim())).map((l) => l.id));
+    // every id of the transcript that is NOT going: a withheld speaker's lines,
+    // and in coded scope every uncoded line too — a range may span neither
+    const sent = new Set(lines.map((l) => l.id));
+    const omitted = new Set(everyLine.filter((l) => !sent.has(l.id)).map((l) => l.id));
     const usable = lines.some((l) => !context.has(l.speaker.trim()));
     if (!usable) return { pid: p, lines: [] as Line[], chunks: [] as Line[][], tok: 0, usable, omitted };
     // Withholding a speaker leaves GAPS, and a range must never span one — that
@@ -234,7 +261,7 @@ export function FindModal({ initialCodes = [], onClose }: {
       ? estimateSuggestTokens(c, codes, red, context)
       : estimateFindTokens(c, question, red, context)), 0);
     return { pid: p, lines, chunks, tok, usable, omitted };
-  }), [chosen, transcripts, lang, excluded, mode, red, context, codes, question]);
+  }), [chosen, transcripts, lang, excluded, mode, red, context, codes, question, scope, segments]);
 
   const requests = requestCount(perPid);
   const inTok = perPid.reduce((n, x) => n + x.tok, 0);
@@ -276,11 +303,11 @@ export function FindModal({ initialCodes = [], onClose }: {
       e.segs++; e.pids.add(s.pid);
       by.set(s.code, e);
     }
-    return liveCodes(codebook).map((name: string) => ({
+    return [...live].map((name: string) => ({
       name, def: codebook[name]?.def ?? "",
       segs: by.get(name)?.segs ?? 0, pids: by.get(name)?.pids.size ?? 0,
     }));
-  }, [segments, transcripts, codebook]);
+  }, [segments, transcripts, codebook, live]);
 
   const shown = useMemo(() => {
     const q = codeQuery.trim().toLowerCase();
@@ -365,7 +392,7 @@ export function FindModal({ initialCodes = [], onClose }: {
             // deleted, so the check passed and a candidate landed for a code
             // that is no longer in the book. Parked counts as gone too — a
             // proposal for a code you set aside is one you asked not to see.
-            if (!Object.hasOwn(st.codebook, p.code) || st.codebook[p.code]?.parked) { skipped++; continue; }   // renamed or deleted mid-run
+            if (!Object.hasOwn(st.codebook, p.code) || (!withParked && st.codebook[p.code]?.parked)) { skipped++; continue; }   // renamed or deleted mid-run
             if (overlapsExisting(st.segments, t.pid, p)) { skipped++; continue; }
             st.addSegment(t.pid, p.startLine, p.endLine, p.code, by, "candidate");
             added++;
@@ -497,6 +524,14 @@ export function FindModal({ initialCodes = [], onClose }: {
                       {focus.size > 0 && <span className="tMeta">{focus.size} picked
                         <span className="sr-only"> codes</span></span>}
                     </CodePickBar>
+                    {parked.length > 0 && (
+                      <label className="ai-spk" style={{ margin: "4px 0 6px" }}>
+                        <input type="checkbox" checked={withParked} disabled={busy}
+                          onChange={() => setWithParked((v) => !v)} />
+                        <span>Include the {parked.length} set-aside code{parked.length === 1 ? "" : "s"}{" "}
+                          <em>hits land under them as candidates, still set aside</em></span>
+                      </label>
+                    )}
                   <div className="ai-cbox" role="group" aria-label="Codes to look for">
                     {shown.length === 0 && (
                       <p className="settings-note" style={{ margin: "6px 8px" }}>
@@ -543,6 +578,24 @@ export function FindModal({ initialCodes = [], onClose }: {
             )}
 
             <div className="eyebrow">Where to look</div>
+            <div className="segmented findMode" role="group" aria-label="How much of each transcript to read">
+              <button className={"seg" + (scope === "all" ? " on" : "")}
+                aria-pressed={scope === "all"} disabled={busy} onClick={() => setScope("all")}>
+                Whole transcripts
+              </button>
+              <button className={"seg" + (scope === "coded" ? " on" : "")}
+                aria-pressed={scope === "coded"} disabled={busy} onClick={() => setScope("coded")}
+                title="Only the lines already inside an accepted excerpt, each sent once with the codes it carries">
+                Coded excerpts only
+              </button>
+            </div>
+            {scope === "coded" && (
+              <p className="settings-note">
+                Only lines inside an accepted excerpt are sent, each once, with the codes it already
+                carries named — for “what else applies to what I have coded?”. Uncoded lines never
+                leave the device, and a hit cannot span one.
+              </p>
+            )}
             <div className="ai-tlist" role="group" aria-label="Transcripts to search">
               {all.map((p) => {
                 const row = perPid.find((x) => x.pid === p);
@@ -562,7 +615,7 @@ export function FindModal({ initialCodes = [], onClose }: {
                       /* every speaker in it is context-only or withheld, so the
                          guard would drop any hit — sending it would cost money
                          for an answer that cannot be used */
-                      : <em>nothing to search</em>}
+                      : <em>{scope === "coded" && !row?.lines.length ? "no coded excerpts" : "nothing to search"}</em>}
                   </span>
                 </label>
                 );
@@ -646,9 +699,10 @@ export function FindModal({ initialCodes = [], onClose }: {
                   : mode === "codes" && !focus.size ? "Pick at least one code"
                     : mode === "question" && !named ? "Name it and describe it"
                       : !chosen.length ? "Pick at least one transcript"
-                        /* transcripts ARE picked; every speaker in them is
-                           context-only, so nothing in them can be a hit */
-                        : "Set at least one speaker to searched"}
+                        : scope === "coded" && !sentLines ? "No coded excerpts in these transcripts"
+                          /* transcripts ARE picked; every speaker in them is
+                             context-only, so nothing in them can be a hit */
+                          : "Set at least one speaker to searched"}
             </button>
             <button ref={stopRef} className="btn" onClick={() => { abort.current?.abort(); onClose(); }}>
               {busy ? "Stop" : "Cancel — send nothing"}

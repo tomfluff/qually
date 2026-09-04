@@ -2,7 +2,9 @@
 // Copyright (C) 2026 Yotam Sechayk
 // The trust boundary for a corpus-wide question search. It never becomes a
 // coding, and it can never point at a line it was not shown.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
+import { renderWindow } from "./suggest";
+import { lineSize } from "./pack";
 import { sanitizeFindReply, renderQuestion, renderFindWindow, renderFindChunk } from "./find";
 import { redactor } from "./redact";
 import type { Line } from "../state/store";
@@ -86,4 +88,16 @@ describe("a range must not span speech that was withheld", () => {
   it("drops a hit that starts on a withheld line", () => {
     expect(sanitizeFindReply(sent, [hit(11, 12)], undefined, omitted)).toEqual([]);
   });
+});
+
+// Find's "coded excerpts only" scope: a line carries the codes it already has
+// as a fourth field, and a line without the field renders exactly as before
+test("codedField: a coded line names its codes; an uncoded line is byte-identical to before", () => {
+  const r = redactor([]);
+  const plain: Line = { id: 4, ts: "", speaker: "P", text: "it was slow" };
+  const coded: Line = { ...plain, coded: ["pace", "frustration"] };
+  expect(renderFindWindow([plain], r)).toBe("TRANSCRIPT:\n4\tP\tit was slow");
+  expect(renderFindWindow([coded], r)).toBe("TRANSCRIPT:\n4\tP\tit was slow\t[already coded: pace; frustration]");
+  expect(renderWindow([coded], r)).toContain("\t[already coded: pace; frustration]");
+  expect(lineSize(coded, r)).toBeGreaterThan(lineSize(plain, r));
 });

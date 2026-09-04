@@ -138,6 +138,8 @@ button.bCtxChip:hover { color:var(--fg); border-color:var(--muted); }
 .nDot { display:inline-block; vertical-align:middle; width:.75em; height:.75em;
   border-radius:.22em; flex-shrink:0;}
 .nName { flex:1; font-weight:500; }
+/* a second, quieter line under a row's name: when it was last read */
+.nName .nWhen { display:block; font-weight:400; font-size:.85em; color:var(--muted); font-style:normal; }
 .nLens .cnt { align-self:center; }
 /* per-transcript run button in the Suggest sidebar. Always rendered, never
    hover-revealed: a control that appears on hover is unfindable at magnification

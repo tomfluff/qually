@@ -15,8 +15,13 @@ import { chunksOfItems, renderGroundChunk, estimateGroundTokens, groundChunk, gr
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, LangFact, ModelPicker } from "./AiModal";
+import { CodePickBar, CodePickRow, type CodePick } from "./CodePicker";
+import { sortCodes, type SortBy } from "../codeStats";
 
-export function GroundModal({ onClose }: { onClose: () => void }) {
+export function GroundModal({ initial, onClose }: {
+  /** the codes ticked in the Codebook when this opened; absent = every code */
+  initial?: string[]; onClose: () => void;
+}) {
   const segments = useStore((s) => s.segments);
   const transcripts = useStore((s) => s.transcripts);
   const lang = useStore((s) => s.ui.lang);
@@ -44,15 +49,40 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
   // re-ground: ignore existing records and run everything again (e.g. after a
   // prompt change — old results don't invalidate by hash, only by content)
   const [reground, setReground] = useState(false);
+  // Which codes to ground. It was every code or nothing, and "ground these
+  // two" — a code just defined, a code under review — meant paying for the
+  // whole book. Same picker as Find and Draft definitions; null = all.
+  const [checked, setChecked] = useState<Set<string> | null>(initial?.length ? new Set(initial) : null);
+  const [sortBy, setSortBy] = useState<SortBy>("name");
+  const [codeQuery, setCodeQuery] = useState("");
+  const rows = useMemo<CodePick[]>(() => {
+    const by = new Map<string, { segs: number; pids: Set<string> }>();
+    for (const sg of segments) {
+      if (sg.status !== "accepted" || !transcripts[sg.pid]) continue;
+      const e = by.get(sg.code) ?? { segs: 0, pids: new Set<string>() };
+      e.segs++; e.pids.add(sg.pid); by.set(sg.code, e);
+    }
+    // only codes with evidence: a code with no accepted excerpt has nothing to ground
+    return [...by.keys()].map((name) => ({
+      name, def: codebook[name]?.def ?? "", segs: by.get(name)!.segs, pids: by.get(name)!.pids.size,
+    }));
+  }, [segments, transcripts, codebook]);
+  const shownRows = useMemo(() => {
+    const q = codeQuery.trim().toLowerCase();
+    const stats = Object.fromEntries(rows.map((r) => [r.name, { segs: r.segs, pids: r.pids }]));
+    return sortCodes(rows.map((r) => r.name), stats, sortBy).map((n) => rows.find((r) => r.name === n)!)
+      .filter((r) => !q || checked?.has(r.name) || r.name.toLowerCase().includes(q));
+  }, [rows, codeQuery, checked, sortBy]);
+  const on = checked ?? new Set(rows.map((r) => r.name));
 
   const eligible = useMemo<GroundItem[]>(() => segments
-    .filter((s) => s.status === "accepted" && transcripts[s.pid])
+    .filter((s) => s.status === "accepted" && transcripts[s.pid] && (!checked || checked.has(s.code)))
     .map((s) => {
       const excerpt = segExcerpt(s, linesOf(transcripts, lang, s.pid)).excerpt;
       return { sid: s.sid, code: s.code, def: codebook[s.code]?.def ?? "", excerpt };
     })
     .filter((it) => !!it.excerpt),
-  [segments, transcripts, lang, codebook]);
+  [segments, transcripts, lang, codebook, checked]);
   const alreadyGrounded = useMemo(
     () => eligible.filter((it) => aiGrounds[it.sid]?.hash === groundHash(it.code, it.excerpt)).length,
     [eligible, aiGrounds]);
@@ -177,6 +207,31 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
                 </div>
               )}
               <ModelPicker modelId={modelId} onPick={setModelId} />
+              {rows.length > 0 && (
+                <>
+                  <div className="eyebrow">Which codes</div>
+                  <input className="findName" value={codeQuery} disabled={busy}
+                    placeholder="Filter codes…" aria-label="Filter the code list by name"
+                    onChange={(e) => setCodeQuery(e.target.value)} />
+                  <CodePickBar sortBy={sortBy} onSort={setSortBy} disabled={busy}
+                    live={codeQuery.trim() ? `${shownRows.length} codes shown` : undefined}
+                    onPick={[
+                      { label: "All", run: () => setChecked(null) },
+                      { label: "None", run: () => setChecked(new Set()) },
+                    ]}>
+                    <span className="tMeta">{on.size} of {rows.length} picked<span className="sr-only"> codes</span></span>
+                  </CodePickBar>
+                  <div className="ai-cbox" role="group" aria-label="Codes to ground">
+                    {shownRows.map((c) => (
+                      <CodePickRow key={c.name} code={c} color={codebook[c.name]?.color ?? ""}
+                        on={on.has(c.name)} disabled={busy} onToggle={() => setChecked((cur) => {
+                          const n = new Set(cur ?? rows.map((r) => r.name));
+                          n.has(c.name) ? n.delete(c.name) : n.add(c.name); return n;
+                        })} />
+                    ))}
+                  </div>
+                </>
+              )}
               {alreadyGrounded > 0 && (
                 <label className="ai-spk" style={{ marginBottom: 8 }}>
                   <input type="checkbox" checked={reground} onChange={() => setReground((v) => !v)} />
@@ -196,9 +251,11 @@ export function GroundModal({ onClose }: { onClose: () => void }) {
               )}
               {todo.length === 0 ? (
                 <p className="about-lede" style={{ marginTop: 10 }}>
-                  Every accepted segment of the loaded transcripts already has a current
-                  grounding. Tick re-ground above to run them again anyway — or recode,
-                  resize, or edit a segment to make it eligible.
+                  {!on.size ? "Pick at least one code."
+                    : !eligible.length ? "The picked codes have no accepted excerpts to ground."
+                      : <>Every accepted segment of the picked codes already has a current
+                        grounding. Tick re-ground above to run them again anyway — or recode,
+                        resize, or edit a segment to make it eligible.</>}
                 </p>
               ) : (
                 <>
