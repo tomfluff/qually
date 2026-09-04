@@ -49,19 +49,24 @@ function NoticeToggle() {
   // on every re-render (and this component re-renders per flag write during a scan)
   const closeMenu = useCallback(() => setMenu(false), []);
   useDismiss(ref, closeMenu, { enabled: menu });
-  // which lenses actually have marks here — the dropdown lists only these
-  // (transcription included: its errors are toggleable from the menu too)
-  const presentLenses = useMemo(() => {
+  // which lenses actually have marks here. The two repair kinds are ALWAYS
+  // listed, first, transcription then substitution — a fixed slot that reads
+  // as one group, and an absent one says why it is grey — while a noticing
+  // lens appears only once it has marks.
+  const present = useMemo(() => {
     const p = new Set<string>();
     for (const [k, v] of Object.entries(aiFlags))
       if (k.startsWith(`${active}:`)) for (const sp of v.spans) p.add(spanLens(sp));
-    // the substitution lens rides after transcription: both are repairs, and
-    // the divider below groups them
-    return [...LENSES, SUBST].filter((l) => p.has(l.id));
+    return p;
   }, [aiFlags, active]);
+  const repairs = [LENSES[0], SUBST]; // transcription, substitution
+  const presentLenses = useMemo(
+    () => [...repairs, ...LENSES.filter((l) => !isRepair({ lens: l.id }) && present.has(l.id))],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- repairs is a constant pair
+    [present]);
   // render when ANY marks exist — a transcription-only transcript still needs the
   // dropdown (its checkbox is the only way BACK if transcription was hidden)
-  if (!presentLenses.length) return null;
+  if (!present.size) return null;
   const toggleLens = (id: string) =>
     useStore.getState().setUi({
       hiddenLenses: hiddenLenses.includes(id)
@@ -82,16 +87,21 @@ function NoticeToggle() {
       {menu && (
         <div className="noticemenu" role="group" aria-label="Observations shown"
           style={{ fontSize: sidebarFontSize }}>
-          {presentLenses.map((l, i) => {
+          {presentLenses.map((l) => {
             // repairs (transcription errors, substitutions) ignore the eye (it
             // hides NOTICINGS) — their checkbox stays live even while reading blind
             const t = isRepair({ lens: l.id });
-            const on = t ? true : show; // NOT "active" — that's the project id above
+            const here = present.has(l.id);
+            const on = t ? here : show; // NOT "active" — that's the project id above
             // lensdiv: a repair is a different KIND of mark (an edit to apply, not
-            // a noticing) — a quiet divider separates the first one from the lenses
-            const first = t && !presentLenses.slice(0, i).some((x) => isRepair({ lens: x.id }));
+            // a noticing) — a quiet divider under the last one keeps the two apart
+            const last = t && l === repairs[repairs.length - 1];
+            const why = t && !here
+              ? (l.id === "transcription" ? "No transcription errors marked — run an AI observation scan first"
+                : "No substitutions proposed — run AI contextualize first")
+              : undefined;
             return (
-              <label key={l.id} className={(on ? "" : "off") + (first ? " lensdiv" : "")}>
+              <label key={l.id} className={(on ? "" : "off") + (last ? " lensdiv" : "")} title={why}>
                 <input type="checkbox" disabled={!on}
                   checked={on && !hiddenLenses.includes(l.id)}
                   onChange={() => toggleLens(l.id)} />
