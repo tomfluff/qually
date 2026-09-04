@@ -21,6 +21,7 @@
 // so a v1 file written before this existed still loads (openProject re-guesses).
 import type { Ai, AiCall, Answer, Decision, DecisionSource, Line, LineFlags, Segment, SpeakerWeight } from "./state/store";
 import type { GroundRec } from "./ai/ground";
+import { isRepair } from "./ai/flag";
 import type { Marker } from "./markers";
 
 export const FORMAT = "qually-project";
@@ -33,7 +34,7 @@ export const FORMAT = "qually-project";
 // v3 added ledger kinds for verdicts and discards on proposed codings and
 // sections. A v2 build reads every AI ledger row as a codebook proposal, so it
 // would turn those rows into a false account of codebook consolidation.
-export const VERSION = 3;
+export const VERSION = 4;
 
 export interface Project {
   /** What parseProject had to throw away to make this file loadable. Empty for
@@ -97,6 +98,8 @@ export interface Project {
   }[];
   /** the F7 study brief: "" is the project default, a pid key overrides it */
   studyBrief?: Record<string, string>;
+  /** the F9 contextualize brief, same keying */
+  substBrief?: Record<string, string>;
   codePlan?: { code: string; action: "rename" | "merge" | "remove"; newName?: string; into?: string; rationale: string }[];
   // the full cluster shape, declared: it round-trips verbatim, and a type that
   // lists half the fields tells the next reader the other half is not saved
@@ -129,7 +132,7 @@ export function statsOf(p: Project): ProjectStats {
     .reduce((n, t) => n + t.lines.reduce((m, l) =>
       m + (l.orig !== undefined ? 1 : 0) + (l.enOrig !== undefined ? 1 : 0), 0), 0);
   const notices = Object.values(p.aiFlags ?? {})
-    .reduce((n, f) => n + f.spans.filter((s) => (s.lens ?? "transcription") !== "transcription").length, 0);
+    .reduce((n, f) => n + f.spans.filter((s) => !isRepair(s)).length, 0);
   return {
     transcripts: Object.keys(p.transcripts).length,
     lines, segments: p.segments.length, codes: Object.keys(p.codebook).length,
@@ -430,6 +433,9 @@ export function parseProject(text: string): Project {
     // whatever the transcripts are called) but values must be strings
     studyBrief: p.studyBrief && typeof p.studyBrief === "object" && !Array.isArray(p.studyBrief)
       ? Object.fromEntries(Object.entries(p.studyBrief).filter(([, v]) => typeof v === "string"))
+      : {},
+    substBrief: p.substBrief && typeof p.substBrief === "object" && !Array.isArray(p.substBrief)
+      ? Object.fromEntries(Object.entries(p.substBrief).filter(([, v]) => typeof v === "string"))
       : {},
     codePlan: Array.isArray(p.codePlan)
       ? p.codePlan.filter((a): a is NonNullable<Project["codePlan"]>[number] =>

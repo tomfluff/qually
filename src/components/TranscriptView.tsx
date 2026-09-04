@@ -17,7 +17,7 @@ import { seekVideo, loopLine, loopWindow, hasVideo, setPlaybackRate } from "../v
 import { useDismiss, useClampToViewport, useMenuArrows, useMenuFocus, useMenuToggleFocus } from "../usePopover";
 import { CreatableCombobox } from "./CreatableCombobox";
 import { stretchColorOf, stretchDims, visible, evidence, pendingAt, type Stretch } from "../stretches";
-import { hashLine, lensOf, spanLens, type Flag } from "../ai/flag";
+import { hashLine, lensOf, spanLens, isRepair, type Flag } from "../ai/flag";
 import type { Line, SpeakerWeight } from "../state/store";
 import { scopeFilter } from "../search";
 import { withSubs, SubText, subSpans } from "../markup";
@@ -84,7 +84,7 @@ function renderFlagged(text: string, spans: Flag[], lineId: number): ReactNode {
           data-tip={h.span.fix ? `${h.span.reason} → “${h.span.fix}”` : h.span.reason}
           ><SubText text={text.slice(h.at, h.at + h.len)} from={h.at} spans={subs} /></span>
       : <span key={k} className={`ainote lens-${spanLens(h.span)}`} style={{ "--lens-c": lens?.color } as CSSProperties}
-          data-ai={ai} data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason}`}
+          data-ai={ai} data-tip={`${lens?.label ?? spanLens(h.span)} — ${h.span.reason}${h.span.fix ? ` → “${h.span.fix}”` : ""}`}
           onClick={(e) => {
             if (!e.altKey) return; // plain click opens the popover (delegated); alt-click stays the dismiss shortcut
             e.stopPropagation();
@@ -661,7 +661,7 @@ export function TranscriptView() {
       // hiding "AI noticings" to read blind shouldn't also hide repair marks
       const spans = f.spans.filter((s) => {
         const lens = spanLens(s);
-        if (lens === "transcription") return !hiddenLenses.includes("transcription");
+        if (isRepair(s)) return !hiddenLenses.includes(lens);
         return showNotices && !hiddenLenses.includes(lens);
       });
       if (spans.length) m.set(l.id, spans);

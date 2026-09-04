@@ -145,6 +145,10 @@ through the project file, where they ride with everything else.
 - **Sections:** ride in the project file, and export as `sections.csv` (alone or
   in the CSV bundle) — see above. The study brief that AI proposals were made
   against rides in the project file too (`studyBrief`).
+- **Substitutions:** AI-proposed `[bracketed]` rewrites are marks (in `aiFlags`,
+  lens `substitute`) until you write them in; a written-in line keeps its
+  transcribed text in `original` like any other edit. The brief describing the
+  conditions rides in the project file (`substBrief`, keyed like `studyBrief`).
 
 ## Convert any transcript with AI
 

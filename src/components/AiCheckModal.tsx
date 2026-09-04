@@ -5,7 +5,7 @@ import { linesOf, useStore } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError } from "../ai/openai";
 import { redactor } from "../ai/redact";
-import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine, spanLens } from "../ai/flag";
+import { LENSES, chunksOf, renderChunk, estimateChunkTokens, scanChunk, hashLine, isRepair } from "../ai/flag";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, LangFact, ModelPicker } from "./AiModal";
@@ -75,7 +75,7 @@ export function AiCheckModal({ pid: initial, choose, onClose }: {
       for (const l of linesOf(transcripts, lang, p)) {
         const f = aiFlags[`${p}:${l.id}`];
         if (!f || f.hash !== hashLine(l.text)) continue; // stale marks aren't shown, don't count them
-        obs += f.spans.filter((sp) => spanLens(sp) !== "transcription").length;
+        obs += f.spans.filter((sp) => !isRepair(sp)).length;
       }
       return { pid: p, n: transcripts[p].lines.length, at: last?.at.slice(0, 10) ?? null, obs };
     });

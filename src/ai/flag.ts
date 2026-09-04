@@ -72,9 +72,28 @@ export const LENSES: Lens[] = [
     instruction: `Mark short, unusually vivid, metaphorical, or speaker-specific phrasings worth quoting verbatim — not routine emphasis, generic opinions, or common conversational phrases. note = why it stands out.`,
   },
 ];
-export const lensOf = (id: string) => LENSES.find((l) => l.id === id);
+// The contextualize run (ai/contextualize.ts) lands its proposals as marks under
+// this lens: "the second one" → "[Beacon]", each with a `fix`. It is NOT in
+// LENSES — the observation scan cannot be asked for it, it has its own gate —
+// but every surface that draws a mark resolves its colour and label here.
+export const SUBST_LENS = "substitute";
+export const SUBST: Lens = {
+  id: SUBST_LENS, label: "Substitution", method: "a bracketed term to write in", color: "#7c5cd6",
+  instruction: "",
+};
+export const lensOf = (id: string) => LENSES.find((l) => l.id === id) ?? (id === SUBST_LENS ? SUBST : undefined);
 // old persisted spans predate the lens field: they came from the transcription check
 export const spanLens = (f: { lens?: string }) => f.lens ?? "transcription";
+/** Can this replacement be written into a line? No newline, control or bidi
+    override characters (bidi could make the Apply button's preview
+    misrepresent the insertion), and no ballooning past any plausible
+    rewrite of the quote. Shared with the contextualize sanitizer. */
+export const lineSafe = (fix: string, quote: string) =>
+  !/[\r\n\u0000-\u001f\u0085\u2028\u2029\u202a-\u202e]/.test(fix) && fix.length <= quote.length * 4 + 40;
+/** A mark that is an EDIT to apply (transcription repair, substitution) rather
+    than an observation to triage — kept out of the Observations panel, its
+    counts and its export, and retired by applyFix when its fix is written in. */
+export const isRepair = (f: { lens?: string }) => spanLens(f) === "transcription" || spanLens(f) === SUBST_LENS;
 
 const PREAMBLE = `You are scanning an automatic speech-recognition transcript of a research interview. Apply ONLY the scans listed below, marking instances for the researcher to review — you never create codes or themes and never summarise; each mark carries only the short note its scan asks for.
 
@@ -172,9 +191,7 @@ export async function scanChunk(opts: {
     // (bidi could make the Apply button's preview misrepresent the insertion),
     // and no ballooning past any plausible repair of the quote.
     const fix = f.lens === "transcription" ? opts.redaction.restore(f.fix?.trim() ?? "") : "";
-    const fixOk = fix && fix !== quote && !opts.redaction.hasPlaceholder(fix)
-      && !/[\r\n\u0000-\u001f\u202a-\u202e]/.test(fix)
-      && fix.length <= quote.length * 4 + 40;
+    const fixOk = fix && fix !== quote && !opts.redaction.hasPlaceholder(fix) && lineSafe(fix, quote);
     (flags[f.line_id] ??= []).push({
       // the note is shown in the mark popover and exported to
       // ai-observations.csv, both read by the researcher who listed the terms —

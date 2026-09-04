@@ -141,7 +141,10 @@ describe("decision ledger", () => {
     useStore.setState({ segments: [{ sid: 10, pid: "P01", start: 1, end: 1, code: "small text",
       notes: "", proposedBy: AI_PROPOSED_BY_PREFIX + "Terra", status: "candidate" }] });
     useStore.getState().setStatus(10, "accepted");
-    expect(VERSION).toBe(3);
+    expect(JSON.parse(useStore.getState().exportProject()).version).toBe(3);
+    // F9's brief is the newest thing a file can carry
+    useStore.setState({ substBrief: { "": "Write [Beacon] for the first system." } });
+    expect(VERSION).toBe(4);
     expect(JSON.parse(useStore.getState().exportProject()).version).toBe(VERSION);
   });
 });

@@ -5,6 +5,7 @@ import { useStore } from "../state/store";
 import { zipTextFiles } from "../zip";
 import { saveBlob } from "../download";
 import { Icon } from "./Icon";
+import { isRepair } from "../ai/flag";
 
 // CSVs get a UTF-8 BOM: without it Excel decodes as the ANSI code page
 // (Shift-JIS on Japanese Windows) and every non-ASCII excerpt is mojibake.
@@ -42,7 +43,7 @@ export function ExportMenu() {
   const answerCount = useStore((s) => s.answers.length);
   const sectionCount = useStore((s) => s.stretches.length);
   const noticeCount = useStore((s) => Object.values(s.aiFlags)
-    .reduce((n, f) => n + f.spans.filter((x) => (x.lens ?? "transcription") !== "transcription").length, 0));
+    .reduce((n, f) => n + f.spans.filter((x) => !isRepair(x)).length, 0));
   const eventCount = useStore((s) => s.markers.length);
 
   useEffect(() => {

@@ -9,6 +9,7 @@ import { CodeCombobox } from "./CodeCombobox";
 import { AiCheckModal } from "./AiCheckModal";
 import { SuggestModal } from "./SuggestModal";
 import { SectionsModal } from "./SectionsModal";
+import { ContextualizeModal } from "./ContextualizeModal";
 import { EventList } from "./EventList";
 import { openColorPicker } from "../colorPicker";
 import { useToggleMenu } from "../usePopover";
@@ -34,6 +35,7 @@ export function CodeSidebar() {
   const [aiOpen, setAiOpen] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const hasCodes = liveCodes(codebook).length > 0;
   const { open: aiMenu, setOpen: setAiMenu, btnRef: aiBtnRef, menuRef: aiMenuRef, arrows: aiArrows } = useToggleMenu();
 
@@ -84,6 +86,9 @@ export function CodeSidebar() {
                 gate — where the labels can be written on the spot. */}
             <button role="menuitem" onClick={() => { setSectionsOpen(true); setAiMenu(false); }}>
               <Icon name="sparkle" size={sidebarFontSize} /> AI section marking
+            </button>
+            <button role="menuitem" onClick={() => { setContextOpen(true); setAiMenu(false); }}>
+              <Icon name="sparkle" size={sidebarFontSize} /> AI contextualize
             </button>
           </div>
         )}
@@ -155,6 +160,7 @@ export function CodeSidebar() {
       {aiOpen && <AiCheckModal pid={active} onClose={() => setAiOpen(false)} />}
       {suggestOpen && <SuggestModal pid={active} onClose={() => setSuggestOpen(false)} />}
       {sectionsOpen && <SectionsModal pid={active} onClose={() => setSectionsOpen(false)} />}
+      {contextOpen && <ContextualizeModal pid={active} onClose={() => setContextOpen(false)} />}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { useStore } from "../state/store";
-import { lensOf, spanLens, type Flag } from "../ai/flag";
+import { lensOf, spanLens, isRepair, type Flag } from "../ai/flag";
 import { useDialogFocus } from "../useDialogFocus";
 import { useDismiss, useClampToViewport } from "../usePopover";
 import { announce } from "../announce";
@@ -26,7 +26,7 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose, onCycle }: {
   const dialogRef = useDialogFocus({ initialFocus: "container" });
   const setRef = useCallback((el: HTMLDivElement | null) => { ref.current = el; return dialogRef(el); }, [dialogRef]);
 
-  const isError = spanLens(span) === "transcription";
+  const canFix = isRepair(span) && !!span.fix;
   const lens = lensOf(spanLens(span));
 
   // reset the inline anchor before the clamp measures: if this instance is ever
@@ -62,7 +62,7 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose, onCycle }: {
       </div>
       <div className="aipop-quote">“{span.quote}”</div>
       <div className="aipop-reason">{span.reason}</div>
-      {isError && span.fix && (
+      {canFix && (
         <div className="row">
           {/* The announcement follows what actually happened: a mark whose quote
               an edit has since moved cannot be applied, and the button used to
@@ -74,7 +74,7 @@ export function AiMarkPopover({ pid, line, span, x, y, onClose, onCycle }: {
                 ? `Fixed: “${span.quote}” is now “${span.fix}”`
                 : `Could not apply: “${span.quote}” is no longer in this line`);
               onClose();
-            }}>Apply fix: “{span.fix}”</button>
+            }}>{spanLens(span) === "transcription" ? "Apply fix" : "Write in"}: “{span.fix}”</button>
         </div>
       )}
     </div>

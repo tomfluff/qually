@@ -6,12 +6,14 @@
 // suggest are also where their runs START: each groups by transcript or by its own
 // axis, and a transcript row carries the sparkle that opens that run's consent gate.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { linesOf, useStore, liveCodes, type Segment } from "../state/store";
+import { linesOf, useStore, liveCodes, type Segment, type Line, type LineFlags } from "../state/store";
+import { announce } from "../announce";
+import type { Lang } from "../lineText";
 import { viewTranscripts } from "../lineText";
 import { earcon } from "../earcons";
 import { Resizer } from "./Resizer";
 import { CodeCombobox } from "./CodeCombobox";
-import { LENSES, hashLine, spanLens, lensOf } from "../ai/flag";
+import { LENSES, hashLine, spanLens, lensOf, isRepair, SUBST_LENS, type Flag } from "../ai/flag";
 import { MergeModal } from "./MergeModal";
 import { DescribeModal } from "./DescribeModal";
 import { AskModal } from "./AskModal";
@@ -19,6 +21,7 @@ import { AskList, ScopeGroup } from "./AskPanel";
 import { SuggestModal } from "./SuggestModal";
 import { FindModal } from "./FindModal";
 import { SectionsModal } from "./SectionsModal";
+import { ContextualizeModal } from "./ContextualizeModal";
 import { stretchColorOf, isEvidence } from "../stretches";
 import { AiCheckModal } from "./AiCheckModal";
 import { SummarizeModal } from "./SummarizeModal";
@@ -108,6 +111,7 @@ export function AssistView() {
   const [suggestFor, setSuggestFor] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [sectionsFor, setSectionsFor] = useState<string | null>(null);
+  const [contextFor, setContextFor] = useState<string | null>(null);
   const [scanFor, setScanFor] = useState<string | null>(null);
   const [sumFor, setSumFor] = useState<string | null>(null);
   const [suggestBy, setSuggestBy] = useState(remembered.suggestBy);
@@ -317,7 +321,7 @@ export function AssistView() {
         const f = aiFlags[`${pid}:${l.id}`];
         if (!f || !f.spans.length || f.hash !== hashLine(l.text)) continue;
         for (const sp of f.spans) {
-          if (spanLens(sp) === "transcription") continue; // errors live in the line editor, not here
+          if (isRepair(sp)) continue; // errors and substitutions live in the line editor, not here
           const cover = segments.find((sg) => sg.pid === pid && sg.status !== "rejected" && sg.start <= l.id && l.id <= sg.end);
           out.push({ pid, id: l.id, speaker: l.speaker, text: l.text, quote: sp.quote, reason: sp.reason, lens: spanLens(sp), codedAs: cover?.code ?? null });
         }
@@ -349,7 +353,7 @@ export function AssistView() {
         {/* the panel (Observations / Merge / Suggest) is picked from the Assist tab's
             own menu — this heading just names what's showing. It stays fixed; the
             list below scrolls inside cbList so the scrollbar clears the drag divider. */}
-        <div className="bSideHead">{panel === "tail" ? "The thin tail" : panel === "decisions" ? "Decisions" : panel === "merge" ? "Merge duplicates" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "sections" ? "Sections" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
+        <div className="bSideHead">{panel === "tail" ? "The thin tail" : panel === "decisions" ? "Decisions" : panel === "merge" ? "Merge duplicates" : panel === "ask" ? "Ask" : panel === "describe" ? "Definitions" : panel === "suggest" ? "Suggest codes" : panel === "sections" ? "Sections" : panel === "contextualize" ? "Contextualize" : panel === "summary" ? "Transcript summary" : "Observations"}</div>
 
         <div className="cbList nicescroll" ref={listRef}
           onScroll={(e) => { remembered.leftScroll[panel] = e.currentTarget.scrollTop; }}>
@@ -525,6 +529,8 @@ export function AssistView() {
           </>
         ) : panel === "sections" ? (
           <SectionsSide onRun={setSectionsFor} />
+        ) : panel === "contextualize" ? (
+          <ContextSide onRun={setContextFor} />
         ) : panel === "summary" ? (
           <>
             {/* Same two ways in as the other panels: the button picks in the modal,
@@ -670,6 +676,8 @@ export function AssistView() {
             onAsk={() => setAskOpen(true)} canAsk={!askWhy} why={askWhy} />
         ) : panel === "sections" ? (
           <SectionList onRun={setSectionsFor} />
+        ) : panel === "contextualize" ? (
+          <ContextList onRun={setContextFor} />
         ) : panel === "describe" ? (
           <DescribeList codebook={codebook} codes={shownDefCodes} stats={stats}
             sortBy={defSort} setSortBy={setDefSort} grouped={defScope === "all"}
@@ -694,6 +702,8 @@ export function AssistView() {
         onClose={() => setSuggestFor(null)} />}
       {sectionsFor !== null && <SectionsModal pid={sectionsFor} choose
         onClose={() => setSectionsFor(null)} />}
+      {contextFor !== null && <ContextualizeModal pid={contextFor} choose
+        onClose={() => setContextFor(null)} />}
       {scanFor !== null && <AiCheckModal pid={scanFor} choose
         onClose={() => setScanFor(null)} />}
       {sumFor !== null && <SummarizeModal pid={sumFor} choose
@@ -1301,6 +1311,145 @@ function SectionList({ onRun }: { onRun: (pid: string) => void }) {
       <div className="bSideNote" style={{ margin: "10px 2px" }}>
         A boundary is easiest to judge with the lines around it in view — <b>Open</b> puts you
         there. Rejecting is remembered, so the next run will not propose the same span again.
+        <button className="nBtn" style={{ marginLeft: 8 }} onClick={() => onRun("")}>Run another</button>
+      </div>
+    </div>
+  );
+}
+
+/** Every pending substitution across the loaded transcripts, in the reading
+    language — a mark is hashed against the text it was made on, like every
+    other mark, so an edited line's proposals drop out on their own. */
+function pendingSubs(
+  transcripts: Record<string, { lines: Line[] }>, aiFlags: Record<string, LineFlags>,
+  lang: Lang, pids: string[],
+) {
+  const out: { pid: string; id: number; speaker: string; text: string; span: Flag }[] = [];
+  for (const pid of pids) {
+    if (!transcripts[pid]) continue;
+    for (const l of linesOf(transcripts, lang, pid)) {
+      const f = aiFlags[`${pid}:${l.id}`];
+      if (!f || !f.spans.length || f.hash !== hashLine(l.text)) continue;
+      for (const span of f.spans)
+        if (spanLens(span) === SUBST_LENS && span.fix) out.push({ pid, id: l.id, speaker: l.speaker, text: l.text, span });
+    }
+  }
+  return out;
+}
+
+function ContextSide({ onRun }: { onRun: (pid: string) => void }) {
+  const transcripts = useStore((s) => s.transcripts);
+  const aiFlags = useStore((s) => s.aiFlags);
+  const lang = useStore((s) => s.ui.lang);
+  const tabs = useStore((s) => s.tabs);
+  const pids = useMemo(() => [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))]
+    .filter((p) => transcripts[p]), [tabs, transcripts]);
+  const pending = useMemo(() => pendingSubs(transcripts, aiFlags, lang, pids), [transcripts, aiFlags, lang, pids]);
+  const n = (pid: string) => pending.filter((x) => x.pid === pid).length;
+  return (
+    <>
+      <button className="btn groundBtn" onClick={() => onRun("")}
+        title="Pick a transcript and let the AI propose which condition each “it” and “the first one” means (sends it to OpenAI after your approval)">
+        <Icon name="sparkle" size={15} /> AI contextualize
+      </button>
+      {pids.length === 0 ? (
+        <div className="bSideNote">No transcripts yet. Import one and its references can be resolved.</div>
+      ) : pids.map((p) => (
+        <div key={p} className="nLens still">
+          <span className="nName">{p}</span>
+          <span className="cnt">{n(p) || "—"}</span>
+          <button className="rowRun" aria-label={`AI contextualize ${p}`}
+            title={`AI contextualize ${p}`} onClick={() => onRun(p)}>
+            <Icon name="sparkle" size={14} />
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** the worklist: every pending substitution, grouped by transcript. Write in
+    one at a time, or a transcript at once (one undo entry); dismiss what is
+    wrong. Reviewing here is reading the line without the ones around it, so
+    Open puts you in the transcript where the mark's popover offers the same. */
+function ContextList({ onRun }: { onRun: (pid: string) => void }) {
+  const transcripts = useStore((s) => s.transcripts);
+  const aiFlags = useStore((s) => s.aiFlags);
+  const lang = useStore((s) => s.ui.lang);
+  const tabs = useStore((s) => s.tabs);
+  const jumpTo = useStore((s) => s.jumpTo);
+  const pids = useMemo(() => [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))], [tabs, transcripts]);
+  const pending = useMemo(() => pendingSubs(transcripts, aiFlags, lang, pids), [transcripts, aiFlags, lang, pids]);
+  if (!pending.length) {
+    return (
+      <div className="empty">
+        No substitutions waiting. Run <b>AI contextualize</b> on a transcript — the button on
+        the left, or the sparkle on any transcript row — and its proposals show up here, and
+        marked in the transcript, to write in or dismiss. It may only write terms you named
+        yourself, in [brackets].
+      </div>
+    );
+  }
+  const groups = pids.filter((p) => pending.some((x) => x.pid === p));
+  const refocus = (from: HTMLElement) => {
+    const row = from.closest(".nInst");
+    const kin = [row?.nextElementSibling, row?.previousElementSibling]
+      .find((el) => el?.classList.contains("nInst"));
+    const target = kin?.querySelector<HTMLElement>(".nActs button");
+    requestAnimationFrame(() => {
+      if (document.activeElement !== document.body) return;
+      (target?.isConnected ? target
+        : document.querySelector<HTMLElement>(".mList button, .groundBtn"))?.focus();
+    });
+  };
+  const c = lensOf(SUBST_LENS)?.color;
+  return (
+    <div className="mList">
+      {groups.map((pid) => (
+        <div key={pid} className="bGroup">
+          <div className="nGrp">
+            {pid}
+            <button className="nBtn" style={{ marginLeft: "auto" }}
+              title={`Write in every proposed substitution in ${pid} — one Ctrl+Z takes it back`}
+              onClick={(e) => {
+                refocus(e.currentTarget);
+                const n = useStore.getState().applyFixes(pid, SUBST_LENS, lang);
+                announce(`${n} line${n === 1 ? "" : "s"} of ${pid} rewritten`);
+              }}>
+              Write in all {pending.filter((x) => x.pid === pid).length}
+            </button>
+          </div>
+          {pending.filter((x) => x.pid === pid).map(({ id, speaker, text, span }) => (
+            <div key={`${id}\u0000${span.quote}`} className="nInst" style={{ "--lens-c": c } as CSSProperties}>
+              <div className="mPair" style={{ marginBottom: 4 }}>
+                <span className="mCode">
+                  <span className="mSw" style={{ background: c }} />
+                  “{span.quote}” → <b>{span.fix}</b>
+                </span>
+                <span className="nRef">{span.reason}</span>
+              </div>
+              <div className="nLine"><b>{speaker}</b> {text}</div>
+              <div className="nFoot">
+                <span className="nRef">{pid}:{id}</span>
+                <span className="nActs">
+                  <button className="nBtn pri"
+                    onClick={(e) => {
+                      refocus(e.currentTarget);
+                      const ok = useStore.getState().applyFix(pid, id, span.quote, span.fix!, lang);
+                      announce(ok ? `Written in: “${span.fix}”` : `Could not apply: “${span.quote}” is no longer in this line`);
+                    }}>Write in</button>
+                  <button className="nBtn" title="Not this one"
+                    onClick={(e) => { refocus(e.currentTarget); useStore.getState().dismissNotice(pid, id, SUBST_LENS, span.quote); }}>Dismiss</button>
+                  <button className="nBtn" onClick={() => jumpTo(pid, id)}>Open</button>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+      <div className="bSideNote" style={{ margin: "10px 2px" }}>
+        A reference is easiest to judge with the lines around it in view — <b>Open</b> puts you
+        there, and the mark's popover offers the same choice.
         <button className="nBtn" style={{ marginLeft: 8 }} onClick={() => onRun("")}>Run another</button>
       </div>
     </div>

@@ -2,11 +2,12 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useStore, liveCodes } from "../state/store";
+import { useStore, liveCodes, linesOf } from "../state/store";
 import { SCROLL_BASE, wheelPixels } from "../scrollSpeed";
 import { useClampToViewport, useDismiss, useMenuArrows, useMenuFocus } from "../usePopover";
 import { MAP_VIEW_ITEMS, currentMapView, openMapView, type MapView } from "./CodeMapView";
 import { Icon } from "./Icon";
+import { isRepair, spanLens, hashLine, SUBST_LENS } from "../ai/flag";
 import { hasTranslation, untranslated } from "../lineText";
 import { codeStats } from "../codeStats";
 import { tailQueue, type TailLimit } from "./TailQueue";
@@ -513,6 +514,7 @@ const ASSIST_GROUPS = [
       { id: "observations", label: "Observations", hint: "AI observations to triage into codes" },
       { id: "suggest", label: "Suggest codes", hint: "candidate codings from your codebook" },
       { id: "sections", label: "Sections", hint: "which stretch of a session belongs to which part of the study" },
+      { id: "contextualize", label: "Contextualize", hint: "which condition “it” and “the first one” mean, written in [brackets]" },
       { id: "summary", label: "Transcript summary", hint: "AI-drafted session summaries to edit and own" },
     ],
   },
@@ -548,15 +550,24 @@ function useAssistCounts(): Partial<Record<AssistPanelId, string>> {
   const answers = useStore((s) => s.answers);
   const summaries = useStore((s) => s.summaries);
   const tailLimit = useStore((s) => s.ui.tailLimit) as TailLimit;
+  const lang = useStore((s) => s.ui.lang);
   return useMemo(() => {
     const out: Partial<Record<AssistPanelId, string>> = {};
     const notices = Object.values(aiFlags)
-      .reduce((n, f) => n + f.spans.filter((x) => (x.lens ?? "transcription") !== "transcription").length, 0);
+      .reduce((n, f) => n + f.spans.filter((x) => !isRepair(x)).length, 0);
     if (notices) out.observations = `${notices} to review`;
     const cand = segments.filter((x) => x.status === "candidate").length;
     if (cand) out.suggest = `${cand} candidate${cand === 1 ? "" : "s"}`;
     const sect = stretches.filter((x) => x.status === "candidate").length;
     if (sect) out.sections = `${sect} to review`;
+    // hashed against the reading, like the panel it counts for — a line edited
+    // since the run hides its proposals there, so it must not be counted here
+    let subs = 0;
+    for (const p of Object.keys(transcripts)) for (const l of linesOf(transcripts, lang, p)) {
+      const f = aiFlags[`${p}:${l.id}`];
+      if (f && f.hash === hashLine(l.text)) subs += f.spans.filter((x) => spanLens(x) === SUBST_LENS && x.fix).length;
+    }
+    if (subs) out.contextualize = `${subs} to write in`;
     const written = Object.keys(summaries).filter((p) => (summaries[p] ?? "").trim() && transcripts[p]).length;
     const pids = Object.keys(transcripts).length;
     if (pids) out.summary = `${written} of ${pids} written`;
@@ -568,7 +579,7 @@ function useAssistCounts(): Partial<Record<AssistPanelId, string>> {
     if (answers.length) out.ask = `${answers.length} answered`;
     if (ledger.length) out.decisions = `${ledger.length} recorded`;
     return out;
-  }, [segments, stretches, transcripts, codebook, aiFlags, ledger, answers, summaries, tailLimit]);
+  }, [segments, stretches, transcripts, codebook, aiFlags, ledger, answers, summaries, tailLimit, lang]);
 }
 
 // The Map tab's menu: the seven views, the working three flat and the derived

@@ -93,7 +93,7 @@ export function renderSections(
     Each event is anchored to the LAST line that began at or before it, so the
     model can name a line id rather than a timestamp; the labels are the
     researcher's own words, so they go through the redactor like any prose. */
-function renderEvents(lines: Line[], markers: Marker[], r: Redaction, offset: number, show = 0): string {
+export function renderEvents(lines: Line[], markers: Marker[], r: Redaction, offset: number, show = 0): string {
   // Events are stamped on the VIDEO clock; the transcript runs on its own, and
   // video[pid].offset is the correction between them. anchorMarkers subtracts it
   // for every other placement in the app, and skipping it here would have sent

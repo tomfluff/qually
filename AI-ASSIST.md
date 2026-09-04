@@ -514,3 +514,93 @@ opener IS the menu item, which unmounts with the menu in the same commit this
 dialog mounts, so by closing time it is detached and cannot take focus. There is
 a fallback to the same list of homes `useMenuFocus` uses, which is what actually
 keeps a keyboard user off `<body>`.
+
+---
+
+## F9 — Contextualize: write the condition into the participant's words (2026-09-04)
+
+Same line: **the AI proposes, the researcher decides.**
+
+A within-subject participant says "the first one", "the second system", or just
+"it" after the moderator has named the system. The transcript's convention for
+what was MEANT rather than SAID is square brackets (`markup.tsx`): `[Beacon]`
+is written in by the researcher and styled so it cannot be mistaken for speech.
+The search bar's find-and-replace writes them one phrase at a time; F9 reads
+the transcript whole and proposes all of them.
+
+### What it reuses (nearly everything)
+
+- **Landing = the transcription repair's shape.** A proposal is a `Flag` with a
+  `fix`, under a new lens `substitute` (`SUBST_LENS`, not in `LENSES` so the
+  scan cannot be asked for it). The mark popover's Apply, hash invalidation on
+  edit, Alt-click dismiss, the Minimap tick and `applyFix` all work unchanged;
+  `isRepair` is what keeps these marks out of the Observations panel, its
+  counts and `ai-observations.csv`. New: `applyFixes(pid, lens, lang)` — every
+  pending fix of one transcript as ONE undo entry, the rule
+  `replaceInTranscript` already follows.
+- **Gate = the sections gate** plus Find's three-state speakers (`rewrite` /
+  `context only` / `not sent`; the interviewer defaults to context by
+  `guessQuiet`). Whole transcript, one request, `CONTEXT_TOKEN_CAP` = 180k.
+- **Payload:** the brief (redacted prose; the `[terms]` in it are vocabulary),
+  this transcript's **settled** sections (`isEvidence` — a candidate is not
+  evidence of which condition a line is in), its events via `renderEvents`,
+  and `id<TAB>[context] speaker<TAB>text`.
+- **The brief** (`substBrief`) is keyed like `studyBrief`: `""` the default,
+  `[pid]` an override; same Save buttons, same reseed rule, travels in the
+  project file, follows a rename, dies with a delete.
+- **Which text:** the reading. Under an English reading the translation is
+  rewritten, otherwise the spoken line — as replace and repair do.
+
+### The trust boundary (`sanitizeSubs`)
+
+Reviewed 2026-09-04 (Fable + Codex); the rules marked **[review]** came from that.
+
+- Line must have been sent and its speaker must be `rewrite`.
+- The quote must occur **exactly once** in the line — `applyFix` writes over
+  the first occurrence, so "it" twice would be a coin toss. The prompt asks the
+  model to widen the quote until unique; the sanitizer enforces it.
+- The quote may not overlap an existing `[bracketed]` run (the researcher's
+  words, via `subSpans`) or another proposal on the same line: `applyFixes`
+  applies them in sequence, and two overlapping rewrites write both names
+  **[review]**.
+- Every `[term]` in the replacement must be one the brief names, as written
+  (`briefTerms` — the same list the gate shows), and the replacement must be
+  the quote with terms standing in for pieces of it, in order, each term
+  replacing something that was there (`onlyResolves`). A word-set check let
+  "[Beacon] fine fine" through for "it was fine" — participant speech deleted
+  and duplicated by *write in all* **[review]**. Grammar-tidying rewrites
+  ("they were" → "[Beacon] was") are dropped on purpose: the prompt says keep
+  the participant's grammar.
+- `lineSafe` (shared with the scan): no newline, control, bidi or Unicode line
+  separator characters, bounded length. A placeholder in the RAW replacement
+  drops it before restoring — the quote holds none, so one there can only be
+  the model writing a name into the line.
+- Reasons are restored through the redaction map; unusable answers are
+  counted and reported (`dropped`), never silent.
+
+The brief's **prose** is redacted; its `[terms]` go plain (`redactProse`),
+because a term is vocabulary, not speech, and `[[REDACTED_1]]` would match
+nothing the sanitizer accepts **[review]**. A brief with content makes the
+project file **v4**: a v3 build would open it, not know `substBrief`, and drop
+it on the next save **[review]**.
+
+### Surfaces
+
+Sidebar AI menu → *AI contextualize* (scope locked); Assist → *Contextualize*
+panel (button + per-row sparkle, `choose`), worklist grouped by transcript with
+**Write in** / **Dismiss** / **Open** per mark and **Write in all** per
+transcript. Logged as `task: "contextualize"`.
+
+### Deliberately not built
+
+- An observation mark on the SAME line whose quote also occurs inside a
+  written-in term ("Beacon" marked, `[Beacon]` inserted before it) is kept at
+  the new hash and now underlines the first occurrence — the same rule
+  `applyFix` has always had for a repair on a line with other marks. Raised in
+  review; left as is, since a term is rarely a word the participant said.
+
+- **Rejection memory.** A dismissed substitution is forgotten; a re-run over the
+  same lines proposes it again. Sections and codings remember rejections, and
+  this should too once a re-run is observed to be a real workflow.
+- Windowing (bounded by the cap instead), and any replacement the researcher
+  did not name — the vocabulary is the brief's brackets, nothing else.

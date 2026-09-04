@@ -10,7 +10,7 @@ import { mergeGroups, type Group } from "../merge";
 import { replaceAllIn, scopeFilter, type LineScope } from "../search";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
-import { hashLine, spanLens, type Flag } from "../ai/flag";
+import { hashLine, spanLens, isRepair, type Flag } from "../ai/flag";
 import type { GroundRec } from "../ai/ground";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import type { Stretch, StretchStatus } from "../stretches";
@@ -193,7 +193,7 @@ export interface Ui {
       speaker you are following. */
   stretchView: "show" | "dim" | "collapse";
   // which Assist-tab panel is showing — chosen from the tab's own menu
-  assistPanel: "observations" | "merge" | "suggest" | "sections" | "summary" | "describe" | "ask" | "decisions" | "tail";
+  assistPanel: "observations" | "merge" | "suggest" | "sections" | "contextualize" | "summary" | "describe" | "ask" | "decisions" | "tail";
   // what the thin-tail queue counts as thin (1, 2 or 3 excerpts) — the
   // researcher's call, and the map's launcher can set it on the way in
   tailLimit: number;
@@ -457,6 +457,9 @@ export interface State {
       An override is REMOVED by deleting its key: storing "" would read as a
       deliberate empty override and suppress the default. */
   studyBrief: Record<string, string>;
+  /** F9: what to call each condition, and how to tell which is being talked
+      about — same shape as studyBrief: "" is the default, [pid] an override. */
+  substBrief: Record<string, string>;
   // the pending revision plan from the last reconcile run — study data too:
   // the review can continue in a later session
   codePlan: CodePlanAction[];
@@ -607,6 +610,12 @@ export interface State {
   editStretch: (i: number, dim: string, value: string) => void;
   setStudyBrief: (pid: string, text: string) => void;
   clearStudyBrief: (pid: string) => void;
+  setSubstBrief: (pid: string, text: string) => void;
+  clearSubstBrief: (pid: string) => void;
+  /** Write in every pending fix of one lens on one transcript — the
+      contextualize run's "apply all" — as ONE undo entry. Returns how many
+      lines changed. */
+  applyFixes: (pid: string, lens: string, lang?: Lang) => number;
   /** a whole run's proposals, as ONE undoable gesture. Returns how many landed. */
   landSections: (pid: string, proposals: SectionProposal[], proposedBy: string) => number;
   setStretchStatus: (i: number, status: StretchStatus) => void;
@@ -1079,7 +1088,7 @@ export const useStore = create<State>()(
       tabs: [], pinnedTabs: [], active: "browse",
       hotbar: { mode: "auto", pinned: [] }, hotbarCache: [],
       video: {}, ui: { ...DEFAULT_UI },
-      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
+      ai: { model: DEFAULT_MODEL, redactTerms: [], lenses: ["transcription"] }, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, substBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
       selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false, nextSid: 1, nextMid: 1, jump: null, paletteOpen: false, eventAt: null, formatOpen: false,
       answers: [], nextAid: 1,
       search: NO_SEARCH,
@@ -1093,7 +1102,7 @@ export const useStore = create<State>()(
         set({
           transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
           active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
+          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, substBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
           answers: [], nextAid: 1,
           // speakerFocus cleared with them: a stale focus name matching a speaker in
           // the NEXT study would silently dim everyone else there
@@ -1511,6 +1520,7 @@ export const useStore = create<State>()(
         // transcript imported under this name would silently inherit a brief
         // written for the deleted one
         const studyBrief = { ...s.studyBrief }; delete studyBrief[pid];
+        const substBrief = { ...s.substBrief }; delete substBrief[pid];
         const speakerFocus = { ...s.ui.speakerFocus }; delete speakerFocus[pid];
         const tabs = s.tabs.filter((p) => p !== pid);
         const active = s.active === pid ? (tabs[0] || "browse") : s.active;
@@ -1532,7 +1542,7 @@ export const useStore = create<State>()(
           extSegRows: s.extSegRows.filter((r) => r.pid !== pid),
           aiFlags: Object.fromEntries(Object.entries(s.aiFlags).filter(([k]) => !k.startsWith(`${pid}:`))),
           aiGrounds: Object.fromEntries(Object.entries(s.aiGrounds).filter(([sid]) => !dead.has(sid))),
-          summaries, studyBrief, video, savedSelections: saved,
+          summaries, studyBrief, substBrief, video, savedSelections: saved,
           tabs, pinnedTabs: s.pinnedTabs.filter((p) => p !== pid),
           active,
           selection: s.selection.pid === pid ? emptySel() : (saved[active] ?? s.selection),
@@ -1680,13 +1690,15 @@ export const useStore = create<State>()(
         // to the old name it would silently fall back to the study default
         const studyBrief = { ...s.studyBrief };
         if (from in studyBrief) { studyBrief[to] = studyBrief[from]; delete studyBrief[from]; }
+        const substBrief = { ...s.substBrief };
+        if (from in substBrief) { substBrief[to] = substBrief[from]; delete substBrief[from]; }
         set({
           transcripts,
           segments: s.segments.map((x) => x.pid === from ? { ...x, pid: to } : x),
           markers: s.markers.map((x) => x.pid === from ? { ...x, pid: to } : x),
           stretches: s.stretches.map((x) => x.pid === from ? { ...x, pid: to } : x),
           lastPid: s.lastPid === from ? to : s.lastPid,
-          summaries, studyBrief,
+          summaries, studyBrief, substBrief,
           extSegRows: s.extSegRows.map((r) => r.pid === from
             ? { ...r, pid: to, segment_ref: r.segment_ref.startsWith(`${from}:`) ? to + r.segment_ref.slice(from.length) : r.segment_ref }
             : r),
@@ -1857,9 +1869,53 @@ export const useStore = create<State>()(
         // drop the applied span, and any span whose quote the repair broke (it can
         // never render again, but would still be read out by the line announcement)
         const spans = cur.spans.filter((s) =>
-          !(spanLens(s) === "transcription" && s.quote === quote) && text.includes(s.quote));
+          !(isRepair(s) && s.quote === quote) && text.includes(s.quote));
         set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, hash: hashLine(text), spans } } });
         return true;
+      },
+      // The same write applyFix makes, over every fix of one lens on one
+      // transcript, as one gesture: thirty substitutions accepted at once are
+      // one thing the researcher did, so they are one Ctrl+Z (the rule
+      // replaceInTranscript already follows). A mark whose quote an earlier
+      // edit has moved is skipped, not guessed at.
+      applyFixes: (pid, lens, lang = "source") => {
+        const s = get();
+        const t = s.transcripts[pid];
+        if (!t) return 0;
+        let n = 0;
+        const entries: LineSnap[] = [];
+        const flags = { ...s.aiFlags };
+        const lines = t.lines.map((l) => {
+          const key = `${pid}:${l.id}`;
+          const cur = s.aiFlags[key];
+          const field = lang === "en" && l.en?.trim() ? "en" : "text";
+          const before = lineText(l, lang);
+          if (!cur || cur.hash !== hashLine(before)) return l;
+          let text = before;
+          for (const sp of cur.spans) {
+            if (spanLens(sp) !== lens || !sp.fix || !text.includes(sp.quote)) continue;
+            text = text.replace(sp.quote, () => sp.fix!); // function: no $-sequences (see applyFix)
+          }
+          if (text === before) return l;
+          n++;
+          entries.push(lineEntry(s, pid, l.id)!);
+          // the applied marks go; any other mark the rewrite broke goes with them,
+          // exactly as applyFix retires them one at a time
+          const spans = cur.spans.filter((sp) => !(spanLens(sp) === lens && sp.fix) && text.includes(sp.quote));
+          flags[key] = { ...cur, hash: hashLine(text), spans };
+          const origKey = field === "en" ? "enOrig" : "orig";
+          const orig = l[origKey] ?? before;
+          const { [origKey]: _drop, ...rest } = l;
+          return !orig || orig === text
+            ? { ...rest, [field]: text }
+            : { ...rest, [origKey]: orig, [field]: text };
+        });
+        if (!n) return 0;
+        const stack = [...s.undoStack, { kind: "lines" as const, pid, entries }];
+        if (stack.length > UNDO_CAP) stack.shift();
+        set({ undoStack: stack, redoStack: [], selRun: false });
+        set({ transcripts: { ...get().transcripts, [pid]: { lines } }, aiFlags: flags });
+        return n;
       },
 
       logAiCall: (call) => set({ aiLog: [...get().aiLog, call] }),
@@ -2114,7 +2170,7 @@ export const useStore = create<State>()(
             seen.add(`${l.id}`);
             for (const sp of f.spans) {
               const lens = sp.lens ?? "transcription";
-              if (lens === "transcription") continue;
+              if (isRepair(sp)) continue;
               rows.push({ pid, line_id: String(l.id), speaker: l.speaker, lens, quote: sp.quote, note: sp.reason, line: l.text });
             }
           }
@@ -2139,12 +2195,18 @@ export const useStore = create<State>()(
           // Verdict and discard rows make it v3: a v2 build treats every AI row
           // as a codebook proposal and would inflate the consolidation account
           // with codings and sections that never changed a code's identity.
-          version: s.ledger.some((d) =>
-            d.kind === "accept-coding" || d.kind === "reject-coding" || d.kind === "discard-coding"
-            || d.kind === "accept-section" || d.kind === "reject-section" || d.kind === "discard-section")
+          // F9 state makes it v4: a v3 build opens the file, does not know
+          // substBrief, and drops it on the next save — the same reason the
+          // study brief made v2. Substitution marks are ordinary aiFlags and
+          // survive as unlabelled marks, so they are not what decides this.
+          version: Object.values(s.substBrief).some((t) => t.trim())
             ? VERSION
-            : s.stretches.some((x) => x.status)
-              || Object.values(s.studyBrief).some((t) => t.trim()) ? 2 : 1,
+            : s.ledger.some((d) =>
+              d.kind === "accept-coding" || d.kind === "reject-coding" || d.kind === "discard-coding"
+              || d.kind === "accept-section" || d.kind === "reject-section" || d.kind === "discard-section")
+              ? 3
+              : s.stretches.some((x) => x.status)
+                || Object.values(s.studyBrief).some((t) => t.trim()) ? 2 : 1,
           savedAt: new Date().toISOString(),
           transcripts: s.transcripts, segments: s.segments, codebook: s.codebook,
           extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
@@ -2162,6 +2224,7 @@ export const useStore = create<State>()(
           codeAreasFp: s.codeAreasFp,
           stretches: s.stretches,         // what each span of talk belongs to — study data
           studyBrief: s.studyBrief,       // the study's shape, in the researcher's words — study data
+          substBrief: s.substBrief,       // the conditions and their names — ditto
           codePlan: s.codePlan,           // pending reconciliation verdicts — ditto
           codeClusters: s.codeClusters,   // pending merge-clusters — ditto
           answers: s.answers,     // …and so are the questions asked of the material
@@ -2212,6 +2275,7 @@ export const useStore = create<State>()(
           codeAreas: p.codeAreas ?? [],
           stretches: p.stretches ?? [],
           studyBrief: p.studyBrief ?? {},
+          substBrief: p.substBrief ?? {},
           codeAreasFp: p.codeAreasFp ?? "",
           codePlan: (p.codePlan ?? []).filter((a) => a.action !== "merge"),
           // emit-never, load-always: pairwise merges from older files become
@@ -2408,6 +2472,12 @@ export const useStore = create<State>()(
         const next = { ...get().studyBrief };
         delete next[pid]; // DELETE, not "": an empty string is a real override
         set({ studyBrief: next });
+      },
+      setSubstBrief: (pid, text) => set({ substBrief: { ...get().substBrief, [pid]: text } }),
+      clearSubstBrief: (pid) => {
+        const next = { ...get().substBrief };
+        delete next[pid];
+        set({ substBrief: next });
       },
 
       // A run's proposals land in ONE store gesture. markStretch owns its own
@@ -3137,7 +3207,7 @@ export const useStore = create<State>()(
         extSegRows: s.extSegRows, tabs: s.tabs, pinnedTabs: s.pinnedTabs, active: s.active,
         hotbar: s.hotbar, video: s.video, ui: { ...currentUi(s.ui), zen: false }, // zen is per-session view state
         ai: s.ai, aiFlags: s.aiFlags, aiGrounds: s.aiGrounds, aiLog: s.aiLog, ledger: s.ledger, // NB: the API key is not in the store (ai/key.ts)
-        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp, stretches: s.stretches, studyBrief: s.studyBrief, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
+        markers: s.markers, summaries: s.summaries, projectNotes: s.projectNotes, projectName: s.projectName, codeGroups: s.codeGroups, codeAreas: s.codeAreas, codeAreasFp: s.codeAreasFp, stretches: s.stretches, studyBrief: s.studyBrief, substBrief: s.substBrief, codePlan: s.codePlan, codeClusters: s.codeClusters, answers: s.answers,
       }),
       onRehydrateStorage: () => (s) => {
         // writes are dropped until hydration lands (a boot-time set() must not
@@ -3164,6 +3234,7 @@ export const useStore = create<State>()(
         s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
         s.ui.assistPanel ??= "observations";
         s.studyBrief ??= {}; // added with F7; a workspace saved before it has none
+        s.substBrief ??= {}; // F9, likewise
         s.ui.stretchView ??= "show";
         s.ui.tailLimit ??= 1;
         s.ui.stretchBand ??= "sm";
