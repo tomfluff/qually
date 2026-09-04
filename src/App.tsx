@@ -28,7 +28,7 @@ import { FindHost } from "./components/FindModal";
 import { Icon } from "./components/Icon";
 import { speakerGroupedText } from "./format";
 import { accentFor } from "./palettes";
-import { LENSES, spanLens } from "./ai/flag";
+import { LENSES, SUBST, isRepair, spanLens } from "./ai/flag";
 import { useCallback, useMemo, useRef } from "react";
 import { useDismiss, OVERLAY_SELECTOR } from "./usePopover";
 import { hasVideo, playheadSecFor } from "./video/seek";
@@ -55,7 +55,9 @@ function NoticeToggle() {
     const p = new Set<string>();
     for (const [k, v] of Object.entries(aiFlags))
       if (k.startsWith(`${active}:`)) for (const sp of v.spans) p.add(spanLens(sp));
-    return LENSES.filter((l) => p.has(l.id));
+    // the substitution lens rides after transcription: both are repairs, and
+    // the divider below groups them
+    return [...LENSES, SUBST].filter((l) => p.has(l.id));
   }, [aiFlags, active]);
   // render when ANY marks exist — a transcription-only transcript still needs the
   // dropdown (its checkbox is the only way BACK if transcription was hidden)
@@ -80,15 +82,16 @@ function NoticeToggle() {
       {menu && (
         <div className="noticemenu" role="group" aria-label="Observations shown"
           style={{ fontSize: sidebarFontSize }}>
-          {presentLenses.map((l) => {
-            // transcription errors ignore the eye (it hides NOTICINGS) — their
-            // checkbox stays live even while reading blind
-            const t = l.id === "transcription";
+          {presentLenses.map((l, i) => {
+            // repairs (transcription errors, substitutions) ignore the eye (it
+            // hides NOTICINGS) — their checkbox stays live even while reading blind
+            const t = isRepair({ lens: l.id });
             const on = t ? true : show; // NOT "active" — that's the project id above
+            // lensdiv: a repair is a different KIND of mark (an edit to apply, not
+            // a noticing) — a quiet divider separates the first one from the lenses
+            const first = t && !presentLenses.slice(0, i).some((x) => isRepair({ lens: x.id }));
             return (
-              // lensdiv: transcription is a different KIND of mark (repair, not
-              // noticing) — a quiet divider separates it from the lenses
-              <label key={l.id} className={(on ? "" : "off") + (t ? " lensdiv" : "")}>
+              <label key={l.id} className={(on ? "" : "off") + (first ? " lensdiv" : "")}>
                 <input type="checkbox" disabled={!on}
                   checked={on && !hiddenLenses.includes(l.id)}
                   onChange={() => toggleLens(l.id)} />
