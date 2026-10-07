@@ -26,10 +26,13 @@
    inside a form here is a filled danger button and already carries its own
    white-on-red; without this the two rules fought and the label went red on red */
 .ctxmenu button.danger:not(.btn) svg { color:inherit; }
-.ctxmenu button.danger:not(.btn) { color:#e0554f; }
-/* not on a disabled item: this rule is as specific as the disabled one above and
-   later, so a disabled "All accepted codings 0" lit up red under the pointer */
-.ctxmenu button.danger:not(.btn):not(:disabled, [aria-disabled="true"]):hover { background:#e0554f; color:#fff; }
+/* Enabled items only: these rules are as specific as the disabled one above and
+   later, so a disabled "All accepted codings 0" stayed red ink and lit up red
+   under the pointer, reading as live. The red is --err (5.6:1 on the light
+   ground; #e0554f was 3.8:1), and the hover fill the darker red .btn.danger
+   already uses, so its white label clears AA (4.8:1; it was 3.8:1). */
+.ctxmenu button.danger:not(.btn):not(:disabled, [aria-disabled="true"]) { color:var(--err); }
+.ctxmenu button.danger:not(.btn):not(:disabled, [aria-disabled="true"]):hover { background:#c8443e; color:#fff; }
 /* Quiet text inside an item (a count, a project's "last used" line) is --muted,
    which on the hover wash (--sel) is 3.9:1 in the light theme, under AA: inside
    a hovered item it takes the dimmer body ink instead (6.6:1), and on a danger
