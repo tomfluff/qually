@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { UNTITLED, useStore } from "../state/store";
 import { activeKey, createProject, deleteProject, listProjects, projectsAvailable,
   switchProject, type ProjectEntry } from "../state/projects";
 import { ProjectError } from "../project";
@@ -11,7 +11,7 @@ import { onProjectSwap } from "../sessionReset";
 import { saveText } from "./ExportMenu";
 import { Icon } from "./Icon";
 
-const displayName = (name: string) => name.trim() || "Untitled project";
+const displayName = (name: string) => name.trim() || UNTITLED;
 const messageOf = (e: unknown) => e instanceof Error ? e.message : String(e);
 
 export function ProjectMenu() {

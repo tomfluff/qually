@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useRef, useState } from "react";
-import { useStore } from "../state/store";
+import { isUntitled, useStore } from "../state/store";
 import { zipTextFiles } from "../zip";
 import { saveBlob } from "../download";
 import { Icon } from "./Icon";
@@ -99,8 +99,10 @@ export function ExportMenu() {
   // Every export passes through here. A named project exports straight away; an
   // unnamed one asks once — name it (kept, editable in Settings) or skip.
   const withBase = (cb: (base: string) => void) => () => {
+    // "Untitled project 2" is what a new project is called, not a name anyone
+    // chose: it asks, as an unnamed one always did
     const name = s().projectName.trim();
-    if (name) return cb(expBase(name));
+    if (!isUntitled(name)) return cb(expBase(name));
     setNameDraft("");
     setNameGate(() => cb);
     setOpen(false);

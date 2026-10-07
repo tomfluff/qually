@@ -507,7 +507,8 @@ export interface State {
   saveFailed: boolean; // browser persistence write failed — autosave is NOT happening
 
   importFiles: (files: FileList | File[]) => Promise<void>;
-  newProject: () => void;
+  /** wipe to a blank project (keeping the person's settings), named `name` */
+  newProject: (name?: string) => void;
   /** another saved project's persisted state replaces this one (projects.ts) */
   loadProjectState: (saved: unknown) => void;
   resolveImport: (choice: ImportChoice) => void;
@@ -1094,14 +1095,28 @@ function hotbarCodes(s: State): string[] {
 const PROJECT_UI = ["speakerColors", "speakerWeight", "speakerFocus", "markerColors", "stretchColors",
   "lang", "mapViewport"] as const;
 
-// wipe the workspace, keep the person: ui prefs (coder name, theme, fonts)
-// and AI settings survive; everything project-shaped resets — including the
-// speaker map, which belongs to the study (see exportProject): a lingering
-// "P is quiet" from study A would silently apply to study B's "P"
+// What a project is called until someone names it: the first is plain, later
+// ones are numbered (projects.ts picks the number). A name of this shape still
+// reads as "not named yet" — the export asks for a real one, and a project
+// holding nothing else is still blank.
+export const UNTITLED = "Untitled project";
+// only the names this scheme makes (2, 3, … — no 0, 1 or leading zeros): a
+// project someone renamed "Untitled project 0" was named by them
+export const UNTITLED_RE = /^Untitled project(?: ([2-9]|[1-9]\d+))?$/i; // group 1: its number
+export const isUntitled = (name: string) => !name.trim() || UNTITLED_RE.test(name.trim());
+
+// wipe the workspace, keep the person: ui prefs (coder name, theme, fonts),
+// the AI model and lenses, and the hotbar's mode survive; everything
+// project-shaped resets — including the speaker map, which belongs to the
+// study (see exportProject): a lingering "P is quiet" from study A would
+// silently apply to study B's "P" — and the redaction terms: they are study
+// A's participants' names, and must not sit in study B's settings or travel
+// out in its project file
 function blankProject(s: State) {
   return {
     transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
     active: "browse", hotbar: { mode: s.hotbar.mode, pinned: [] }, hotbarCache: [],
+    ai: { ...s.ai, redactTerms: [] },
     video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, substBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
     answers: [], nextAid: 1,
     // speakerFocus cleared with them: a stale focus name matching a speaker in
@@ -1128,8 +1143,8 @@ export const useStore = create<State>()(
       search: NO_SEARCH,
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
 
-      newProject: () => {
-        set(blankProject(get()));
+      newProject: (name = "") => {
+        set({ ...blankProject(get()), projectName: name });
         forgetScroll();
         projectSwapped();
       },
@@ -3280,7 +3295,9 @@ export const useStore = create<State>()(
 export function hasProjectWork(s: State): boolean {
   if (Object.keys(s.transcripts).length || s.segments.length) return true; // the cheap, common answer
   const save = useStore.persist.getOptions().partialize!;
-  return JSON.stringify(save(s)) !== JSON.stringify(save({ ...s, ...blankProject(s) }));
+  // an "Untitled project 3" given at creation is not something anyone wrote
+  const blank = { ...s, ...blankProject(s), ...(isUntitled(s.projectName) ? { projectName: s.projectName } : {}) };
+  return JSON.stringify(save(s)) !== JSON.stringify(save(blank));
 }
 
 // Bring a persisted state written by any older build into today's shape.

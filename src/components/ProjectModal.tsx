@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useState } from "react";
-import { hasProjectWork, useStore } from "../state/store";
+import { UNTITLED, hasProjectWork, useStore } from "../state/store";
 import { openAsNewProject, projectsAvailable } from "../state/projects";
 import { statsOf } from "../project";
 import { announce } from "../announce";
@@ -15,7 +15,7 @@ export function ProjectModal() {
   // primitives only — a selector returning a fresh object re-renders forever
   const curTranscripts = useStore((s) => Object.keys(s.transcripts).length);
   const curSegments = useStore((s) => s.segments.length);
-  const curName = useStore((s) => s.projectName.trim() || "Untitled project");
+  const curName = useStore((s) => s.projectName.trim() || UNTITLED);
   // Only a project holding nothing at all is opened over rather than beside.
   // Subscribed, not read once: a CSV imported in the same batch can still be
   // landing after this dialog appears. (Computed only while a file waits.)

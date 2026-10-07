@@ -5,7 +5,7 @@
 // tick, points autosave at the next project and swaps the store's state — so
 // no write can ever pair one project's state with the other's key. Moves run
 // one at a time: a second click while the first is still reading waits its turn.
-import { useStore } from "./store";
+import { UNTITLED, UNTITLED_RE, useStore } from "./store";
 import type { Project } from "../project";
 import { activeKey, dropRawState, enterProject, listProjects, newProjectKey, projectsAvailable,
   readProject, saveNow } from "./persistence";
@@ -81,17 +81,40 @@ async function open(key: string, discard = false) {
 export const switchProject = (key: string) =>
   serial(async () => (key === activeKey() ? false : (await open(key), true)));
 
+// "Untitled project", then "Untitled project 2", 3…: the lowest number no
+// project in this browser goes by (an unnamed one counts as the first). The
+// other projects' names are gathered first; the number is picked by calling
+// the result at the moment of creation, against the open project's name as it
+// is THEN — it can be renamed while its save lands.
+async function untitledNamer(except?: string) {
+  const open = activeKey();
+  const others = (await listProjects()).filter((p) => p.key !== except && p.key !== open).map((p) => p.name);
+  return () => {
+    const names = open === except ? others : [...others, useStore.getState().projectName];
+    const taken = new Set(names.map((n) => UNTITLED_RE.exec(n.trim() || UNTITLED))
+      .filter((m) => m !== null).map((m) => Number(m[1] ?? 1)));
+    let n = 1;
+    while (taken.has(n)) n++;
+    return n === 1 ? UNTITLED : `${UNTITLED} ${n}`;
+  };
+}
+
 export const createProject = () => serial(async () => {
+  const name = await untitledNamer();
   await leave();
-  enter(newProjectKey(), () => useStore.getState().newProject());
+  enter(newProjectKey(), () => useStore.getState().newProject(name()));
 });
 
 /** A project file opened beside the current work instead of over it. Resolves
     false when the file was cancelled while the current project was saving. */
 export const openAsNewProject = (p: Project) => serial(async () => {
+  // a file that names its study keeps that name; an unnamed one is numbered
+  // like any other new project, so the list can tell them apart
+  const named = p.projectName?.trim();
+  const name = named ? () => p.projectName! : await untitledNamer();
   await leave();
   if (useStore.getState().pendingProject !== p) return false;
-  enter(newProjectKey(), () => useStore.getState().openProject(p));
+  enter(newProjectKey(), () => useStore.getState().openProject({ ...p, projectName: name() }));
   return true;
 });
 
@@ -105,8 +128,9 @@ export const deleteProject = (key: string) => serial(async () => {
       .sort((a, b) => (b.used ?? 0) - (a.used ?? 0))[0];
     if (next) await open(next.key, true);
     else {
+      const name = await untitledNamer(key); // numbered among what will be left
       notBusy();
-      enter(newProjectKey(), () => useStore.getState().newProject());
+      enter(newProjectKey(), () => useStore.getState().newProject(name()));
     }
   }
   await dropRawState(key);

@@ -216,7 +216,7 @@ it("deleting: another project keeps its pending edit; the open one moves on; the
   const left = await app.listProjects();
   expect(left).toHaveLength(1);
   expect(left[0].key).not.toBe(FIRST);
-  expect(app.s().projectName).toBe("");
+  expect(app.s().projectName).toBe("Untitled project"); // numbered among what is left: nothing
   expect(app.s().transcripts).toEqual({});
 });
 
@@ -596,6 +596,104 @@ it("anything left in a project counts as work — a lone decision ledger include
   expect(hasProjectWork(app.s())).toBe(false);
   app.s().setUi({ fontSize: 30 });               // the person's settings are not the project's
   expect(hasProjectWork(app.s())).toBe(false);
+});
+
+it("a new project keeps the person's AI choices, never the last study's redaction terms", async () => {
+  vi.useFakeTimers();
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")]]); // redacts "Study A"
+  const app = await boot(data);
+  app.s().setAi({ lenses: ["transcription", "emotion"] });
+  await app.createProject();
+  expect(app.s().ai).toEqual({ model: "gpt-5", redactTerms: [], lenses: ["transcription", "emotion"] });
+  expect(app.s().hotbar.mode).toBe("auto");
+  await vi.advanceTimersByTimeAsync(1000);
+  const b = app.activeKey();
+  expect((data.get(b) as { state: { ai: { redactTerms: string[] } } }).state.ai.redactTerms).toEqual([]);
+  expect(JSON.parse(app.s().exportProject()).ai.redactTerms).toEqual([]); // nor in its file
+
+  await app.switchProject(FIRST);
+  expect(app.s().ai.redactTerms).toEqual(["Study A"]); // A keeps its own
+  await app.deleteProject(b);
+  await app.deleteProject(FIRST);                      // the last one: a fresh project
+  expect(app.s().ai.redactTerms).toEqual([]);
+  expect(app.s().ai.model).toBe("gpt-5");
+});
+
+it("an envelope with no AI settings doesn't open with the last project's redaction terms", async () => {
+  vi.useFakeTimers();
+  const old = envelope("Study X", "Xan") as { state: Record<string, unknown> };
+  delete old.state.ai;
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")], [`${FIRST}:x`, old]]);
+  const app = await boot(data);
+  await app.switchProject(`${FIRST}:x`);
+  expect(app.s().ai.redactTerms).toEqual([]);
+});
+
+it("a project file opened beside keeps its own redaction terms", async () => {
+  vi.useFakeTimers();
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")]]);
+  const app = await boot(data);
+  const { parseProject } = await import("./project");
+  const p = parseProject(JSON.stringify({ format: "qually-project", version: 1, savedAt: "", projectName: "F",
+    transcripts: {}, segments: [], codebook: {}, ai: { model: "m", redactTerms: ["Fay"], lenses: [] } }));
+  app.s().setPendingProject(p);
+  await app.openAsNewProject(p);
+  expect(app.s().ai.redactTerms).toEqual(["Fay"]);
+  expect(app.s().projectName).toBe("F");
+});
+
+it("new projects are numbered: the lowest number no project goes by", async () => {
+  vi.useFakeTimers();
+  const unnamed = envelope("", "Ann");                  // an unnamed project counts as the first
+  const data = new Map<string, unknown>([[FIRST, unnamed]]);
+  const app = await boot(data);
+  await app.createProject();
+  expect(app.s().projectName).toBe("Untitled project 2");
+  const two = app.activeKey();
+  await app.createProject();
+  expect(app.s().projectName).toBe("Untitled project 3");
+  app.s().setProjectName("Pilot");                     // renamed: its number is free again
+  await app.createProject();
+  expect(app.s().projectName).toBe("Untitled project 3");
+  await app.switchProject(two);
+  await app.deleteProject(two);                        // 2 is free now
+  await app.createProject();
+  expect(app.s().projectName).toBe("Untitled project 2");
+  const { parseProject } = await import("./project");  // an unnamed file is numbered too
+  const p = parseProject(JSON.stringify({ format: "qually-project", version: 1, savedAt: "",
+    transcripts: {}, segments: [], codebook: {} }));
+  app.s().setPendingProject(p);
+  await app.openAsNewProject(p);
+  expect(app.s().projectName).toBe("Untitled project 4");
+});
+
+it("a new project's given name doesn't make it count as work", async () => {
+  vi.useFakeTimers();
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")]]);
+  const app = await boot(data);
+  await app.createProject();
+  await app.createProject();
+  expect(app.s().projectName).toBe("Untitled project 2");
+  const { hasProjectWork } = await import("./state/store");
+  expect(hasProjectWork(app.s())).toBe(false);          // a file opens over it, not beside
+  app.s().setProjectName("Pilot study");
+  expect(hasProjectWork(app.s())).toBe(true);
+  app.s().setProjectName("Untitled project 0"); // not a name the scheme gives: someone chose it
+  expect(hasProjectWork(app.s())).toBe(true);
+  app.s().setProjectName("Untitled project 1"); // nor this: the first has no number
+  expect(hasProjectWork(app.s())).toBe(true);
+});
+
+it("the number is picked when the project is made, against a rename made while the last one saved", async () => {
+  vi.useFakeTimers();
+  const data = new Map<string, unknown>([[FIRST, envelope("Pilot", "Ann")]]);
+  const app = await boot(data, { slow: new Map([[FIRST, 100]]) });
+  const made = app.createProject();
+  await vi.advanceTimersByTimeAsync(50);  // the outgoing save is still landing
+  app.s().setProjectName("Untitled project");
+  await vi.advanceTimersByTimeAsync(500);
+  await made;
+  expect(app.s().projectName).toBe("Untitled project 2");
 });
 
 it("without IndexedDB there is one project, and moves are refused", async () => {

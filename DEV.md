@@ -76,7 +76,8 @@ Some secondary state has a separate lifetime:
   is the current one; the speaker map and event/section colours belong to the project;
 - AI settings (model, lenses, redaction terms) and the hotbar's mode belong to the
   project, as they do in a project file: switching brings back that project's own, and a
-  new project starts from a copy of the ones in use when it was created;
+  new project starts from a copy of the ones in use when it was created — except the
+  redaction terms, which name one study's participants and start empty;
 - the OpenAI key is outside the project store, in sessionStorage by default or
   localStorage only when the researcher explicitly asks the app to remember it;
 - media contents are not persisted, though project metadata can remember a filename
