@@ -1397,7 +1397,7 @@ function ContextList({ onRun }: { onRun: (pid: string) => void }) {
   const pids = useMemo(() => [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))], [tabs, transcripts]);
   const pending = useMemo(() => pendingSubs(transcripts, aiFlags, lang, pids), [transcripts, aiFlags, lang, pids]);
   // "Write in all" asks first when a term would replace more than a short
-  // reference (see SHORT_REFERENCE): those rows, struck through, and a choice
+  // reference (see SHORT_REFERENCE_WORDS / SHORT_REFERENCE_CHARS): those rows, struck through, and a choice
   const [ask, setAsk] = useState<{ pid: string; btn: HTMLElement } | null>(null);
   // the rows are read live, never kept from the click: what the dialog lists is
   // what its buttons write, and a batch that no longer holds a flagged row has

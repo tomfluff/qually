@@ -166,12 +166,12 @@ test("applyFixes with a skip writes the rest and leaves exactly the skipped mark
   const { suspicious } = await import("./ai/contextualize");
   await useStore.getState().importFiles([new File([
     "line_id,timestamp,speaker,text\n" +
-    "1,00:00:01,P,the first one was fine\n" +
+    "1,00:00:01,P,the one with the map was fine\n" +
     "2,00:00:05,P,it froze\n" +
     "3,00:00:09,P,this crashed and it was not usable\n",
   ], "EXCEPT.csv")]);
   const lines = useStore.getState().transcripts.EXCEPT.lines;
-  const longRef = { quote: "the first one", reason: "", lens: SUBST_LENS, fix: "[Beacon]" };
+  const longRef = { quote: "the one with the map", reason: "", lens: SUBST_LENS, fix: "[Beacon]" };
   const pronoun = { quote: "it", reason: "", lens: SUBST_LENS, fix: "[Harbor]" };
   const shortRef = { quote: "this", reason: "", lens: SUBST_LENS, fix: "[Harbor]" };
   const judgment = { quote: "it was not usable", reason: "", lens: SUBST_LENS, fix: "[Beacon]" };
@@ -180,7 +180,7 @@ test("applyFixes with a skip writes the rest and leaves exactly the skipped mark
 
   expect(useStore.getState().applyFixes("EXCEPT", SUBST_LENS, "source", suspicious)).toBe(2);
   const after = useStore.getState().transcripts.EXCEPT.lines.map((l) => l.text);
-  expect(after).toEqual(["the first one was fine", "[Harbor] froze", "[Harbor] crashed and it was not usable"]);
+  expect(after).toEqual(["the one with the map was fine", "[Harbor] froze", "[Harbor] crashed and it was not usable"]);
   expect(useStore.getState().undoStack.length).toBe(before + 1);
   // every pending substitution left is one the skip picked, still on its line
   const pending = useStore.getState().transcripts.EXCEPT.lines.flatMap((l) => {

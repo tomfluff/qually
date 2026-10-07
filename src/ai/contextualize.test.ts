@@ -5,7 +5,7 @@
 // in it exactly once, and the replacement holds a bracketed term.
 import { describe, expect, it } from "vitest";
 import { redactor } from "./redact";
-import { sanitizeSubs, renderContext, redactProse, proseRedactions, gapsOf, replacedLength, suspicious, SHORT_REFERENCE } from "./contextualize";
+import { sanitizeSubs, renderContext, redactProse, proseRedactions, gapsOf, measureGap, suspicious, SHORT_REFERENCE_WORDS, SHORT_REFERENCE_CHARS } from "./contextualize";
 import { SUBST_LENS } from "./flag";
 import type { Line } from "../state/store";
 
@@ -160,34 +160,108 @@ describe("redactProse", () => {
 });
 
 // "Write in all" asks first when a term replaces more than a short reference.
-// Measured in characters, because Japanese has no spaces to count words by.
 describe("how much of the participant's speech a term replaces", () => {
+  it("sets separate ceilings of three words and three characters", () => {
+    expect({ words: SHORT_REFERENCE_WORDS, chars: SHORT_REFERENCE_CHARS }).toEqual({ words: 3, chars: 3 });
+  });
+
   it("measures the gap a term stands in for, not the words it keeps", () => {
     expect(gapsOf("the first one was slower", "[Paper] was slower")).toEqual([[0, 13]]);
-    expect(replacedLength("the second system", "[Harbor]")).toBe(17);
-    expect(replacedLength("the second system's menu", "[Harbor]'s menu")).toBe(17);
-    expect(replacedLength("it was not usable", "[Beacon]")).toBe(17);
-    expect(replacedLength("2番目のシステム", "[Harbor]")).toBe(8);
-    expect(replacedLength("使えなかった", "[Beacon]")).toBe(6);
-    expect(replacedLength("it", "[Beacon]")).toBe(2);
-    // two terms: the longest single stand-in decides, not the sum
-    expect(replacedLength("the first one and the second one", "[Beacon] and [Harbor]")).toBe(14);
-    // characters, not UTF-16 units: a surrogate pair is one
-    expect(replacedLength("𠮷野家", "[Beacon]")).toBe(3);
-    // a removed space is removed too: " abcde" is six, past the ceiling
-    expect(replacedLength(" abcde", "[Beacon]")).toBe(6);
-    expect(suspicious({ quote: " abcde", fix: "[Beacon]" })).toBe(true);
-    // a fix with no term at all is no resolution: the whole quote counts, not 0
-    expect(gapsOf("使えなかった", "使")).toBeNull();
-    expect(replacedLength("使えなかった", "使")).toBe(6);
+    const quote = "the second system's menu";
+    const fix = "[Beacon]'s menu";
+    const gaps = gapsOf(quote, fix)!;
+    expect({ measures: gaps.map(([a, b]) => measureGap(quote.slice(a, b))), suspicious: suspicious({ quote, fix }) })
+      .toEqual({ measures: [{ unit: "words", n: 3 }], suspicious: false });
   });
-  it("flags anything past a pronoun-length reference, in either language", () => {
-    expect(SHORT_REFERENCE).toBe(5);
-    for (const [quote, fix] of [["it", "[Beacon]"], ["それ", "[Beacon]"], ["最初の", "[Beacon]"], ["this", "[Harbor]"]])
-      expect(suspicious({ quote, fix })).toBe(false);
-    for (const [quote, fix] of [["使えなかった", "[Beacon]"], ["it was not usable", "[Beacon]"],
-      ["the second system", "[Harbor]"], ["2番目のシステム", "[Harbor]"]])
-      expect(suspicious({ quote, fix })).toBe(true);
-    expect(suspicious({ quote: "it" })).toBe(false); // no fix, nothing to write
+
+  it.each([
+    ["it", 1], ["this one", 2], ["the first one", 3], ["the second system", 3],
+  ])("passes a short English reference: %s", (quote, n) => {
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "words", n }, suspicious: false });
+  });
+
+  it.each([
+    ["it was not usable", 4], ["the one with the map", 5],
+  ])("warns when more than three words are removed: %s", (quote, n) => {
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "words", n }, suspicious: true });
+  });
+
+  it("accepts the known three-word miss: it was bad", () => {
+    const quote = "it was bad";
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "words", n: 3 }, suspicious: false });
+  });
+
+  it.each([
+    ["それ", 2], ["あれ", 2], ["最初の", 3],
+  ])("passes a short Japanese reference: %s", (quote, n) => {
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "chars", n }, suspicious: false });
+  });
+
+  it.each([
+    ["2番目の…", 5], ["2番目のシステム", 8], ["使えなかった", 6], ["遅かった", 4], ["それは良い", 5],
+  ])("warns when more than three characters are removed: %s", (quote, n) => {
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "chars", n }, suspicious: true });
+  });
+
+  it("counts mixed Latin and Japanese text without spaces in characters", () => {
+    const quote = "Beaconは使えなかった";
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "chars", n: 13 }, suspicious: true });
+  });
+
+  it.each([
+    ["the first one and the second one", [{ unit: "words", n: 3 }, { unit: "words", n: 3 }], false],
+    ["it and the one with the map", [{ unit: "words", n: 1 }, { unit: "words", n: 5 }], true],
+    ["the first one and 遅かった", [{ unit: "words", n: 3 }, { unit: "chars", n: 4 }], true],
+  ])("judges each term's gap independently: %s", (quote, measures, warn) => {
+    const fix = "[Beacon] and [Harbor]";
+    const gaps = gapsOf(quote, fix)!;
+    expect({ measures: gaps.map(([a, b]) => measureGap(quote.slice(a, b))), suspicious: suspicious({ quote, fix }) })
+      .toEqual({ measures, suspicious: warn });
+  });
+
+  it("counts a whitespace-padded English gap in words, ignoring empty pieces", () => {
+    const quote = " \t the first one \n";
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "words", n: 3 }, suspicious: false });
+  });
+
+  it("counts whitespace-separated Japanese text in words", () => {
+    const quote = "それ は 良い";
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "words", n: 3 }, suspicious: false });
+  });
+
+  it("counts Thai text without spaces in characters", () => {
+    const quote = "ช้าง";
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "chars", n: 4 }, suspicious: true });
+  });
+
+  it("counts a surrogate-pair character once", () => {
+    const quote = "𠮷野家";
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
+      .toEqual({ measure: { unit: "chars", n: 3 }, suspicious: false });
+  });
+
+  it("judges the whole quote when the fix has no term", () => {
+    expect(gapsOf("使えなかった", "使")).toBeNull();
+    for (const [quote, fix, unit, n, warn] of [
+      ["使えなかった", "使", "chars", 6, true], ["it", "i", "words", 1, false],
+    ] as const) {
+      expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix }) })
+        .toEqual({ measure: { unit, n }, suspicious: warn });
+    }
+  });
+
+  it("never asks for a span without a fix", () => {
+    const quote = "使えなかった";
+    expect({ measure: measureGap(quote), suspicious: suspicious({ quote }) })
+      .toEqual({ measure: { unit: "chars", n: 6 }, suspicious: false });
   });
 });

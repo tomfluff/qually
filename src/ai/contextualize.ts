@@ -156,25 +156,27 @@ export function gapsOf(quote: string, fix: string): [number, number][] | null {
   return gaps;
 }
 
-/** The longest stretch of the participant's words one [term] replaces, in
-    CHARACTERS (code points): Japanese has no spaces to count words by. A fix
-    that is not a clean resolution counts the whole quote. */
-export const replacedLength = (quote: string, fix: string) =>
-  Math.max(0, ...(gapsOf(quote, fix) ?? [[0, quote.length]])
-    .map(([a, b]) => Array.from(quote.slice(a, b)).length)); // untrimmed: a removed space is removed too
+/** The gap chooses its unit: spaces allow word counting; CJK/Thai without
+    spaces need code points because the transcript stores no language. */
+export const measureGap = (text: string): { unit: "words" | "chars"; n: number } =>
+  /\s/u.test(text) || !/[\p{Script_Extensions=Han}\p{Script_Extensions=Hiragana}\p{Script_Extensions=Katakana}\p{Script_Extensions=Thai}]/u.test(text)
+    ? { unit: "words", n: text.split(/\s+/u).filter(Boolean).length }
+    : { unit: "chars", n: Array.from(text).length };
 
-/** A term may stand in for this many characters and still count as a short
-    reference. It only decides whether "Write in all" asks first, so it errs
-    toward asking: 5 is the most that still catches 使えなかった ("it was
-    unusable", 6). Ceiling: anything longer is flagged, so English ordinals
-    ("the first one", 13) and 2番目のシステム (8) ask too, and only pronoun-length
-    references (it, this, それ, 最初の) go through unasked; a Japanese predicate
-    of five characters or fewer (遅かった, "was slow", 4) is not caught. */
-export const SHORT_REFERENCE = 5;
+/** Ceiling: 3 words passes "it", "this one", "the first one", "the second
+    system"; longer gaps ask for "it was not usable", "the one with the map".
+    Known miss: "it was bad" (3 words) goes through unasked. */
+export const SHORT_REFERENCE_WORDS = 3;
+/** Ceiling: 3 characters passes それ, あれ, 最初の; longer gaps ask for
+    2番目の…, 使えなかった, 遅かった, and the whole それは良い. */
+export const SHORT_REFERENCE_CHARS = 3;
 
 /** a pending substitution whose term replaces more than a short reference */
 export const suspicious = (sp: { quote: string; fix?: string }) =>
-  !!sp.fix && replacedLength(sp.quote, sp.fix) > SHORT_REFERENCE;
+  !!sp.fix && (gapsOf(sp.quote, sp.fix) ?? [[0, sp.quote.length]]).some(([a, b]) => {
+    const { unit, n } = measureGap(sp.quote.slice(a, b));
+    return n > (unit === "words" ? SHORT_REFERENCE_WORDS : SHORT_REFERENCE_CHARS);
+  });
 
 /** The trust boundary, testable without the network. A proposal survives only
     if it names a line that was sent and may be rewritten, quotes words that
