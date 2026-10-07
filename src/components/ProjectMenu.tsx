@@ -6,7 +6,7 @@ import { activeKey, createProject, deleteProject, listProjects, projectsAvailabl
   switchProject, type ProjectEntry } from "../state/projects";
 import { ProjectError } from "../project";
 import { announce } from "../announce";
-import { useToggleMenu } from "../usePopover";
+import { OVERLAY_SELECTOR, useToggleMenu } from "../usePopover";
 import { onProjectSwap } from "../sessionReset";
 import { saveText } from "./ExportMenu";
 import { Icon } from "./Icon";
@@ -77,9 +77,10 @@ export function ProjectMenu() {
   };
   // a refused move reopens the menu with the reason in it — sighted readers
   // get the line, screen-reader users the announcement
-  // (not over a dialog opened meanwhile: the menu would take focus out of it)
+  // (not over anything opened meanwhile — a dialog, the palette, a popover:
+  // the menu would pull focus out from under it)
   const refused = (msg: string) => {
-    if (!document.querySelector(".about-backdrop")) setOpen(true);
+    if (!document.querySelector(OVERLAY_SELECTOR)) setOpen(true);
     showError(msg);
   };
   const openProject = async (p: ProjectEntry) => {

@@ -16,15 +16,16 @@ export function ProjectModal() {
   const curTranscripts = useStore((s) => Object.keys(s.transcripts).length);
   const curSegments = useStore((s) => s.segments.length);
   const curName = useStore((s) => s.projectName.trim() || "Untitled project");
+  // Only a project holding nothing at all is opened over rather than beside.
+  // Subscribed, not read once: a CSV imported in the same batch can still be
+  // landing after this dialog appears. (Computed only while a file waits.)
+  const hasWork = useStore((s) => !!s.pendingProject && hasProjectWork(s));
   const [opening, setOpening] = useState(false);
   const [err, setErr] = useState("");
   useEffect(() => setErr(""), [p]); // a refusal belongs to the file it refused
   const dialogRef = useDialogFocus();
   if (!p) return null;
   const cur = { transcripts: curTranscripts, segments: curSegments };
-  // Only a project holding nothing at all is opened over rather than beside
-  // (read here, not subscribed: nothing behind this modal can change it).
-  const hasWork = hasProjectWork(useStore.getState());
 
   const st = statsOf(p);
   const close = () => useStore.getState().setPendingProject(null);

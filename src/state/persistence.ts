@@ -204,12 +204,15 @@ export const dropRawState = async (key: string): Promise<void> => {
   // a queued flush must not resurrect what we just dropped — but only THIS
   // project's: dropping another must not cost the open project its edits
   if (pending?.key === key) pending = null;
-  try { localStorage.removeItem(key); } catch { /* nothing to drop */ }
-  if (typeof indexedDB === "undefined") return;
+  const dropLegacy = () => { try { localStorage.removeItem(key); } catch { /* nothing to drop */ } };
+  if (typeof indexedDB === "undefined") { dropLegacy(); return; }
   // The delete in a transaction of its own: on a full disk any put can fail,
   // and a delete must not fail with it — freeing space is the point. A
-  // failure here is the caller's to report.
+  // failure here is the caller's to report, and leaves everything as it was:
+  // the legacy copy (all there is when its migration never landed) goes only
+  // once the delete has.
   await idbWrite([], [key]);
+  dropLegacy();
   delete index.meta[key];
   // best effort: a stale entry for a gone key shows nowhere (the list comes
   // from the envelopes present)

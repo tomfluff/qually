@@ -411,6 +411,16 @@ it("on a full disk the open project can still be deleted — the last one, or wi
   expect(app.s().transcripts).toEqual({});
 });
 
+it("a failed delete leaves a never-migrated legacy copy where it was", async () => {
+  vi.useFakeTimers();
+  const ls = new Map([[FIRST, JSON.stringify(envelope("Study A", "Ann"))]]);
+  const faults: Faults = { full: true, failing: new Set([FIRST]) }; // migration can't land; nor can the delete
+  const app = await boot(new Map(), faults, ls);
+  expect(app.s().projectName).toBe("Study A");
+  await expect(app.deleteProject(FIRST)).rejects.toThrow();
+  expect(ls.has(FIRST)).toBe(true); // the only saved copy of Study A
+});
+
 it("a record whose state isn't a project object is refused, and left as it was", async () => {
   vi.useFakeTimers();
   const odd = { version: 0, state: [{ transcripts: {} }] };

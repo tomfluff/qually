@@ -10,10 +10,14 @@ import { getKey, setKey, isRemembered } from "../ai/key";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 import { announce } from "../announce";
+import { onProjectSwap } from "../sessionReset";
 
 // Settings popover: instant-apply controls (no save button), all persisted via ui autosave.
 export function SettingsButton() {
   const [open, setOpen] = useState(false);
+  // its speaker-rename and redaction drafts were typed for the project then
+  // open: once another one opens they would be applied to it
+  useEffect(() => onProjectSwap(() => setOpen(false)), []);
   const [tab, setTab] = useState<"Appearance"|"Reading"|"Media"|"Coding"|"Speakers"|"AI">("Appearance");
   const [dragSpeed, setDragSpeed] = useState<number | null>(null); // scroll slider mid-drag value (%)
   const [dragVol, setDragVol] = useState<number | null>(null);     // volume slider mid-drag value (%)
