@@ -76,6 +76,7 @@ export function ProjectMenu() {
     if (!open) {
       setEntries([]); setListError(unseen.current); setRenaming(false); setConfirmKey(null);
       unseen.current = "";
+      focusAfterDelete.current = null; // a delete that finished after the menu closed points nowhere now
     }
     setOpen(!open);
   };

@@ -432,6 +432,25 @@ it("a failed delete leaves a never-migrated legacy copy where it was", async () 
   expect(app.s().projectName).toBe("Study A");
 });
 
+it("after a full-disk delete of the open project, a reload opens a project that is there", async () => {
+  vi.useFakeTimers();
+  const faults: Faults = {};
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")], [`${FIRST}:x`, envelope("Study X", "Xan")]]);
+  let app = await boot(data, faults);
+  await app.switchProject(`${FIRST}:x`);
+  await app.switchProject(FIRST);           // the index on disk now says A
+  await vi.advanceTimersByTimeAsync(1000);
+  faults.full = true;                       // the pointer's write will fail; the delete won't
+  await app.deleteProject(FIRST);
+  expect(data.has(FIRST)).toBe(false);
+  faults.full = false;
+  app = await boot(data, faults);
+  expect(app.activeKey()).toBe(`${FIRST}:x`);
+  expect(app.s().projectName).toBe("Study X");
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(data.has(FIRST)).toBe(false);      // and no blank ghost of A written back
+});
+
 it("a record whose state isn't a project object is refused, and left as it was", async () => {
   vi.useFakeTimers();
   const odd = { version: 0, state: [{ transcripts: {} }] };

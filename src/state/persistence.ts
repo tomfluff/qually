@@ -108,7 +108,23 @@ const readActive = async (): Promise<unknown> => {
   // project is open under the store that booted — and one naming another
   // project can't prove ours empty, so it keeps the write gate shut.
   else if (key !== index.active) return null;
+  const v = await idbGet(index.active);
+  if (v !== undefined || hasLegacyCopy(index.active)) return v;
+  // The pointer names a project with nothing saved while others ARE saved: a
+  // brand-new one never written, or one deleted when the pointer's own write
+  // failed (a full disk). Booting blank under that key would hide the rest
+  // behind the menu, and the first autosave would bring the deleted one back
+  // as an empty ghost — open the most recently used project that is there.
+  const keys = (await idbKeys()).filter(isProjectKey)
+    .sort((a, b) => (index.meta[b]?.used ?? 0) - (index.meta[a]?.used ?? 0));
+  if (!keys.length) return undefined; // a genuine first run
+  if (!adopt) return null;            // late: not ours to re-point, and not proof of empty
+  index.active = keys[0];
   return idbGet(index.active);
+};
+// only the first project ever had a localStorage copy; a blocked probe is "no"
+const hasLegacyCopy = (key: string) => {
+  try { return key === FIRST_KEY && localStorage.getItem(key) !== null; } catch { return false; }
 };
 
 /** the store tells us when hydration finished; until then, writes are dropped —
@@ -241,7 +257,7 @@ export interface ProjectEntry { key: string; name: string; transcripts: number |
 export const listProjects = async (): Promise<ProjectEntry[]> => {
   const keys = new Set(typeof indexedDB === "undefined" ? [] : (await idbKeys()).filter(isProjectKey));
   keys.add(index.active); // a brand-new project has no envelope until its first write
-  if (legacyCopy(FIRST_KEY)) keys.add(FIRST_KEY);
+  if (!keys.has(FIRST_KEY) && hasLegacyCopy(FIRST_KEY)) keys.add(FIRST_KEY); // presence only: no 5 MB parse per opening
   return [...keys].sort().map((key) => {
     const m = index.meta[key];
     return { key, name: m?.name ?? "", transcripts: m?.transcripts ?? null, used: m?.used ?? null };

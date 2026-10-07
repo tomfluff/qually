@@ -24,6 +24,12 @@ it("opens autosave after an empty IndexedDB read even when legacy storage is blo
           queueMicrotask(() => { request.result = undefined; request.onsuccess?.(); });
           return request;
         },
+        // an empty store: boot asks what else is saved when the open project reads empty
+        getAllKeys: () => {
+          const request: { result?: unknown; onsuccess?: () => void; onerror?: () => void } = {};
+          queueMicrotask(() => { request.result = []; request.onsuccess?.(); });
+          return request;
+        },
         put: (value: unknown, key: IDBValidKey) => {
           writes.push({ key, value });
           queueMicrotask(() => tx.oncomplete?.());
