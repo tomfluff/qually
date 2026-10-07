@@ -53,7 +53,7 @@ export const renderCodebook = (codes: SuggestCode[], r: Redaction): string => {
 export const renderWindow = (lines: Line[], r: Redaction, context?: Set<string>): string => {
   const window = lines.map((l) => {
     const tag = context?.has(l.speaker.trim()) ? "[context] " : "";
-    return `${l.id}\t${tag}${r.redact(l.speaker)}\t${r.redact(l.text)}${codedField(l)}`;
+    return `${l.id}\t${tag}${r.redact(l.speaker)}\t${r.redact(l.text)}${codedField(l, r)}`;
   }).join("\n");
   return `TRANSCRIPT:\n${window}`;
 };

@@ -58,7 +58,7 @@ export const renderQuestion = (question: string, r: Redaction): string =>
 export const renderFindWindow = (lines: Line[], r: Redaction, context?: Set<string>): string =>
   `TRANSCRIPT:\n${lines.map((l) => {
     const tag = context?.has(l.speaker.trim()) ? "[context] " : "";
-    return `${l.id}\t${tag}${r.redact(l.speaker)}\t${r.redact(l.text)}${codedField(l)}`;
+    return `${l.id}\t${tag}${r.redact(l.speaker)}\t${r.redact(l.text)}${codedField(l, r)}`;
   }).join("\n")}`;
 
 /** What the consent gate previews: the whole request, in the order it is read. */

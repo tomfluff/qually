@@ -30,7 +30,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { linesOf, liveCodes, parkedCodes, useStore, guessQuiet, type Line } from "../state/store";
 import { getKey } from "../ai/key";
 import { modelOf, estimateTokens, costOf, AiError, runKey } from "../ai/openai";
-import { redactor } from "../ai/redact";
+import { redactor, type Redaction } from "../ai/redact";
 import { segExcerpt } from "../contract/excerpt";
 import { norm } from "../contract/segments";
 import { chunksOf, estimateSuggestTokens, renderSuggestChunk, suggestChunk,
@@ -47,6 +47,11 @@ import { sortCodes, type SortBy } from "../codeStats";
     The third state is not a cost control: it is the only way to keep a
     speaker's words off the wire, which is a consent question. */
 type Voice = "code" | "context" | "exclude";
+
+// Count every field the window redacts so consent and both log paths agree.
+const lineRedactions = (lines: Line[], r: Redaction) => lines.reduce((n, l) =>
+  n + r.count(l.text) + r.count(l.speaker)
+    + (l.coded ?? []).reduce((m, name) => m + r.count(name), 0), 0);
 
 // Opened from the Assist panel (a button that is always there) and from any
 // code's own menu (which unmounts the row that opened it). The host captures
@@ -267,7 +272,7 @@ export function FindModal({ initialCodes = [], onClose }: {
     ? codes.reduce((n, c) => n + red.count(c.def) + c.excerpts.reduce((m, e) => m + red.count(e), 0), 0)
     : red.count(question)), [mode, codes, red, question]);
   const redactions = useMemo(() => perPid.reduce((n, x) =>
-    n + x.lines.reduce((m, l) => m + red.count(l.text) + red.count(l.speaker), 0), 0)
+    n + lineRedactions(x.lines, red), 0)
     // the stable half rides EVERY request, so the gate counts it per request
     + askedRedactions * requestCount(perPid), [perPid, red, askedRedactions]);
 
@@ -393,7 +398,7 @@ export function FindModal({ initialCodes = [], onClose }: {
           useStore.getState().logAiCall({
             at: new Date().toISOString(), model: model.id, task: "find", pid: t.pid,
             lines: c.length,
-            redactions: c.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0) + askedRedactions,
+            redactions: lineRedactions(c, red) + askedRedactions,
             inTok: usage.inTok, outTok: usage.outTok, cachedTok: usage.cachedTok, writeTok: usage.writeTok,
             costUsd: +usage.costUsd.toFixed(5),
           });
@@ -411,7 +416,7 @@ export function FindModal({ initialCodes = [], onClose }: {
       if (job) useStore.getState().logAiIncomplete(e, {
         model: model.id, task: "find", pid: job.pid,
         lines: job.chunk.length,
-        redactions: job.chunk.reduce((n, l) => n + red.count(l.text) + red.count(l.speaker), 0)
+        redactions: lineRedactions(job.chunk, red)
           + askedRedactions,
       });
       if ((e as Error).name === "AbortError") return;

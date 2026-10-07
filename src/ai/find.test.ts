@@ -5,6 +5,7 @@
 import { describe, expect, it, test } from "vitest";
 import { renderWindow } from "./suggest";
 import { lineSize, codedLines } from "./pack";
+import { estimateTokens } from "./openai";
 import { sanitizeFindReply, renderQuestion, renderFindWindow, renderFindChunk } from "./find";
 import { redactor } from "./redact";
 import type { Line, Segment } from "../state/store";
@@ -97,9 +98,30 @@ test("codedField: a coded line names its codes; an uncoded line is byte-identica
   const plain: Line = { id: 4, ts: "", speaker: "P", text: "it was slow" };
   const coded: Line = { ...plain, coded: ["pace", "frustration"] };
   expect(renderFindWindow([plain], r)).toBe("TRANSCRIPT:\n4\tP\tit was slow");
+  expect(renderWindow([plain], r)).toBe("TRANSCRIPT:\n4\tP\tit was slow");
   expect(renderFindWindow([coded], r)).toBe("TRANSCRIPT:\n4\tP\tit was slow\t[already coded: pace; frustration]");
   expect(renderWindow([coded], r)).toContain("\t[already coded: pace; frustration]");
   expect(lineSize(coded, r)).toBeGreaterThan(lineSize(plain, r));
+});
+
+test.each([
+  ["renderFindWindow", renderFindWindow],
+  ["renderWindow", renderWindow],
+])("codedField: %s redacts context-only code names", (_name, render) => {
+  const coded: Line = { ...L(4, "it was slow"), coded: ["Dana at North Clinic"] };
+  const output = render([coded], redactor(["Dana"]));
+  expect(output).not.toContain("Dana");
+  expect(output).toContain("\t[already coded: [REDACTED_1] at North Clinic]");
+});
+
+test("lineSize sizes redacted context-only code names and keeps its unredacted fallback", () => {
+  const coded: Line = { ...L(4, "it was slow"), coded: ["Dana at North Clinic"] };
+  expect(lineSize(coded, redactor(["Dana"]))).toBe(
+    estimateTokens("4\tP\tit was slow\t[already coded: [REDACTED_1] at North Clinic]"),
+  );
+  expect(lineSize(coded)).toBe(
+    estimateTokens("4\tP\tit was slow\t[already coded: Dana at North Clinic]"),
+  );
 });
 
 test("codedLines labels actual lines across sparse ids, excluding candidates and rejections", () => {

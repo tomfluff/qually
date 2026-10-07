@@ -61,17 +61,17 @@ export const lineSize = (
 ): number => {
   const red = r ? r.redact.bind(r) : (s: string) => s;
   const tag = context?.has(l.speaker.trim()) ? "[context] " : "";
-  return estimateTokens(`${l.id}\t${tag}${red(l.speaker)}\t${red(l.text)}${codedField(l)}`);
+  return estimateTokens(`${l.id}\t${tag}${red(l.speaker)}\t${red(l.text)}${codedField(l, { redact: red })}`);
 };
 
 /** The optional fourth field of a transcript line: the codes the researcher has
     already given it. Set only by Find's "coded excerpts only" scope, where the
     lines sent are exactly the coded ones and the model is told what they carry —
-    so it can propose what they do NOT yet carry. Code names go plain, as the
-    codebook's do. Absent means the field is not rendered at all, so every run
-    that does not use it sends the bytes it always sent. */
-export const codedField = (l: { coded?: string[] }) =>
-  l.coded?.length ? `\t[already coded: ${l.coded.join("; ")}]` : "";
+    so it can propose what they do NOT yet carry. These names are context only,
+    so redact them: the model never needs to repeat them. Absent means the field
+    is not rendered at all, so runs without it send the bytes they always sent. */
+export const codedField = (l: { coded?: string[] }, r: { redact: (s: string) => string }) =>
+  l.coded?.length ? `\t[already coded: ${l.coded.map((name) => r.redact(name)).join("; ")}]` : "";
 
 // Line ids can be timestamps or have arbitrary gaps, so a segment is walked
 // over the REAL lines it covers, never the integers between its ends; only
