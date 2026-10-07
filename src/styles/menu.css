@@ -27,7 +27,15 @@
    white-on-red; without this the two rules fought and the label went red on red */
 .ctxmenu button.danger:not(.btn) svg { color:inherit; }
 .ctxmenu button.danger:not(.btn) { color:#e0554f; }
-.ctxmenu button.danger:not(.btn):hover { background:#e0554f; color:#fff; }
+/* not on a disabled item: this rule is as specific as the disabled one above and
+   later, so a disabled "All accepted codings 0" lit up red under the pointer */
+.ctxmenu button.danger:not(.btn):not(:disabled, [aria-disabled="true"]):hover { background:#e0554f; color:#fff; }
+/* Quiet text inside an item (a count, a project's "last used" line) is --muted,
+   which on the hover wash (--sel) is 3.9:1 in the light theme, under AA: inside
+   a hovered item it takes the dimmer body ink instead (6.6:1), and on a danger
+   item's red it follows the item's own white rather than going grey-on-red. */
+.ctxmenu button:not(.btn):not(:disabled, [aria-disabled="true"]):hover :is(.ctxcount, .project-meta) { color:var(--fg-dim); }
+.ctxmenu button.danger:not(.btn):not(:disabled, [aria-disabled="true"]):hover :is(.ctxcount, .project-meta) { color:inherit; }
 /* a labelled group inside a context menu — the shape the Codebook's Options
    menu already uses, so a menu that holds two unlike things says which is which */
 .ctxmenu .ctxgrp { font-size:10px; text-transform:uppercase; letter-spacing:.06em;
@@ -58,9 +66,6 @@
 .project-name { display:flex; align-items:center; gap:7px; overflow-wrap:anywhere; }
 .project-open[aria-current="true"] .project-name { font-weight:700; }
 .project-meta { color:var(--muted); font-size:.85em; }
-/* --muted on the hover wash (--sel) is 3.9:1 in the light theme, under AA:
-   the dimmer body ink keeps the line quiet and readable (6.6:1) */
-.ctxmenu button.project-open:hover .project-meta { color:var(--fg-dim); }
 .project-menu .ctxform > .btn { font-size:inherit; }
 
 /* color picker popover (colorPicker.tsx) — anchored to the swatch that opened it.
