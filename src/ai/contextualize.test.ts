@@ -202,7 +202,7 @@ describe("how much of the participant's speech a term replaces", () => {
   });
 
   it.each([
-    ["2番目の…", 5], ["2番目のシステム", 8], ["使えなかった", 6], ["遅かった", 4], ["それは良い", 5],
+    ["2番目の…", 4], ["2番目のシステム", 8], ["使えなかった", 6], ["遅かった", 4], ["それは良い", 5],
   ])("warns when more than three characters are removed: %s", (quote, n) => {
     expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
       .toEqual({ measure: { unit: "chars", n }, suspicious: true });
@@ -231,16 +231,24 @@ describe("how much of the participant's speech a term replaces", () => {
       .toEqual({ measure: { unit: "words", n: 3 }, suspicious: false });
   });
 
-  it("counts whitespace-separated Japanese text in words", () => {
-    const quote = "それ は 良い";
+  // Whisper puts spaces between Japanese phrases: the script decides, not the
+  // spaces, and only letters and digits count
+  it.each([
+    [" 使えなかった", 6, true],          // a leading space
+    ["それは 使えなかった", 9, true],    // a space inside
+    ["それ は 良い", 5, true],
+    ["それ!!", 2, false],                // punctuation does not count
+    ["最初の。", 3, false],
+  ])("counts Japanese in letters and digits, spaces and punctuation aside: %s", (quote, n, warns) => {
     expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
-      .toEqual({ measure: { unit: "words", n: 3 }, suspicious: false });
+      .toEqual({ measure: { unit: "chars", n }, suspicious: warns });
   });
 
-  it("counts Thai text without spaces in characters", () => {
-    const quote = "ช้าง";
-    expect({ measure: measureGap(quote), suspicious: suspicious({ quote, fix: "[Beacon]" }) })
-      .toEqual({ measure: { unit: "chars", n: 4 }, suspicious: true });
+  it("counts Thai in letters, its combining marks aside", () => {
+    expect(measureGap("ช้าง")).toEqual({ unit: "chars", n: 3 }); // ้ is a mark
+    expect(suspicious({ quote: "ช้าง", fix: "[Beacon]" })).toBe(false);
+    expect(measureGap("ระบบที่สอง")).toEqual({ unit: "chars", n: 8 });
+    expect(suspicious({ quote: "ระบบที่สอง", fix: "[Beacon]" })).toBe(true);
   });
 
   it("counts a surrogate-pair character once", () => {

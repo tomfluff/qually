@@ -156,12 +156,16 @@ export function gapsOf(quote: string, fix: string): [number, number][] | null {
   return gaps;
 }
 
-/** The gap chooses its unit: spaces allow word counting; CJK/Thai without
-    spaces need code points because the transcript stores no language. */
+/** The gap chooses its unit, since the transcript stores no language: any
+    Han/Hiragana/Katakana/Thai character means characters — spaces or not,
+    because Whisper puts spaces between Japanese phrases ("それは 使えなかった")
+    — counting only letters and digits, so neither those spaces nor
+    punctuation add up ("それ!!" is 2). Anything else (English, Korean…) is
+    counted in whitespace-separated words. */
 export const measureGap = (text: string): { unit: "words" | "chars"; n: number } =>
-  /\s/u.test(text) || !/[\p{Script_Extensions=Han}\p{Script_Extensions=Hiragana}\p{Script_Extensions=Katakana}\p{Script_Extensions=Thai}]/u.test(text)
-    ? { unit: "words", n: text.split(/\s+/u).filter(Boolean).length }
-    : { unit: "chars", n: Array.from(text).length };
+  /[\p{Script_Extensions=Han}\p{Script_Extensions=Hiragana}\p{Script_Extensions=Katakana}\p{Script_Extensions=Thai}]/u.test(text)
+    ? { unit: "chars", n: (text.match(/[\p{L}\p{N}]/gu) ?? []).length }
+    : { unit: "words", n: text.split(/\s+/u).filter(Boolean).length };
 
 /** Ceiling: 3 words passes "it", "this one", "the first one", "the second
     system"; longer gaps ask for "it was not usable", "the one with the map".
