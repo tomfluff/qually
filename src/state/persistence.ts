@@ -115,8 +115,12 @@ const readActive = async (): Promise<unknown> => {
   // failed (a full disk). Booting blank under that key would hide the rest
   // behind the menu, and the first autosave would bring the deleted one back
   // as an empty ghost — open the most recently used project that is there.
-  const keys = (await idbKeys()).filter(isProjectKey)
-    .sort((a, b) => (index.meta[b]?.used ?? 0) - (index.meta[a]?.used ?? 0));
+  // the first project may survive only as its legacy copy (a migration that
+  // never landed) — that is a saved project too, and the legacy path below
+  // loads it once the pointer names it
+  const found = (await idbKeys()).filter(isProjectKey);
+  if (hasLegacyCopy(FIRST_KEY) && !found.includes(FIRST_KEY)) found.push(FIRST_KEY);
+  const keys = found.sort((a, b) => (index.meta[b]?.used ?? 0) - (index.meta[a]?.used ?? 0));
   if (!keys.length) return undefined; // a genuine first run
   if (!adopt) return null;            // late: not ours to re-point, and not proof of empty
   index.active = keys[0];

@@ -1440,8 +1440,9 @@ function ContextList({ onRun }: { onRun: (pid: string) => void }) {
   const writeAll = (pid: string, from: HTMLElement, skip?: typeof suspicious) => {
     refocus(from);
     const n = useStore.getState().applyFixes(pid, SUBST_LENS, lang, skip);
-    // counted AFTER the write: a skipped mark the write broke is dropped (see
-    // applySpanFixes), and the announcement must not promise it is still there
+    // counted AFTER the write, from what is actually pending: a line whose write
+    // would have dropped a skipped mark is left whole (see applyFixes), so its
+    // other proposals are still in the list too
     const st = useStore.getState();
     const left = skip ? pendingSubs(st.transcripts, st.aiFlags, lang, [pid]).length : 0;
     announce(`${n} line${n === 1 ? "" : "s"} of ${pid} rewritten`

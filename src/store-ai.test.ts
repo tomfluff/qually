@@ -189,3 +189,39 @@ test("applyFixes with a skip writes the rest and leaves exactly the skipped mark
   });
   expect(pending).toEqual([longRef, judgment]);
 });
+
+test("applyFixes with a skip leaves a line unwritten if a skipped mark would be lost", async () => {
+  const { SUBST_LENS } = await import("./ai/flag");
+  const { suspicious } = await import("./ai/contextualize");
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text\n" +
+    "1,00:00:01,P,this was simpler than the one with the map\n" +
+    "2,00:00:05,P,it froze\n",
+  ], "KEEP.csv")]);
+  const lines = useStore.getState().transcripts.KEEP.lines;
+  useStore.getState().addFlags("KEEP", {
+    1: [{ quote: "this", reason: "", lens: SUBST_LENS, fix: "[the one with the map]" },
+        { quote: "the one with the map", reason: "", lens: SUBST_LENS, fix: "[Paper]" }],
+    2: [{ quote: "it", reason: "", lens: SUBST_LENS, fix: "[Harbor]" }],
+  }, lines, [SUBST_LENS]);
+  const flags = useStore.getState().aiFlags["KEEP:1"];
+  expect(flags.spans.map(suspicious)).toEqual([false, true]);
+  const before = useStore.getState().undoStack.length;
+
+  const written = useStore.getState().applyFixes("KEEP", SUBST_LENS, "source", suspicious);
+  const after = useStore.getState().transcripts.KEEP.lines;
+  expect(useStore.getState().aiFlags["KEEP:1"].spans).toContain(flags.spans[1]);
+  expect(after[0].text).toBe("this was simpler than the one with the map");
+  expect(after[0]).toBe(lines[0]);
+  expect(useStore.getState().aiFlags["KEEP:1"]).toBe(flags);
+  expect(after[1].text).toBe("[Harbor] froze");
+  expect(written).toBe(1);
+  expect(useStore.getState().undoStack.length).toBe(before + 1);
+  expect(useStore.getState().applyFixes("KEEP", SUBST_LENS, "source", suspicious)).toBe(0);
+  expect(useStore.getState().undoStack.length).toBe(before + 1);
+
+  useStore.getState().undo();
+  expect(useStore.getState().transcripts.KEEP.lines.map((l) => l.text)).toEqual(lines.map((l) => l.text));
+  expect(useStore.getState().aiFlags["KEEP:1"]).toBe(flags);
+  expect(useStore.getState().aiFlags["KEEP:2"].spans).toHaveLength(1);
+});

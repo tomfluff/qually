@@ -57,8 +57,16 @@ export function ProjectMenu() {
   // A rename draft or a delete confirmation names the project it was opened
   // on: once another project is open, neither may stand (Rename would write
   // the old name onto this one).
-  useEffect(() => onProjectSwap(() => { setOpen(false); setRenaming(false); setConfirmKey(null); }),
-    [setOpen]);
+  useEffect(() => onProjectSwap(() => {
+    setOpen(false); setRenaming(false); setConfirmKey(null);
+    // App remounts the main view for the new project: focus that was inside it
+    // (a slow read leaves time to Tab back into the transcript) falls to
+    // <body>. Hand it to this trigger — the control that made the move —
+    // never taking it from one that still holds it.
+    requestAnimationFrame(() => {
+      if (!document.activeElement || document.activeElement === document.body) btnRef.current?.focus();
+    });
+  }), [setOpen, btnRef]);
 
   useLayoutEffect(() => {
     if (!open || focusAfterDelete.current === null) return;

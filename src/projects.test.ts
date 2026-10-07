@@ -417,6 +417,20 @@ it("on a full disk the open project can still be deleted — the last one, or wi
   expect(app.s().transcripts).toEqual({});
 });
 
+// The crash screen's reset (or a failed pointer write) can leave the index on
+// a project that is gone while the first project survives only as its legacy
+// localStorage copy: that copy is a saved project too, and boot must open it
+// rather than a blank workspace.
+it("a pointer to a gone project falls back to a first project kept only as its legacy copy", async () => {
+  vi.useFakeTimers();
+  const data = new Map<string, unknown>([["qually-projects", { active: `${FIRST}:b`, meta: {} }]]);
+  const ls = new Map([[FIRST, JSON.stringify(envelope("Study A", "Ann"))]]);
+  const app = await boot(data, undefined, ls);
+  expect(app.activeKey()).toBe(FIRST);
+  expect(app.s().projectName).toBe("Study A");
+  expect(Object.keys(app.s().transcripts)).toEqual(["P01"]);
+});
+
 it("a failed delete leaves a never-migrated legacy copy where it was", async () => {
   vi.useFakeTimers();
   const ls = new Map([[FIRST, JSON.stringify(envelope("Study A", "Ann"))]]);
@@ -549,6 +563,58 @@ it("after CrashScreen's reset nothing writes the project back", async () => {
   app.s().setProjectName("late"); // e.g. the save-health flag flipping
   await vi.advanceTimersByTimeAsync(1000);
   expect(data.has(FIRST)).toBe(false);
+});
+
+// Opening a file over an untouched project goes around the move queue, so a
+// delete of that project still waiting on the next one's read must notice the
+// swap and stop, not enter the next one and drop the key the file now holds.
+it("a delete waiting on a slow read can't drop a project opened in place meanwhile", async () => {
+  vi.useFakeTimers();
+  const faults = { slow: new Map<string, number>() };
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")]]);
+  const app = await boot(data, faults);
+  await app.createProject();
+  const b = app.activeKey();
+  app.s().setProjectName("Study B");
+  await app.switchProject(FIRST);
+  await vi.advanceTimersByTimeAsync(1000);
+  faults.slow.set(b, 2000);
+  const del = app.deleteProject(FIRST);
+  const settled = del.then(() => "deleted", (e: Error) => e.message);
+  await vi.advanceTimersByTimeAsync(50);
+  const file = JSON.parse(app.s().exportProject());
+  file.projectName = "Study F";
+  file.transcripts = { F01: { lines: [{ id: 1, ts: "", speaker: "P", text: "from the file" }] } };
+  file.tabs = ["F01"]; file.active = "F01"; file.segments = [];
+  const { parseProject } = await import("./project");
+  app.s().openProject(parseProject(JSON.stringify(file)));
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(await settled).toMatch(/changed/);
+  expect(app.activeKey()).toBe(FIRST);
+  expect(app.s().projectName).toBe("Study F");
+  expect(nameAt(data, FIRST)).toBe("Study F"); // its autosave landed under its own key
+  expect(nameAt(data, b)).toBe("Study B");     // the other project untouched
+});
+
+// An unnamed file opened OVER an untouched project (ProjectModal's in-place
+// branch calls openProject) keeps the slot's number, as one opened beside
+// gets one: two rows reading "Untitled project" can't be told apart.
+it("an unnamed file opened over an untouched project keeps its numbered name", async () => {
+  vi.useFakeTimers();
+  const app = await boot(new Map([[FIRST, envelope("Study A", "Ann")]]));
+  await app.createProject();                       // "Untitled project"
+  await app.createProject();
+  expect(app.s().projectName).toBe("Untitled project 2");
+  const { parseProject } = await import("./project");
+  const file = JSON.parse(app.s().exportProject());
+  file.transcripts = { F01: { lines: [{ id: 1, ts: "", speaker: "P", text: "from the file" }] } };
+  file.tabs = ["F01"]; file.active = "F01"; delete file.projectName;
+  app.s().openProject(parseProject(JSON.stringify(file)));
+  expect(app.s().projectName).toBe("Untitled project 2");
+  // a named file keeps its own name, untouched project or not
+  await app.createProject();
+  app.s().openProject(parseProject(JSON.stringify({ ...file, projectName: "Study F" })));
+  expect(app.s().projectName).toBe("Study F");
 });
 
 // a last project reset boots blank under the SAME key, so its reading

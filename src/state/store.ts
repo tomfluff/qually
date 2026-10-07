@@ -1965,6 +1965,11 @@ export const useStore = create<State>()(
           const { text, spans } = applySpanFixes(before, cur.spans,
             (sp) => spanLens(sp) === lens && !!sp.fix && !skip?.(sp));
           if (text === before) return l;
+          // "All except these" promises the skipped stay pending; a write that
+          // would drop one (its words now first-occur inside an inserted term)
+          // leaves the whole line for one-by-one review instead
+          if (skip && cur.spans.some((sp) => spanLens(sp) === lens && !!sp.fix && skip(sp) && !spans.includes(sp)))
+            return l;
           n++;
           entries.push(lineEntry(s, pid, l.id)!);
           flags[key] = { ...cur, hash: hashLine(text), spans };
@@ -2337,7 +2342,11 @@ export const useStore = create<State>()(
           markers: p.markers ?? [],
           summaries: p.summaries ?? {},
           projectNotes: p.projectNotes ?? "",
-          projectName: p.projectName ?? "",
+          // an unnamed file opened OVER an untouched project keeps that slot's
+          // name — blank or the "Untitled project N" it was given — so two rows
+          // never read the same; over real work (the one-project session's
+          // replace) it stays unnamed, as before
+          projectName: p.projectName?.trim() ? p.projectName : hasProjectWork(s) ? "" : s.projectName,
           codeGroups: p.codeGroups ?? [],
           codeAreas: p.codeAreas ?? [],
           stretches: p.stretches ?? [],

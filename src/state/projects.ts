@@ -11,6 +11,7 @@ import { activeKey, dropRawState, enterProject, listProjects, newProjectKey, pro
   readProject, saveNow } from "./persistence";
 import { dropScroll, positioned, scrollFor } from "../scrollMemory";
 import { aiBusy } from "../ai/openai";
+import { projectGeneration } from "../sessionReset";
 
 export { activeKey, listProjects, projectsAvailable, type ProjectEntry } from "./persistence";
 
@@ -66,8 +67,9 @@ function enter(key: string, load: () => void) {
 // read FIRST: a project that can't be read is never entered, and the one you
 // are on stays exactly as it was. `discard`: the one you are on is about to be
 // deleted, so its edits needn't land first.
-async function open(key: string, discard = false) {
+async function open(key: string, discard = false, stillHome: () => void = () => {}) {
   const saved = await readProject(key);
+  stillHome();
   // a record that isn't an envelope would load as a blank project — and the
   // first autosave would then write that blank over whatever it does hold
   const state = (saved as { state?: unknown } | undefined)?.state;
@@ -124,11 +126,21 @@ export const openAsNewProject = (p: Project) => serial(async () => {
     a project needs deleting, and its edits are going anyway. */
 export const deleteProject = (key: string) => serial(async () => {
   if (key === activeKey()) {
+    // A file opened over an untouched project goes around this queue: if the
+    // open project was swapped while this waited on a listing or a read, the
+    // key now holds that file — enter nothing and drop nothing.
+    const home = projectGeneration();
+    const stillHome = () => {
+      if (projectGeneration() !== home)
+        throw new Error("the project changed while it was being deleted, so nothing was deleted");
+    };
     const next = (await listProjects()).filter((p) => p.key !== key)
       .sort((a, b) => (b.used ?? 0) - (a.used ?? 0))[0];
-    if (next) await open(next.key, true);
+    stillHome();
+    if (next) await open(next.key, true, stillHome);
     else {
       const name = await untitledNamer(key); // numbered among what will be left
+      stillHome();
       notBusy();
       enter(newProjectKey(), () => useStore.getState().newProject(name()));
     }
