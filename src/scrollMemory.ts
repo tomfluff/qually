@@ -19,9 +19,15 @@
 // you had read up to. Kept in their own localStorage key rather than the main
 // store: they are view state, they change on every scroll frame, and they must
 // not ride the project file to another machine (see project.ts).
+import { FIRST_KEY } from "./state/persistence";
+
 interface ScrollAnchor { index: number; delta: number }
 
-const KEY = "coding-app-scroll";
+// One key per project, so each keeps its own reading positions — "P01" in one
+// study is not "P01" in another. The first project keeps the original key; a
+// later one's carries the same suffix as its envelope key (persistence.ts).
+const keyFor = (projectKey: string) => "coding-app-scroll" + projectKey.slice(FIRST_KEY.length);
+let KEY = keyFor(FIRST_KEY);
 
 function load(): Record<string, ScrollAnchor> {
   try {
@@ -44,11 +50,30 @@ export const positioned = new Set<string>(); // tabs whose initial position has 
 // scroll frame, and localStorage.setItem is synchronous — one write per frame
 // would put disk I/O on the scroll's critical path.
 let timer: ReturnType<typeof setTimeout> | undefined;
+function write() {
+  try { localStorage.setItem(KEY, JSON.stringify(savedScroll)); } catch { /* quota: the coding matters, this doesn't */ }
+}
 function persist() {
   clearTimeout(timer);
-  timer = setTimeout(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(savedScroll)); } catch { /* quota: the coding matters, this doesn't */ }
-  }, 400);
+  timer = setTimeout(write, 400);
+}
+
+/** Swap in another project's positions. The current ones are written under
+    their own key first — left to the debounce, they would land under the next
+    project's. */
+export function scrollFor(projectKey: string) {
+  if (keyFor(projectKey) === KEY) return;
+  clearTimeout(timer);
+  write();
+  KEY = keyFor(projectKey);
+  for (const k of Object.keys(savedScroll)) delete savedScroll[k];
+  positioned.clear();
+  Object.assign(savedScroll, load());
+}
+
+/** a deleted project's positions go with it */
+export function dropScroll(projectKey: string) {
+  try { localStorage.removeItem(keyFor(projectKey)); } catch { /* nothing to drop */ }
 }
 
 /** Record where a tab is parked (the only writer — it keeps the copy on disk in step). */

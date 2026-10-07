@@ -55,6 +55,12 @@ export function preselectBrowse(codes: string[]) {
 // as the rest of this cache
 let excerptScroll = 0;
 let codeListScroll = 0;
+// This cache also needs clearing while Browse is unmounted.
+onProjectSwap(() => {
+  remembered.selected = new Set(); remembered.anchor = null;
+  remembered.filter = ""; remembered.facets = EMPTY_CODEBOOK_FACETS;
+  excerptScroll = 0; codeListScroll = 0;
+});
 
 export function BrowseView() {
   const codebook = useStore((s) => s.codebook);
@@ -116,17 +122,6 @@ export function BrowseView() {
   const [recolor, setRecolor] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => { Object.assign(remembered, { selected, anchor, filter, showRejected, facets }); },
     [selected, anchor, filter, showRejected, facets]);
-  // Opening a project replaces the store in place. If the Codebook was the
-  // active view in both files it never unmounts, so neither this component's
-  // state nor `remembered` resets on its own — and both are keyed by
-  // identifiers the next study reuses with different meanings: code NAMES for
-  // the selection, and sids, which a new project hands out from 1 again. The
-  // Code map registers the same forget-me for the same reason.
-  useEffect(() => onProjectSwap(() => {
-    setSelected(new Set()); setAnchor(null); setExpanded(new Set()); setSourceOpen(new Set());
-    setFocusTitle(null);   // a name from the old project must not claim focus in the new one
-  }), []);
-
   const counts = useMemo(() => codeStats(segments, transcripts), [segments, transcripts]);
   const cntIcon = countIconSize(sidebarFontSize);
 

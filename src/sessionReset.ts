@@ -12,6 +12,13 @@ export function onProjectSwap(fn: () => void): () => void {
   return () => listeners.delete(fn);
 }
 
+// Which project the store holds, as a count of swaps: async work (a file still
+// being read) checks it before writing, so a project opened, switched to or
+// started in the meantime never receives what was meant for the last one.
+let generation = 0;
+export const projectGeneration = () => generation;
+
 export function projectSwapped(): void {
+  generation++;
   for (const fn of listeners) fn();
 }

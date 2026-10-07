@@ -1,26 +1,49 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
+import { useState } from "react";
 import { useStore } from "../state/store";
+import { openAsNewProject, projectsAvailable } from "../state/projects";
 import { statsOf } from "../project";
+import { announce } from "../announce";
 import { useDialogFocus } from "../useDialogFocus";
 import { Icon } from "./Icon";
 
-// Opening a project REPLACES the workspace. Same lesson as the re-import modal:
-// undo can't reach across it, so the preview is the safety net — show what's
-// coming in and what's about to go, before anything happens.
+// Preview the file before opening it; existing work stays beside it when this
+// browser can keep several projects.
 export function ProjectModal() {
   const p = useStore((s) => s.pendingProject);
   // primitives only — a selector returning a fresh object re-renders forever
   const curTranscripts = useStore((s) => Object.keys(s.transcripts).length);
   const curSegments = useStore((s) => s.segments.length);
+  const curName = useStore((s) => s.projectName.trim() || "Untitled project");
+  // Anything you would miss counts as work — a codebook drafted before any
+  // transcript, a name, notes or a brief — not just transcripts and coding:
+  // only a project with none of it is opened over rather than beside.
+  const hasWork = useStore((s) => Object.keys(s.transcripts).length > 0 || s.segments.length > 0
+    || Object.keys(s.codebook).length > 0
+    || !!s.projectName.trim() || !!s.projectNotes.trim()
+    || [...Object.values(s.studyBrief), ...Object.values(s.substBrief)].some((t) => t.trim()));
+  const [opening, setOpening] = useState(false);
   const dialogRef = useDialogFocus();
   if (!p) return null;
   const cur = { transcripts: curTranscripts, segments: curSegments };
 
   const st = statsOf(p);
   const close = () => useStore.getState().setPendingProject(null);
-  const hasWork = cur.transcripts > 0 || cur.segments > 0;
+  const asNew = hasWork && projectsAvailable();
   const saved = st.savedAt ? new Date(st.savedAt).toLocaleString() : "unknown date";
+  const label = p.projectName?.trim() || "the project";
+  const open = async () => {
+    if (opening) return;
+    if (!asNew) { useStore.getState().openProject(p); announce(`Opened ${label}.`); return; }
+    setOpening(true);
+    try {
+      // false: cancelled while the current project was still saving
+      if (await openAsNewProject(p)) announce(`Opened ${label} as a new project.`);
+    } catch (e) {
+      announce(`Couldn't open the project: ${e instanceof Error ? e.message : String(e)}.`, { assertive: true });
+    } finally { setOpening(false); }
+  };
 
   return (
     <div className="about-backdrop" onMouseDown={close}>
@@ -55,7 +78,9 @@ export function ProjectModal() {
           </div>
         )}
 
-        {hasWork && (
+        {asNew ? (
+          <div className="imp-note">It opens as a new project. “{curName}” stays in this browser — switch back from the Projects menu.</div>
+        ) : hasWork && (
           <div className="ai-warn">
             <b>This replaces everything currently open</b> — {cur.transcripts} transcript{cur.transcripts === 1 ? "" : "s"} and {cur.segments} segment{cur.segments === 1 ? "" : "s"}.
             Export your current work first if you need it: undo can't reach across this.
@@ -63,8 +88,8 @@ export function ProjectModal() {
         )}
 
         <div className="imp-actions">
-          <button className="btn primary" onClick={() => useStore.getState().openProject(p)}>
-            {hasWork ? "Replace and open" : "Open project"}
+          <button className="btn primary" aria-disabled={opening} onClick={() => { void open(); }}>
+            {asNew ? "Open as new project" : hasWork ? "Replace and open" : "Open project"}
           </button>
           <button className="btn" onClick={close}>Cancel</button>
         </div>

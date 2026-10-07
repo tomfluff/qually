@@ -14,6 +14,7 @@ import { fmtLike, markerColor, markerKey } from "../markers";
 import { Resizer } from "./Resizer";
 import { SummarizeModal } from "./SummarizeModal";
 import { Icon } from "./Icon";
+import { onProjectSwap } from "../sessionReset";
 
 // survives leaving the tab (the view unmounts on tab change), like Browse/Assist
 const remembered = {
@@ -135,6 +136,11 @@ export function SummaryView() {
 // time. Not persisted — it is view state for the session, not project data.
 const sumScroll: Record<string, number> = {};
 const sumTextScroll: Record<string, number> = {};
+onProjectSwap(() => {
+  remembered.pid = null;
+  for (const pid of Object.keys(sumScroll)) delete sumScroll[pid];
+  for (const pid of Object.keys(sumTextScroll)) delete sumTextScroll[pid];
+});
 
 function DetailPane({ pid }: { pid: string }) {
   const { items, lineOf, offset, tsSample } = useSummaryData(pid);

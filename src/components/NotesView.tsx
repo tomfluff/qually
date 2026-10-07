@@ -11,10 +11,12 @@ import { useStore } from "../state/store";
 import { fmtTime } from "../markers";
 import { playheadSecFor, seekVideo } from "../video/seek";
 import { Icon } from "./Icon";
+import { onProjectSwap } from "../sessionReset";
 
 // a stamp line: starts with the em-dash marker and carries a clock time
 // where the document was parked, session-only (same pattern as Browse/Assist/Summary)
 let notesScroll = 0;
+onProjectSwap(() => { notesScroll = 0; });
 
 const STAMP_RE = /^— .*\d{2}:\d{2}/;
 

@@ -14,6 +14,7 @@ import { tailQueue, type TailLimit } from "./TailQueue";
 import { parseCSV } from "../contract/csv";
 import { isMarkerRows } from "../markers";
 import { announce } from "../announce";
+import { projectGeneration } from "../sessionReset";
 
 export function Tabs() {
   const tabs = useStore((s) => s.tabs);
@@ -387,8 +388,12 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
     const f = files?.[0];
     if (!f) return;
     setErr(null); setNote(null);
+    const home = projectGeneration();
     try {
-      const rows = parseCSV(await f.text());
+      const text = await f.text();
+      // another project opened while it was read: this pid is not that project's
+      if (projectGeneration() !== home) return;
+      const rows = parseCSV(text);
       if (!isMarkerRows(rows)) {
         setErr("Not an events CSV — it needs an “event” column and a time (video_time_s, rec_offset_s, or video_time_hms).");
         return;

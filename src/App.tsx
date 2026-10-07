@@ -34,6 +34,7 @@ import { useDismiss, OVERLAY_SELECTOR } from "./usePopover";
 import { hasVideo, playheadSecFor } from "./video/seek";
 import { announce } from "./announce";
 import { saveBlob } from "./download";
+import { onProjectSwap } from "./sessionReset";
 
 // Show/hide the AI noticing highlights — the blind-reading control. Only appears
 // once the active transcript actually has notices, so it costs no chrome before.
@@ -125,6 +126,9 @@ const READ_FONTS: Record<"system" | "serif" | "atkinson", string> = {
 
 export function App() {
   const active = useStore((s) => s.active);
+  // A reused transcript/code name must not carry an editor or menu into another study.
+  const [projectSession, setProjectSession] = useState(0);
+  useEffect(() => onProjectSwap(() => setProjectSession((n) => n + 1)), []);
   // Tabs are a VIEW: closing the last one must not fake a wiped project. As long as
   // any transcript is loaded, keep the Browse pill and the coded work on screen —
   // Welcome is only for a genuinely empty workspace.
@@ -157,8 +161,8 @@ export function App() {
   useEffect(installScrollSpeed, []);
 
   // remember the transcript you were last on — the Notes stamp reads it after
-  // you've switched to a reserved view
-  useEffect(() => { if (onTranscript) useStore.getState().setLastPid(active); }, [active, onTranscript]);
+  // you've switched to a reserved view, even when another project reuses its pid
+  useEffect(() => { if (onTranscript) useStore.getState().setLastPid(active); }, [active, onTranscript, projectSession]);
 
   // minimap width drives its own width + the search bar/toggle offset
   useEffect(() => {
@@ -293,8 +297,8 @@ export function App() {
   return (
     <div id="app" className={zen ? "zen" : ""}>
       <Toolbar />
-      {hasData && <Tabs />}
-      <div id="main">
+      {hasData && <Tabs key={`tabs-${projectSession}`} />}
+      <div id="main" key={`main-${projectSession}`}>
         {hasData && onTranscript && (
           <>
             <CodeSidebar />
@@ -328,15 +332,15 @@ export function App() {
           <Icon name="x" size={sidebarFontSize + 1} /> Exit zen <kbd>Esc</kbd>
         </button>
       )}
-      <CommandPalette />
+      <CommandPalette key={`palette-${projectSession}`} />
       <ImportModal />
       <SegUpdateModal />
       <ImportSignModal />
       <ProjectModal />
       <SaveWarning />
-      <ColorPickerHost />
-      <DefineHost />
-      <FindHost />
+      <ColorPickerHost key={`color-${projectSession}`} />
+      <DefineHost key={`define-${projectSession}`} />
+      <FindHost key={`find-${projectSession}`} />
       <Tooltip />
     </div>
   );

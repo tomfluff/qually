@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yotam Sechayk
 import { create } from "zustand";
 import { persist, type PersistStorage } from "zustand/middleware";
-import { markHydrated, projectStorage, setOnSaveResult } from "./persistence";
+import { FIRST_KEY, activeKey, markHydrated, projectStorage, setOnSaveResult } from "./persistence";
 import { parseCSV, toCSV } from "../contract/csv";
 import { collapseRuns, formatSegRef, norm, type CodedLine } from "../contract/segments";
 import { excerptOf, RESEARCHER } from "../contract/excerpt";
@@ -18,8 +18,8 @@ import type { SectionProposal } from "../sections";
 import { isMarkerRows, markerIdent, markerKey, markerRows, parseMarkers, type Marker } from "../markers";
 import { DEFAULT_ACCENT } from "../palettes";
 import { hasTranslation, lineText, viewLines, type Lang } from "../lineText";
-import { forgetScroll, renameScroll } from "../scrollMemory";
-import { projectSwapped } from "../sessionReset";
+import { forgetScroll, renameScroll, scrollFor } from "../scrollMemory";
+import { projectGeneration, projectSwapped } from "../sessionReset";
 import { PALETTE, pickNewColor, recolorPlan, conflictGraph } from "../codeColors";
 import { announce } from "../announce";
 // earcons imports this store back, but only reads it inside call bodies — the
@@ -508,6 +508,8 @@ export interface State {
 
   importFiles: (files: FileList | File[]) => Promise<void>;
   newProject: () => void;
+  /** another saved project's persisted state replaces this one (projects.ts) */
+  loadProjectState: (saved: unknown) => void;
   resolveImport: (choice: ImportChoice) => void;
   resolveSegUpdates: (apply: boolean) => void;
   resolveImportSign: (name: string | null) => void;
@@ -1085,6 +1087,34 @@ function hotbarCodes(s: State): string[] {
   return liveCodes(s.codebook).sort((a, b) => (count[b] || 0) - (count[a] || 0)).slice(0, 9);
 }
 
+// The study's half of `ui`, kept per project: the speaker map and colour
+// choices (they travel with a project file, see exportProject), which text the
+// study is read in (it decides what excerpts and exports say), and where its
+// map's camera was left. Every other ui field is the person's.
+const PROJECT_UI = ["speakerColors", "speakerWeight", "speakerFocus", "markerColors", "stretchColors",
+  "lang", "mapViewport"] as const;
+
+// wipe the workspace, keep the person: ui prefs (coder name, theme, fonts)
+// and AI settings survive; everything project-shaped resets — including the
+// speaker map, which belongs to the study (see exportProject): a lingering
+// "P is quiet" from study A would silently apply to study B's "P"
+function blankProject(s: State) {
+  return {
+    transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
+    active: "browse", hotbar: { mode: s.hotbar.mode, pinned: [] }, hotbarCache: [],
+    video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, substBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
+    answers: [], nextAid: 1,
+    // speakerFocus cleared with them: a stale focus name matching a speaker in
+    // the NEXT study would silently dim everyone else there
+    ui: { ...s.ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {}, stretchColors: {},
+      lang: "source", mapViewport: null },
+    selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
+    jump: null, search: NO_SEARCH, paletteOpen: false, eventAt: null,
+    pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
+    nextSid: 1, nextMid: 1,
+  } satisfies Partial<State>;
+}
+
 export const useStore = create<State>()(
   persist(
     (set, get) => ({
@@ -1098,25 +1128,27 @@ export const useStore = create<State>()(
       search: NO_SEARCH,
       pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false, saveFailed: false,
 
-      // wipe the workspace, keep the person: ui prefs (coder name, theme, fonts)
-      // and AI settings survive; everything project-shaped resets — including the
-      // speaker map, which belongs to the study (see exportProject): a lingering
-      // "P is quiet" from study A would silently apply to study B's "P"
       newProject: () => {
-        set({
-          transcripts: {}, segments: [], codebook: {}, extSegRows: [], tabs: [], pinnedTabs: [],
-          active: "browse", hotbar: { mode: get().hotbar.mode, pinned: [] }, hotbarCache: [],
-          video: {}, aiFlags: {}, aiGrounds: {}, aiLog: [], ledger: [], markers: [], summaries: {}, projectNotes: "", projectName: "", codeGroups: [], codeAreas: [], codeAreasFp: "", stretches: [], studyBrief: {}, substBrief: {}, codePlan: [], codeClusters: [], mapPositions: emptyLayout(), mapIslandPos: emptyLayout(), lastPid: "",
-          answers: [], nextAid: 1,
-          // speakerFocus cleared with them: a stale focus name matching a speaker in
-          // the NEXT study would silently dim everyone else there
-          ui: { ...get().ui, speakerColors: {}, speakerWeight: {}, speakerFocus: {}, markerColors: {}, stretchColors: {} },
-          selection: emptySel(), savedSelections: {}, undoStack: [], redoStack: [], selRun: false,
-          jump: null, search: NO_SEARCH,
-          pendingImports: [], pendingProject: null, pendingSegUpdates: [], pendingImportSign: null, pendingCoderAsk: false,
-          nextSid: 1, nextMid: 1,
-        });
+        set(blankProject(get()));
         forgetScroll();
+        projectSwapped();
+      },
+
+      // Another project from this browser, as its envelope stored it. The
+      // person's settings stay as they are now (every envelope carries a copy,
+      // and the newest is the one in use); everything project-shaped comes from
+      // the envelope, or resets where the envelope has none — so nothing of the
+      // project being left can survive into this one. Its scroll positions are
+      // swapped by the caller (projects.ts), not forgotten.
+      loadProjectState: (saved) => {
+        const s = get();
+        const p = (saved ?? {}) as Partial<State>;
+        const blank = blankProject(s);
+        const own = Object.fromEntries(PROJECT_UI
+          .filter((k) => p.ui?.[k] !== undefined).map((k) => [k, p.ui![k]]));
+        const next = { ...s, ...blank, ...p, ui: { ...blank.ui, ...own } } as State;
+        migrateState(next);
+        set(next);
         projectSwapped();
       },
 
@@ -1132,15 +1164,25 @@ export const useStore = create<State>()(
         // would otherwise overwrite the import and silently delete the imported data.
         let marked = false;
         const mark = () => { if (!marked) { marked = true; get().pushUndo(); } };
+        // Reading a file is async, and the Projects menu stays reachable meanwhile.
+        // If another project was opened while one was read, stop: nothing below —
+        // not even the batch's wrap-up, which signs and un-undoes by "what's new
+        // since we started" — may touch a project this batch wasn't meant for.
+        const home = projectGeneration();
         for (const f of Array.from(files)) {
+          let text: string;
+          try { text = await f.text(); }
+          catch (err) { skipped.push(`${f.name}: ${err instanceof Error ? err.message : String(err)}`); continue; }
+          if (projectGeneration() !== home)
+            throw new Error(`${[...skipped, `${f.name} and any after it weren't imported: the project changed while they were being read`].join("; ")}`);
           try {
             // a project file goes through the same one entry point; the modal confirms
             // before it replaces the workspace
             if (/\.json$/i.test(f.name)) {
-              set({ pendingProject: parseProject(await f.text()) });
+              set({ pendingProject: parseProject(text) });
               continue;
             }
-            const rows = parseCSV(await f.text());
+            const rows = parseCSV(text);
             const cols = rows.length ? Object.keys(rows[0]) : [];
             if (cols.includes("segment_ref")) { mark(); importSegments(get, set, rows); }
             // isMarkerRows FIRST: an events CSV is schema-loose and keeps every
@@ -2254,11 +2296,13 @@ export const useStore = create<State>()(
               .map((sp) => [sp, "quiet" as SpeakerWeight])),
         };
         set({
-          // speakerFocus doesn't travel between studies — a stale name matching a
-          // speaker in the loaded project would silently dim everyone else
-          ui: { ...s.ui, speakerColors: speakers.colors, speakerWeight: speakers.weight, speakerFocus: {},
+          // the project's half of ui starts blank (speakerFocus, the reading
+          // language, the map camera: none travels between studies — a stale
+          // focus name matching a speaker here would silently dim everyone else)
+          ui: { ...blankProject(s).ui, speakerColors: speakers.colors, speakerWeight: speakers.weight,
             markerColors: p.markerColors ?? {},
             stretchColors: p.stretchColors ?? {} },
+          lastPid: "", // "the transcript you were last on" was in the other study
           // ascending line ids are an invariant everything downstream leans on
           // (binary searches, rowsToLines) — rehydrate enforces it, and a
           // hand-edited project file must not be the one path that skips it
@@ -3199,7 +3243,7 @@ export const useStore = create<State>()(
       },
     }),
     {
-      name: "coding-app-state",
+      name: FIRST_KEY, // the first project's key; persistence.ts decides which one opens
       // Debounced IndexedDB (see persistence.ts for why localStorage lost the
       // job). A refused write still surfaces: persistence.ts reports save
       // health and the callback below drives saveFailed / the App banner.
@@ -3216,99 +3260,106 @@ export const useStore = create<State>()(
         // clobber the saved project) — open the gate even on an empty/failed
         // hydration, or a fresh workspace would never save at all
         markHydrated();
-        if (!s) return;
-        s.nextSid = s.segments.reduce((m, x) => Math.max(m, x.sid), 0) + 1; // reduce, not spread: spreading throws past ~65k elements
-        // Ascending line ids are an assumption everything downstream makes (see
-        // rowsToLines). A workspace saved before that sort existed can hold an
-        // out-of-order transcript, and re-import alignment would then compare two
-        // differently-ordered line lists and drop or misplace coding.
-        for (const t of Object.values(s.transcripts))
-          if (t.lines.some((l, i) => i > 0 && l.id < t.lines[i - 1].id))
-            t.lines = [...t.lines].sort((a, b) => a.id - b.id);
-        s.markers ??= [];
-        s.nextMid = s.markers.reduce((m, x) => Math.max(m, x.mid), 0) + 1;
-        s.hotbarCache = hotbarCodes(s as State);
-        // fields added after a persisted state was written (persist merges shallowly)
-        s.ai.lenses ??= ["transcription"];
-        s.pinnedTabs ??= [];
-        s.aiGrounds ??= {};
-        s.ledger ??= [];
-        s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
-        s.ui.assistPanel ??= "observations";
-        s.studyBrief ??= {}; // added with F7; a workspace saved before it has none
-        s.substBrief ??= {}; // F9, likewise
-        s.ui.stretchView ??= "show";
-        s.ui.tailLimit ??= 1;
-        s.ui.stretchBand ??= "sm";
-        s.ui.stretchLabel ??= "md";
-        s.stretches ??= [];
-        s.ui.eventSort ??= "type";
-        // normalize, not just default: a corrupt persisted value would make the
-        // sidebar chip index SORTS with -1 and crash the whole sidebar
-        if (!SORTS.some((x) => x.id === s.ui.codeSort)) s.ui.codeSort = "name";
-        s.ui.markerColors ??= {};
-        s.ui.eventListHeight = clampEventHeight(s.ui.eventListHeight ?? 200);
-        s.summaries ??= {};
-        s.projectNotes ??= "";
-        s.projectName ??= "";
-        s.codeGroups ??= [];
-        s.codeAreas ??= [];
-        s.codeAreasFp ??= "";
-        s.codePlan ??= [];
-        s.codeClusters ??= [];
-        // same pairwise->cluster migration for a persisted local session
-        if (s.codePlan.some((a) => a.action === "merge")) {
-          s.codeClusters = [...s.codeClusters,
-            ...s.codePlan.filter((a) => a.action === "merge" && a.into).map((a) => ({
-              survivor: a.into!, codes: [a.code, a.into!],
-              ...(a.newName ? { newName: a.newName } : {}), rationale: a.rationale,
-            }))];
-          s.codePlan = s.codePlan.filter((a) => a.action !== "merge");
-        }
-        s.codeClusters = normalizeClusters(s as State, s.codeClusters);
-        s.answers ??= [];
-        s.nextAid = s.answers.reduce((m, x) => Math.max(m, x.aid), 0) + 1;
-        s.ui.summaryLayout ??= "side";
-        s.ui.mapMinimap ??= "bottom-right";
-        s.ui.mapViewport ??= null;
-        s.ui.mapSounds ??= true;
-        s.ui.stretchColors ??= {};
-        s.ui.soundVolume ??= 1;
-        s.ui.mapRing ??= "md";
-        s.ui.summarySplit = clampSummarySplit(s.ui.summarySplit ?? 0.5);
-        s.ui.groundBold ??= true;
-        s.ui.groundWash ??= true;
-        s.ui.groundUnderline ??= false;
-        s.ui.showNotices ??= true;
-        s.ui.hiddenLenses ??= [];
-        s.ui.lanePattern ??= false;
-        s.ui.scrollSpeed ??= 1;
-        s.ui.loopEdit ??= true;
-        s.ui.loopSpeed ??= 0.75;
-        // bounds moved (44–160 → 64–256): pull an old persisted width into range
-        s.ui.minimapWidth = clampMinimapWidth(s.ui.minimapWidth ?? 66);
-        // was `string | null` (global) before it went per-transcript — an old
-        // scalar value can't be mapped to a pid, so it resets to everyone
-        if (typeof s.ui.speakerFocus !== "object" || s.ui.speakerFocus === null) s.ui.speakerFocus = {};
-        // dim/collapse were one exclusive mode before they became combinable
-        // toggles; the old "collapse" mode dimmed too, so it maps to both on
-        const legacyMode = (s.ui as { speakerFocusMode?: string }).speakerFocusMode;
-        s.ui.focusDim ??= true;
-        s.ui.focusCollapse ??= legacyMode === "collapse";
-        s.ui.speakerColors ??= {};
-        s.ui.speakerWeight ??= {};
-        s.ui.fontFamily ??= "system";
-        s.ui.coderName ??= "";
-        s.ui.mergeGapOn ??= false;
-        s.ui.mergeGap ??= 3;
-        s.ui.lang = asLang(s.ui.lang);
-        s.ui = currentUi(s.ui);
-        // never-empty invariant: rows written empty by an earlier build become "(default)"
-        s.segments = s.segments.map((x) => (x.proposedBy?.trim() ? x : { ...x, proposedBy: "(default)" }));
+        scrollFor(activeKey()); // the project that opened brings its own reading positions
+        if (s) migrateState(s);
       },
     }
   )
 );
+
+// Bring a persisted state written by any older build into today's shape.
+// Boot's hydration and a project switch (loadProjectState) both pass through
+// here; it mutates in place, as persist's rehydrate callback always has.
+function migrateState(s: State) {
+  s.nextSid = s.segments.reduce((m, x) => Math.max(m, x.sid), 0) + 1; // reduce, not spread: spreading throws past ~65k elements
+  // Ascending line ids are an assumption everything downstream makes (see
+  // rowsToLines). A workspace saved before that sort existed can hold an
+  // out-of-order transcript, and re-import alignment would then compare two
+  // differently-ordered line lists and drop or misplace coding.
+  for (const t of Object.values(s.transcripts))
+    if (t.lines.some((l, i) => i > 0 && l.id < t.lines[i - 1].id))
+      t.lines = [...t.lines].sort((a, b) => a.id - b.id);
+  s.markers ??= [];
+  s.nextMid = s.markers.reduce((m, x) => Math.max(m, x.mid), 0) + 1;
+  s.hotbarCache = hotbarCodes(s as State);
+  // fields added after a persisted state was written (persist merges shallowly)
+  s.ai.lenses ??= ["transcription"];
+  s.pinnedTabs ??= [];
+  s.aiGrounds ??= {};
+  s.ledger ??= [];
+  s.codeClusters = stampCids(s.codeClusters ?? [], { fromFile: true });
+  s.ui.assistPanel ??= "observations";
+  s.studyBrief ??= {}; // added with F7; a workspace saved before it has none
+  s.substBrief ??= {}; // F9, likewise
+  s.ui.stretchView ??= "show";
+  s.ui.tailLimit ??= 1;
+  s.ui.stretchBand ??= "sm";
+  s.ui.stretchLabel ??= "md";
+  s.stretches ??= [];
+  s.ui.eventSort ??= "type";
+  // normalize, not just default: a corrupt persisted value would make the
+  // sidebar chip index SORTS with -1 and crash the whole sidebar
+  if (!SORTS.some((x) => x.id === s.ui.codeSort)) s.ui.codeSort = "name";
+  s.ui.markerColors ??= {};
+  s.ui.eventListHeight = clampEventHeight(s.ui.eventListHeight ?? 200);
+  s.summaries ??= {};
+  s.projectNotes ??= "";
+  s.projectName ??= "";
+  s.codeGroups ??= [];
+  s.codeAreas ??= [];
+  s.codeAreasFp ??= "";
+  s.codePlan ??= [];
+  s.codeClusters ??= [];
+  // same pairwise->cluster migration for a persisted local session
+  if (s.codePlan.some((a) => a.action === "merge")) {
+    s.codeClusters = [...s.codeClusters,
+      ...s.codePlan.filter((a) => a.action === "merge" && a.into).map((a) => ({
+        survivor: a.into!, codes: [a.code, a.into!],
+        ...(a.newName ? { newName: a.newName } : {}), rationale: a.rationale,
+      }))];
+    s.codePlan = s.codePlan.filter((a) => a.action !== "merge");
+  }
+  s.codeClusters = normalizeClusters(s as State, s.codeClusters);
+  s.answers ??= [];
+  s.nextAid = s.answers.reduce((m, x) => Math.max(m, x.aid), 0) + 1;
+  s.ui.summaryLayout ??= "side";
+  s.ui.mapMinimap ??= "bottom-right";
+  s.ui.mapViewport ??= null;
+  s.ui.mapSounds ??= true;
+  s.ui.stretchColors ??= {};
+  s.ui.soundVolume ??= 1;
+  s.ui.mapRing ??= "md";
+  s.ui.summarySplit = clampSummarySplit(s.ui.summarySplit ?? 0.5);
+  s.ui.groundBold ??= true;
+  s.ui.groundWash ??= true;
+  s.ui.groundUnderline ??= false;
+  s.ui.showNotices ??= true;
+  s.ui.hiddenLenses ??= [];
+  s.ui.lanePattern ??= false;
+  s.ui.scrollSpeed ??= 1;
+  s.ui.loopEdit ??= true;
+  s.ui.loopSpeed ??= 0.75;
+  // bounds moved (44–160 → 64–256): pull an old persisted width into range
+  s.ui.minimapWidth = clampMinimapWidth(s.ui.minimapWidth ?? 66);
+  // was `string | null` (global) before it went per-transcript — an old
+  // scalar value can't be mapped to a pid, so it resets to everyone
+  if (typeof s.ui.speakerFocus !== "object" || s.ui.speakerFocus === null) s.ui.speakerFocus = {};
+  // dim/collapse were one exclusive mode before they became combinable
+  // toggles; the old "collapse" mode dimmed too, so it maps to both on
+  const legacyMode = (s.ui as { speakerFocusMode?: string }).speakerFocusMode;
+  s.ui.focusDim ??= true;
+  s.ui.focusCollapse ??= legacyMode === "collapse";
+  s.ui.speakerColors ??= {};
+  s.ui.speakerWeight ??= {};
+  s.ui.fontFamily ??= "system";
+  s.ui.coderName ??= "";
+  s.ui.mergeGapOn ??= false;
+  s.ui.mergeGap ??= 3;
+  s.ui.lang = asLang(s.ui.lang);
+  s.ui = currentUi(s.ui);
+  // never-empty invariant: rows written empty by an earlier build become "(default)"
+  s.segments = s.segments.map((x) => (x.proposedBy?.trim() ? x : { ...x, proposedBy: "(default)" }));
+}
 
 // Save health → the App's autosave-failing banner. Deferred a microtask so the
 // flag's own persist attempt can't recurse into the write path mid-flush.

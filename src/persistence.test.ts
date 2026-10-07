@@ -52,13 +52,13 @@ it("opens autosave after an empty IndexedDB read even when legacy storage is blo
   const saveResults: boolean[] = [];
   setOnSaveResult((ok) => saveResults.push(ok));
 
-  await expect(projectStorage.getItem("coding-store")).resolves.toBeNull();
+  await expect(projectStorage.getItem("coding-app-state")).resolves.toBeNull();
   markHydrated();
-  projectStorage.setItem("coding-store", { state: { active: "browse" }, version: 4 });
+  projectStorage.setItem("coding-app-state", { state: { active: "browse" }, version: 4 });
   await vi.advanceTimersByTimeAsync(500);
 
-  expect(writes).toEqual([{
-    key: "coding-store", value: { state: { active: "browse" }, version: 4 },
-  }]);
+  // the envelope, then the project index in the same transaction
+  expect(writes.map((w) => w.key)).toEqual(["coding-app-state", "qually-projects"]);
+  expect(writes[0].value).toEqual({ state: { active: "browse" }, version: 4 });
   expect(saveResults).toEqual([true]);
 });

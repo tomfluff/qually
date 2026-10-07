@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { linesOf, useStore, liveCodes, type Segment, type Line, type LineFlags } from "../state/store";
 import { announce } from "../announce";
+import { onProjectSwap } from "../sessionReset";
 import type { Lang } from "../lineText";
 import { viewTranscripts } from "../lineText";
 import { earcon } from "../earcons";
@@ -74,6 +75,13 @@ const remembered = {
   scroll: {} as Record<string, number>,
   leftScroll: {} as Record<string, number>,
 };
+onProjectSwap(() => {
+  Object.assign(remembered, {
+    obsSel: null, proposals: [], flipped: new Set(), suggestSel: null,
+    defSel: [], defAnchor: null, askPids: null, askCodes: null, askQ: "",
+    scroll: {}, leftScroll: {},
+  });
+});
 type DefScope = "all" | "undefined" | "defined";
 // one word each: three segments in a 264px sidebar, and "No definition" wrapped
 // to two lines and shoved the control out of shape
@@ -223,7 +231,7 @@ export function AssistView() {
   // offering a code with no excerpts there would be offering nothing.
   const answers = useStore((s) => s.answers);
   const askPidList = allPids;
-  // intersected with what EXISTS: the remembered picks outlive a project swap and
+  // intersected with what EXISTS: the remembered picks outlive transcript/code deletions and
   // a rename, and a scope holding a dead pid would disagree with the sidebar that
   // is meant to be showing it
   const onPids = useMemo(

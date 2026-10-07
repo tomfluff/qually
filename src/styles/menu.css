@@ -50,6 +50,16 @@
 .ctxmenu .ctxrow { display:flex; gap:6px; }
 .ctxmenu .ctxrow .btn { flex:1; justify-content:center; font-size:inherit; }
 
+.ctxmenu.project-menu { width:28em; min-width:min(20em, calc(100vw - 16px));
+  max-width:calc(100vw - 16px); box-sizing:border-box; }
+.project-list { list-style:none; margin:0; padding:0; }
+.project-row { display:flex; align-items:center; gap:2px; }
+.ctxmenu button.project-open { flex:1; min-width:0; flex-direction:column; align-items:flex-start; gap:3px; }
+.project-name { display:flex; align-items:center; gap:7px; overflow-wrap:anywhere; }
+.project-open[aria-current="true"] .project-name { font-weight:700; }
+.project-meta { color:var(--muted); font-size:.85em; }
+.project-menu .ctxform > .btn { font-size:inherit; }
+
 /* color picker popover (colorPicker.tsx) — anchored to the swatch that opened it.
    z-index above the settings modal (backdrop is 95): the speaker swatches open
    this from inside that modal. font-size comes inline from ui.sidebarFontSize. */

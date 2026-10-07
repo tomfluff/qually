@@ -7,7 +7,7 @@ import { SettingsButton } from "./SettingsButton";
 import { AboutButton } from "./AboutButton";
 import { DataFormatButton } from "./DataFormatButton";
 import { ExportMenu } from "./ExportMenu";
-import { NewProjectButton } from "./NewProjectButton";
+import { ProjectMenu } from "./ProjectMenu";
 import { ProjectError } from "../project";
 import { announce } from "../announce";
 import { Icon } from "./Icon";
@@ -142,7 +142,7 @@ export function Toolbar() {
         <span className="brandtag">Thematic analysis, made accessible</span>
       </span>
       <span className="tbdiv" />
-      <NewProjectButton />
+      <ProjectMenu />
       <button className="btn primary iconlabel" onClick={() => fileRef.current?.click()}
         title="Import transcript/codebook/segment CSVs, or open a .qually.json project">
         <Icon name="upload" size={16} /> Import

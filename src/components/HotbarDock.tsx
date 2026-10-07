@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore, inkOn } from "../state/store";
+import { onProjectSwap } from "../sessionReset";
 import { CodeMenu } from "./CodeMenu";
 import { Icon } from "./Icon";
 
@@ -28,6 +29,8 @@ export function HotbarDock() {
   const [collapsed, setCollapsed] = useState(false);
   // right-click (or the menu key) on a tile: the same code menu the sidebar rows open
   const [menu, setMenu] = useState<{ code: string; x: number; y: number } | null>(null);
+  // a code's menu belongs to its project; whether the dock is collapsed is the person's
+  useEffect(() => onProjectSwap(() => setMenu(null)), []);
 
   // no early return on an empty codebook: before the first code exists the dock
   // still shows the "0" palette tile (the way to CREATE that first code) + refresh

@@ -54,7 +54,8 @@ valuable next step.
   merge, pin, delete) is reachable through a per-row `⋯` button (or `Shift+F10` — on
   hotbar tiles too), not right-click alone; a segment's lane bar is a real button — `Enter` opens its popover
   (notes, reject, delete, copy); panel dividers resize with arrow keys; search results
-  are focusable and `Enter` jumps.
+  are focusable and `Enter` jumps; the toolbar's Projects menu switches, starts, renames
+  and deletes projects (deleting asks inline first), and each move is announced.
 - The selection follows the keyboard: arrowing past the viewport edge scrolls it into view.
 - Every focusable control has a visible focus ring (accent + a background gap, so it
   stays visible on any ground, including a coloured lane bar).

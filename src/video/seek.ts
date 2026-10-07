@@ -3,6 +3,7 @@
 // Bridge between the timecode chip (in TranscriptView) and whatever <video>
 // the VideoDock currently has loaded. Kept module-local so the chip doesn't
 // need a ref or context.
+import { onProjectSwap } from "../sessionReset";
 
 let el: HTMLVideoElement | null = null;
 let offset = 0;
@@ -39,7 +40,13 @@ export function setPlaybackRate(r: number) { if (el) el.playbackRate = r; }
 // whether a loop currently owns the playback rate — the dock's own rate effect
 // checks this so the two writers never fight over el.playbackRate
 let loopActive = false;
+let stopLoop: (() => void) | null = null;
 export const isLooping = () => loopActive;
+onProjectSwap(() => {
+  stopLoop?.();
+  el?.pause();
+  registerVideo(null, 0);
+});
 
 export function tsToSec(ts: string): number | null {
   const p = (ts || "").split(".")[0].split(":").map(Number);
@@ -82,6 +89,7 @@ export function loopLine(startTs: string, endTs: string | null, rate: number): (
   if (!el) return null;
   const win = loopWindow(startTs, endTs);
   if (win === null) return null;
+  stopLoop?.();
   const v = el;
   const from = Math.max(0, win.s + offset);
   const to = Math.max(from + 1, win.e + offset);
@@ -92,10 +100,16 @@ export function loopLine(startTs: string, endTs: string | null, rate: number): (
   v.currentTime = from;
   v.addEventListener("timeupdate", onTime);
   void v.play();
-  return () => {
+  let running = true;
+  stopLoop = () => {
+    // The editor's unmount cleanup may run after the project swap stopped it.
+    if (!running) return;
+    running = false;
     v.removeEventListener("timeupdate", onTime);
     loopActive = false;
+    stopLoop = null;
     v.playbackRate = prevRate;
     v.pause(); // ponytail: always pause on exit; resuming a pre-existing playback isn't tracked
   };
+  return stopLoop;
 }

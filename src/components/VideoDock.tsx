@@ -6,6 +6,7 @@ import { useStore, isTranscriptView } from "../state/store";
 import { registerVideo, tsToSec, isLooping, playheadSec } from "../video/seek";
 import { useDismiss, OVERLAY_SELECTOR } from "../usePopover";
 import { Icon } from "./Icon";
+import { onProjectSwap } from "../sessionReset";
 
 // bottom-RIGHT-anchored: expanding/collapsing grows upward and LEFTWARD, so the
 // corner holding the expand/collapse button never moves out from under the
@@ -72,7 +73,7 @@ export function VideoDock() {
   // clear it. A ref, not state: nothing renders from it.
   const pipWant = useRef(false);
   const lastTab = useRef("");
-  useEffect(() => { if (onTranscript) lastTab.current = pid; }, [onTranscript, pid]);
+  useEffect(() => { if (onTranscript) lastTab.current = pid; });
   const [media, setMedia] = useState<Record<string, { url: string; name: string }>>({});
   const wantPid = onTranscript ? pid : lastTab.current;
   // The pin is the FALLBACK, not an override: a transcript with its own media
@@ -112,6 +113,19 @@ export function VideoDock() {
   // position we're about to restore.
   const lastTime = useRef<Record<string, number>>({});
   const switching = useRef(false);
+
+  useEffect(() => onProjectSwap(() => {
+    // Media is session-only: another project's P01 must never inherit this P01's file.
+    videoRef.current?.pause();
+    registerVideo(null, 0);
+    pipWant.current = false;
+    if (document.pictureInPictureElement === videoRef.current && document.pictureInPictureElement)
+      void document.exitPictureInPicture().catch(() => { /* already gone */ });
+    for (const m of Object.values(media)) URL.revokeObjectURL(m.url);
+    lastTime.current = {}; lastTab.current = ""; vidPidRef.current = "";
+    switching.current = true;
+    setMedia({}); setPlaying(false); setTime(0); setPip(false); setPipPid(""); setSpeedMenu(null);
+  }), [media]);
 
   // Debounced: geom changes on every mousemove of a drag, and localStorage.setItem is
   // SYNCHRONOUS — it takes a lock over the whole origin's storage. Writing it ~60×/sec
@@ -176,7 +190,7 @@ export function VideoDock() {
   // vidPid as a ref: syncPip is a stable callback (the listeners below subscribe
   // once) and must still see which transcript is playing right now
   const vidPidRef = useRef(vidPid);
-  useEffect(() => { vidPidRef.current = vidPid; }, [vidPid]);
+  useEffect(() => { vidPidRef.current = vidPid; });
   useEffect(syncPip);
   useEffect(() => {
     // A leave on OUR mounted element is the user closing the floating window

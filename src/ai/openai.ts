@@ -108,8 +108,18 @@ export const MIN_CACHEABLE_TOKENS = 1024;
 export const worthCaching = (prefixText: string, requests: number) =>
   requests > 1 && estimateTokens(prefixText) >= MIN_CACHEABLE_TOKENS;
 
+// Requests out right now. Every one answers into whichever project is open when
+// it lands, so a project switch waits for them (src/state/projects.ts).
+let inFlight = 0;
+export const aiBusy = () => inFlight > 0;
+
 // One structured-output call. Returns the parsed object plus what it actually cost.
-export async function callJson<T>(opts: {
+export async function callJson<T>(opts: Parameters<typeof request>[0]): Promise<{ data: T; usage: Usage }> {
+  inFlight++;
+  try { return await request<T>(opts); } finally { inFlight--; }
+}
+
+async function request<T>(opts: {
   key: string;
   model: string;
   system: string;

@@ -41,6 +41,9 @@
 
 /* who your codes are signed as; sits at the head of the right cluster */
 #toolbar .coderchip { max-width:22ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#toolbar .project-trigger { max-width:28ch; }
+#toolbar .project-trigger .blabel { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#toolbar .project-trigger svg { flex-shrink:0; }
 /* Unset is a data problem, not a preference: an unsigned export can't be told from a
    second coder's. Loud enough to answer, not so loud it reads as an error. */
 #toolbar .coderchip.unset { color:var(--accent); border-color:var(--accent); }

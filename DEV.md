@@ -54,15 +54,26 @@ by the current UI.
 
 ## Persistence and recovery
 
-The persisted zustand project lives under `coding-app-state` in IndexedDB when the
-browser provides it. Writes are throttled and flushed when the page is hidden or
-unloaded. If IndexedDB is unavailable, the adapter falls back to localStorage;
-localStorage is also the one-time migration source for builds that predate IndexedDB
-and the synchronous storage used by tests.
+The persisted zustand project lives in IndexedDB when the browser provides it, one
+envelope per project: the first project (the one a single-project build saved) keeps
+`coding-app-state`, later ones are `coding-app-state:<id>`. A small `qually-projects`
+record says which one is open and holds each one's name, transcript count and last
+use for the Projects menu; the list itself is derived from the envelope keys present,
+so a lost index cannot hide a project. Writes are throttled and flushed when the page
+is hidden or unloaded. Moving between projects (`src/state/projects.ts`) saves the
+project being left under its own key, points autosave at the next and swaps the store
+in one synchronous step, one move at a time. If IndexedDB is unavailable, the adapter
+falls back to localStorage with a single project; localStorage is also the one-time
+migration source for builds that predate IndexedDB and the synchronous storage used
+by tests.
 
 Some secondary state has a separate lifetime:
 
-- transcript scroll anchors and video-dock geometry use their own localStorage keys;
+- transcript scroll anchors are per project (`coding-app-scroll`, then
+  `coding-app-scroll:<id>`); video-dock geometry is one localStorage key for the
+  person, and media loaded into the dock is dropped when the project changes;
+- personal UI preferences ride in every project envelope, and the open project's copy
+  is the current one; the speaker map and event/section colours belong to the project;
 - the OpenAI key is outside the project store, in sessionStorage by default or
   localStorage only when the researcher explicitly asks the app to remember it;
 - media contents are not persisted, though project metadata can remember a filename
