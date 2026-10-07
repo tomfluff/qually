@@ -127,24 +127,53 @@ export interface RawSub { line_id: number; quote: string; replacement: string; w
 function onlyResolves(quote: string, fix: string, terms: string[]): boolean {
   const runs = fix.match(BRACKET) ?? [];
   if (!runs.length || runs.some((t) => !terms.includes(t))) return false;
-  // The fix is p0 T1 p1 T2 … Tn pn; it resolves the quote only if the quote is
-  // p0 g1 p1 g2 … gn pn with every gap non-empty — the pieces between the
-  // terms are the quote's own words, in order, once, and each term stands in
-  // for something that was actually there. A word-set check let "[Beacon]
-  // fine fine" through for "it was fine": participant speech deleted and
-  // duplicated by "write in all".
+  return gapsOf(quote, fix) !== null;
+}
+
+/** Where in `quote` each [term] of `fix` stands in for its words, as [start,
+    end) ranges in order — or null when the fix is not the quote with terms in
+    place of pieces of it.
+    The fix is p0 T1 p1 T2 … Tn pn; it resolves the quote only if the quote is
+    p0 g1 p1 g2 … gn pn with every gap non-empty — the pieces between the
+    terms are the quote's own words, in order, once, and each term stands in
+    for something that was actually there. A word-set check let "[Beacon]
+    fine fine" through for "it was fine": participant speech deleted and
+    duplicated by "write in all". */
+export function gapsOf(quote: string, fix: string): [number, number][] | null {
   const pieces = fix.split(BRACKET);
-  if (!quote.startsWith(pieces[0])) return false;
+  if (!quote.startsWith(pieces[0])) return null;
   let cur = pieces[0].length;
+  const gaps: [number, number][] = [];
   for (let i = 1; i < pieces.length; i++) {
     const p = pieces[i];
     const last = i === pieces.length - 1;
     const at = last ? (quote.endsWith(p) ? quote.length - p.length : -1) : quote.indexOf(p, cur + 1);
-    if (at < cur + 1) return false;
+    if (at < cur + 1) return null;
+    gaps.push([cur, at]);
     cur = at + p.length;
   }
-  return true;
+  return gaps;
 }
+
+/** The longest stretch of the participant's words one [term] replaces, in
+    CHARACTERS (code points): Japanese has no spaces to count words by. A fix
+    that is not a clean resolution counts the whole quote. */
+export const replacedLength = (quote: string, fix: string) =>
+  Math.max(0, ...(gapsOf(quote, fix) ?? [[0, quote.length]])
+    .map(([a, b]) => Array.from(quote.slice(a, b).trim()).length));
+
+/** A term may stand in for this many characters and still count as a short
+    reference. It only decides whether "Write in all" asks first, so it errs
+    toward asking: 5 is the most that still catches 使えなかった ("it was
+    unusable", 6). Ceiling: anything longer is flagged, so English ordinals
+    ("the first one", 13) and 2番目のシステム (8) ask too, and only pronoun-length
+    references (it, this, それ, 最初の) go through unasked; a Japanese predicate
+    of five characters or fewer (遅かった, "was slow", 4) is not caught. */
+export const SHORT_REFERENCE = 5;
+
+/** a pending substitution whose term replaces more than a short reference */
+export const suspicious = (sp: { quote: string; fix?: string }) =>
+  !!sp.fix && replacedLength(sp.quote, sp.fix) > SHORT_REFERENCE;
 
 /** The trust boundary, testable without the network. A proposal survives only
     if it names a line that was sent and may be rewritten, quotes words that

@@ -22,6 +22,8 @@ import { SuggestModal } from "./SuggestModal";
 import { FindModal } from "./FindModal";
 import { SectionsModal } from "./SectionsModal";
 import { ContextualizeModal } from "./ContextualizeModal";
+import { gapsOf, suspicious } from "../ai/contextualize";
+import { useDialogFocus } from "../useDialogFocus";
 import { stretchColorOf, isEvidence } from "../stretches";
 import { AiCheckModal } from "./AiCheckModal";
 import { SummarizeModal } from "./SummarizeModal";
@@ -1386,6 +1388,9 @@ function ContextList({ onRun }: { onRun: (pid: string) => void }) {
   const jumpTo = useStore((s) => s.jumpTo);
   const pids = useMemo(() => [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))], [tabs, transcripts]);
   const pending = useMemo(() => pendingSubs(transcripts, aiFlags, lang, pids), [transcripts, aiFlags, lang, pids]);
+  // "Write in all" asks first when a term would replace more than a short
+  // reference (see SHORT_REFERENCE): those rows, struck through, and a choice
+  const [ask, setAsk] = useState<{ pid: string; rows: typeof pending; btn: HTMLElement } | null>(null);
   if (!pending.length) {
     return (
       <div className="empty">
@@ -1409,8 +1414,23 @@ function ContextList({ onRun }: { onRun: (pid: string) => void }) {
     });
   };
   const c = lensOf(SUBST_LENS)?.color;
+  const writeAll = (pid: string, from: HTMLElement, skip?: typeof suspicious) => {
+    refocus(from);
+    const n = useStore.getState().applyFixes(pid, SUBST_LENS, lang, skip);
+    // counted AFTER the write: a skipped mark the write broke is dropped (see
+    // applySpanFixes), and the announcement must not promise it is still there
+    const st = useStore.getState();
+    const left = skip ? pendingSubs(st.transcripts, st.aiFlags, lang, [pid]).length : 0;
+    announce(`${n} line${n === 1 ? "" : "s"} of ${pid} rewritten`
+      + (left ? `; ${left} left to review one by one` : ""));
+  };
   return (
     <div className="mList">
+      {ask && <WriteInAllConfirm pid={ask.pid} rows={ask.rows}
+        total={pending.filter((x) => x.pid === ask.pid).length}
+        onAll={() => { setAsk(null); writeAll(ask.pid, ask.btn); }}
+        onExcept={() => { setAsk(null); writeAll(ask.pid, ask.btn, suspicious); }}
+        onCancel={() => { setAsk(null); announce("Nothing written"); }} />}
       {groups.map((pid) => (
         <div key={pid} className="bGroup">
           <div className="nGrp">
@@ -1418,9 +1438,9 @@ function ContextList({ onRun }: { onRun: (pid: string) => void }) {
             <button className="nBtn" style={{ marginLeft: "auto" }}
               title={`Write in every proposed substitution in ${pid} — one Ctrl+Z takes it back`}
               onClick={(e) => {
-                refocus(e.currentTarget);
-                const n = useStore.getState().applyFixes(pid, SUBST_LENS, lang);
-                announce(`${n} line${n === 1 ? "" : "s"} of ${pid} rewritten`);
+                const flagged = pending.filter((x) => x.pid === pid && suspicious(x.span));
+                if (flagged.length) setAsk({ pid, rows: flagged, btn: e.currentTarget });
+                else writeAll(pid, e.currentTarget);
               }}>
               Write in all {pending.filter((x) => x.pid === pid).length}
             </button>
@@ -1457,6 +1477,76 @@ function ContextList({ onRun }: { onRun: (pid: string) => void }) {
         A reference is easiest to judge with the lines around it in view — <b>Open</b> puts you
         there, and the mark's popover offers the same choice.
         <button className="nBtn" style={{ marginLeft: 8 }} onClick={() => onRun("")}>Run another</button>
+      </div>
+    </div>
+  );
+}
+
+/** The quote with the words a term replaces struck through — <del>, so the
+    removal is a line through the words and a "removed" for a screen reader,
+    not a colour. */
+function Struck({ quote, fix }: { quote: string; fix: string }) {
+  const gaps = gapsOf(quote, fix) ?? [[0, quote.length] as [number, number]];
+  const out: ReactNode[] = [];
+  let cur = 0;
+  gaps.forEach(([a, b], i) => {
+    if (a > cur) out.push(quote.slice(cur, a));
+    out.push(<del key={i}><span className="sr-only">removed: </span>{quote.slice(a, b)}</del>);
+    cur = b;
+  });
+  if (cur < quote.length) out.push(quote.slice(cur));
+  return <>{out}</>;
+}
+
+// "Write in all" with rows whose term replaces more than a short reference:
+// the same confirm shape as New project (about-backdrop + useDialogFocus, Esc
+// cancels), listing those rows so the struck words are read before they go.
+function WriteInAllConfirm({ pid, rows, total, onAll, onExcept, onCancel }: {
+  pid: string; rows: { id: number; span: Flag }[]; total: number;
+  onAll: () => void; onExcept: () => void; onCancel: () => void;
+}) {
+  const dialogRef = useDialogFocus();
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onCancel(); } };
+    document.addEventListener("keydown", onEsc, true);
+    return () => document.removeEventListener("keydown", onEsc, true);
+  }, [onCancel]);
+  const k = rows.length;
+  return (
+    <div className="about-backdrop" onMouseDown={onCancel}>
+      <div className="about imp" ref={dialogRef} role="dialog" aria-modal="true"
+        aria-labelledby="writein-title" aria-describedby="writein-lede" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="about-head">
+          <h2 id="writein-title">Write in all {total} in {pid}?</h2>
+          <button className="btn iconbtn" onClick={onCancel} title="Cancel (Esc)">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <p className="about-lede" id="writein-lede">
+          {k === 1 ? "This one replaces" : `These ${k} replace`} more than a short reference.
+          Check that the struck-through words are only the reference, not what was said about it.
+        </p>
+        <ul className="writeinList">
+          {rows.map(({ id, span }) => (
+            <li key={`${id}\u0000${span.quote}`}>
+              <span className="nRef">{pid}:{id}</span>{" "}
+              “<Struck quote={span.quote} fix={span.fix!} />” → <b>{span.fix}</b>
+            </li>
+          ))}
+        </ul>
+        <div className="imp-actions">
+          <button className="btn primary" onClick={onAll}>Write in all {total}</button>
+          {/* when every row is flagged, "all except these" would write nothing:
+              that is Cancel, so it is not offered twice */}
+          {total > k && (
+            <button className="btn" onClick={onExcept}>All except these {k}</button>
+          )}
+          <button className="btn" onClick={onCancel}>Cancel</button>
+        </div>
+        <div className="imp-note">
+          {total > k && <>“All except these” leaves {k === 1 ? "it" : "them"} in the list to write in or
+            dismiss one by one. </>}One Ctrl+Z takes back whatever is written.
+        </div>
       </div>
     </div>
   );

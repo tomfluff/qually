@@ -5,7 +5,7 @@
 // in it exactly once, and the replacement holds a bracketed term.
 import { describe, expect, it } from "vitest";
 import { redactor } from "./redact";
-import { sanitizeSubs, renderContext, redactProse, proseRedactions } from "./contextualize";
+import { sanitizeSubs, renderContext, redactProse, proseRedactions, gapsOf, replacedLength, suspicious, SHORT_REFERENCE } from "./contextualize";
 import { SUBST_LENS } from "./flag";
 import type { Line } from "../state/store";
 
@@ -156,5 +156,32 @@ describe("redactProse", () => {
     const r = redactor(["Acme", "Ann"]);
     expect(redactProse("Ann's study: [Acme] first, then [Harbor].", r)).toBe("[REDACTED_2]'s study: [Acme] first, then [Harbor].");
     expect(proseRedactions("Ann's study: [Acme] first, then [Harbor].", r)).toBe(1);
+  });
+});
+
+// "Write in all" asks first when a term replaces more than a short reference.
+// Measured in characters, because Japanese has no spaces to count words by.
+describe("how much of the participant's speech a term replaces", () => {
+  it("measures the gap a term stands in for, not the words it keeps", () => {
+    expect(gapsOf("the first one was slower", "[Paper] was slower")).toEqual([[0, 13]]);
+    expect(replacedLength("the second system", "[Harbor]")).toBe(17);
+    expect(replacedLength("the second system's menu", "[Harbor]'s menu")).toBe(17);
+    expect(replacedLength("it was not usable", "[Beacon]")).toBe(17);
+    expect(replacedLength("2番目のシステム", "[Harbor]")).toBe(8);
+    expect(replacedLength("使えなかった", "[Beacon]")).toBe(6);
+    expect(replacedLength("it", "[Beacon]")).toBe(2);
+    // two terms: the longest single stand-in decides, not the sum
+    expect(replacedLength("the first one and the second one", "[Beacon] and [Harbor]")).toBe(14);
+    // characters, not UTF-16 units: a surrogate pair is one
+    expect(replacedLength("𠮷野家", "[Beacon]")).toBe(3);
+  });
+  it("flags anything past a pronoun-length reference, in either language", () => {
+    expect(SHORT_REFERENCE).toBe(5);
+    for (const [quote, fix] of [["it", "[Beacon]"], ["それ", "[Beacon]"], ["最初の", "[Beacon]"], ["this", "[Harbor]"]])
+      expect(suspicious({ quote, fix })).toBe(false);
+    for (const [quote, fix] of [["使えなかった", "[Beacon]"], ["it was not usable", "[Beacon]"],
+      ["the second system", "[Harbor]"], ["2番目のシステム", "[Harbor]"]])
+      expect(suspicious({ quote, fix })).toBe(true);
+    expect(suspicious({ quote: "it" })).toBe(false); // no fix, nothing to write
   });
 });

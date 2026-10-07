@@ -101,6 +101,10 @@
 .segdiff-k { flex:0 0 3.9em; text-align:right; font-size:.82em; font-weight:700;
   text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
 .imp-actions { display:flex; flex-direction:column; gap:6px; margin-top:14px; }
+/* the rows "Write in all" asks about: what each term would replace, struck
+   through (a line, not a colour), scrolling inside the dialog when long */
+.writeinList { margin:8px 0 0; padding-left:1.2em; line-height:1.55; max-height:40vh; overflow:auto; }
+.writeinList del { text-decoration-thickness:2px; }
 /* a disabled primary must not still read as the filled call to action ("Pick a
    transcript", "Suggesting…"): drop the accent fill, keep AA-legible ink */
 .imp-actions .btn.primary:disabled { background:var(--panel); border-color:var(--line);

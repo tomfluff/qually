@@ -617,8 +617,9 @@ export interface State {
   clearSubstBrief: (pid: string) => void;
   /** Write in every pending fix of one lens on one transcript — the
       contextualize run's "apply all" — as ONE undo entry. Returns how many
-      lines changed. */
-  applyFixes: (pid: string, lens: string, lang?: Lang) => number;
+      lines changed. `skip` leaves the marks it picks pending, for review one
+      by one ("all except these"). */
+  applyFixes: (pid: string, lens: string, lang?: Lang, skip?: (f: Flag) => boolean) => number;
   /** a whole run's proposals, as ONE undoable gesture. Returns how many landed. */
   landSections: (pid: string, proposals: SectionProposal[], proposedBy: string) => number;
   setStretchStatus: (i: number, status: StretchStatus) => void;
@@ -1885,7 +1886,7 @@ export const useStore = create<State>()(
       // one thing the researcher did, so they are one Ctrl+Z (the rule
       // replaceInTranscript already follows). A mark whose quote an earlier
       // edit has moved is skipped, not guessed at.
-      applyFixes: (pid, lens, lang = "source") => {
+      applyFixes: (pid, lens, lang = "source", skip) => {
         const s = get();
         const t = s.transcripts[pid];
         if (!t) return 0;
@@ -1898,7 +1899,8 @@ export const useStore = create<State>()(
           const field = lang === "en" && l.en?.trim() ? "en" : "text";
           const before = lineText(l, lang);
           if (!cur || cur.hash !== hashLine(before)) return l;
-          const { text, spans } = applySpanFixes(before, cur.spans, (sp) => spanLens(sp) === lens && !!sp.fix);
+          const { text, spans } = applySpanFixes(before, cur.spans,
+            (sp) => spanLens(sp) === lens && !!sp.fix && !skip?.(sp));
           if (text === before) return l;
           n++;
           entries.push(lineEntry(s, pid, l.id)!);

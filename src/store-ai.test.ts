@@ -158,3 +158,34 @@ test("applySpanFixes never moves a mark onto another instance of its words", asy
   expect(result.text).toBe("[Paper] was it");
   expect(result.spans).toEqual([]);
 });
+
+// "All except these": the rest is written as one gesture, and exactly the
+// flagged substitutions stay pending, on their lines, for review one by one.
+test("applyFixes with a skip writes the rest and leaves exactly the skipped marks pending", async () => {
+  const { SUBST_LENS, hashLine } = await import("./ai/flag");
+  const { suspicious } = await import("./ai/contextualize");
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text\n" +
+    "1,00:00:01,P,the first one was fine\n" +
+    "2,00:00:05,P,it froze\n" +
+    "3,00:00:09,P,this crashed and it was not usable\n",
+  ], "EXCEPT.csv")]);
+  const lines = useStore.getState().transcripts.EXCEPT.lines;
+  const longRef = { quote: "the first one", reason: "", lens: SUBST_LENS, fix: "[Beacon]" };
+  const pronoun = { quote: "it", reason: "", lens: SUBST_LENS, fix: "[Harbor]" };
+  const shortRef = { quote: "this", reason: "", lens: SUBST_LENS, fix: "[Harbor]" };
+  const judgment = { quote: "it was not usable", reason: "", lens: SUBST_LENS, fix: "[Beacon]" };
+  useStore.getState().addFlags("EXCEPT", { 1: [longRef], 2: [pronoun], 3: [shortRef, judgment] }, lines, [SUBST_LENS]);
+  const before = useStore.getState().undoStack.length;
+
+  expect(useStore.getState().applyFixes("EXCEPT", SUBST_LENS, "source", suspicious)).toBe(2);
+  const after = useStore.getState().transcripts.EXCEPT.lines.map((l) => l.text);
+  expect(after).toEqual(["the first one was fine", "[Harbor] froze", "[Harbor] crashed and it was not usable"]);
+  expect(useStore.getState().undoStack.length).toBe(before + 1);
+  // every pending substitution left is one the skip picked, still on its line
+  const pending = useStore.getState().transcripts.EXCEPT.lines.flatMap((l) => {
+    const f = useStore.getState().aiFlags[`EXCEPT:${l.id}`];
+    return f && f.hash === hashLine(l.text) ? f.spans.filter((s) => s.lens === SUBST_LENS && s.fix) : [];
+  });
+  expect(pending).toEqual([longRef, judgment]);
+});
