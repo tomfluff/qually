@@ -569,6 +569,22 @@ it("CrashScreen's reset drops the project's scroll positions too", async () => {
   expect(ls.has("coding-app-scroll")).toBe(false);
 });
 
+// ...and a scroll write still waiting on its debounce must not put them back
+// while a slow delete runs
+it("CrashScreen's reset is not undone by a pending scroll write", async () => {
+  vi.useFakeTimers();
+  const ls = new Map<string, string>();
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")]]);
+  const app = await boot(data, { slow: new Map([[FIRST, 700]]) }, ls);
+  vi.stubGlobal("location", { reload: vi.fn() });
+  app.rememberScroll("P01", { index: 7, delta: 0 }); // debounced: not written yet
+  const { CrashScreen } = await import("./components/CrashScreen");
+  (new CrashScreen({ children: null }) as unknown as { reset: () => void }).reset();
+  await vi.advanceTimersByTimeAsync(900);
+  expect(data.has(FIRST)).toBe(false);
+  expect(ls.has("coding-app-scroll")).toBe(false);
+});
+
 it("anything left in a project counts as work — a lone decision ledger included", async () => {
   vi.useFakeTimers();
   const app = await boot(new Map());

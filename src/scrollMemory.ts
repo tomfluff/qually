@@ -71,8 +71,15 @@ export function scrollFor(projectKey: string) {
   Object.assign(savedScroll, load());
 }
 
-/** a deleted project's positions go with it */
+/** a deleted project's positions go with it — and when it is the one these
+    positions are for (CrashScreen's reset), the pending debounced write and
+    the copy in memory go too, or the timer writes them straight back */
 export function dropScroll(projectKey: string) {
+  if (keyFor(projectKey) === KEY) {
+    clearTimeout(timer);
+    for (const k of Object.keys(savedScroll)) delete savedScroll[k];
+    positioned.clear();
+  }
   try { localStorage.removeItem(keyFor(projectKey)); } catch { /* nothing to drop */ }
 }
 

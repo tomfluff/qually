@@ -33,6 +33,7 @@ import { tsToSec } from "../video/seek";
 import type { ReactNode } from "react";
 import { stretchLabelPlacement } from "../stretchLabelPosition";
 import { searchHighlight } from "./SearchHighlight";
+import { projectGeneration } from "../sessionReset";
 
 type LanedSeg = ReturnType<typeof laneAssign>[number];
 
@@ -243,6 +244,10 @@ export function TranscriptView() {
       const edge = grip.dataset.edge as "start" | "end";
       const st0 = useStore.getState().stretches[si];
       if (!st0) return;
+      // the drag's listeners are on the document and outlive this view: a
+      // project switch landing mid-drag must end it, or `si` — an array index —
+      // would move the other project's section of the same number
+      const home = projectGeneration();
       let snapped = false;
       let last = { start: st0.start, end: st0.end };
       const apply = (start: number, end: number) => {
@@ -253,6 +258,7 @@ export function TranscriptView() {
         useStore.getState().setStretchRange(si, start, end);
       };
       const move = (ev: globalThis.MouseEvent) => {
+        if (projectGeneration() !== home) { up(); return; }
         const row = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest(".lineRow") as HTMLElement | null;
         if (!row?.dataset.lid) return;
         const gs = +row.dataset.lid, ge = +(row.dataset.end ?? row.dataset.lid);
@@ -1027,6 +1033,10 @@ export function TranscriptView() {
     // a plain click (open the popover) lands here too — an unconditional pushUndo
     // killed the redo stack and pushed a no-op undo entry for every such click
     let snapped = false;
+    // the listeners are on the document and outlive this view: a project
+    // switch landing mid-drag ends the gesture, or `seg.sid` would resize the
+    // other project's segment of the same number
+    const home = projectGeneration();
     // drag telemetry, like the map's field crossings: one quiet tick per line
     // the edge actually crosses — pitch says direction (growing vs shrinking).
     // Tracked here because move fires per PIXEL, not per line.
@@ -1040,6 +1050,7 @@ export function TranscriptView() {
       setSegmentRange(seg.sid, start, end);
     };
     const move = (ev: globalThis.MouseEvent) => {
+      if (projectGeneration() !== home) { up(); return; }
       const row = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest(".lineRow") as HTMLElement | null;
       if (!row?.dataset.lid) return;
       const gs = +row.dataset.lid, ge = +(row.dataset.end ?? row.dataset.lid);
