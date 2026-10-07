@@ -10,7 +10,7 @@ import { mergeGroups, type Group } from "../merge";
 import { replaceAllIn, scopeFilter, type LineScope } from "../search";
 import { previewImport, remapSegment, type ImportPreview } from "../align";
 import { DEFAULT_MODEL } from "../ai/openai";
-import { hashLine, spanLens, isRepair, type Flag } from "../ai/flag";
+import { hashLine, spanLens, isRepair, applySpanFixes, type Flag } from "../ai/flag";
 import type { GroundRec } from "../ai/ground";
 import { FORMAT, VERSION, parseProject, type Project } from "../project";
 import type { Stretch, StretchStatus } from "../stretches";
@@ -1847,9 +1847,9 @@ export const useStore = create<State>()(
       },
       // One-click transcription repair from a mark's popover. Rides editLine (so
       // `orig` tracking, the ✱ diff and exports behave exactly like a manual
-      // repair), then re-hashes the flag record against the corrected text with
-      // only the applied span removed — an edit normally invalidates every mark
-      // on the line, which would strand a second error until a re-scan.
+      // repair), then re-hashes the flag record with marks still pointing at the
+      // same words — an edit normally invalidates every mark on the line, which
+      // would strand a second error until a re-scan.
       applyFix: (pid, id, quote, fix, lang = "source") => {
         const l = get().transcripts[pid]?.lines.find((x) => x.id === id);
         if (!l) return false;
@@ -1861,18 +1861,13 @@ export const useStore = create<State>()(
         const field = lang === "en" && l.en?.trim() ? "en" : "text";
         const was = lineText(l, lang);
         if (!was.includes(quote)) return false;
-        // replacer FUNCTION, not the string: in String.replace a string replacement
-        // interprets $-sequences ($&, $', $`), so a fix containing them would write
-        // something other than what the Apply button showed
-        const text = was.replace(quote, () => fix); // first occurrence — the one the mark underlines
-        get().editLine(pid, id, text, field);
         const key = `${pid}:${id}`;
         const cur = get().aiFlags[key];
+        const requested: Flag = { quote, fix, reason: "", lens: "transcription" };
+        const { text, spans: kept } = applySpanFixes(was, [requested, ...(cur?.spans ?? [])], (sp) => sp === requested);
+        get().editLine(pid, id, text, field);
         if (!cur) return true; // the line was repaired; there was simply no mark to retire
-        // drop the applied span, and any span whose quote the repair broke (it can
-        // never render again, but would still be read out by the line announcement)
-        const spans = cur.spans.filter((s) =>
-          !(isRepair(s) && s.quote === quote) && text.includes(s.quote));
+        const spans = kept.filter((sp) => !(isRepair(sp) && sp.quote === quote));
         set({ aiFlags: { ...get().aiFlags, [key]: { ...cur, hash: hashLine(text), spans } } });
         return true;
       },
@@ -1894,17 +1889,10 @@ export const useStore = create<State>()(
           const field = lang === "en" && l.en?.trim() ? "en" : "text";
           const before = lineText(l, lang);
           if (!cur || cur.hash !== hashLine(before)) return l;
-          let text = before;
-          for (const sp of cur.spans) {
-            if (spanLens(sp) !== lens || !sp.fix || !text.includes(sp.quote)) continue;
-            text = text.replace(sp.quote, () => sp.fix!); // function: no $-sequences (see applyFix)
-          }
+          const { text, spans } = applySpanFixes(before, cur.spans, (sp) => spanLens(sp) === lens && !!sp.fix);
           if (text === before) return l;
           n++;
           entries.push(lineEntry(s, pid, l.id)!);
-          // the applied marks go; any other mark the rewrite broke goes with them,
-          // exactly as applyFix retires them one at a time
-          const spans = cur.spans.filter((sp) => !(spanLens(sp) === lens && sp.fix) && text.includes(sp.quote));
           flags[key] = { ...cur, hash: hashLine(text), spans };
           const origKey = field === "en" ? "enOrig" : "orig";
           const orig = l[origKey] ?? before;

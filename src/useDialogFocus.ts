@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-const FOCUSABLE = "a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex='-1'])";
+const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 // The focus half of a modal dialog, shared by every modal (the ARIA role and
 // labelling stay in each component's JSX). A callback ref (React 19 ref

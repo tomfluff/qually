@@ -34,6 +34,58 @@ export function hashLine(text: string): string {
 // made before the field existed (those get no Apply button until re-scanned).
 export interface Flag { quote: string; reason: string; lens: string; fix?: string }
 
+// Where a mark lying wholly inside a written span [from, to) of `was` sits in
+// its replacement `fix`, or -1. Only words the replacement carries through at
+// the SAME end count — a shared prefix or suffix ("slower" in "the first one
+// was slower" → "[Paper] was slower") — because those are provably the same
+// characters. Finding the quote anywhere in the fix is not: "it was it" →
+// "[Paper] was it" carries the SECOND "it", and a mark on the first must not
+// move onto it.
+const carried = (was: string, fix: string, from: number, to: number) => {
+  const head = to;                 // the mark and everything before it
+  const tail = was.length - from;  // the mark and everything after it
+  if (was.slice(0, head) === fix.slice(0, head)) return from;
+  if (tail <= fix.length && was.slice(-tail) === fix.slice(-tail)) return fix.length - tail;
+  return -1;
+};
+
+// Resolve before writing: a replacement can contain a later quote. Every mark
+// is drawn at its quote's FIRST occurrence, so writing "[Digital map]" and then
+// resolving "it" afresh landed it inside the new term. Positions are fixed once,
+// against the text as it stood; a mark is kept only where its first occurrence
+// still is the same words — moved by the writes before it, or carried through
+// the replacement it sat inside — and dropped otherwise. Dropping is the safe
+// direction: a missed mark is cheap, a misplaced one is a false quote.
+export function applySpanFixes(before: string, spans: readonly Flag[], choose: (s: Flag) => boolean) {
+  const located = spans.map((span) => {
+    const at = before.indexOf(span.quote);
+    return { span, at, end: at + span.quote.length, chosen: choose(span) && span.fix !== undefined };
+  });
+  const writes: typeof located = [];
+  let text = "", cursor = 0;
+  for (const hit of located.filter((h) => h.chosen && h.at >= 0).sort((a, b) => a.at - b.at)) {
+    if (hit.at < cursor) continue; // overlapping marks keep the first, as the renderer does
+    text += before.slice(cursor, hit.at) + hit.span.fix!; // literal text, including $-sequences
+    cursor = hit.end;
+    writes.push(hit);
+  }
+  text += before.slice(cursor);
+  const kept = located.filter((hit) => {
+    if (hit.chosen || hit.at < 0) return false;
+    let shift = 0;
+    for (const write of writes) {
+      if (write.at < hit.end && hit.at < write.end) {
+        const k = hit.at >= write.at && hit.end <= write.end
+          ? carried(before.slice(write.at, write.end), write.span.fix!, hit.at - write.at, hit.end - write.at) : -1;
+        return k >= 0 && text.indexOf(hit.span.quote) === write.at + shift + k;
+      }
+      if (write.end <= hit.at) shift += write.span.fix!.length - (write.end - write.at);
+    }
+    return text.indexOf(hit.span.quote) === hit.at + shift;
+  }).map((hit) => hit.span);
+  return { text, spans: kept, written: writes.length };
+}
+
 export interface Lens {
   id: string;
   label: string;   // checkbox + tooltip name

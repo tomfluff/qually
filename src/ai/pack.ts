@@ -47,6 +47,7 @@
 // describe.
 
 import { estimateTokens } from "./openai";
+import type { Segment } from "../state/store";
 
 /** A transcript line as renderChunk and renderSuggestChunk will write it.
     Takes the same redaction the request will, because packing what is not sent
@@ -71,6 +72,25 @@ export const lineSize = (
     that does not use it sends the bytes it always sent. */
 export const codedField = (l: { coded?: string[] }) =>
   l.coded?.length ? `\t[already coded: ${l.coded.join("; ")}]` : "";
+
+// Line ids can be timestamps or have arbitrary gaps, so a segment is walked
+// over the REAL lines it covers, never the integers between its ends; only
+// accepted segments label evidence. `lines` are sorted by id (the import
+// sorts them), so each segment's first line is a binary search away.
+export function codedLines(lines: readonly { id: number }[], segments: readonly Segment[], pid: string) {
+  const coded = new Map<number, string[]>();
+  for (const sg of segments) {
+    if (sg.pid !== pid || sg.status !== "accepted") continue;
+    let lo = 0, hi = lines.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (lines[mid].id < sg.start) lo = mid + 1; else hi = mid; }
+    for (let i = lo; i < lines.length && lines[i].id <= sg.end; i++) {
+      const id = lines[i].id;
+      const have = coded.get(id) ?? [];
+      if (!have.includes(sg.code)) coded.set(id, [...have, sg.code]);
+    }
+  }
+  return coded;
+}
 
 export interface PackOpts {
   /** soft target: estimated tokens of ITEMS per request (the fixed part rides on top) */

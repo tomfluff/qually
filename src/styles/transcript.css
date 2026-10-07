@@ -317,6 +317,7 @@
 .ainote.lens-workaround { text-decoration-style:solid; }
 .ainote.lens-tension    { text-decoration-style:solid; text-decoration-thickness:4px; }
 .ainote.lens-invivo     { text-decoration:none; box-shadow:inset 0 0 0 2px var(--lens-c, var(--accent)); }
+.ainote.lens-substitute { text-decoration-line:underline overline; }
 /* Scroll headroom (height set inline: viewport − one row, at both ends). The hatch
    only marks the 3rem nearest the text — a full screen of stripes is noise, but the
    band still reads as "edge of document". */

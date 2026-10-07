@@ -4,10 +4,10 @@
 // coding, and it can never point at a line it was not shown.
 import { describe, expect, it, test } from "vitest";
 import { renderWindow } from "./suggest";
-import { lineSize } from "./pack";
+import { lineSize, codedLines } from "./pack";
 import { sanitizeFindReply, renderQuestion, renderFindWindow, renderFindChunk } from "./find";
 import { redactor } from "./redact";
-import type { Line } from "../state/store";
+import type { Line, Segment } from "../state/store";
 
 const L = (id: number, text: string, speaker = "P"): Line => ({ id, ts: "", speaker, text });
 const lines = [L(1, "I zoom right in"), L(2, "then I give up", "P"), L(3, "mm", "R")];
@@ -100,4 +100,29 @@ test("codedField: a coded line names its codes; an uncoded line is byte-identica
   expect(renderFindWindow([coded], r)).toBe("TRANSCRIPT:\n4\tP\tit was slow\t[already coded: pace; frustration]");
   expect(renderWindow([coded], r)).toContain("\t[already coded: pace; frustration]");
   expect(lineSize(coded, r)).toBeGreaterThan(lineSize(plain, r));
+});
+
+test("codedLines labels actual lines across sparse ids, excluding candidates and rejections", () => {
+  const sparse = [L(1, "I zoom right in"), L(1_000_000_000, "then I give up")];
+  const segment: Segment = { sid: 1, pid: "P01", start: 1, end: 1_000_000_000,
+    code: "zoom", notes: "", proposedBy: "(default)", status: "accepted" };
+  const segments = [segment,
+    { ...segment, sid: 2, code: "candidate", status: "candidate" },
+    { ...segment, sid: 3, code: "rejected", status: "rejected" }];
+
+  expect(codedLines(sparse, segments, "P01")).toEqual(new Map([
+    [1, ["zoom"]], [1_000_000_000, ["zoom"]],
+  ]));
+  expect(codedLines(sparse, segments.slice(1), "P01").size).toBe(0);
+});
+
+test("codedLines keeps each code once per line in segment order and only for the requested transcript", () => {
+  const segment: Segment = { sid: 1, pid: "P01", start: 1, end: 2,
+    code: "zoom", notes: "", proposedBy: "(default)", status: "accepted" };
+  expect(codedLines([L(1, "zoom"), L(2, "give up"), L(3, "outside")], [
+    segment,
+    { ...segment, sid: 2, code: "frustration", start: 2 },
+    { ...segment, sid: 3 },
+    { ...segment, sid: 4, pid: "P02", code: "other transcript" },
+  ], "P01")).toEqual(new Map([[1, ["zoom"]], [2, ["zoom", "frustration"]]]));
 });

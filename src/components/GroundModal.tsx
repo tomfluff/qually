@@ -219,7 +219,7 @@ export function GroundModal({ initial, onClose }: {
                       { label: "All", run: () => setChecked(null) },
                       { label: "None", run: () => setChecked(new Set()) },
                     ]}>
-                    <span className="tMeta">{on.size} of {rows.length} picked<span className="sr-only"> codes</span></span>
+                    <span className="tMeta">{rows.filter((r) => on.has(r.name)).length} of {rows.length} picked<span className="sr-only"> codes</span></span>
                   </CodePickBar>
                   <div className="ai-cbox" role="group" aria-label="Codes to ground">
                     {shownRows.map((c) => (

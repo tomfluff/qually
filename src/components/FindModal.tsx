@@ -36,7 +36,7 @@ import { norm } from "../contract/segments";
 import { chunksOf, estimateSuggestTokens, renderSuggestChunk, suggestChunk,
   overlapsExisting, SUGGEST_EXEMPLARS, type SuggestCode } from "../ai/suggest";
 import { findChunksOf, estimateFindTokens, renderFindChunk, findChunk } from "../ai/find";
-import { lineSize, WINDOW_PACK } from "../ai/pack";
+import { lineSize, WINDOW_PACK, codedLines } from "../ai/pack";
 import { announce } from "../announce";
 import { earcon } from "../earcons";
 import { AiModal, LangFact, ModelPicker } from "./AiModal";
@@ -208,7 +208,7 @@ export function FindModal({ initialCodes = [], onClose }: {
   const live = useMemo(() => new Set(withParked ? Object.keys(codebook) : liveCodes(codebook)), [codebook, withParked]);
   const parked = useMemo(() => parkedCodes(codebook), [codebook]);
   const picked = useMemo(() => [...focus].filter((c) => live.has(c)), [focus, live]);
-  const stale = useMemo(() => [...focus].filter((c) => !live.has(c)), [focus, live]);
+  const stale = useMemo(() => [...focus].filter((c) => !Object.hasOwn(codebook, c)), [focus, codebook]);
 
   const codes = useMemo<SuggestCode[]>(() => (mode === "codes"
     ? bookFor(picked)
@@ -226,14 +226,7 @@ export function FindModal({ initialCodes = [], onClose }: {
     // the names of every code over it (see codedField). Candidates and
     // rejections are not evidence of what a line is about, so they neither
     // admit a line nor label it.
-    const codedBy = new Map<number, string[]>();
-    if (scope === "coded") for (const sg of segments) {
-      if (sg.pid !== p || sg.status !== "accepted") continue;
-      for (let id = sg.start; id <= sg.end; id++) {
-        const have = codedBy.get(id) ?? [];
-        if (!have.includes(sg.code)) codedBy.set(id, [...have, sg.code]);
-      }
-    }
+    const codedBy = scope === "coded" ? codedLines(everyLine, segments, p) : new Map<number, string[]>();
     const lines = everyLine
       .filter((l) => !excluded.has(l.speaker.trim()) && (scope === "all" || codedBy.has(l.id)))
       .map((l) => (scope === "coded" ? { ...l, coded: codedBy.get(l.id) } : l));
@@ -521,7 +514,7 @@ export function FindModal({ initialCodes = [], onClose }: {
                       { label: "All shown", run: () => setFocus(new Set(shown.map((c) => c.name))) },
                       { label: "None", run: () => setFocus(new Set()) },
                     ]}>
-                      {focus.size > 0 && <span className="tMeta">{focus.size} picked
+                      {picked.length > 0 && <span className="tMeta">{picked.length} picked
                         <span className="sr-only"> codes</span></span>}
                     </CodePickBar>
                     {parked.length > 0 && (
@@ -696,7 +689,7 @@ export function FindModal({ initialCodes = [], onClose }: {
             <button className="btn primary" onClick={run} disabled={busy || !ready}>
               {busy ? `Searching… ${progress}/${requests}`
                 : ready ? `Send ${requests} request${requests === 1 ? "" : "s"} to OpenAI`
-                  : mode === "codes" && !focus.size ? "Pick at least one code"
+                  : mode === "codes" && !picked.length ? "Pick at least one code"
                     : mode === "question" && !named ? "Name it and describe it"
                       : !chosen.length ? "Pick at least one transcript"
                         : scope === "coded" && !sentLines ? "No coded excerpts in these transcripts"

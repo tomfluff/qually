@@ -129,7 +129,7 @@ export function ContextualizeModal({ pid: initial, choose, onClose }: {
     if (!choose) return [];
     const pids = [...tabs, ...Object.keys(transcripts).filter((p) => !tabs.includes(p))];
     return pids.filter((p) => transcripts[p]).map((p) => {
-      const last = aiLog.filter((c) => c.task === "contextualize" && c.pid === p).at(-1);
+      const last = aiLog.filter((c) => c.task === "contextualize" && c.pid === p && !c.outcome).at(-1);
       let pending = 0;
       for (const l of linesOf(transcripts, lang, p)) {
         const f = aiFlags[`${p}:${l.id}`];

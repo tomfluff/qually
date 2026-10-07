@@ -72,9 +72,15 @@ export function useDismiss(
 // ignored so it toggles instead of close-then-reopen). Used by the sidebar AI
 // menu and the Codebook AI/View menus — the same three lines each had inline.
 export function useToggleMenu() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const setOpen: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
+    // A menu item may open a dialog in the same commit that removes it. Give
+    // the dialog a surviving opener before the focused item disappears.
+    if (value === false && menuRef.current?.contains(document.activeElement)) btnRef.current?.focus();
+    setOpenState(value);
+  };
   useDismiss(menuRef, () => setOpen(false), {
     enabled: open,
     ignore: (e) => !!btnRef.current?.contains(e.target as Node),

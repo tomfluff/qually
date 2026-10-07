@@ -93,7 +93,7 @@ most valuable thing anyone could do for this project:
 | Segment is rejected | faded hue | vertical **stripes** + an outline, and a `REJ` tag in Browse |
 | Mixed-speaker excerpt | amber | a **`!`** badge |
 | AI: likely mis-transcription | amber | **dotted** underline |
-| AI: which noticing lens | lens hue | **underline style** (wavy / double / dashed / thick / boxed) |
+| AI: which noticing lens | lens hue | **underline style** (wavy / double / dashed / thick / boxed / over-and-under for a proposed substitution) |
 | Mark is an unjudged AI proposal | faded hue | **stripes** on its gutter band (its label pill is welded to that band), and on the minimap a **hairline border** around a ghost fill |
 
 **Caveat on code patterns.** These are a **setting, off by default** (Settings → Codes →

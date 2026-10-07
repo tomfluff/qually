@@ -81,3 +81,80 @@ test("applyFixes writes every substitution of one transcript as ONE undo entry",
   expect(useStore.getState().applyFixes("P09", SUBST_LENS)).toBe(2);
   expect(useStore.getState().applyFixes("P09", SUBST_LENS)).toBe(0);
 });
+
+test("applyFixes resolves every quote before a substitution writes the same letters", async () => {
+  const { SUBST_LENS, hashLine } = await import("./ai/flag");
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text\n1,00:00:03,P,the first one beat it easily\n",
+  ], "BATCH.csv")]);
+  const lines = useStore.getState().transcripts.BATCH.lines;
+  useStore.getState().addFlags("BATCH", {
+    1: [{ quote: "the first one", reason: "ordinal", lens: SUBST_LENS, fix: "[Digital map]" },
+        { quote: "it", reason: "reference", lens: SUBST_LENS, fix: "[Paper]" }],
+  }, lines, [SUBST_LENS]);
+
+  expect(useStore.getState().applyFixes("BATCH", SUBST_LENS)).toBe(1);
+  const line = useStore.getState().transcripts.BATCH.lines[0];
+  expect(line.text).toBe("[Digital map] beat [Paper] easily");
+  expect(line.orig).toBe("the first one beat it easily");
+  expect(useStore.getState().aiFlags["BATCH:1"]).toMatchObject({ hash: hashLine(line.text), spans: [] });
+});
+
+test("applyFix drops a remaining quote whose first occurrence moved into the substitution", async () => {
+  const { SUBST_LENS, hashLine } = await import("./ai/flag");
+  await useStore.getState().importFiles([new File([
+    "line_id,timestamp,speaker,text\n1,00:00:03,P,the first one beat it easily\n",
+  ], "SINGLE.csv")]);
+  const lines = useStore.getState().transcripts.SINGLE.lines;
+  useStore.getState().addFlags("SINGLE", {
+    1: [{ quote: "the first one", reason: "ordinal", lens: SUBST_LENS, fix: "[Digital map]" },
+        { quote: "it", reason: "reference", lens: SUBST_LENS, fix: "[Paper]" }],
+  }, lines, [SUBST_LENS]);
+
+  expect(useStore.getState().applyFix("SINGLE", 1, "the first one", "[Digital map]")).toBe(true);
+  const line = useStore.getState().transcripts.SINGLE.lines[0];
+  expect(line.text).toBe("[Digital map] beat it easily");
+  expect(useStore.getState().aiFlags["SINGLE:1"]).toMatchObject({ hash: hashLine(line.text), spans: [] });
+});
+
+test("applySpanFixes writes literal fixes in position order, skips overlaps and preserves shifted observations", async () => {
+  const { applySpanFixes, SUBST_LENS } = await import("./ai/flag");
+  const observation = { quote: "slower", reason: "evaluation", lens: "evaluation" };
+  const result = applySpanFixes("alpha beta slower omega", [
+    { quote: "beta slower", reason: "", lens: SUBST_LENS, fix: "overlap" },
+    { quote: "alpha beta", reason: "", lens: SUBST_LENS, fix: "$&" },
+    observation,
+    { quote: "omega", reason: "", lens: SUBST_LENS, fix: "[$']" },
+  ], (sp) => !!sp.fix);
+  expect(result).toEqual({ text: "$& slower [$']", spans: [observation], written: 2 });
+});
+
+// A substitution widened to be unique keeps the participant's other words, so
+// an observation on those words is still on them afterwards — it must survive
+// the write, as it did before positions were fixed. One on words the write
+// changed, or one that would now resolve inside the [term], must not.
+test("applySpanFixes keeps a mark whose words the replacement carries through, and only those", async () => {
+  const { applySpanFixes, SUBST_LENS } = await import("./ai/flag");
+  const slower = { quote: "slower", reason: "evaluation", lens: "evaluation" };
+  const first = { quote: "first", reason: "ordinal", lens: "evaluation" };
+  const harbor = { quote: "Harb", reason: "", lens: "evaluation" };
+  const result = applySpanFixes("the first one was slower than Harbor", [
+    { quote: "the first one was slower", reason: "", lens: SUBST_LENS, fix: "[Harbor] was slower" },
+    slower, first, harbor,
+  ], (sp) => sp.lens === SUBST_LENS);
+  expect(result.text).toBe("[Harbor] was slower than Harbor");
+  expect(result.spans).toEqual([slower]);
+});
+
+// Carried means the SAME characters, not the same string somewhere in the fix:
+// "it was it" → "[Paper] was it" keeps the second "it", and a mark on the first
+// must not slide onto it.
+test("applySpanFixes never moves a mark onto another instance of its words", async () => {
+  const { applySpanFixes, SUBST_LENS } = await import("./ai/flag");
+  const first = { quote: "it", reason: "the first it", lens: "evaluation" };
+  const result = applySpanFixes("it was it", [
+    { quote: "it was it", reason: "", lens: SUBST_LENS, fix: "[Paper] was it" }, first,
+  ], (sp) => sp.lens === SUBST_LENS);
+  expect(result.text).toBe("[Paper] was it");
+  expect(result.spans).toEqual([]);
+});
