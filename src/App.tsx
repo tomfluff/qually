@@ -333,9 +333,10 @@ export function App() {
         </button>
       )}
       <CommandPalette key={`palette-${projectSession}`} />
-      <ImportModal />
-      <SegUpdateModal />
-      <ImportSignModal />
+      {/* their drafts (a signature typed for one batch) belong to the project they were raised in */}
+      <ImportModal key={`import-${projectSession}`} />
+      <SegUpdateModal key={`segupd-${projectSession}`} />
+      <ImportSignModal key={`sign-${projectSession}`} />
       <ProjectModal />
       <SaveWarning />
       <ColorPickerHost key={`color-${projectSession}`} />

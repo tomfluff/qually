@@ -225,11 +225,23 @@ export const dropRawState = async (key: string): Promise<void> => {
 // there, and creating or switching would start writing around it.
 export const projectsAvailable = () => typeof indexedDB !== "undefined" && hydrated;
 
+// The first project's localStorage copy from a pre-IndexedDB build, while its
+// move into IndexedDB has not landed: until then it IS that project, so the
+// list and a switch must still find it there.
+const legacyCopy = (key: string): StorageValue<unknown> | undefined => {
+  if (key !== FIRST_KEY) return undefined;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) as StorageValue<unknown> : undefined;
+  } catch { return undefined; }
+};
+
 export interface ProjectEntry { key: string; name: string; transcripts: number | null; used: number | null }
 /** every project in this browser, oldest first (keys sort by creation) */
 export const listProjects = async (): Promise<ProjectEntry[]> => {
   const keys = new Set(typeof indexedDB === "undefined" ? [] : (await idbKeys()).filter(isProjectKey));
   keys.add(index.active); // a brand-new project has no envelope until its first write
+  if (legacyCopy(FIRST_KEY)) keys.add(FIRST_KEY);
   return [...keys].sort().map((key) => {
     const m = index.meta[key];
     return { key, name: m?.name ?? "", transcripts: m?.transcripts ?? null, used: m?.used ?? null };
@@ -237,9 +249,10 @@ export const listProjects = async (): Promise<ProjectEntry[]> => {
 };
 
 /** another project's envelope: undefined = never written; THROWS when unreadable */
-export const readProject = (key: string): Promise<StorageValue<unknown> | undefined> =>
-  Promise.race([idbGet(key) as Promise<StorageValue<unknown> | undefined>,
-    new Promise<never>((_, rej) => setTimeout(() => rej(new Error("IndexedDB read timed out")), 3000))]);
+export const readProject = async (key: string): Promise<StorageValue<unknown> | undefined> =>
+  (await Promise.race([idbGet(key) as Promise<StorageValue<unknown> | undefined>,
+    new Promise<never>((_, rej) => setTimeout(() => rej(new Error("IndexedDB read timed out")), 3000))]))
+  ?? legacyCopy(key);
 
 export const newProjectKey = () =>
   `${FIRST_KEY}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

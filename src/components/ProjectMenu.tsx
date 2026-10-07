@@ -69,9 +69,13 @@ export function ProjectMenu() {
   // shown in the menu AND said: the line alone is silent, the announcement alone invisible
   const showError = (msg: string) => { setListError(msg); announce(msg, { assertive: true }); };
   const listFailed = (e: unknown) => showError(`Couldn't list projects: ${messageOf(e)}.`);
+  // a refusal that arrived while something else was open over the menu: it was
+  // announced, and is still shown the next time the menu opens
+  const unseen = useRef("");
   const toggle = () => {
     if (!open) {
-      setEntries([]); setListError(""); setRenaming(false); setConfirmKey(null);
+      setEntries([]); setListError(unseen.current); setRenaming(false); setConfirmKey(null);
+      unseen.current = "";
     }
     setOpen(!open);
   };
@@ -81,6 +85,7 @@ export function ProjectMenu() {
   // the menu would pull focus out from under it)
   const refused = (msg: string) => {
     if (!document.querySelector(OVERLAY_SELECTOR)) setOpen(true);
+    else if (!menuRef.current) unseen.current = msg; // (not `open`: stale in an async caller)
     showError(msg);
   };
   const openProject = async (p: ProjectEntry) => {

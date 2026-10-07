@@ -16,13 +16,18 @@ interface Faults {
 }
 
 // One Map behind a minimal IndexedDB: values are cloned in and out like the
-// real thing, and requests answer in creation order, one microtask each. A
-// failed write fails its whole transaction and lands nothing.
+// real thing; transactions run one at a time in the order they were created
+// (as overlapping ones on one object store do), their requests in order, one
+// microtask each. A failed write fails its whole transaction and lands nothing.
 function fakeIdb(data: Map<string, unknown>, f: Faults = {}) {
+  let last: Promise<void> = Promise.resolve();
   const db = {
     onclose: null,
     transaction: () => {
       const tx: Record<string, unknown> & { oncomplete?: () => void; onerror?: () => void } = { error: null };
+      const after = last;
+      let finished!: () => void;
+      last = new Promise<void>((res) => { finished = res; });
       let open = 0, failed = false;
       const staged: (() => void)[] = [];
       const req = (fn: () => unknown, ms = 0) => {
@@ -31,12 +36,13 @@ function fakeIdb(data: Map<string, unknown>, f: Faults = {}) {
         const answer = () => {
           try { r.result = fn(); r.onsuccess?.(); } catch (e) { failed = true; r.error = e; r.onerror?.(); }
           if (--open === 0) queueMicrotask(() => {
+            finished();
             if (failed) { tx.error = new DOMException("write failed", "QuotaExceededError"); tx.onerror?.(); return; }
             staged.forEach((w) => w());
             tx.oncomplete?.();
           });
         };
-        if (ms) setTimeout(answer, ms); else queueMicrotask(answer);
+        void after.then(() => { if (ms) setTimeout(answer, ms); else queueMicrotask(answer); });
         return r;
       };
       const write = (k: string, w: () => void, put = true) => req(() => {
@@ -419,6 +425,11 @@ it("a failed delete leaves a never-migrated legacy copy where it was", async () 
   expect(app.s().projectName).toBe("Study A");
   await expect(app.deleteProject(FIRST)).rejects.toThrow();
   expect(ls.has(FIRST)).toBe(true); // the only saved copy of Study A
+  // ...and still a project you can find and go back to
+  expect((await app.listProjects()).map((p) => p.key)).toContain(FIRST);
+  faults.full = false; faults.failing!.clear();
+  await app.switchProject(FIRST);
+  expect(app.s().projectName).toBe("Study A");
 });
 
 it("a record whose state isn't a project object is refused, and left as it was", async () => {
