@@ -20,7 +20,7 @@ export function ProjectModal() {
   // transcript, a name, notes or a brief — not just transcripts and coding:
   // only a project with none of it is opened over rather than beside.
   const hasWork = useStore((s) => Object.keys(s.transcripts).length > 0 || s.segments.length > 0
-    || Object.keys(s.codebook).length > 0
+    || s.extSegRows.length > 0 || Object.keys(s.codebook).length > 0
     || !!s.projectName.trim() || !!s.projectNotes.trim()
     || [...Object.values(s.studyBrief), ...Object.values(s.substBrief)].some((t) => t.trim()));
   const [opening, setOpening] = useState(false);

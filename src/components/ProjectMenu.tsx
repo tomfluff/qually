@@ -80,9 +80,10 @@ export function ProjectMenu() {
   const refused = (msg: string) => { setOpen(true); showError(msg); };
   const openProject = async (p: ProjectEntry) => {
     setOpen(false);
-    if (p.key === key) return;
     const nm = displayName(p.name);
-    try { await switchProject(p.key); announce(`Opened project ${nm}.`); }
+    // no "already open" shortcut here: a switch still in flight means the open
+    // project is about to change, and this choice must queue behind it
+    try { if (await switchProject(p.key)) announce(`Opened project ${nm}.`); }
     catch (e) { refused(`Couldn't open ${nm}: ${messageOf(e)}.`); }
   };
   const startProject = async () => {

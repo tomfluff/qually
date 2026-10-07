@@ -206,10 +206,14 @@ export const dropRawState = async (key: string): Promise<void> => {
   if (pending?.key === key) pending = null;
   try { localStorage.removeItem(key); } catch { /* nothing to drop */ }
   if (typeof indexedDB === "undefined") return;
-  const meta = { ...index.meta };
-  delete meta[key];
-  await idbWrite([[INDEX, { ...index, meta }]], [key]); // a failure is the caller's to report
+  // The delete in a transaction of its own: on a full disk any put can fail,
+  // and a delete must not fail with it — freeing space is the point. A
+  // failure here is the caller's to report.
+  await idbWrite([], [key]);
   delete index.meta[key];
+  // best effort: a stale entry for a gone key shows nowhere (the list comes
+  // from the envelopes present)
+  idbWrite([[INDEX, index]]).catch(() => { /* see above */ });
 };
 
 // ── several projects ──────────────────────────────────────────────────────

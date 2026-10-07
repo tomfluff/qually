@@ -6,6 +6,7 @@ import { zipTextFiles } from "../zip";
 import { saveBlob } from "../download";
 import { Icon } from "./Icon";
 import { isRepair } from "../ai/flag";
+import { onProjectSwap } from "../sessionReset";
 
 // CSVs get a UTF-8 BOM: without it Excel decodes as the ANSI code page
 // (Shift-JIS on Japanese Windows) and every non-ASCII excerpt is mojibake.
@@ -45,6 +46,10 @@ export function ExportMenu() {
   const noticeCount = useStore((s) => Object.values(s.aiFlags)
     .reduce((n, f) => n + f.spans.filter((x) => !isRepair(x)).length, 0));
   const eventCount = useStore((s) => s.markers.length);
+
+  // A parked export (and a name typed for it) belongs to the project it was
+  // asked of: once another is open, Save & export would name and export that one.
+  useEffect(() => onProjectSwap(() => { setOpen(false); setGate(null); setNameGate(null); }), []);
 
   useEffect(() => {
     if (!open) return;

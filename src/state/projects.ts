@@ -59,20 +59,22 @@ function enter(key: string, load: () => void) {
 }
 
 // read FIRST: a project that can't be read is never entered, and the one you
-// are on stays exactly as it was
-async function open(key: string) {
+// are on stays exactly as it was. `discard`: the one you are on is about to be
+// deleted, so its edits needn't land first.
+async function open(key: string, discard = false) {
   const saved = await readProject(key);
   // a record that isn't an envelope would load as a blank project — and the
   // first autosave would then write that blank over whatever it does hold
-  if (saved !== undefined && (typeof saved !== "object" || saved === null
-    || typeof (saved as { state?: unknown }).state !== "object" || saved.state === null))
+  const state = (saved as { state?: unknown } | undefined)?.state;
+  if (saved !== undefined && (!state || typeof state !== "object" || Array.isArray(state)))
     throw new Error("its saved data isn't in a shape this version of QuAlly can open");
-  await leave();
-  enter(key, () => useStore.getState().loadProjectState(saved?.state));
+  if (discard) notBusy(); else await leave();
+  enter(key, () => useStore.getState().loadProjectState(state));
 }
 
+/** resolves true when it moved (false: that project was already open) */
 export const switchProject = (key: string) =>
-  serial(() => (key === activeKey() ? undefined : open(key)));
+  serial(async () => (key === activeKey() ? false : (await open(key), true)));
 
 export const createProject = () => serial(async () => {
   await leave();
@@ -89,14 +91,16 @@ export const openAsNewProject = (p: Project) => serial(async () => {
 });
 
 /** Delete a project from this browser. The open one is left first — for the
-    most recently used other project, or a fresh one when it was the last. */
+    most recently used other project, or a fresh one when it was the last —
+    WITHOUT insisting that it save on the way out: a full disk is exactly when
+    a project needs deleting, and its edits are going anyway. */
 export const deleteProject = (key: string) => serial(async () => {
   if (key === activeKey()) {
     const next = (await listProjects()).filter((p) => p.key !== key)
       .sort((a, b) => (b.used ?? 0) - (a.used ?? 0))[0];
-    if (next) await open(next.key);
+    if (next) await open(next.key, true);
     else {
-      await leave();
+      notBusy();
       enter(newProjectKey(), () => useStore.getState().newProject());
     }
   }

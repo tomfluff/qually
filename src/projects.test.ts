@@ -11,6 +11,7 @@ const FIRST = "coding-app-state";
 interface Faults {
   broken?: Set<string>;       // reads of these keys fail
   failing?: Set<string>;      // writes (put/delete) of these keys fail, and their transaction with them
+  full?: boolean;             // a full disk: every put fails, deletes still work
   slow?: Map<string, number>; // reads AND writes of these keys answer after this many ms
 }
 
@@ -38,8 +39,8 @@ function fakeIdb(data: Map<string, unknown>, f: Faults = {}) {
         if (ms) setTimeout(answer, ms); else queueMicrotask(answer);
         return r;
       };
-      const write = (k: string, w: () => void) => req(() => {
-        if (f.failing?.has(k)) throw new DOMException("write failed", "QuotaExceededError");
+      const write = (k: string, w: () => void, put = true) => req(() => {
+        if (f.failing?.has(k) || (put && f.full)) throw new DOMException("write failed", "QuotaExceededError");
         staged.push(w);
       }, f.slow?.get(k));
       const store = {
@@ -49,7 +50,7 @@ function fakeIdb(data: Map<string, unknown>, f: Faults = {}) {
         }, f.slow?.get(k)),
         getAllKeys: () => req(() => [...data.keys()]),
         put: (v: unknown, k: string) => { const c = structuredClone(v); return write(k, () => data.set(k, c)); },
-        delete: (k: string) => write(k, () => data.delete(k)),
+        delete: (k: string) => write(k, () => data.delete(k), false),
       };
       tx.objectStore = () => store;
       return tx;
@@ -391,6 +392,31 @@ it("an import whose last read fails after the project changed leaves the next pr
   await vi.advanceTimersByTimeAsync(300);
   await expect(imp).rejects.toThrow(/project changed/);
   expect(app.s().pendingImportSign).toBeNull();
+});
+
+it("on a full disk the open project can still be deleted — the last one, or with others", async () => {
+  vi.useFakeTimers();
+  const faults: Faults = {};
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")], [`${FIRST}:x`, envelope("Study X", "Xan")]]);
+  const app = await boot(data, faults);
+  faults.full = true;
+  app.s().setProjectName("Study A2");       // unsaveable now
+  await app.deleteProject(FIRST);           // with another to go to
+  expect(data.has(FIRST)).toBe(false);
+  expect(app.s().projectName).toBe("Study X");
+  await app.deleteProject(`${FIRST}:x`);    // and the last one
+  expect(data.has(`${FIRST}:x`)).toBe(false);
+  expect(app.s().transcripts).toEqual({});
+});
+
+it("a record whose state isn't a project object is refused, and left as it was", async () => {
+  vi.useFakeTimers();
+  const odd = { version: 0, state: [{ transcripts: {} }] };
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")], [`${FIRST}:x`, odd]]);
+  const app = await boot(data);
+  await expect(app.switchProject(`${FIRST}:x`)).rejects.toThrow(/shape/);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(data.get(`${FIRST}:x`)).toEqual(odd);
 });
 
 it("a record that isn't a saved project is never loaded, so never written over", async () => {
