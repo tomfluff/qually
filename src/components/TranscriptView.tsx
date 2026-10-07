@@ -1084,13 +1084,28 @@ export function TranscriptView() {
     if (e.ctrlKey || e.metaKey) { selectLine(id, { toggle: true }); st.endSelGesture(); return; }
     let moved = false;
     const sx = e.clientX, sy = e.clientY;
+    // as with the edge drags: a switch landing mid-press ends it untouched —
+    // `id` is a line of the project that was open, not of the next one
+    const home = projectGeneration();
+    const gone = () => {
+      if (projectGeneration() === home) return false;
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      // the gesture flag is the one thing to close: left set (an in-place
+      // project open keeps it), the next project's first selection would
+      // coalesce into this gesture and take no undo step of its own
+      useStore.getState().endSelGesture();
+      return true;
+    };
     const move = (ev: globalThis.MouseEvent) => {
+      if (gone()) return;
       if (!moved && Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 4) return;
       if (!moved) { moved = true; startSelection(id); }
       const row = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest(".lineRow") as HTMLElement | null;
       if (row?.dataset.lid) selectLine(+row.dataset.lid, { extend: true });
     };
     const up = () => {
+      if (gone()) return;
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
       if (!moved) selectLine(id); // plain click (toggles off if already the sole selection)
