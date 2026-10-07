@@ -10,6 +10,7 @@ import { ExportMenu } from "./ExportMenu";
 import { ProjectMenu } from "./ProjectMenu";
 import { ProjectError } from "../project";
 import { announce } from "../announce";
+import { onProjectSwap } from "../sessionReset";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
 
@@ -110,6 +111,9 @@ export function Toolbar() {
   useEffect(() => {
     if (!pendingCount) setStatus((cur) => (cur.endsWith("awaiting your decision") ? "" : cur));
   }, [pendingCount]);
+  // "imported 3 file(s)" is about the project it happened in; the toolbar
+  // outlives a project switch, so the line must not
+  useEffect(() => onProjectSwap(() => setStatus("")), []);
 
   const doImport = async (files: FileList | null) => {
     if (!files?.length) return;

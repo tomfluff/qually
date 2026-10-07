@@ -391,8 +391,13 @@ function TabMenu({ pid, x, y, onClose }: { pid: string; x: number; y: number; on
     const home = projectGeneration();
     try {
       const text = await f.text();
-      // another project opened while it was read: this pid is not that project's
-      if (projectGeneration() !== home) return;
+      // another project opened while it was read: this pid is not that project's.
+      // Said aloud (this tab's own error line may be gone with it), in the words
+      // importFiles uses for the same refusal
+      if (projectGeneration() !== home) {
+        announce(`${f.name} wasn't loaded: the project changed while it was being read`, { assertive: true });
+        return;
+      }
       const rows = parseCSV(text);
       if (!isMarkerRows(rows)) {
         setErr("Not an events CSV — it needs an “event” column and a time (video_time_s, rec_offset_s, or video_time_hms).");

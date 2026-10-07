@@ -74,6 +74,9 @@ Some secondary state has a separate lifetime:
   person, and media loaded into the dock is dropped when the project changes;
 - personal UI preferences ride in every project envelope, and the open project's copy
   is the current one; the speaker map and event/section colours belong to the project;
+- AI settings (model, lenses, redaction terms) and the hotbar's mode belong to the
+  project, as they do in a project file: switching brings back that project's own, and a
+  new project starts from a copy of the ones in use when it was created;
 - the OpenAI key is outside the project store, in sessionStorage by default or
   localStorage only when the researcher explicitly asks the app to remember it;
 - media contents are not persisted, though project metadata can remember a filename

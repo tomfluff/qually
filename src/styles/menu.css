@@ -58,6 +58,9 @@
 .project-name { display:flex; align-items:center; gap:7px; overflow-wrap:anywhere; }
 .project-open[aria-current="true"] .project-name { font-weight:700; }
 .project-meta { color:var(--muted); font-size:.85em; }
+/* --muted on the hover wash (--sel) is 3.9:1 in the light theme, under AA:
+   the dimmer body ink keeps the line quiet and readable (6.6:1) */
+.ctxmenu button.project-open:hover .project-meta { color:var(--fg-dim); }
 .project-menu .ctxform > .btn { font-size:inherit; }
 
 /* color picker popover (colorPicker.tsx) — anchored to the swatch that opened it.

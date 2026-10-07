@@ -551,6 +551,24 @@ it("after CrashScreen's reset nothing writes the project back", async () => {
   expect(data.has(FIRST)).toBe(false);
 });
 
+// a last project reset boots blank under the SAME key, so its reading
+// positions must go with it, as they do on a delete
+it("CrashScreen's reset drops the project's scroll positions too", async () => {
+  vi.useFakeTimers();
+  const ls = new Map<string, string>();
+  const app = await boot(new Map([[FIRST, envelope("Study A", "Ann")]]), undefined, ls);
+  app.rememberScroll("P01", { index: 7, delta: 0 });
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(ls.has("coding-app-scroll")).toBe(true);
+  const reload = vi.fn();
+  vi.stubGlobal("location", { reload });
+  const { CrashScreen } = await import("./components/CrashScreen");
+  (new CrashScreen({ children: null }) as unknown as { reset: () => void }).reset();
+  await vi.advanceTimersByTimeAsync(100);
+  expect(reload).toHaveBeenCalled();
+  expect(ls.has("coding-app-scroll")).toBe(false);
+});
+
 it("anything left in a project counts as work — a lone decision ledger included", async () => {
   vi.useFakeTimers();
   const app = await boot(new Map());

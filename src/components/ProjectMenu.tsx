@@ -91,11 +91,12 @@ export function ProjectMenu() {
   };
   const openProject = async (p: ProjectEntry) => {
     setOpen(false);
-    if (!available && p.key === key) return; // one project, already open: nothing to do
     const nm = displayName(p.name);
+    // a choice that changes nothing still gets a word, or the reader retries
+    if (!available && p.key === key) { announce(`${nm} is already open.`); return; }
     // no "already open" shortcut here: a switch still in flight means the open
     // project is about to change, and this choice must queue behind it
-    try { if (await switchProject(p.key)) announce(`Opened project ${nm}.`); }
+    try { announce(await switchProject(p.key) ? `Opened project ${nm}.` : `${nm} is already open.`); }
     catch (e) { refused(`Couldn't open ${nm}: ${messageOf(e)}.`); }
   };
   const startProject = async () => {
@@ -170,7 +171,9 @@ export function ProjectMenu() {
       <button className="btn iconlabel project-trigger" ref={btnRef} onClick={toggle}
         aria-label={`Projects — open: ${name}`} title={`Projects — open: ${name}`}
         aria-haspopup="dialog" aria-expanded={open}>
-        <Icon name="folder" size={16} /> <span className="blabel">{name}</span>
+        {/* pname, not blabel: the narrow toolbar hides button labels, but this
+            is which study you are coding into — state, not a label */}
+        <Icon name="folder" size={16} /> <span className="pname">{name}</span>
         <Icon name={open ? "chevron-up" : "chevron-down"} size={12} />
       </button>
       {open && (
@@ -207,9 +210,13 @@ export function ProjectMenu() {
                     <div className="ctxform">
                       <div className="ctxnote" id={noteId}>
                         Delete <b>{nm}</b> from this browser — {count === null ? "all its transcripts" : `${count} transcript${count === 1 ? "" : "s"}`} and all {count === 1 ? "its" : "their"} coding? This can't be undone.
-                        {isActive && <> {projects.length > 1
-                          ? "You'll be moved to your most recently used other project."
-                          : "A new, empty project takes its place."}</>}
+                        {/* without the list, which way it goes is unknown here —
+                            deleteProject lists again and decides then */}
+                        {isActive && <> {listError
+                          ? "You'll be moved to your most recently used other project, or a new, empty one if this is the last."
+                          : projects.length > 1
+                            ? "You'll be moved to your most recently used other project."
+                            : "A new, empty project takes its place."}</>}
                       </div>
                       {isActive && <button className="btn" onClick={saveFirst}>Save a project file first</button>}
                       <div className="ctxrow">

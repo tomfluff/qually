@@ -42,7 +42,11 @@
 /* who your codes are signed as; sits at the head of the right cluster */
 #toolbar .coderchip { max-width:22ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #toolbar .project-trigger { max-width:28ch; }
-#toolbar .project-trigger .blabel { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#toolbar .project-trigger .pname { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* The open project's name is not a label but which study you are coding into:
+   where the labels above collapse it stays on screen, just shorter (full name
+   in the tooltip). After the 28ch rule: a media query adds no specificity. */
+@media (max-width: 1150px) { #toolbar .project-trigger { max-width:22ch; } }
 #toolbar .project-trigger svg { flex-shrink:0; }
 /* Unset is a data problem, not a preference: an unsigned export can't be told from a
    second coder's. Loud enough to answer, not so loud it reads as an error. */

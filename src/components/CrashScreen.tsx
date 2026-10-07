@@ -8,6 +8,7 @@
 import { Component, type ReactNode } from "react";
 import { useStore } from "../state/store";
 import { activeKey, dropRawState, readRawState, stopSaving } from "../state/persistence";
+import { dropScroll } from "../scrollMemory";
 
 export class CrashScreen extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -37,7 +38,12 @@ export class CrashScreen extends Component<{ children: ReactNode }, { error: Err
     // reload only after the drop settles — reloading mid-delete rehydrates the
     // same crashing state and this screen just comes back
     stopSaving();
-    dropRawState(activeKey()).catch(() => { /* reload anyway, as "Just reload" would */ })
+    // its reading positions go with it, as on a delete: a last project reset
+    // boots blank under the SAME key, and a transcript imported there under a
+    // reused name would open at the dead project's place
+    const key = activeKey();
+    dropScroll(key);
+    dropRawState(key).catch(() => { /* reload anyway, as "Just reload" would */ })
       .then(() => location.reload());
   };
 
@@ -47,11 +53,12 @@ export class CrashScreen extends Component<{ children: ReactNode }, { error: Err
       <div role="alert" style={{ maxWidth: "38rem", margin: "15vh auto", padding: "0 1.5rem",
         fontFamily: "system-ui, sans-serif", lineHeight: 1.5 }}>
         <h1 style={{ fontSize: "1.3rem" }}>QuAlly hit an error it couldn't recover from</h1>
-        <p>Your work is still stored in this browser. Save a copy of this project first — then reset,
-          and load that file (or your last saved project) back in. Other projects in this browser stay untouched.</p>
+        <p>Your work is still stored in this browser. Save a copy of this project first — then remove it,
+          and load that file (or your last saved project) back in. Other projects in this browser stay untouched;
+          if you have any, the reload opens the one you used last.</p>
         <p style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
           <button onClick={this.saveRaw}>Save my work (project file)</button>
-          <button onClick={this.reset}>Reset this project and reload</button>
+          <button onClick={this.reset}>Remove this project and reload</button>
           <button onClick={() => location.reload()}>Just reload</button>
         </p>
         <details>

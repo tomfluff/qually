@@ -1135,8 +1135,10 @@ export const useStore = create<State>()(
       },
 
       // Another project from this browser, as its envelope stored it. The
-      // person's settings stay as they are now (every envelope carries a copy,
-      // and the newest is the one in use); everything project-shaped comes from
+      // person's settings — the personal half of ui — stay as they are now
+      // (every envelope carries a copy, and the newest is the one in use); AI
+      // settings and the hotbar mode are the project's, as in a project file,
+      // and come back with it (see DEV.md); everything project-shaped comes from
       // the envelope, or resets where the envelope has none — so nothing of the
       // project being left can survive into this one. Its scroll positions are
       // swapped by the caller (projects.ts), not forgotten.
