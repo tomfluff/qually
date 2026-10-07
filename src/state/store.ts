@@ -3271,6 +3271,16 @@ export const useStore = create<State>()(
   )
 );
 
+/** Whether the open project holds anything at all: what would be saved of it
+    differs from what a blank project would save. Generic on purpose — a
+    decision ledger left after its codes were deleted counts, and so will any
+    field added later; a false "yes" only means a file opens beside it. */
+export function hasProjectWork(s: State): boolean {
+  if (Object.keys(s.transcripts).length || s.segments.length) return true; // the cheap, common answer
+  const save = useStore.persist.getOptions().partialize!;
+  return JSON.stringify(save(s)) !== JSON.stringify(save({ ...s, ...blankProject(s) }));
+}
+
 // Bring a persisted state written by any older build into today's shape.
 // Boot's hydration and a project switch (loadProjectState) both pass through
 // here; it mutates in place, as persist's rehydrate callback always has.

@@ -9,7 +9,7 @@ import { useStore } from "./store";
 import type { Project } from "../project";
 import { activeKey, dropRawState, enterProject, listProjects, newProjectKey, projectsAvailable,
   readProject, saveNow } from "./persistence";
-import { dropScroll, scrollFor } from "../scrollMemory";
+import { dropScroll, positioned, scrollFor } from "../scrollMemory";
 import { aiBusy } from "../ai/openai";
 
 export { activeKey, listProjects, projectsAvailable, type ProjectEntry } from "./persistence";
@@ -45,15 +45,20 @@ async function leave() {
 }
 
 function enter(key: string, load: () => void) {
-  const from = activeKey(), before = useStore.getState();
+  const from = activeKey(), before = useStore.getState(), placed = [...positioned];
   enterProject(key);
   scrollFor(key);
   try { load(); }
   catch (e) {
     // Nothing of the next project landed (a corrupt envelope fails before any
     // set): point back, or the next edit would save this project's state over
-    // that one's.
-    if (useStore.getState() === before) { enterProject(from); scrollFor(from); }
+    // that one's. The open transcript never re-mounted, so it never re-places
+    // itself: hand back its "placed" mark too, or its scrolling stops saving.
+    if (useStore.getState() === before) {
+      enterProject(from);
+      scrollFor(from);
+      for (const pid of placed) positioned.add(pid);
+    }
     throw e;
   }
 }

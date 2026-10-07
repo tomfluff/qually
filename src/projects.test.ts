@@ -250,8 +250,10 @@ it("a project that reads but won't load is never entered either", async () => {
   const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")], [`${FIRST}:x`, bad]]);
   const before = structuredClone(bad);
   const app = await boot(data);
+  app.positioned.add("P01"); // the open transcript has placed itself
   await expect(app.switchProject(`${FIRST}:x`)).rejects.toThrow();
   expect(app.activeKey()).toBe(FIRST);
+  expect(app.positioned.has("P01")).toBe(true); // so its scrolling keeps being saved
   app.s().setProjectName("Study A2"); // must land on A, not over X
   await vi.advanceTimersByTimeAsync(1000);
   expect(nameAt(data, FIRST)).toBe("Study A2");
@@ -507,6 +509,19 @@ it("after CrashScreen's reset nothing writes the project back", async () => {
   app.s().setProjectName("late"); // e.g. the save-health flag flipping
   await vi.advanceTimersByTimeAsync(1000);
   expect(data.has(FIRST)).toBe(false);
+});
+
+it("anything left in a project counts as work — a lone decision ledger included", async () => {
+  vi.useFakeTimers();
+  const app = await boot(new Map());
+  const { hasProjectWork } = await import("./state/store");
+  expect(hasProjectWork(app.s())).toBe(false);  // a brand-new workspace
+  app.useStore.setState({ ledger: [{ at: "t", kind: "rename", codes: ["a"], why: "" } as never] });
+  expect(hasProjectWork(app.s())).toBe(true);
+  app.s().newProject();
+  expect(hasProjectWork(app.s())).toBe(false);
+  app.s().setUi({ fontSize: 30 });               // the person's settings are not the project's
+  expect(hasProjectWork(app.s())).toBe(false);
 });
 
 it("without IndexedDB there is one project, and moves are refused", async () => {

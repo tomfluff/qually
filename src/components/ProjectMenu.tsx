@@ -77,9 +77,14 @@ export function ProjectMenu() {
   };
   // a refused move reopens the menu with the reason in it — sighted readers
   // get the line, screen-reader users the announcement
-  const refused = (msg: string) => { setOpen(true); showError(msg); };
+  // (not over a dialog opened meanwhile: the menu would take focus out of it)
+  const refused = (msg: string) => {
+    if (!document.querySelector(".about-backdrop")) setOpen(true);
+    showError(msg);
+  };
   const openProject = async (p: ProjectEntry) => {
     setOpen(false);
+    if (!available && p.key === key) return; // one project, already open: nothing to do
     const nm = displayName(p.name);
     // no "already open" shortcut here: a switch still in flight means the open
     // project is about to change, and this choice must queue behind it

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
 import { useEffect, useState } from "react";
-import { useStore } from "../state/store";
+import { hasProjectWork, useStore } from "../state/store";
 import { openAsNewProject, projectsAvailable } from "../state/projects";
 import { statsOf } from "../project";
 import { announce } from "../announce";
@@ -16,19 +16,15 @@ export function ProjectModal() {
   const curTranscripts = useStore((s) => Object.keys(s.transcripts).length);
   const curSegments = useStore((s) => s.segments.length);
   const curName = useStore((s) => s.projectName.trim() || "Untitled project");
-  // Anything you would miss counts as work — a codebook drafted before any
-  // transcript, a name, notes or a brief — not just transcripts and coding:
-  // only a project with none of it is opened over rather than beside.
-  const hasWork = useStore((s) => Object.keys(s.transcripts).length > 0 || s.segments.length > 0
-    || s.extSegRows.length > 0 || Object.keys(s.codebook).length > 0
-    || !!s.projectName.trim() || !!s.projectNotes.trim()
-    || [...Object.values(s.studyBrief), ...Object.values(s.substBrief)].some((t) => t.trim()));
   const [opening, setOpening] = useState(false);
   const [err, setErr] = useState("");
   useEffect(() => setErr(""), [p]); // a refusal belongs to the file it refused
   const dialogRef = useDialogFocus();
   if (!p) return null;
   const cur = { transcripts: curTranscripts, segments: curSegments };
+  // Only a project holding nothing at all is opened over rather than beside
+  // (read here, not subscribed: nothing behind this modal can change it).
+  const hasWork = hasProjectWork(useStore.getState());
 
   const st = statsOf(p);
   const close = () => useStore.getState().setPendingProject(null);
