@@ -1169,12 +1169,13 @@ export const useStore = create<State>()(
         // not even the batch's wrap-up, which signs and un-undoes by "what's new
         // since we started" — may touch a project this batch wasn't meant for.
         const home = projectGeneration();
+        const moved = (name: string) => new Error([...skipped,
+          `${name} and any after it weren't imported: the project changed while they were being read`].join("; "));
         for (const f of Array.from(files)) {
           let text: string;
           try { text = await f.text(); }
           catch (err) { skipped.push(`${f.name}: ${err instanceof Error ? err.message : String(err)}`); continue; }
-          if (projectGeneration() !== home)
-            throw new Error(`${[...skipped, `${f.name} and any after it weren't imported: the project changed while they were being read`].join("; ")}`);
+          if (projectGeneration() !== home) throw moved(f.name);
           try {
             // a project file goes through the same one entry point; the modal confirms
             // before it replaces the workspace
@@ -1242,6 +1243,9 @@ export const useStore = create<State>()(
             skipped.push(`${f.name}: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
+        // a last read that FAILED skipped the check above, and the swap may have
+        // happened during it
+        if (projectGeneration() !== home) throw moved("the rest");
         set({ hotbarCache: hotbarCodes(get()) });
         // A batch that CREATED a transcript can't be undone honestly: snapshot()
         // covers segments/codebook but not transcripts, tabs or the guessed

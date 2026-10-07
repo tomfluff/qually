@@ -161,11 +161,17 @@ const flush = () => {
 };
 /** Write the open project now and see it land. An envelope is a whole
     snapshot, so the newest write succeeding means everything is on disk;
-    rejects when it failed. Edits made while it was landing go round again, so
-    it resolves with nothing pending — and the caller's continuation runs before
-    any further event can queue more. */
+    rejects when it failed. Edits made while it was landing go round again —
+    queued, or already sent by the debounce timer — so it resolves only once
+    the newest write has landed and nothing is pending; the caller's
+    continuation then runs before any further event can queue more. */
 export const saveNow = async () => {
-  do { flush(); await lastSave; } while (pending);
+  for (;;) {
+    flush();
+    const p = lastSave;
+    await p;
+    if (!pending && p === lastSave) return;
+  }
 };
 
 /** CrashScreen's reset: nothing more is written this session. A write landing

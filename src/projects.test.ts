@@ -359,6 +359,40 @@ it("edits made while the outgoing save lands are saved too before leaving — or
   expect(app.s().projectName).toBe("Study A2");
 });
 
+it("an edit the debounce sends while the outgoing save lands must land too before leaving", async () => {
+  vi.useFakeTimers();
+  const failing = new Set<string>();
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")], [`${FIRST}:x`, envelope("Study X", "Xan")]]);
+  const app = await boot(data, { failing, slow: new Map([[FIRST, 600]]) });
+  const sw = app.switchProject(`${FIRST}:x`);
+  sw.catch(() => { /* asserted below */ });
+  await vi.advanceTimersByTimeAsync(50);
+  app.s().setProjectName("Study A2");       // its debounce fires at ~550, mid-save
+  await vi.advanceTimersByTimeAsync(650);   // first save landed at ~600; the timer's is out
+  failing.add(FIRST);                       // ...and that one fails
+  await vi.advanceTimersByTimeAsync(1000);
+  await expect(sw).rejects.toThrow(/couldn't be saved/);
+  expect(app.activeKey()).toBe(FIRST);
+  expect(app.s().projectName).toBe("Study A2");
+});
+
+it("an import whose last read fails after the project changed leaves the next project alone", async () => {
+  vi.useFakeTimers();
+  const x = envelope("Study X", "Xan") as { state: Record<string, unknown> };
+  x.state.segments = [{ sid: 1, pid: "P01", start: 1, end: 1, code: "c", proposedBy: "(default)", status: "accepted", notes: "" }];
+  x.state.codebook = { c: { color: "#336699", def: "", status: "candidate" } };
+  const data = new Map<string, unknown>([[FIRST, envelope("Study A", "Ann")], [`${FIRST}:x`, x]]);
+  const app = await boot(data);
+  const file = { name: "P09.csv",
+    text: () => new Promise<string>((_, rej) => setTimeout(() => rej(new Error("unreadable")), 200)) } as File;
+  const imp = app.s().importFiles([file]);
+  imp.catch(() => { /* asserted below */ });
+  await app.switchProject(`${FIRST}:x`);
+  await vi.advanceTimersByTimeAsync(300);
+  await expect(imp).rejects.toThrow(/project changed/);
+  expect(app.s().pendingImportSign).toBeNull();
+});
+
 it("a record that isn't a saved project is never loaded, so never written over", async () => {
   vi.useFakeTimers();
   const odd = { transcripts: { P01: {} } }; // data, but not an envelope

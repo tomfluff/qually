@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Yotam Sechayk
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import { openAsNewProject, projectsAvailable } from "../state/projects";
 import { statsOf } from "../project";
@@ -24,6 +24,8 @@ export function ProjectModal() {
     || !!s.projectName.trim() || !!s.projectNotes.trim()
     || [...Object.values(s.studyBrief), ...Object.values(s.substBrief)].some((t) => t.trim()));
   const [opening, setOpening] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => setErr(""), [p]); // a refusal belongs to the file it refused
   const dialogRef = useDialogFocus();
   if (!p) return null;
   const cur = { transcripts: curTranscripts, segments: curSegments };
@@ -41,7 +43,10 @@ export function ProjectModal() {
       // false: cancelled while the current project was still saving
       if (await openAsNewProject(p)) announce(`Opened ${label} as a new project.`);
     } catch (e) {
-      announce(`Couldn't open the project: ${e instanceof Error ? e.message : String(e)}.`, { assertive: true });
+      // on screen as well as said; the dialog stays, so Cancel is right there
+      const msg = `Couldn't open it: ${e instanceof Error ? e.message : String(e)}.`;
+      setErr(msg);
+      announce(msg, { assertive: true });
     } finally { setOpening(false); }
   };
 
@@ -86,6 +91,8 @@ export function ProjectModal() {
             Export your current work first if you need it: undo can't reach across this.
           </div>
         )}
+
+        {err && <div className="ai-warn">{err}</div>}
 
         <div className="imp-actions">
           <button className="btn primary" aria-disabled={opening} onClick={() => { void open(); }}>

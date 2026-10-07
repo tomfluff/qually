@@ -9,6 +9,7 @@
   --bg:#ffffff; --fg:#1a1a1a; --fg-dim:#4a4a4a; --muted:#6b6b6b; --line:#e4e4e4;
   --panel:#f6f6f6; --accent:#6d28d9; /* brand purple; App.tsx overwrites from palettes.ts */
   --warn:#b45309; /* objections and reversals; dark theme lifts it below */
+  --err:#c62828; /* error text: 5.6:1 on --bg (the old #e0554f was 3.8:1 here); dark lifts it */
   /* search hits on the map: deliberately NOT the accent, which means
      "selected" everywhere else — a hit is somewhere you were sent, not
      something you picked. Amber clears 3:1 on both grounds (1.4.11). */
@@ -40,6 +41,7 @@
   --bg:#161a1e; --fg:#e6e6e6; --fg-dim:#a8b0b8; --muted:#97a3ad; --line:#2c333a;
   --panel:#1e242a; --accent:#a78bfa;
   --warn:#e8964f;
+  --err:#e0554f;
   --find-ring:#e8b563;
   --subst-ink:#5eead4;
   --row-hover:#23282e;

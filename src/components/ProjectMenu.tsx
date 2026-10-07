@@ -7,6 +7,7 @@ import { activeKey, createProject, deleteProject, listProjects, projectsAvailabl
 import { ProjectError } from "../project";
 import { announce } from "../announce";
 import { useToggleMenu } from "../usePopover";
+import { onProjectSwap } from "../sessionReset";
 import { saveText } from "./ExportMenu";
 import { Icon } from "./Icon";
 
@@ -53,6 +54,12 @@ export function ProjectMenu() {
   }, [open]);
 
   // The confirmation disappears after deletion; restore only once the new rows exist.
+  // A rename draft or a delete confirmation names the project it was opened
+  // on: once another project is open, neither may stand (Rename would write
+  // the old name onto this one).
+  useEffect(() => onProjectSwap(() => { setOpen(false); setRenaming(false); setConfirmKey(null); }),
+    [setOpen]);
+
   useLayoutEffect(() => {
     if (!open || focusAfterDelete.current === null) return;
     (openRefs.current[focusAfterDelete.current] ?? actionRef.current)?.focus();
@@ -68,19 +75,22 @@ export function ProjectMenu() {
     }
     setOpen(!open);
   };
+  // a refused move reopens the menu with the reason in it — sighted readers
+  // get the line, screen-reader users the announcement
+  const refused = (msg: string) => { setOpen(true); showError(msg); };
   const openProject = async (p: ProjectEntry) => {
     setOpen(false);
     if (p.key === key) return;
     const nm = displayName(p.name);
     try { await switchProject(p.key); announce(`Opened project ${nm}.`); }
-    catch (e) { announce(`Couldn't open ${nm}: ${messageOf(e)}.`, { assertive: true }); }
+    catch (e) { refused(`Couldn't open ${nm}: ${messageOf(e)}.`); }
   };
   const startProject = async () => {
     setOpen(false);
     try {
       await createProject();
       announce("New project started. Your other projects are in the Projects menu.");
-    } catch (e) { announce(`Couldn't start a new project: ${messageOf(e)}.`, { assertive: true }); }
+    } catch (e) { refused(`Couldn't start a new project: ${messageOf(e)}.`); }
   };
   const remove = async (p: ProjectEntry) => {
     if (deleting) return;
@@ -116,8 +126,7 @@ export function ProjectMenu() {
       // leaving it may have worked before the delete itself failed: say where you are
       const moved = wasActive && activeKey() !== p.key
         ? ` ${displayName(useStore.getState().projectName)} is open now.` : "";
-      if (moved) setOpen(false);
-      announce(`Couldn't delete ${nm}: ${messageOf(e)}.${moved}`, { assertive: true });
+      refused(`Couldn't delete ${nm}: ${messageOf(e)}.${moved}`);
     }
     finally { setDeleting(false); }
   };
@@ -139,8 +148,7 @@ export function ProjectMenu() {
     try { await useStore.getState().importFiles(picked); }
     catch (e) {
       // back in the menu, where the reader was, with the reason on screen too
-      setOpen(true);
-      showError(e instanceof ProjectError ? e.message : `Couldn't open that file: ${messageOf(e)}`);
+      refused(e instanceof ProjectError ? e.message : `Couldn't open that file: ${messageOf(e)}`);
     }
   };
 
