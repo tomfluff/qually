@@ -174,6 +174,12 @@ describe("how much of the participant's speech a term replaces", () => {
     expect(replacedLength("the first one and the second one", "[Beacon] and [Harbor]")).toBe(14);
     // characters, not UTF-16 units: a surrogate pair is one
     expect(replacedLength("𠮷野家", "[Beacon]")).toBe(3);
+    // a removed space is removed too: " abcde" is six, past the ceiling
+    expect(replacedLength(" abcde", "[Beacon]")).toBe(6);
+    expect(suspicious({ quote: " abcde", fix: "[Beacon]" })).toBe(true);
+    // a fix with no term at all is no resolution: the whole quote counts, not 0
+    expect(gapsOf("使えなかった", "使")).toBeNull();
+    expect(replacedLength("使えなかった", "使")).toBe(6);
   });
   it("flags anything past a pronoun-length reference, in either language", () => {
     expect(SHORT_REFERENCE).toBe(5);

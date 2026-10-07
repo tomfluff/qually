@@ -1390,7 +1390,22 @@ function ContextList({ onRun }: { onRun: (pid: string) => void }) {
   const pending = useMemo(() => pendingSubs(transcripts, aiFlags, lang, pids), [transcripts, aiFlags, lang, pids]);
   // "Write in all" asks first when a term would replace more than a short
   // reference (see SHORT_REFERENCE): those rows, struck through, and a choice
-  const [ask, setAsk] = useState<{ pid: string; rows: typeof pending; btn: HTMLElement } | null>(null);
+  const [ask, setAsk] = useState<{ pid: string; btn: HTMLElement } | null>(null);
+  // the rows are read live, never kept from the click: what the dialog lists is
+  // what its buttons write, and a batch that no longer holds a flagged row has
+  // nothing left to ask about (nor may it come back when proposals return)
+  const askRows = ask ? pending.filter((x) => x.pid === ask.pid && suspicious(x.span)) : [];
+  const askStale = !!ask && !askRows.length;
+  useEffect(() => {
+    if (!askStale || !ask) return;
+    setAsk(null);
+    // closing itself, the dialog hands focus back like every other close:
+    // to its button, or — when that went with the rows — the panel's next one
+    requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return;
+      (ask.btn.isConnected ? ask.btn : document.querySelector<HTMLElement>(".mList button, .groundBtn"))?.focus();
+    });
+  }, [askStale, ask]);
   if (!pending.length) {
     return (
       <div className="empty">
@@ -1426,7 +1441,7 @@ function ContextList({ onRun }: { onRun: (pid: string) => void }) {
   };
   return (
     <div className="mList">
-      {ask && <WriteInAllConfirm pid={ask.pid} rows={ask.rows}
+      {ask && askRows.length > 0 && <WriteInAllConfirm pid={ask.pid} rows={askRows}
         total={pending.filter((x) => x.pid === ask.pid).length}
         onAll={() => { setAsk(null); writeAll(ask.pid, ask.btn); }}
         onExcept={() => { setAsk(null); writeAll(ask.pid, ask.btn, suspicious); }}
@@ -1438,8 +1453,7 @@ function ContextList({ onRun }: { onRun: (pid: string) => void }) {
             <button className="nBtn" style={{ marginLeft: "auto" }}
               title={`Write in every proposed substitution in ${pid} — one Ctrl+Z takes it back`}
               onClick={(e) => {
-                const flagged = pending.filter((x) => x.pid === pid && suspicious(x.span));
-                if (flagged.length) setAsk({ pid, rows: flagged, btn: e.currentTarget });
+                if (pending.some((x) => x.pid === pid && suspicious(x.span))) setAsk({ pid, btn: e.currentTarget });
                 else writeAll(pid, e.currentTarget);
               }}>
               Write in all {pending.filter((x) => x.pid === pid).length}

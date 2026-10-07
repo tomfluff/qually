@@ -141,7 +141,8 @@ function onlyResolves(quote: string, fix: string, terms: string[]): boolean {
     duplicated by "write in all". */
 export function gapsOf(quote: string, fix: string): [number, number][] | null {
   const pieces = fix.split(BRACKET);
-  if (!quote.startsWith(pieces[0])) return null;
+  // no term at all is not a resolution: [] would read as "replaces nothing"
+  if (pieces.length < 2 || !quote.startsWith(pieces[0])) return null;
   let cur = pieces[0].length;
   const gaps: [number, number][] = [];
   for (let i = 1; i < pieces.length; i++) {
@@ -160,7 +161,7 @@ export function gapsOf(quote: string, fix: string): [number, number][] | null {
     that is not a clean resolution counts the whole quote. */
 export const replacedLength = (quote: string, fix: string) =>
   Math.max(0, ...(gapsOf(quote, fix) ?? [[0, quote.length]])
-    .map(([a, b]) => Array.from(quote.slice(a, b).trim()).length));
+    .map(([a, b]) => Array.from(quote.slice(a, b)).length)); // untrimmed: a removed space is removed too
 
 /** A term may stand in for this many characters and still count as a short
     reference. It only decides whether "Write in all" asks first, so it errs
