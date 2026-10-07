@@ -115,7 +115,8 @@
   padding:0 4px; background:var(--panel); font:inherit; }
 /* a note directly under a heading (or first in the panel) is intro text, not a
    row explainer — no pull-up */
-.set-h + .settings-note, .set-panel > .settings-note:first-child { margin-top:0; }
+.set-h + .settings-note, .eyebrow + .settings-note,
+.set-panel > .settings-note:first-child { margin-top:0; }
 /* group headings inside a tab — same voice as the sidebar's ALL CODES header */
 .set-h { font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:600;
   color:var(--muted); margin:10px 0 -3px; }

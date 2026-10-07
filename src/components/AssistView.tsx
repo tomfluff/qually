@@ -689,7 +689,7 @@ export function AssistView() {
           // resolved here, once, so the list below reads excerpts in the same
           // language the transcript and the codebook are showing
           <SuggestList candidates={shownCandidates} groupBy={suggestBy}
-            transcripts={viewTranscripts(transcripts, lang)} codebook={codebook} tabs={tabs} />
+            transcripts={viewTranscripts(transcripts, lang)} codebook={codebook} pidOrder={allPids} />
         )}
       </div>
       {mergeOpen && <MergeModal onProposals={(p) => { setProposals(p); setFlipped(new Set()); }}
@@ -925,12 +925,12 @@ function ClearSuggestions({ pid }: { pid: string | null }) {
 // code (the sidebar picks which) — a worklist mirror of what's striped in the
 // transcript. Accept/Reject use the same setStatus the segment popover does, so a
 // verdict here or there is the same verdict. Candidates come pre-filtered.
-function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
+function SuggestList({ candidates, groupBy, transcripts, codebook, pidOrder }: {
   candidates: Segment[];
   groupBy: "transcript" | "code";
   transcripts: Record<string, { lines: { id: number; speaker: string; text: string }[] }>;
   codebook: Record<string, { color: string; def: string; status: string }>;
-  tabs: string[];
+  pidOrder: string[];
 }) {
   const setStatus = useStore((s) => s.setStatus);
   const jumpTo = useStore((s) => s.jumpTo);
@@ -972,9 +972,9 @@ function SuggestList({ candidates, groupBy, transcripts, codebook, tabs }: {
       </div>
     );
   };
-  // group headers: transcripts in tab order, codes alphabetically
+  // Corpus order keeps candidates visible even when their transcript's tab is closed.
   const groups = groupBy === "transcript"
-    ? tabs.filter((pid) => candidates.some((c) => c.pid === pid))
+    ? pidOrder.filter((pid) => candidates.some((c) => c.pid === pid))
     : [...new Set(candidates.map((c) => c.code))].sort();
   const inGroup = (g: string) => candidates.filter((c) => (groupBy === "transcript" ? c.pid : c.code) === g);
   return (

@@ -1482,6 +1482,15 @@ export const useStore = create<State>()(
         // ghost state — no tab highlighted, no ×, and undo refuses to restore it.
         const tabs = isTranscriptView(pid) && s.transcripts[pid] ? placeTab(s, pid) : s.tabs;
         set({ active: pid, tabs, selection: saved[pid] ?? emptySel(), savedSelections: saved, jump: { pid, line } });
+        // Opening from another view must leave keyboard coding on the destination,
+        // whose display groups are only available after switching active.
+        // Only a line that EXISTS: startSelection finds a group by numeric range,
+        // so a stale target (a Notes stamp after a re-import dropped its line)
+        // inside a merged group's span would select lines nobody asked for.
+        // (isTranscriptView too: an import can name a transcript "notes", and that
+        // view renders the Notes page, not those lines.)
+        if (!isTranscriptView(s.active) && isTranscriptView(pid)
+          && s.transcripts[pid]?.lines.some((l) => l.id === line)) get().startSelection(line);
       },
       clearJump: () => set({ jump: null }),
       scrollToLine: (line) => set({ jump: { pid: get().active, line } }), // same-tab scroll, no selection change

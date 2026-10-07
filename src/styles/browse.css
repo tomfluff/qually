@@ -198,7 +198,7 @@ mark.ground.gunder { text-decoration:underline; text-underline-offset:3px; text-
   color:var(--muted); font-weight:700; margin:2px 0 8px; }
 .bSideNote { color:var(--muted); font-size:.85em; line-height:1.45; padding:2px; }
 .browse-left .groundBtn { width:100%; display:inline-flex; align-items:center;
-  justify-content:center; gap:6px; margin-bottom:8px; }
+  justify-content:center; gap:6px; margin-bottom:8px; font-size:inherit; }
 
 /* Codebook sidebar: filter with the AI action (sparkle menu) and a View menu
    beside it — the transcript-sidebar pattern (input + compact menu buttons). */

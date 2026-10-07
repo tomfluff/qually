@@ -874,6 +874,9 @@ export function TranscriptView() {
     const idx = itemIdx.get(jump.line);
     if (idx !== undefined) { stopAnims(); vref.current?.scrollToIndex(idx + 1, { align: "center" }); } // +1 for the top vpad
     positioned.add(active); // the jump IS this tab's position; scrolls from here are the user's
+    // Unmounting the jump control loses focus; keep keyboard coding at the destination.
+    if (!document.activeElement || document.activeElement === document.body)
+      tviewRef.current?.querySelector<HTMLElement>(".tviewlist")?.focus({ preventScroll: true });
     clearJump();
   }, [jump, active, transcript, itemIdx, clearJump, pad, stopAnims]);
 

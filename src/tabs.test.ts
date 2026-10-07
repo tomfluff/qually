@@ -97,6 +97,95 @@ test("jumping into a closed pinned transcript also lands it in the pinned group"
   expect(s().tabs).toEqual(["A", "B"]);
 });
 
+test.each(["assist", "browse"])("jumping from %s selects the target line instead of its saved selection", (active) => {
+  useStore.setState({
+    transcripts: { A: { lines: [
+      { id: 1, ts: "", speaker: "P", text: "first" },
+      { id: 2, ts: "", speaker: "P", text: "target" },
+    ] } },
+    tabs: ["A"], active,
+    selection: { pid: null, anchor: null, head: null, lines: new Set() },
+    savedSelections: { A: { pid: "A", anchor: 1, head: 1, lines: new Set([1]) } },
+    ui: { ...useStore.getState().ui, mergeLines: false },
+  } as never);
+  useStore.getState().jumpTo("A", 2);
+  expect(useStore.getState().active).toBe("A");
+  expect(useStore.getState().selection).toEqual({ pid: "A", anchor: 2, head: 2, lines: new Set([2]) });
+  expect(useStore.getState().jump).toEqual({ pid: "A", line: 2 });
+});
+
+// a stale target (a Notes stamp whose line a re-import dropped) falls inside a
+// merged group's numeric span; it must not select that group
+test("jumping from another view to a line that no longer exists selects nothing new", () => {
+  const saved = { pid: "A", anchor: 30, head: 30, lines: new Set([30]) };
+  useStore.setState({
+    transcripts: { A: { lines: [
+      { id: 10, ts: "", speaker: "P", text: "so when I" },
+      { id: 20, ts: "", speaker: "P", text: "zoomed in it broke." },
+      { id: 30, ts: "", speaker: "R", text: "okay." },
+    ] } },
+    tabs: ["A"], active: "notes",
+    selection: { pid: null, anchor: null, head: null, lines: new Set() },
+    savedSelections: { A: saved },
+    ui: { ...useStore.getState().ui, mergeLines: true },
+  } as never);
+  useStore.getState().jumpTo("A", 15);
+  expect(useStore.getState().active).toBe("A");
+  expect(useStore.getState().selection).toBe(saved);
+});
+
+// an import can name a transcript after a reserved view; "notes" still renders
+// the Notes page, so a jump there must not select lines it does not show
+test("jumping to a transcript named like a reserved view selects nothing", () => {
+  const saved = { pid: "notes", anchor: 2, head: 2, lines: new Set([2]) };
+  useStore.setState({
+    transcripts: { notes: { lines: [
+      { id: 1, ts: "", speaker: "P", text: "first." },
+      { id: 2, ts: "", speaker: "P", text: "second." },
+    ] } },
+    tabs: ["notes"], active: "browse",
+    selection: { pid: null, anchor: null, head: null, lines: new Set() },
+    savedSelections: { notes: saved },
+    ui: { ...useStore.getState().ui, mergeLines: false },
+  } as never);
+  useStore.getState().jumpTo("notes", 1);
+  expect(useStore.getState().selection).toBe(saved);
+});
+
+test("jumping between transcript tabs restores the target's saved selection", () => {
+  const saved = { pid: "A", anchor: 1, head: 1, lines: new Set([1]) };
+  const outgoing = { pid: "B", anchor: 1, head: 1, lines: new Set([1]) };
+  useStore.setState({
+    transcripts: { A: { lines: [
+      { id: 1, ts: "", speaker: "P", text: "first" },
+      { id: 2, ts: "", speaker: "P", text: "target" },
+    ] }, B: { lines: [{ id: 1, ts: "", speaker: "P", text: "other" }] } },
+    tabs: ["A", "B"], active: "B", selection: outgoing, savedSelections: { A: saved },
+  } as never);
+  useStore.getState().jumpTo("A", 2);
+  expect(useStore.getState().active).toBe("A");
+  expect(useStore.getState().selection).toBe(saved);
+  expect(useStore.getState().savedSelections.B).toBe(outgoing);
+  expect(useStore.getState().jump).toEqual({ pid: "A", line: 2 });
+});
+
+test("a same-tab jump leaves the current selection unchanged", () => {
+  const selection = { pid: "A", anchor: 1, head: 1, lines: new Set([1]) };
+  const saved = { pid: "A", anchor: 2, head: 2, lines: new Set([2]) };
+  useStore.setState({
+    transcripts: { A: { lines: [
+      { id: 1, ts: "", speaker: "P", text: "first" },
+      { id: 2, ts: "", speaker: "P", text: "target" },
+    ] } },
+    tabs: ["A"], active: "A", selection, savedSelections: { A: saved },
+  } as never);
+  useStore.getState().jumpTo("A", 2);
+  expect(useStore.getState().active).toBe("A");
+  expect(useStore.getState().selection).toBe(selection);
+  expect(useStore.getState().savedSelections.A).toBe(saved);
+  expect(useStore.getState().jump).toEqual({ pid: "A", line: 2 });
+});
+
 test("deleting a transcript takes everything keyed to it, and leaves no undo", () => {
   const s = () => useStore.getState();
   useStore.setState({
