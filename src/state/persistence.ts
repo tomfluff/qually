@@ -109,17 +109,21 @@ const readActive = async (): Promise<unknown> => {
   // project can't prove ours empty, so it keeps the write gate shut.
   else if (key !== index.active) return null;
   const v = await idbGet(index.active);
-  if (v !== undefined || hasLegacyCopy(index.active)) return v;
+  // a legacy copy only counts when it can be opened (see legacyReadable)
+  if (v !== undefined || (index.active === FIRST_KEY && legacyReadable())) return v;
   // The pointer names a project with nothing saved while others ARE saved: a
   // brand-new one never written, or one deleted when the pointer's own write
   // failed (a full disk). Booting blank under that key would hide the rest
   // behind the menu, and the first autosave would bring the deleted one back
   // as an empty ghost — open the most recently used project that is there.
-  // the first project may survive only as its legacy copy (a migration that
-  // never landed) — that is a saved project too, and the legacy path below
-  // loads it once the pointer names it
+  // The first project may survive only as its legacy copy (a migration that
+  // never landed): a saved project too, which the legacy path below loads once
+  // the pointer names it — but only as the LAST resort. That copy was never
+  // read back by this build, so it must not outrank a project IndexedDB holds
+  // (a damaged one would boot blank, or not at all, over a good one); it stays
+  // listed and openable from the menu either way.
   const found = (await idbKeys()).filter(isProjectKey);
-  if (hasLegacyCopy(FIRST_KEY) && !found.includes(FIRST_KEY)) found.push(FIRST_KEY);
+  if (!found.length && legacyReadable()) found.push(FIRST_KEY);
   const keys = found.sort((a, b) => (index.meta[b]?.used ?? 0) - (index.meta[a]?.used ?? 0));
   if (!keys.length) return undefined; // a genuine first run
   if (!adopt) return null;            // late: not ours to re-point, and not proof of empty
@@ -129,6 +133,16 @@ const readActive = async (): Promise<unknown> => {
 // only the first project ever had a localStorage copy; a blocked probe is "no"
 const hasLegacyCopy = (key: string) => {
   try { return key === FIRST_KEY && localStorage.getItem(key) !== null; } catch { return false; }
+};
+// a legacy copy that is a project envelope at all — one that can't even be
+// parsed would boot blank with saving on, hiding the projects that ARE there
+// behind the menu. (Not a full validation: the copy is only ever a last resort.)
+const isRecord = (x: unknown) => !!x && typeof x === "object" && !Array.isArray(x);
+const legacyReadable = () => {
+  try {
+    const v = JSON.parse(localStorage.getItem(FIRST_KEY) ?? "null") as { state?: unknown } | null;
+    return isRecord(v) && isRecord(v!.state);
+  } catch { return false; }
 };
 
 /** the store tells us when hydration finished; until then, writes are dropped —
@@ -321,8 +335,13 @@ const idbStorage: PersistStorage<unknown> = {
       // the write gate by itself.
       // Only over a read that came back EMPTY: when it failed, a newer copy may
       // be sitting there unseen, and this would write the older one over it.
-      if (!readFailed)
-        idbWrite([[key, parsed]]).then(() => localStorage.removeItem(key)).catch(() => { /* keep the legacy copy */ });
+      // The index goes with it, in the same transaction: boot may have re-pointed
+      // it here in memory (readActive's fallback), and a pointer left on the
+      // gone project would send the next boot looking there first.
+      if (!readFailed) {
+        index.meta[key] = metaOf(parsed);
+        idbWrite([[key, parsed], [INDEX, index]]).then(() => localStorage.removeItem(key)).catch(() => { /* keep the legacy copy */ });
+      }
       return parsed;
     } catch {
       // localStorage is only an optional migration source. If the authoritative

@@ -431,6 +431,61 @@ it("a pointer to a gone project falls back to a first project kept only as its l
   expect(Object.keys(app.s().transcripts)).toEqual(["P01"]);
 });
 
+// ...but only a copy that can be read: an unparseable one ranked first would
+// boot blank with saving on, hiding a good project behind the menu
+it.each([
+  ["unparseable", "{broken json"],
+  ["a state that is an array", JSON.stringify({ version: 0, state: [] })],
+  ["a state whose segments aren't a list", JSON.stringify({ version: 0, state: { transcripts: {}, segments: null } })],
+  ["a state whose codebook is null", JSON.stringify({ version: 0, state: { transcripts: {}, segments: [], codebook: null } })],
+])("a legacy copy (%s) never outranks a project IndexedDB holds, however recently it was used", async (_what, raw) => {
+  vi.useFakeTimers();
+  const b = `${FIRST}:b`;
+  const data = new Map<string, unknown>([
+    ["qually-projects", { active: `${FIRST}:gone`, meta: {
+      [FIRST]: { name: "Study A", transcripts: 1, used: 100 },
+      [b]: { name: "Study B", transcripts: 1, used: 10 },
+    } }],
+    [b, envelope("Study B", "Ben")],
+  ]);
+  const ls = new Map([[FIRST, raw]]);
+  const app = await boot(data, undefined, ls);
+  expect(app.activeKey()).toBe(b);
+  expect(app.s().projectName).toBe("Study B");
+  expect(ls.get(FIRST)).toBe(raw); // left where it was, not migrated
+});
+
+// ...and the same when the pointer itself names the first project: a broken
+// legacy copy there is not a project to boot into while a good one is saved
+it("a pointer on the first project with only a broken legacy copy falls back to a saved project", async () => {
+  vi.useFakeTimers();
+  const b = `${FIRST}:b`;
+  const data = new Map<string, unknown>([
+    ["qually-projects", { active: FIRST, meta: { [b]: { name: "Study B", transcripts: 1, used: 10 } } }],
+    [b, envelope("Study B", "Ben")],
+  ]);
+  const app = await boot(data, undefined, new Map([[FIRST, "{broken json"]]));
+  expect(app.activeKey()).toBe(b);
+  expect(app.s().projectName).toBe("Study B");
+});
+
+// The fallback re-points the index in memory; migrating the legacy copy must
+// write that pointer (and the project's list entry) with it, or the next boot
+// starts again from the gone project — and a slow read there shuts saving off.
+it("migrating the fallback legacy copy repairs the index on disk", async () => {
+  vi.useFakeTimers();
+  const data = new Map<string, unknown>([["qually-projects", { active: `${FIRST}:gone`, meta: {} }]]);
+  const saved = envelope("Study A", "Ann");
+  saved.state.active = "browse"; // nothing mounts that would autosave on its own
+  const ls = new Map([[FIRST, JSON.stringify(saved)]]);
+  await boot(data, undefined, ls);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(ls.has(FIRST)).toBe(false);
+  expect(data.get("qually-projects")).toMatchObject({
+    active: FIRST, meta: { [FIRST]: { name: "Study A", transcripts: 1 } },
+  });
+});
+
 it("a failed delete leaves a never-migrated legacy copy where it was", async () => {
   vi.useFakeTimers();
   const ls = new Map([[FIRST, JSON.stringify(envelope("Study A", "Ann"))]]);
